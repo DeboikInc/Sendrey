@@ -74,7 +74,7 @@ export default function DroplyHero() {
                   </motion.button>
 
                   <motion.button whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} className="px-8 py-4 rounded-full font-semibold text-[rgba(255,255,255,0.85)] border border-[rgba(255,255,255,0.08)] hover:bg-white/5 ">
-                    Get Started - It's Free
+                    Get Started - I&apos;s Free
                   </motion.button>
                 </div>
               </motion.div>
