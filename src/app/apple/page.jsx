@@ -101,7 +101,7 @@ export default function AppleWatchHero() {
                   whileTap={{ scale: 0.98 }}
                   className={`w-14 h-10 rounded-md flex items-center justify-center border border-transparent ${thumbBg[i]} ${active === i ? 'ring-2 ring-[#F47C20]/40' : ''}`}
                 >
-                  <img src={productImage} alt={`thumb-${i}`} className="w-10 h-8 object-contain" />
+                  {/* <img src={productImage} alt={`thumb-${i}`} className="w-10 h-8 object-contain" /> */}
                 </motion.button>
               ))}
             </div>
@@ -138,13 +138,13 @@ export default function AppleWatchHero() {
               style={{ transform: 'rotate(-6deg)' }}
             >
               <div className="absolute inset-0 rounded-3xl bg-gradient-to-br from-white/60 to-white/30 blur-[12px] -z-10" />
-              <motion.img
+              {/* <motion.img
                 src={productImage}
                 alt="Apple Watch"
                 className="w-full h-full object-contain drop-shadow-2xl"
                 whileHover={{ scale: 1.02, rotate: -3 }}
                 transition={{ type: 'spring', stiffness: 120 }}
-              />
+              /> */}
             </motion.div>
 
             {/* floating shadow below product */}
