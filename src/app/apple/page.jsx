@@ -1,3 +1,5 @@
+'use client'
+
 import React, { useState } from 'react'
 import { FiMenu, FiSearch, FiShoppingBag } from 'react-icons/fi'
 import { FaFacebookF, FaTwitter, FaLinkedinIn } from 'react-icons/fa'
