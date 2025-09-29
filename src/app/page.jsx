@@ -122,20 +122,22 @@ export default function ComingSoon() {
 
               {/* phone signup */}
               <form onSubmit={handleSubmit} className="mt-6 w-full max-w-lg">
-                <div className="flex gap-2 items-center bg-white/5 rounded-full p-1">
-                  <div className="pl-3 pr-1 text-white/75">
-                    <FiMail />
+                <div className="flex sm:flex-row flex-col sm:gap-2 items-center sm:bg-white/5 rounded-full p-1">
+                  <div className='flex flex-1 items-center sm:bg-transparent bg-white/5 rounded-full sm:mb-0 mb-2'>
+                    <div className="pl-3 pr-1 text-white/75">
+                      <FiMail />
+                    </div>
+                    <input
+                      className="flex-1 bg-transparent outline-none px-3 py-3 rounded-full text-sm text-white placeholder:text-white/60"
+                      placeholder="Your Whatsapp Phone Number"
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      aria-label="whatsapp"
+                    />
                   </div>
-                  <input
-                    className="flex-1 bg-transparent outline-none px-3 py-3 rounded-full text-sm text-white placeholder:text-white/60"
-                    placeholder="Your Whatsapp Phone Number"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    aria-label="whatsapp"
-                  />
                   <button
                     type="submit"
-                    className="rounded-full px-5 py-2 text-sm font-semibold bg-white/10 hover:bg-white/20 transition"
+                    className="rounded-full text-nowrap px-5 py-2 text-sm font-semibold bg-white/10 hover:bg-white/20 transition"
                   >
                     {submitted ? 'Thanks!' : 'Notify Me'}
                   </button>
