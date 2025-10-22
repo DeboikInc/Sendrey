@@ -6,7 +6,6 @@ const smsService = require('../services/smsService');
 const logger = require('../utils/logger');
 const ActivityLogger = require('../utils/activityLogger');
 
-
 class AuthController extends BaseController {
   constructor() {
     super(authService);
