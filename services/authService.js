@@ -12,18 +12,21 @@ class AuthService {
   async register(userData, userRole) {
     try {
       // Check if user already exists
-      const existingUser = await User.findOne({
-        $or: [
-          { email: userData.email },
-          { phone: userData.phone }
-        ]
-      });
+      const conditions = [];
+
+      if (userData.email) conditions.push({ email: userData.email });
+      if (userData.phone) conditions.push({ phone: userData.phone });
+
+      const existingUser = conditions.length
+        ? await User.findOne({ $or: conditions })
+        : null;
 
       if (existingUser) {
-        throw new Error(existingUser.email === userData.email
-          ? 'Email already registered'
-          : 'Phone number already registered'
-        );
+        if (userData.email && existingUser.email === userData.email) {
+          throw new Error('Email already registered');
+        } else if (userData.phone && existingUser.phone === userData.phone) {
+          throw new Error('Phone number already registered');
+        }
       }
 
       // Create user
@@ -271,7 +274,7 @@ class AuthService {
     logger.info(`Token blacklisted: ${token.substring(0, 20)}...`);
     return true;
   }
-  
+
 }
 
 module.exports = new AuthService();

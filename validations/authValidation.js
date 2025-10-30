@@ -22,14 +22,14 @@ const formatToLocal = (value, helpers) => {
   }
 
   // Get national number (e.g. "8134714125")
-  let nationalNumber = phoneNumber.nationalNumber;
+  // let nationalNumber = phoneNumber.nationalNumber;
 
-  // Add leading zero if missing (e.g. "08134714125")
-  if (nationalNumber.length === 10) {
-    nationalNumber = '0' + nationalNumber;
-  }
+  // // Add leading zero if missing (e.g. "08134714125")
+  // if (nationalNumber.length === 10) {
+  //   nationalNumber = '0' + nationalNumber;
+  // }
 
-  return nationalNumber; // Joi will replace the input value with this
+  return phoneNumber.number; // Joi will replace the input value with this
 };
 
 // Custom objectId validation (for MongoDB)
@@ -192,7 +192,7 @@ const authValidation = {
       .messages({
         'string.empty': 'Last name is required',
       })
-  }).messages(validationMessages),
+  }),
 
   // // Login validation
   login: Joi.object({
