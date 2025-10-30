@@ -13,6 +13,7 @@ class SMSService {
 
   async compileSMSTemplate(templateName, data) {
     try {
+
       const templatePath = path.join(__dirname, '../templates/sms', `${templateName}.txt`);
       let templateContent = await fs.readFile(templatePath, 'utf-8');
 
@@ -33,12 +34,13 @@ class SMSService {
       const message = await this.compileSMSTemplate(templateName, data);
 
       if (config.sms.provider === 'twilio') {
+        
         const result = await this.client.messages.create({
-          body: message,
+          to,
           from: config.sms.twilio.fromNumber,
-          to
+          body: message,
         });
-
+        
         logger.info(`SMS sent to ${to}: ${result.sid}`);
         return result;
       }
@@ -47,7 +49,7 @@ class SMSService {
       throw new Error('SMS provider not configured');
     } catch (error) {
       logger.error('SMS sending error:', error);
-      throw new Error('Failed to send SMS');
+      throw new Error('Failed to send SMS', error);
     }
   }
 
