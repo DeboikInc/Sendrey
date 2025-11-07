@@ -43,6 +43,13 @@ router.get('/search',
   userController.searchUsers
 );
 
+router.get('/runners',
+  authenticate,
+  authorize(['admin', 'super-admin', 'manager', 'user', 'runner']), 
+  userController.getRunners
+);
+
+
 router.get('/:userId',
   validate(userParamsValidation.userId),
   checkOwnership('params.userId'), // Allow access to own profile or admin
@@ -50,11 +57,11 @@ router.get('/:userId',
 );
 
 router.put('/:userId',
-  validate(userParamsValidation.userId),
-  validate(userValidation.updateProfile),
+  validate(userParamsValidation.userId, 'params'),
+  validate(userValidation.updateProfile, 'body'),
   checkOwnership('params.userId'),
   auditLog('UPDATE_USER'),
-  userController.updateProfile
+  userController.updateProfile.bind(userController)
 );
 
 router.patch('/:userId/role',

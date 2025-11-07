@@ -90,7 +90,7 @@ class AuthController extends BaseController {
       const { email, password, phone } = req.body;
 
       // Authenticate user
-      const { user, token } = await authService.login(email, password, phone);
+      const { user, token } = await authService.login(email, phone, password);
 
       const ip = req.ip;
       const userAgent = req.get('User-Agent');
