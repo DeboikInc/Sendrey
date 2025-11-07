@@ -43,7 +43,7 @@ const userSchema = new mongoose.Schema({
   fleetType: {
     type: String,
     enum: FLEET,
-    default: 'pedestran'
+    default: 'pedestrian'
   },
   levelOfEducation: {
     type: String,

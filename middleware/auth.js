@@ -38,7 +38,11 @@ const authenticate = async (req, res, next) => {
     }
 
     // Get user from database
-    const user = await User.findById(decoded.id).select('-password');
+    // const user = await User.findById(decoded.id).select('-password');
+
+    const userId = decoded.id || decoded.userId || decoded._id;
+    const user = await User.findById(userId).select('-password');
+
 
     if (!user) {
       return res.status(401).json({
@@ -66,7 +70,7 @@ const authenticate = async (req, res, next) => {
     req.user = user;
     req.token = token;
 
-    logger.info(`User authenticated: ${user.email} - ${req.method} ${req.path}`);
+    logger.info(`User authenticated: ${user.email || user.phone || user._id} - ${req.method} ${req.path}`);
 
     next();
   } catch (error) {
@@ -169,7 +173,7 @@ const authorize = (roles = []) => {
       });
     }
 
-    logger.debug(`User authorized: ${req.user.email} - Role: ${req.user.role} - ${req.method} ${req.path}`);
+    logger.debug(`User authorized: ${req.user.email || req.user.phone} - Role: ${req.user.role} - ${req.method} ${req.path}`);
 
     next();
   };
@@ -249,7 +253,7 @@ const checkOwnership = (resourceOwnerIdPath = 'params.userId') => {
       return next();
     }
 
-    logger.warn(`Ownership violation: ${req.user.email} attempted to access resource owned by ${resourceOwnerId}`);
+    logger.warn(`Ownership violation: ${req.user.email || req.user.phone} attempted to access resource owned by ${resourceOwnerId}`);
 
     return res.status(403).json({
       success: false,

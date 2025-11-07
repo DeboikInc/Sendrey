@@ -161,7 +161,7 @@ const authValidation = {
         'any.empty': 'Gender must be one of: male, female'
       }),
     fleetType: Joi.string()
-      .valid('cycling', 'bike', 'car', 'van', 'pedestran')
+      .valid('cycling', 'bike', 'car', 'van', 'pedestrian')
       .messages({
         'any.empty': 'Provide fleet type'
       }),
@@ -176,7 +176,8 @@ const authValidation = {
       }),
     role: Joi.string()
       .valid('user', 'runner', 'sales', 'manager', 'admin', 'super-admin')
-      .default('user')
+      // .default('user')
+      .optional()
       .messages({
         'any.only': 'Role must be one of: user, admin, moderator'
       }),
@@ -300,9 +301,10 @@ const userParamsValidation = {
 };
 
 // Validation middleware helper
-const validate = (schema) => {
+const validate = (schema, property = 'body') => {
   return (req, res, next) => {
-    const { error, value } = schema.validate(req.body, {
+    const data = req[property];
+    const { error, value } = schema.validate(data, {
       abortEarly: false,
       stripUnknown: true,
       allowUnknown: false
@@ -321,11 +323,13 @@ const validate = (schema) => {
       });
     }
 
-    // Replace req.body with validated and sanitized data
-    req.body = value;
+    req[property] = value; // put sanitized data back in the right place
     next();
   };
 };
+
+
+
 
 // Validate query parameters
 const validateQuery = (schema) => {

@@ -3,6 +3,7 @@ const userService = require('../services/userService');
 const emailService = require('../services/emailService');
 const smsService = require('../services/smsService');
 const logger = require('../utils/logger');
+const User = require('../models/User');
 
 class UserController extends BaseController {
   constructor() {
@@ -26,6 +27,22 @@ class UserController extends BaseController {
     }
   }
 
+  async getRunners(req, res) {
+    try {
+      const { fleetType } = req.query;
+
+      const query = { role: 'runner' };
+      if (fleetType) {
+        query.fleetType = fleetType;
+      }
+      const runners = await User.find({ role: 'runner' }).select('-password');
+      res.status(200).json({ success: true, data: runners });
+    } catch (error) {
+      console.error('Error fetching runners:', error);
+      res.status(500).json({ success: false, message: 'Server Error' });
+    }
+  };
+
   /**
    * Get public user profile
    */
@@ -45,10 +62,14 @@ class UserController extends BaseController {
    */
   async updateProfile(req, res, next) {
     try {
-      const userId = req.user.id;
+      const userId = req.params.userId || req.user.id;
       const updateData = req.body;
 
       const user = await userService.updateUser(userId, updateData);
+      if (!user) {
+        return this.error(res, 'User not found', 404);
+      }
+
       logger.info(`Profile updated for user: ${user.email}`);
 
       this.success(res, {
@@ -60,6 +81,7 @@ class UserController extends BaseController {
       next(error);
     }
   }
+
 
   /**
    * Get all user profile
@@ -82,7 +104,7 @@ class UserController extends BaseController {
       const result = await userService.getUserById(user, userId);
 
       this.success(res, result);
-     
+
     } catch (error) {
       next(error);
     }
