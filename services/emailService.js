@@ -117,7 +117,7 @@ class EmailService {
     try {
 
       const html = await this.compileTemplate(templateName, data);
-      console.log('Template compiled successfully');
+      // console.log('Template compiled successfully');
 
       const payload = {
         Recipients: { To: [to] },
@@ -134,8 +134,8 @@ class EmailService {
         },
       };
 
-      console.log('Payload:', JSON.stringify(payload, null, 2));
-      console.log('Making API request to:', `${this.baseUrl}/emails/transactional`);
+      // console.log('Payload:', JSON.stringify(payload, null, 2));
+      // console.log('Making API request to:', `${this.baseUrl}/emails/transactional`);
 
       const res = await axios.post(`${this.baseUrl}/emails/transactional`, payload, {
         headers: {

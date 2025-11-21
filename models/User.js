@@ -447,10 +447,10 @@ userSchema.query.search = function (searchTerm) {
 };
 
 // Static method to find nearby runners
-userSchema.statics.findNearbyRunners = async function({ 
-  latitude, 
-  longitude, 
-  serviceType, 
+userSchema.statics.findNearbyRunners = async function ({
+  latitude,
+  longitude,
+  serviceType,
   fleetType,
   maxDistance = 2000 // 2km in meters
 }) {
@@ -480,7 +480,7 @@ userSchema.statics.findNearbyRunners = async function({
   }
 
   return this.find(query)
-    .select('firstName lastName phone fleetType serviceType location latitude longitude isOnline')
+    .select('firstName lastName phone fleetType serviceType location latitude longitude isOnline isAvailable')
     .lean();
 };
 
