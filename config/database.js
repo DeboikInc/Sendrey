@@ -28,3 +28,8 @@ const connectDb = async () => {
 }
 
 module.exports = connectDb;
+
+
+// runners should be notified of services, accept or decline
+// only runners available within 2km(trekable) to user should be notified
+// only online runners should be sent to users requesting service

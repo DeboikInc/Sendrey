@@ -16,6 +16,7 @@ const { requestLogger, enhancedRequestLogger } = require('./middleware/logger');
 
 const app = express();
 
+
 // Database connection
 const connectDb = require('./config/database');
 connectDb();

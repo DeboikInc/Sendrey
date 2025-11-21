@@ -22,7 +22,6 @@ class UserService {
    * user by email
    */
   async getUserByEmail(email, phone) {
-
     // Find user
     const user = await User.findOne({
       $or: [
@@ -39,8 +38,8 @@ class UserService {
   }
 
   /**
- * find single user by id 
- */
+   * find single user by id 
+   */
   async getUserById(id) {
     const user = await User.findById(id);
 
@@ -48,28 +47,7 @@ class UserService {
       throw new Error('User does not exist');
     }
 
-    return user
-  }
-
-  // Get runners by service type
-  async findRunnersByServiceType(serviceType) {
-    return await User.find({
-      role: 'runner',
-      serviceType: serviceType,
-      isActive: true,
-      isVerified: true
-    }).select('firstName lastName avatar phone fleetType serviceType');
-  }
-
-  // Get nearby runners by service type and location
-  async findNearbyRunners(serviceType, nearestBusStop) {
-    return await User.find({
-      role: 'runner',
-      serviceType: serviceType,
-      nearestBusStop: new RegExp(nearestBusStop, 'i'),
-      isActive: true,
-      isVerified: true
-    }).select('firstName lastName avatar phone fleetType serviceType');
+    return user;
   }
 
   /**
@@ -111,11 +89,10 @@ class UserService {
   }
 
   /**
-    * List users with pagination and filters
-    */
+   * List users with pagination and filters
+   */
   async listUsers(filters = {}) {
     try {
-
       const {
         page = 1,
         limit = 10,
@@ -191,8 +168,8 @@ class UserService {
   }
 
   /**
- * update single user by id 
- */
+   * update single user by id 
+   */
   async updateUser(id, updateData) {
     const user = await User.findById(id);
 
@@ -200,14 +177,14 @@ class UserService {
       throw new Error('User does not exist');
     }
 
-    const updatedUser = await User.findByIdAndUpdate(id, updateData)
+    const updatedUser = await User.findByIdAndUpdate(id, updateData, { new: true });
 
     return updatedUser;
   }
 
   /**
-  * Update notification preferences
-  */
+   * Update notification preferences
+   */
   async updateNotificationPreferences(userId, preferences) {
     try {
       const user = await User.findByIdAndUpdate(
@@ -254,8 +231,8 @@ class UserService {
   }
 
   /**
-     * Update user status (active/inactive)
-     */
+   * Update user status (active/inactive)
+   */
   async updateUserStatus(userId, isActive, reason = '') {
     try {
       const user = await User.findByIdAndUpdate(
@@ -289,8 +266,6 @@ class UserService {
         throw new Error('User not found');
       }
 
-      // In a real application, you might want to soft delete
-      // or archive user data instead of hard delete
       return { message: 'User deleted successfully' };
     } catch (error) {
       logger.error('UserService - Delete user error:', error);
@@ -299,8 +274,8 @@ class UserService {
   }
 
   /**
-  * Search users with advanced filters
-  */
+   * Search users with advanced filters
+   */
   async searchUsers(filters = {}) {
     try {
       const {
@@ -351,170 +326,18 @@ class UserService {
       const users = await User.find(query)
         .select('-password -verificationToken -resetPasswordToken')
         .sort({ createdAt: -1 })
-        .limit(50); // Limit search results
+        .limit(50);
 
       return { users, count: users.length };
     } catch (error) {
       logger.error('UserService - Search users error:', error);
       throw error;
     }
+    
   }
-
   /**
-   * Bulk user actions
+   * Convert users data to CSV
    */
-  async bulkUserAction(userIds, action, role = null) {
-    try {
-      let result;
-
-      switch (action) {
-        case 'activate':
-          result = await User.updateMany(
-            { _id: { $in: userIds } },
-            { isActive: true }
-          );
-          break;
-
-        case 'deactivate':
-          result = await User.updateMany(
-            { _id: { $in: userIds } },
-            { isActive: false }
-          );
-          break;
-
-        case 'delete':
-          result = await User.deleteMany({ _id: { $in: userIds } });
-          break;
-
-        case 'assign-role':
-          if (!role) {
-            throw new Error('Role is required for assign-role action');
-          }
-          result = await User.updateMany(
-            { _id: { $in: userIds } },
-            { role }
-          );
-          break;
-
-        default:
-          throw new Error('Invalid bulk action');
-      }
-
-      return {
-        action,
-        affectedCount: result.modifiedCount || result.deletedCount,
-        totalSelected: userIds.length
-      };
-    } catch (error) {
-      logger.error('UserService - Bulk user action error:', error);
-      throw error;
-    }
-  }
-
-  /**
-  * Export users data
-  */
-  async exportUsers(options = {}) {
-    try {
-      const {
-        format = 'csv',
-        fields = ['id', 'email', 'firstName', 'lastName', 'role', 'createdAt'],
-        dateFrom,
-        dateTo
-      } = options;
-
-      // Build query for date range
-      const query = {};
-      if (dateFrom || dateTo) {
-        query.createdAt = {};
-        if (dateFrom) query.createdAt.$gte = new Date(dateFrom);
-        if (dateTo) query.createdAt.$lte = new Date(dateTo);
-      }
-
-      const users = await User.find(query).select(fields.join(' '));
-
-      let data;
-      let contentType;
-      let filename;
-
-      switch (format) {
-        case 'csv':
-          data = this.convertToCSV(users, fields);
-          contentType = 'text/csv';
-          filename = `users-export-${Date.now()}.csv`;
-          break;
-
-        case 'json':
-          data = JSON.stringify(users, null, 2);
-          contentType = 'application/json';
-          filename = `users-export-${Date.now()}.json`;
-          break;
-
-        case 'xlsx':
-          // For XLSX, you would need a library like 'xlsx'
-          data = this.convertToXLSX(users, fields);
-          contentType = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-          filename = `users-export-${Date.now()}.xlsx`;
-          break;
-
-        default:
-          throw new Error('Unsupported export format');
-      }
-
-      return { data, contentType, filename };
-    } catch (error) {
-      logger.error('UserService - Export users error:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Get user statistics (admin only)
-   */
-  async getUserStats() {
-    try {
-      const [
-        totalUsers,
-        activeUsers,
-        verifiedUsers,
-        usersToday,
-        usersThisWeek,
-        usersByRole
-      ] = await Promise.all([
-        User.countDocuments(),
-        User.countDocuments({ isActive: true }),
-        User.countDocuments({ isVerified: true }),
-        User.countDocuments({
-          createdAt: { $gte: new Date().setHours(0, 0, 0, 0) }
-        }),
-        User.countDocuments({
-          createdAt: { $gte: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }
-        }),
-        User.aggregate([
-          { $group: { _id: '$role', count: { $sum: 1 } } }
-        ])
-      ]);
-
-      return {
-        totalUsers,
-        activeUsers,
-        verifiedUsers,
-        usersToday,
-        usersThisWeek,
-        usersByRole: usersByRole.reduce((acc, item) => {
-          acc[item._id] = item.count;
-          return acc;
-        }, {})
-      };
-    } catch (error) {
-      logger.error('UserService - Get user stats error:', error);
-      throw error;
-    }
-  }
-
-  /**
-  * Convert users data to CSV
-  */
   convertToCSV(users, fields) {
     if (users.length === 0) return '';
 
@@ -549,6 +372,9 @@ class UserService {
     return this.convertToCSV(users, fields);
   }
 
+  /**
+   * Get user activity
+   */
   async getUserActivity(userId, options = {}) {
     try {
       const {
@@ -615,7 +441,6 @@ class UserService {
       throw error;
     }
   }
-
 }
 
 module.exports = new UserService();

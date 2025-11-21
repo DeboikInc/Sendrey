@@ -8,7 +8,7 @@ class SMSService {
   constructor() {
     this.isConfigured = false;
     this.provider = config.sms?.provider;
-    
+
     if (this.provider === 'twilio') {
       if (config.sms.twilio?.accountSid && config.sms.twilio?.authToken) {
         this.client = twilio(config.sms.twilio.accountSid, config.sms.twilio.authToken);
@@ -26,22 +26,22 @@ class SMSService {
    */
   formatPhoneNumber(phoneNumber) {
     let cleaned = phoneNumber.replace(/[\s\-\(\)]/g, '');
-    
+
     // If it starts with 0 (like 09025127581), convert to +234
     if (cleaned.startsWith('0')) {
       return '+234' + cleaned.substring(1);
     }
-    
+
     // If it starts with 234 without +, add +
     if (cleaned.startsWith('234') && !cleaned.startsWith('+234')) {
       return '+' + cleaned;
     }
-    
+
     // If it already has +, return as is
     if (cleaned.startsWith('+')) {
       return cleaned;
     }
-    
+
     return '+234' + cleaned;
   }
 
@@ -78,9 +78,9 @@ class SMSService {
       }
 
       const formattedTo = this.formatPhoneNumber(to);
-      
+
       // Validate the formatted number
-      if (!this.validatePhoneNumber(to)) {
+      if (!this.validatePhoneNumber(formattedTo)) {
         throw new Error(`Invalid phone number format: ${to} (formatted as: ${formattedTo})`);
       }
 
@@ -94,7 +94,7 @@ class SMSService {
           from: config.sms.twilio.fromNumber,
           body: message,
         });
-        
+
         logger.info(`SMS sent to ${formattedTo}: ${result.sid}`);
         return result;
       }
@@ -102,18 +102,20 @@ class SMSService {
       throw new Error(`SMS provider '${this.provider}' not supported`);
     } catch (error) {
       logger.error('SMS sending error:', {
-        errorMessage: error.message,
-        errorCode: error.code,
-        phoneNumber: to
+        message: error?.message,
+        code: error?.code,
+        status: error?.status,
+        moreInfo: error?.moreInfo,
+        stack: error?.stack,
+        raw: error
       });
-      throw new Error(`Failed to send SMS: ${error.message}`);
     }
   }
 
   // Specific SMS methods
   async sendOTP(phoneNumber, otpCode) {
     console.log(`Attempting to send OTP to: ${phoneNumber}, Formatted: ${this.formatPhoneNumber(phoneNumber)}`);
-    
+
     if (!this.isConfigured) {
       logger.warn('SMS not configured - would send OTP:', { phoneNumber, otpCode });
       if (process.env.NODE_ENV === 'development') {

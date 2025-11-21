@@ -7,7 +7,7 @@ const { authenticate, authorize, auditLog, checkOwnership } = require('../middle
 
 // Public routes (if any)
 router.get('/public-profile/:userId',
-  validate(userParamsValidation.userId),
+  validate(userParamsValidation.userId, 'params'),
   userController.getProfile
 );
 
@@ -43,21 +43,9 @@ router.get('/search',
   userController.searchUsers
 );
 
-router.get('/runners',
-  authenticate,
-  authorize(['admin', 'super-admin', 'manager', 'user', 'runner']), 
-  userController.getRunners
-);
-
-// get runners by service type
-router.get('/runners/:serviceType',
-  validate(userParamsValidation.serviceType),
-  userController.getRunnersByServiceType
-);
-
 
 router.get('/:userId',
-  validate(userParamsValidation.userId),
+  validate(userParamsValidation.userId, 'params'),
   checkOwnership('params.userId'), // Allow access to own profile or admin
   userController.getProfile
 );
@@ -71,7 +59,7 @@ router.put('/:userId',
 );
 
 router.patch('/:userId/role',
-  validate(userParamsValidation.userId),
+  validate(userParamsValidation.userId, 'params'),
   validate(userValidation.updateRole),
   authorize(['admin', 'super-admin']), // Only admin can change roles
   auditLog('UPDATE_USER_ROLE'),
@@ -79,7 +67,7 @@ router.patch('/:userId/role',
 );
 
 router.patch('/:userId/status',
-  validate(userParamsValidation.userId),
+  validate(userParamsValidation.userId, 'params'),
   validate(userValidation.updateStatus),
   checkOwnership('params.userId'),
   auditLog('UPDATE_USER_STATUS'),
@@ -87,7 +75,7 @@ router.patch('/:userId/status',
 );
 
 router.delete('/:userId',
-  validate(userParamsValidation.userId),
+  validate(userParamsValidation.userId, 'params'),
   authorize(['super-admin']), // Only admin can delete users
   auditLog('DELETE_USER'),
   userController.deleteUser
