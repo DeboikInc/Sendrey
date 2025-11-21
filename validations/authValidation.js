@@ -122,12 +122,12 @@ const commonSchemas = {
     }),
 
   serviceType: Joi.string().
-  valid('pick-up', 'run-errand').
-  required()
-  .messages({
-    'any.only': 'Service type must be one of: pick-up, run-errand',
-    'any.required': 'Service type is required'
-  })
+    valid('pick-up', 'run-errand').
+    required()
+    .messages({
+      'any.only': 'Service type must be one of: pick-up, run-errand',
+      'any.required': 'Service type is required'
+    })
 };
 
 // Validation schemas for different auth operations
@@ -189,13 +189,17 @@ const authValidation = {
       .messages({
         'any.only': 'Role must be one of: user, admin, moderator'
       }),
-      serviceType: Joi.string()
+    serviceType: Joi.string()
       .valid('pick-up', 'run-errand').
       required()
       .messages({
         'any.only': 'Service type must be one of: pick-up, run-errand',
         'any.required': 'Service type is required'
-      })
+      }),
+    latitude: Joi.number().min(-90).max(90).optional(),
+    longitude: Joi.number().min(-180).max(180).optional(),
+    isOnline: Joi.boolean().optional(),
+    isAvailable: Joi.boolean().optional()
   }),
 
   registerUser: Joi.object({
@@ -209,8 +213,11 @@ const authValidation = {
     lastName: commonSchemas.name
       .messages({
         'string.empty': 'Last name is required',
-      })
+      }),
+    latitude: Joi.number().min(-90).max(90).optional(),
+    longitude: Joi.number().min(-180).max(180).optional(),
   }),
+
 
   // // Login validation
   login: Joi.object({

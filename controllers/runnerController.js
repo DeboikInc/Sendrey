@@ -13,9 +13,9 @@ class RunnerController {
    * Error response helper
    */
   error(res, message, statusCode = 400) {
-    return res.status(statusCode).json({ 
-      success: false, 
-      message 
+    return res.status(statusCode).json({
+      success: false,
+      message
     });
   }
 
@@ -37,6 +37,24 @@ class RunnerController {
         return this.error(res, 'Invalid latitude or longitude', 400);
       }
 
+      if (lat < -90 || lat > 90) {
+        return this.error(res, 'Latitude must be between -90 and 90', 400);
+      }
+      if (lng < -180 || lng > 180) {
+        return this.error(res, 'Longitude must be between -180 and 180', 400);
+      }
+
+      const validServiceTypes = ['pick-up', 'run-errand'];
+      if (serviceType && !validServiceTypes.includes(serviceType)) {
+        return this.error(res, `Invalid service type. Must be one of: ${validServiceTypes.join(', ')}`, 400);
+      }
+
+      const validFleetTypes = ['cycling', 'bike', 'car', 'van', 'pedestrian'];
+      if (fleetType && !validFleetTypes.includes(fleetType)) {
+        return this.error(res, `Invalid fleet type. Must be one of: ${validFleetTypes.join(', ')}`, 400);
+      }
+
+
       const runners = await runnerService.findNearbyRunners({
         latitude: lat,
         longitude: lng,
@@ -44,6 +62,12 @@ class RunnerController {
         fleetType,
         maxDistance: 2000
       });
+
+      let message = `Found ${runners.length} nearby runner${runners.length !== 1 ? 's' : ''}`;
+
+      if (runners.length === 0) {
+        return this.error(res, 'No runners found matching all the specified criteria', 404);
+      }
 
       this.success(res, {
         success: true,
@@ -65,8 +89,8 @@ class RunnerController {
 
       const runners = await runnerService.getAllRunners(serviceType, fleetType);
 
-      this.success(res, { 
-        success: true, 
+      this.success(res, {
+        success: true,
         count: runners.length,
         runners
       });
