@@ -44,6 +44,12 @@ class AuthController extends BaseController {
       const verificationToken = await authService.generateVerificationToken(user._id);
       const otp = await authService.generatePhoneVerificationOTP(user._id, userData.phone);
 
+      console.log('SERVER LOG: Runner Data Saved:', {
+        isOnline: user.isOnline,
+        isAvailable: user.isAvailable,
+        serviceType: user.serviceType
+      });
+
       // Send email token and
       // Send OTP via SMS
       try {
@@ -63,7 +69,7 @@ class AuthController extends BaseController {
         logger.warn('Failed to send OTP via SMS:', smsError.message);
         // Continue with registration even if SMS fails
       }
-      
+
       // Remove sensitive data from response
       const userResponse = this._sanitizeUser(user);
 

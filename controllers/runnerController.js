@@ -1,0 +1,184 @@
+const runnerService = require('../services/runnerService');
+const logger = require('../utils/logger');
+
+class RunnerController {
+  /**
+   * Success response helper
+   */
+  success(res, data, statusCode = 200) {
+    return res.status(statusCode).json(data);
+  }
+
+  /**
+   * Error response helper
+   */
+  error(res, message, statusCode = 400) {
+    return res.status(statusCode).json({ 
+      success: false, 
+      message 
+    });
+  }
+
+  /**
+   * Get nearby runners (within 2km)
+   */
+  async getNearbyRunners(req, res, next) {
+    try {
+      const { latitude, longitude, serviceType, fleetType } = req.query;
+
+      if (!latitude || !longitude) {
+        return this.error(res, 'Latitude and longitude are required', 400);
+      }
+
+      const lat = parseFloat(latitude);
+      const lng = parseFloat(longitude);
+
+      if (isNaN(lat) || isNaN(lng)) {
+        return this.error(res, 'Invalid latitude or longitude', 400);
+      }
+
+      const runners = await runnerService.findNearbyRunners({
+        latitude: lat,
+        longitude: lng,
+        serviceType,
+        fleetType,
+        maxDistance: 2000
+      });
+
+      this.success(res, {
+        success: true,
+        count: runners.length,
+        runners
+      });
+    } catch (error) {
+      logger.error('Error finding nearby runners:', error);
+      next(error);
+    }
+  }
+
+  /**
+   * Get all runners
+   */
+  async getRunners(req, res, next) {
+    try {
+      const { fleetType, serviceType } = req.query;
+
+      const runners = await runnerService.getAllRunners(serviceType, fleetType);
+
+      this.success(res, { 
+        success: true, 
+        count: runners.length,
+        runners
+      });
+    } catch (error) {
+      logger.error('Error fetching runners:', error);
+      next(error);
+    }
+  }
+
+  /**
+   * Get runners by service type
+   */
+  async getRunnersByServiceType(req, res, next) {
+    try {
+      const { serviceType } = req.params;
+      const runners = await runnerService.findRunnersByServiceType(serviceType);
+
+      this.success(res, {
+        success: true,
+        count: runners.length,
+        runners
+      });
+    } catch (error) {
+      logger.error('Error fetching runners by service type:', error);
+      next(error);
+    }
+  }
+
+  /**
+   * Get online runners
+   */
+  async getOnlineRunners(req, res, next) {
+    try {
+      const { serviceType, fleetType } = req.query;
+
+      const runners = await runnerService.getOnlineRunners(serviceType, fleetType);
+
+      this.success(res, {
+        success: true,
+        count: runners.length,
+        runners
+      });
+    } catch (error) {
+      logger.error('Error fetching online runners:', error);
+      next(error);
+    }
+  }
+
+  /**
+   * Update runner location
+   */
+  async updateRunnerLocation(req, res, next) {
+    try {
+      const { userId, latitude, longitude } = req.body;
+
+      if (!userId || !latitude || !longitude) {
+        return this.error(res, 'userId, latitude, and longitude are required', 400);
+      }
+
+      const runner = await runnerService.updateRunnerLocation(userId, latitude, longitude);
+
+      this.success(res, {
+        success: true,
+        message: 'Location updated successfully',
+        runner
+      });
+    } catch (error) {
+      logger.error('Error updating runner location:', error);
+      next(error);
+    }
+  }
+
+  /**
+   * Set runner online status
+   */
+  async setRunnerOnlineStatus(req, res, next) {
+    try {
+      const { userId, isOnline, isAvailable } = req.body;
+
+      if (!userId) {
+        return this.error(res, 'userId is required', 400);
+      }
+
+      const runner = await runnerService.setRunnerOnlineStatus(userId, isOnline, isAvailable);
+
+      this.success(res, {
+        success: true,
+        message: 'Status updated successfully',
+        runner
+      });
+    } catch (error) {
+      logger.error('Error updating runner status:', error);
+      next(error);
+    }
+  }
+
+  /**
+   * Get runner statistics
+   */
+  async getRunnerStats(req, res, next) {
+    try {
+      const stats = await runnerService.getRunnerStats();
+
+      this.success(res, {
+        success: true,
+        stats
+      });
+    } catch (error) {
+      logger.error('Error fetching runner stats:', error);
+      next(error);
+    }
+  }
+}
+
+module.exports = new RunnerController();

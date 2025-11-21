@@ -3,15 +3,13 @@ const userService = require('../services/userService');
 const emailService = require('../services/emailService');
 const smsService = require('../services/smsService');
 const logger = require('../utils/logger');
-const User = require('../models/User');
 
 class UserController extends BaseController {
   constructor() {
     super(userService);
-    this.smsService = smsService
-    this.emailService = emailService
+    this.smsService = smsService;
+    this.emailService = emailService;
     this.listUsers = this.listUsers.bind(this);
-
   }
 
   /**
@@ -26,22 +24,6 @@ class UserController extends BaseController {
       next(error);
     }
   }
-
-  async getRunners(req, res) {
-    try {
-      const { fleetType } = req.query;
-
-      const query = { role: 'runner' };
-      if (fleetType) {
-        query.fleetType = fleetType;
-      }
-      const runners = await User.find({ role: 'runner' }).select('-password');
-      res.status(200).json({ success: true, data: runners });
-    } catch (error) {
-      console.error('Error fetching runners:', error);
-      res.status(500).json({ success: false, message: 'Server Error' });
-    }
-  };
 
   /**
    * Get public user profile
@@ -82,9 +64,8 @@ class UserController extends BaseController {
     }
   }
 
-
   /**
-   * Get all user profile
+   * Get all user profiles
    */
   async listUsers(req, res, next) {
     try {
@@ -98,13 +79,15 @@ class UserController extends BaseController {
     }
   }
 
+  /**
+   * Get single user by ID
+   */
   async getSingleUser(req, res, next) {
     try {
       const { userId } = req.params;
       const result = await userService.getUserById(userId);
 
       this.success(res, result);
-
     } catch (error) {
       next(error);
     }
@@ -130,6 +113,9 @@ class UserController extends BaseController {
     }
   }
 
+  /**
+   * Update user role (admin only)
+   */
   async updateUserRole(req, res, next) {
     try {
       const { userId } = req.params;
@@ -147,6 +133,9 @@ class UserController extends BaseController {
     }
   }
 
+  /**
+   * Update user status
+   */
   async updateUserStatus(req, res, next) {
     try {
       const { userId } = req.params;
@@ -164,6 +153,9 @@ class UserController extends BaseController {
     }
   }
 
+  /**
+   * Delete user
+   */
   async deleteUser(req, res, next) {
     try {
       const { userId } = req.params;
@@ -176,6 +168,9 @@ class UserController extends BaseController {
     }
   }
 
+  /**
+   * Search users
+   */
   async searchUsers(req, res, next) {
     try {
       const filters = req.query;
@@ -187,6 +182,9 @@ class UserController extends BaseController {
     }
   }
 
+  /**
+   * Bulk user actions
+   */
   async bulkUserAction(req, res, next) {
     try {
       const { userIds, action, role } = req.body;
@@ -202,6 +200,9 @@ class UserController extends BaseController {
     }
   }
 
+  /**
+   * Export users
+   */
   async exportUsers(req, res, next) {
     try {
       const { format, fields, dateFrom, dateTo } = req.body;
@@ -216,25 +217,6 @@ class UserController extends BaseController {
       next(error);
     }
   }
-
-  // get runners by service type
-  async getRunnersByServiceType(req, res) {
-    try {
-      const { serviceType } = req.params;
-      const runners = await userService.findRunnersByServiceType(serviceType);
-
-      res.status(200).json({
-        success: true,
-        data: runners
-      });
-    } catch (error) {
-      res.status(400).json({
-        success: false,
-        message: error.message
-      });
-    }
-  };
-
 
   /**
    * Remove sensitive data from user object

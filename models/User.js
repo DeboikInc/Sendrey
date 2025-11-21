@@ -106,6 +106,45 @@ const userSchema = new mongoose.Schema({
     default: false
   },
 
+  location: {
+    type: {
+      type: String,
+      enum: ['Point'],
+      default: 'Point'
+    },
+    coordinates: {
+      type: [Number], // [longitude, latitude]
+      default: [0, 0]
+    }
+  },
+
+  latitude: {
+    type: Number,
+    default: null
+  },
+  longitude: {
+    type: Number,
+    default: null
+  },
+
+  // Online status for runners
+  isOnline: {
+    type: Boolean,
+    default: false
+  },
+
+  // Available to take jobs
+  isAvailable: {
+    type: Boolean,
+    default: true
+  },
+
+  // Last location update timestamp
+  lastLocationUpdate: {
+    type: Date,
+    default: null
+  },
+
   // Email Verification
   verificationToken: String,
   verificationExpires: Date,
@@ -231,6 +270,9 @@ userSchema.index({ isActive: 1 });
 userSchema.index({ isVerified: 1 });
 userSchema.index({ createdAt: -1 });
 userSchema.index({ lastLogin: -1 });
+userSchema.index({ location: '2dsphere' }); // for geospatial queries
+userSchema.index({ role: 1, isOnline: 1, isAvailable: 1 });
+userSchema.index({ serviceType: 1, fleetType: 1 });
 
 // Pre-save middleware to hash password
 userSchema.pre('save', async function (next) {
@@ -250,6 +292,19 @@ userSchema.pre('save', async function (next) {
 userSchema.pre('save', function (next) {
   if (this.isModified() && !this.isModified('lastActive')) {
     this.lastActive = new Date();
+  }
+  next();
+});
+
+userSchema.pre('save', function (next) {
+  if (this.isModified('latitude') || this.isModified('longitude')) {
+    if (this.latitude && this.longitude) {
+      this.location = {
+        type: 'Point',
+        coordinates: [this.longitude, this.latitude] // MongoDB uses [lng, lat]
+      };
+      this.lastLocationUpdate = new Date();
+    }
   }
   next();
 });
@@ -389,6 +444,44 @@ userSchema.query.search = function (searchTerm) {
       { email: regex }
     ]
   });
+};
+
+// Static method to find nearby runners
+userSchema.statics.findNearbyRunners = async function({ 
+  latitude, 
+  longitude, 
+  serviceType, 
+  fleetType,
+  maxDistance = 2000 // 2km in meters
+}) {
+  const query = {
+    role: 'runner',
+    isOnline: true,
+    isAvailable: true,
+    location: {
+      $near: {
+        $geometry: {
+          type: 'Point',
+          coordinates: [longitude, latitude]
+        },
+        $maxDistance: maxDistance
+      }
+    }
+  };
+
+  // Filter by service type if provided
+  if (serviceType) {
+    query.serviceType = serviceType;
+  }
+
+  // Filter by fleet type if provided
+  if (fleetType) {
+    query.fleetType = fleetType;
+  }
+
+  return this.find(query)
+    .select('firstName lastName phone fleetType serviceType location latitude longitude isOnline')
+    .lean();
 };
 
 module.exports = mongoose.model('User', userSchema);
