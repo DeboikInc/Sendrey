@@ -43,14 +43,17 @@ mongoose
       id: Number,
       from: String,
       text: String,
+      // audioUrl: String,
+      // audioSize: String,
+      // audioName: String,
+      // fileUrl: String,
+      // fileSize: String,
+      // fileName: String,
       type: { type: String, default: "text" },
       time: String,
       status: { type: String, default: "sent" },
       senderId: String,  
       senderType: String,
-      fileUrl: String,
-      fileName: String,
-      fileSize: String,
     });
 
     const chatSchema = new mongoose.Schema({
