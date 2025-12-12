@@ -52,7 +52,7 @@ mongoose
       type: { type: String, default: "text" },
       time: String,
       status: { type: String, default: "sent" },
-      senderId: String,  
+      senderId: String,
       senderType: String,
     });
 
@@ -168,6 +168,62 @@ mongoose
 
         console.log(`Emitting message to room ${chatId}`);
         io.to(chatId).emit("message", message);
+      });
+
+      socket.on("requestRunner", async ({ runnerId, userId, chatId, serviceType }) => {
+        console.log('SERVER: Received requestRunner from user:', userId, 'to runner:', runnerId);
+
+        socket.join(chatId);
+
+        // Find or create chat - DON'T crash if it exists
+        let chat = await Chat.findOne({ chatId });
+        if (!chat) {
+          chat = await Chat.create({
+            chatId,
+            messages: []
+          });
+          console.log(`Created new chat: ${chatId}`);
+        } else {
+          console.log(`Chat already exists: ${chatId}`);
+        }
+
+        // Emit to the specific runner
+        io.to(`runners-${serviceType}`).emit("runnerRequested", {
+          runnerId,
+          userId,
+          chatId,
+          serviceType
+        });
+      });
+
+      socket.on("acceptRunnerRequest", async ({ runnerId, userId, chatId }) => {
+        console.log(`Runner ${runnerId} accepted request from user ${userId}`);
+
+        // Runner joins the chat room
+        socket.join(chatId);
+
+        // Notify the user that runner accepted - emit to the chatId room
+        io.to(chatId).emit("runnerAccepted", {
+          runnerId,
+          userId,
+          chatId,
+          timestamp: new Date().toISOString()
+        });
+
+        console.log(`Emitted runnerAccepted to chat room: ${chatId}`);
+      });
+
+      socket.on("acceptRunnerRequest", async ({ runnerId, userId, chatId }) => {
+        console.log(`Runner ${runnerId} accepted request from user ${userId}`);
+
+        socket.join(chatId);
+        // Notify the user that runner accepted
+        io.to(chatId).emit("runnerAccepted", {
+          runnerId,
+          userId,
+          chatId,
+          timestamp: new Date().toISOString()
+        });
       });
 
       socket.on("disconnect", () => {
