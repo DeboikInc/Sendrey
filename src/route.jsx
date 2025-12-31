@@ -1,12 +1,28 @@
 import { Routes, Route } from "react-router";
-import ErrandServiceApp from "./pages/home";
 import WhatsAppLikeChat from "./pages/raw";
+import { Home } from "./pages/Home";
+import { Auth } from "./pages/auth";
+import { Welcome } from "./pages/welcome";
+import { Profile } from "./pages/Profile"
+import { Location } from "./pages/Location"
+import { Wallet } from "./pages/Wallet";
+import { OngoingOrders } from "./pages/OngoingOrders";
+import { OrderDetail } from "./components/common/OrderDetail";
+import { TrackDeliveryScreen } from "./components/screens/TrackDeliveryScreen.jsx";
 
 export default function ProjectedRoutes() {
   return (
     <Routes>
-      <Route index element={<ErrandServiceApp />} />
       <Route path="raw" element={<WhatsAppLikeChat />} />
+      <Route path="" element={<Home />} />
+      <Route path="auth" element={<Auth />} />
+      <Route path="welcome" element={<Welcome />} />
+      <Route path="profile" element={<Profile />} />
+      <Route path="locations" element={<Location />} />
+      <Route path="wallet" element={<Wallet />} />
+      <Route path="ongoing-orders" element={<OngoingOrders />} />
+      <Route path="track-delivery" element={<TrackDeliveryScreen />} />
+      {/* <Route path="order" element={<OrderDetail />} /> */}
 
       {/* <Route element={<AuthLayout />}>
         <Route path="login" element={<Login />} />
@@ -18,6 +34,7 @@ export default function ProjectedRoutes() {
         <Route path=":city" element={<City />} />
         <Route path="trending" element={<Trending />} />
       </Route> */}
+
     </Routes>
   )
 }

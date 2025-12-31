@@ -1,146 +1,29 @@
 import { useState } from "react";
-import ChatScreen from "../components/screens/ChatScreen";
-import OnboardingScreen from "../components/screens/OnboardingScreen";
 import RoleSelectionScreen from "../components/screens/RoleSelectionScreen";
-import ServiceSelectionScreen from "../components/screens/ServiceSelectionScreen";
-import MarketSelectionScreen from "../components/screens/MarketSelectionScreen";
-import VehicleSelectionScreen from "../components/screens/VehicleSelectionScreen";
-import RunnerSelectionScreen from "../components/screens/RunnerSelectionScreen";
 import useDarkMode from "../hooks/useDarkMode";
-import RunnerDashboardScreen from "../components/screens/RunnerDashboardScreen";
+import { useNavigate } from "react-router-dom";
 
-export default function ErrandServiceApp() {
-  const [dark, setDark] = useDarkMode();
-  const [currentScreen, setCurrentScreen] = useState('role_selection');
-  const [userData, setUserData] = useState({});
-  const [selectedMarket, setSelectedMarket] = useState('');
-  const [selectedVehicle, setSelectedVehicle] = useState('');
-  const [selectedRunner, setSelectedRunner] = useState(null);
-  const [userType, setUserType] = useState(null);
 
-  const navigateTo = (screen) => {
-    setCurrentScreen(screen);
-  };
+export const Home = () => {
+    const [dark, setDark] = useDarkMode();
+    const [userType, setUserType] = useState(null);
+    const navigate = useNavigate();
 
-  const updateUserData = (newData) => {
-    setUserData({ ...userData, ...newData });
-  };
-
-  // Render the appropriate screen based on currentScreen state
-  const renderScreen = () => {
-    switch (currentScreen) {
-      case 'role_selection':
-        return (
-          <RoleSelectionScreen
-            onSelectRole={(type) => {
-              setUserType(type);
-              navigateTo('onboarding');
-            }}
-            darkMode={dark}
-            toggleDarkMode={() => setDark(!dark)}
-          />
-        );
-
-      case 'onboarding':
-        return (
-          <OnboardingScreen
-            userType={userType}
-            onComplete={(data) => {
-              updateUserData(data);
-              if (userType === 'user') {
-                navigateTo('service_selection');
-              } else {
-                // For runners, go to dashboard after onboarding
-                navigateTo('runner_dashboard');
-              }
-            }}
-            darkMode={dark}
-            toggleDarkMode={() => setDark(!dark)}
-          />
-        );
-
-      case 'service_selection':
-        return (
-          <ServiceSelectionScreen
-            onSelectService={(service) => {
-              updateUserData({ service });
-              navigateTo('market_selection');
-            }}
-            darkMode={dark}
-            toggleDarkMode={() => setDark(!dark)}
-          />
-        );
-
-      case 'market_selection':
-        return (
-          <MarketSelectionScreen
-            service={userData}
-            onSelectMarket={(market) => {
-              setSelectedMarket(market);
-              navigateTo('vehicle_selection');
-            }}
-            darkMode={dark}
-            toggleDarkMode={() => setDark(!dark)}
-          />
-        );
-
-      case 'vehicle_selection':
-        return (
-          <VehicleSelectionScreen
-            onSelectVehicle={(vehicle) => {
-              setSelectedVehicle(vehicle);
-              navigateTo('runner_selection');
-            }}
-            darkMode={dark}
-          />
-        );
-
-      case 'runner_selection':
-        return (
-          <RunnerSelectionScreen
-            selectedVehicle={selectedVehicle}
-            onSelectRunner={(runner) => {
-              setSelectedRunner(runner);
-              navigateTo('chat');
-            }}
-            darkMode={dark}
-          />
-        );
-
-      case 'chat':
-        return (
-          <ChatScreen
-            runner={selectedRunner}
-            market={selectedMarket}
-            userData={userData}
-            darkMode={dark}
-            toggleDarkMode={() => setDark(!dark)}
-            onBack={() => navigateTo('runner_selection')}
-          />
-        );
-
-      case 'runner_dashboard':
-        return (
-          <RunnerDashboardScreen
-            runner={selectedRunner}
-            market={selectedMarket}
-            userData={userData}
-            darkMode={dark}
-            toggleDarkMode={() => setDark(!dark)}
-            onBack={() => navigateTo('runner_selection')}
-          />
-        );
-
-      default:
-        return <RoleSelectionScreen onSelectRole={setUserType} darkMode={dark} />;
-    }
-  };
-
-  return (
-    <div className={`mn-h-screen ${dark ? 'dark' : ''}`}>
-      <div className="h-screen w-full bg-gradient-to-br from-slate-900 via-slate-950 to-black text-white">
-        {renderScreen()}
-      </div>
-    </div>
-  );
+    return (
+        <>
+            <div className={`min-h-screen ${dark ? "dark" : ""}`}>
+                <div className="h-screen w-full bg-gradient-to-br from-slate-900 via-slate-950 to-black text-white">
+                    <RoleSelectionScreen
+                        onSelectRole={(type) => {
+                            setUserType(type);
+                            navigate("/auth", { state: { userType: "user" } });
+                        }}
+                        darkMode={dark}
+                        toggleDarkMode={() => setDark(!dark)}
+                    />
+                </div>
+            </div>
+        </>
+    )
 }
+
