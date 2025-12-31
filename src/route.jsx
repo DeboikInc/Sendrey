@@ -1,5 +1,5 @@
 import { Routes, Route } from "react-router";
-import WhatsAppLikeChat from "./pages/raw";
+import WhatsAppLikeChat from "./pages/Raw";
 import { Home } from "./pages/Home";
 import { Auth } from "./pages/Auth";
 import { Welcome } from "./pages/Welcome";
