@@ -379,6 +379,9 @@ mongoose
         } catch (error) {
           console.error("Error in acceptRunnerRequest:", error);
 
+
+
+          
           // Still emit acceptance even if DB update fails
           socket.join(chatId);
           if (!chatRoomMembers.has(chatId)) {
