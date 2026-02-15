@@ -14,6 +14,7 @@ const config = require('./config');
 const routes = require('./routes');
 const { errorHandler, notFound } = require('./middleware/errorHandler');
 const { requestLogger, enhancedRequestLogger } = require('./middleware/logger');
+const { startAllConsumers } = require('./kafka/consumers');
 
 const app = express();
 const path = require('path');
@@ -49,6 +50,9 @@ const startServer = async () => {
       res.header('Cross-Origin-Resource-Policy', 'cross-origin');
       next();
     }, express.static(path.join(__dirname, 'uploads')));
+
+    // Start all Kafka consumers
+    // await startAllConsumers();
 
     // 3. Routes
     app.use('/api/v1', routes);

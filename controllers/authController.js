@@ -9,6 +9,7 @@ const ActivityLogger = require('../utils/activityLogger');
 const User = require('../models/User');
 const Runner = require('../models/Runner');
 const bcrypt = require('bcryptjs');
+const { sendEmailEvent } = require('../kafka/producers/emailProducer');
 
 class AuthController extends BaseController {
   constructor() {
@@ -106,13 +107,13 @@ class AuthController extends BaseController {
       const otp = await authService.generatePhoneVerificationOTP(runner._id, runnerData.phone, 'runner');
 
       // Send email token
-      // try {
-      //   if (runner.email) {
-      //     await emailService.sendEmailVerification(runner, verificationToken);
-      //   }
-      // } catch (emailError) {
-      //   logger.warn('Failed to send verification email:', emailError.message);
-      // }
+      try {
+        if (runner.email) {
+          await emailService.sendEmailVerification(runner, verificationToken);
+        }
+      } catch (emailError) {
+        logger.warn('Failed to send verification email:', emailError.message);
+      }
 
       // Send OTP via SMS
       try {

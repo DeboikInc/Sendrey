@@ -21,11 +21,11 @@ const getStatusLabel = (status) => {
 
 const handleUpdateStatus = async (socket, io, data) => {
   try {
-    const { chatId, status } = data;
-    
+    const { chatId, status, serviceType: clientServiceType } = data;
+
     // ✅ FIX: Extract runnerId from chatId if socket.runnerId is not set
     let runnerId = socket.runnerId;
-    
+
     if (!runnerId) {
       // Parse from chatId format: user-{userId}-runner-{runnerId}
       const match = chatId.match(/runner-(.+)$/);
@@ -49,16 +49,25 @@ const handleUpdateStatus = async (socket, io, data) => {
     }
 
     // Map serviceType to taskType
-    const taskType = chat.serviceType === 'run-errand' ? TASK_TYPES.SHOPPING : TASK_TYPES.PICKUP_DELIVERY;
+    const resolvedServiceType = chat.serviceType || clientServiceType;
 
-    console.log('🔍 Task type:', taskType, 'from serviceType:', chat.serviceType);
+    console.log('Resolved serviceType:', resolvedServiceType, '(chat:', chat.serviceType, ', client:', clientServiceType, ')');
 
-    // Validate status is in the flow
+    if (!resolvedServiceType) {
+      return socket.emit('error', { message: 'Cannot determine service type' });
+    }
+
+    const taskType = resolvedServiceType === 'run-errand'
+      ? TASK_TYPES.SHOPPING
+      : TASK_TYPES.PICKUP_DELIVERY;
+
+    console.log('Task type:', taskType);
+
     const validStatuses = STATUS_FLOWS[taskType];
     if (!validStatuses.includes(status)) {
       console.error('❌ Invalid status:', status, 'for task type:', taskType);
       return socket.emit('error', {
-        message: `Invalid status ${status} for task type ${taskType}`
+        message: `Invalid status "${status}" for task type "${taskType}". Valid: ${validStatuses.join(', ')}`
       });
     }
 
