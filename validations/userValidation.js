@@ -221,6 +221,11 @@ const userValidation = {
           'string.empty': 'Dropoff phone cannot be empty'
         }),
 
+      // specialInstructions: Joi.string().allow('').optional()
+      //   .messages({
+      //     'string.empty': 'special Instructions must be a string'
+      //   }),
+
       userId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).required()
         .messages({
           'string.pattern.base': 'Invalid user ID format',
@@ -288,6 +293,10 @@ const userValidation = {
           .messages({
             'any.unknown': 'pickupPhone is not allowed for errand service'
           }),
+        pickupItems: Joi.forbidden()
+          .messages({
+            'any.unknown': 'pickupItems is not allowed for errand service'
+          }),
         pickupCoordinates: Joi.forbidden()
           .messages({
             'any.unknown': 'pickupCoordinates is not allowed for errand service (use marketCoordinates instead)'
@@ -304,6 +313,11 @@ const userValidation = {
         pickupPhone: Joi.string().allow('').optional()
           .messages({
             'string.empty': 'Pickup phone cannot be empty'
+          }),
+
+        pickupItems: Joi.string().allow('').optional()
+          .messages({
+            'string.empty': 'Pickup items cannot be empty'
           }),
 
         pickupCoordinates: Joi.object({

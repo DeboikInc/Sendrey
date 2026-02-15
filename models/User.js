@@ -193,6 +193,7 @@ const userSchema = new mongoose.Schema({
     fleetType: { type: String, enum: FLEET_TYPE },
     deliveryLocation: { type: String },
     dropoffPhone: { type: String },
+    specialInstructions:{type: String},
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     timestamp: { type: Date, default: Date.now },
     status: {
@@ -214,6 +215,7 @@ const userSchema = new mongoose.Schema({
     // PICKUP-SPECIFIC FIELDS
     pickupLocation: { type: String },
     pickupPhone: { type: String },
+    pickupItems:{type: String},
     pickupCoordinates: {
       lat: { type: Number },
       lng: { type: Number }
@@ -428,12 +430,12 @@ userSchema.statics.findNearbyUsers = async function ({
     query['currentRequest.fleetType'] = fleetType;
   }
 
-  // console.log('🔍 USER SEARCH QUERY:', JSON.stringify(query, null, 2));
-  const allUsers = await this.find({ role: 'user' })
-    .select('firstName lastName currentRequest latitude longitude')
-    .limit(5)
+  // console.log(' USER SEARCH QUERY:', JSON.stringify(query, null, 2));
+  // const allUsers = await this.find({ role: 'user' })
+  //   .select('firstName lastName currentRequest latitude longitude')
+  //   .limit(5)
 
-  // console.log('📋 ACTUAL USERS IN DB (first 5):');
+  // console.log(' ACTUAL USERS IN DB (first 5):');
   // allUsers.forEach(user => {
   //   console.log(`  - ${user.firstName}:`, {
   //     hasCurrentRequest: !!user.currentRequest,
@@ -449,7 +451,7 @@ userSchema.statics.findNearbyUsers = async function ({
     .select('firstName lastName phone currentRequest location latitude longitude avatar')
     .lean();
 
-  // console.log('✅ Search returned:', results.length, 'users');
+  // console.log('Search returned:', results.length, 'users');
 
   return results;
 };

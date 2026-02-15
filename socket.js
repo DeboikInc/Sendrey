@@ -11,6 +11,8 @@ const socketHandlers = require("./socket/socketHandlers");
 const chatStatusHandlers = require('./socket/chatStatusHandlers');
 const fileUploadHandlers = require('./socket/fileUploadHandlers');
 
+const callHandlers = require("./socket/callHandlers");
+
 // Import models
 const { Chat } = require("./models/Chat");
 const ServiceRequest = require("./socket/ServiceRequest");
@@ -111,7 +113,7 @@ mongoose.connect(database.url, database.options)
       // Invoice events
       socket.on("sendInvoice", (data) => socketHandlers.handleSendInvoice(socket, io, data));
 
-      socket.on("acceptInvoice", async ({ invoiceId, chatId, userId, runnerId }) => {
+      socket.on(" acceptInvoice", async ({ invoiceId, chatId, userId, runnerId }) => {
         try {
           const invoice = await Invoice.findOneAndUpdate(
             { invoiceId },
@@ -190,6 +192,18 @@ mongoose.connect(database.url, database.options)
 
       // Tracking event
       socket.on("startTrackRunner", (data) => socketHandlers.handleStartTrackRunner(io, data));
+
+      // call
+      socket.on('rejoinUserRoom', ({ userId, userType }) => {
+        const room = userType === 'runner' ? `runner-${userId}` : `user-${userId}`;
+        socket.join(room);
+
+        const roomSockets = io.sockets.adapter.rooms.get(room);
+        console.log(` ${userType || 'User'} ${userId} re-joined personal room: ${room}`);
+        console.log(`Room ${room} now has ${roomSockets?.size || 0} sockets:`, Array.from(roomSockets || []));
+      });
+
+      callHandlers.register(socket, io);
 
       // Disconnect
       socket.on("disconnect", () => socketHandlers.handleDisconnect(socket));

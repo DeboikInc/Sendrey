@@ -3,7 +3,7 @@ const bcrypt = require('bcryptjs');
 const { GENDER, ROLE, FLEET, EDUCATION, SERVICE_TYPE, RUNNER_STATUS, VERIFICATION_STATUS } = require('../config/constants');
 
 const runnerSchema = new mongoose.Schema({
-  
+
   email: {
     type: String,
     lowercase: true,
@@ -39,7 +39,7 @@ const runnerSchema = new mongoose.Schema({
     type: String,
     trim: true,
   },
-  
+
   fleetType: {
     type: String,
     enum: FLEET,
@@ -59,7 +59,7 @@ const runnerSchema = new mongoose.Schema({
     type: String,
     trim: true,
   },
-  
+
   // Profile Information
   avatar: {
     type: String,
@@ -80,7 +80,7 @@ const runnerSchema = new mongoose.Schema({
     },
     default: 'male'
   },
-  
+
   // Location & Availability
   location: {
     type: {
@@ -113,7 +113,7 @@ const runnerSchema = new mongoose.Schema({
     type: Date,
     default: null
   },
-  
+
   // Verification
   runnerStatus: {
     type: String,
@@ -164,7 +164,7 @@ const runnerSchema = new mongoose.Schema({
     rejectionReason: String,
     verifiedBy: String
   },
-  
+
   // Account Status
   role: {
     type: String,
@@ -183,7 +183,7 @@ const runnerSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
-  
+
   // Verification Tokens (same as user)
   verificationToken: String,
   verificationExpires: Date,
@@ -191,7 +191,7 @@ const runnerSchema = new mongoose.Schema({
   resetPasswordExpires: Date,
   phoneVerificationOTP: String,
   phoneVerificationExpires: Date,
-  
+
   // Privacy Settings
   isEmailPublic: {
     type: Boolean,
@@ -201,7 +201,7 @@ const runnerSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
-  
+
   // Notification Preferences
   notificationPreferences: {
     email: {
@@ -220,12 +220,12 @@ const runnerSchema = new mongoose.Schema({
       promotions: { type: Boolean, default: false }
     }
   },
-  
+
   // Address Information
   address: {
     type: String, maxlength: 255
   },
-  
+
   // Activity Tracking
   lastLogin: {
     type: Date,
@@ -240,7 +240,7 @@ const runnerSchema = new mongoose.Schema({
     default: 0
   },
   lockUntil: Date,
-  
+
   // Account Statistics
   profileViews: {
     type: Number,
@@ -250,7 +250,7 @@ const runnerSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   },
-  
+
   savedLocations: [{
     name: { type: String, required: true },
     address: { type: String, required: true },
@@ -258,22 +258,23 @@ const runnerSchema = new mongoose.Schema({
     lng: { type: Number, required: true },
     savedAt: { type: Date, default: Date.now }
   }],
-  
+
   currentRequest: {
     serviceType: { type: String, enum: SERVICE_TYPE },
     fleetType: { type: String, enum: FLEET },
     // common
     deliveryLocation: { type: String },
     dropoffPhone: { type: String },
-    
+    specialInstructions: { type: String },
+
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     timestamp: { type: Date, default: Date.now },
-    status: { 
-      type: String, 
-      enum: ['idle', 'searching', 'active', 'awaiting_runner_connection', 'completed', 'cancelled'], 
-      default: 'awaiting_runner_connection' 
+    status: {
+      type: String,
+      enum: ['idle', 'searching', 'active', 'awaiting_runner_connection', 'completed', 'cancelled'],
+      default: 'awaiting_runner_connection'
     },
-    
+
     // ERAND-SPECIFIC FIELDS
     marketLocation: { type: String },
     marketItems: { type: String },
@@ -283,9 +284,10 @@ const runnerSchema = new mongoose.Schema({
       lat: { type: Number },
       lng: { type: Number }
     },
-    
+
     // PICKUP-SPECIFIC FIELDS
-    pickupLocation: { type: String }, 
+    pickupLocation: { type: String },
+    pickupItems: { type: String },
     pickupPhone: { type: String },
     pickupCoordinates: {
       lat: { type: Number },
@@ -397,7 +399,7 @@ runnerSchema.methods.incrementLoginAttempts = async function () {
   }
 
   const updates = { $inc: { failedLoginAttempts: 1 } };
-  
+
   if (this.failedLoginAttempts + 1 >= 5 && !this.isLocked()) {
     updates.$set = { lockUntil: Date.now() + 2 * 60 * 60 * 1000 };
   }
@@ -450,7 +452,6 @@ runnerSchema.statics.cleanupExpiredTokens = function () {
   });
 };
 
-// EXACT copy of your findNearbyRunners method
 runnerSchema.statics.findNearbyRunners = async function ({
   latitude,
   longitude,
@@ -481,9 +482,29 @@ runnerSchema.statics.findNearbyRunners = async function ({
     query.fleetType = fleetType;
   }
 
-  return this.find(query)
-    .select('firstName lastName phone fleetType currentRequest serviceType location latitude longitude isOnline isAvailable isActive avatar')
+  const allRunners = await this.find({ role: 'runner' })
+    .select('firstName lastName currentRequest latitude longitude')
+    .limit(5)
+
+  console.log('ACTUAL Runners IN DB (first 5):');
+  allRunners.forEach(runner => {
+    console.log(`  - ${runner.firstName}:`, {
+      hasCurrentRequest: !!runner.currentRequest,
+      serviceType: runner.currentRequest?.serviceType,
+      fleetType: runner.currentRequest?.fleetType,
+      status: runner.currentRequest?.status,
+      lat: runner.latitude,
+      lng: runner.longitude
+    });
+  });
+
+  const results = await this.find(query)
+    .select('firstName lastName phone currentRequest location latitude longitude avatar')
     .lean();
+
+  // console.log('✅ Search returned:', results.length, 'users');
+
+  return results;
 };
 
 // Query helpers

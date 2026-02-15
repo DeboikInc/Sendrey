@@ -7,14 +7,23 @@ const messageSchema = new mongoose.Schema({
   from: String,
   text: String,
   type: { type: String, default: "text" },
+  messageType: { type: String, default: null },
   time: String,
   status: { type: String, default: "sent" },
   senderId: String,
   senderType: String,
 
+  replyTo: { type: String, default: null },
+  replyToMessage: { type: String, default: null },
+  replyToFrom: { type: String, default: null },
+  reaction: { type: String, default: null },
+  edited: { type: Boolean, default: false },
+  deleted: { type: Boolean, default: false },
+
   fileName: { type: String, default: null },
   fileUrl: { type: String, default: null },
   fileSize: { type: String, default: null },
+  fileType: { type: String, default: null },
 
   invoiceData: { type: mongoose.Schema.Types.Mixed, default: null },
   invoiceId: { type: String, default: null },
@@ -28,18 +37,36 @@ const messageSchema = new mongoose.Schema({
       bio: String
     },
     default: null
-  }
+  },
+  tempId: { type: String, default: null },
 });
 
 const chatSchema = new mongoose.Schema({
   chatId: { type: String, required: true, unique: true },
   messages: [messageSchema],
   taskId: { type: String, required: false, index: true },
-  serviceType: { type: String, enum: ['pick-up', 'run-errand'], required: false, default:null },
+  serviceType: {
+    type: String,
+    enum: ['pick-up', 'run-errand', null],
+    required: false,
+    default: null
+  },
   participants: [{
     userId: String,
     userType: { type: String, enum: ['user', 'runner'] }
   }],
+
+  specialInstructions: {
+    text: { type: String, default: null },
+    media: [{
+      fileName: String,
+      fileUrl: String,
+      fileType: String,
+      fileSize: String
+    }],
+    createdAt: { type: Date, default: null }
+  },
+
   lastActivity: { type: Date, default: Date.now },
   isActive: { type: Boolean, default: true }
 });
