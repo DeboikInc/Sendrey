@@ -4,21 +4,27 @@ const http = require("http");
 const { Server } = require("socket.io");
 const mongoose = require("mongoose");
 const cors = require("cors");
-const User = require("./models/User");
 require("dotenv").config();
 
 const { database } = require("./config/index");
+const socketHandlers = require("./socket/socketHandlers");
+const chatStatusHandlers = require('./socket/chatStatusHandlers');
+const fileUploadHandlers = require('./socket/fileUploadHandlers');
+const notificationHandlers = require('./socket/notificationHandlers');
 
-// --- MongoDB setup ---
-const currentDB = database.url;
-console.log("Connecting to MongoDB with URL:", currentDB);
+const callHandlers = require("./socket/callHandlers");
 
-mongoose
-  .connect(currentDB, database.options)
+// Import models
+const { Chat } = require("./models/Chat");
+const ServiceRequest = require("./socket/ServiceRequest");
+const Invoice = require("./socket/Invoice");
+const User = require('./models/User');
+
+// MongoDB connection
+mongoose.connect(database.url, database.options)
   .then(() => {
     console.log("MongoDB connected");
 
-    // Start server only after DB connects
     const app = express();
     const server = http.createServer(app);
 
@@ -31,583 +37,123 @@ mongoose
       allowEIO3: true,
       pingTimeout: 60000,
       pingInterval: 25000,
-      maxHttpBufferSize: 10e6, // 10mb limit
+      maxHttpBufferSize: 10e6,
       perMessageDeflate: true
     });
 
     app.use(cors());
     app.use(express.json());
 
-    // Track connected runners by service type
-    const runnersByService = {
-      "pick-up": new Set(),
-      "run-errand": new Set(),
-    };
-
-    // Import User model to update availability
-    const User = mongoose.model("User");
-
-    // Chat Schema
-    const messageSchema = new mongoose.Schema({
-      _id: false,
-      id: { type: mongoose.Schema.Types.Mixed },
-      from: String,
-      text: String,
-      type: { type: String, default: "text" },
-      time: String,
-      status: { type: String, default: "sent" },
-      senderId: String,
-      senderType: String,
-
-      fileName: { type: String, default: null },
-      fileUrl: { type: String, default: null },
-      fileSize: { type: String, default: null },
-
-      invoiceData: { type: mongoose.Schema.Types.Mixed, default: null },
-      invoiceId: { type: String, default: null },
-
-      runnerInfo: {
-        type: {
-          firstName: String,
-          lastName: String,
-          avatar: String,
-          rating: Number,
-          bio: String
-        },
-        default: null
-      }
-    });
-
-    const chatSchema = new mongoose.Schema({
-      chatId: { type: String, required: true, unique: true },
-      messages: [messageSchema],
-    });
-
-    const Chat = mongoose.model("Chat", chatSchema);
-
-    // ServiceRequest Schema
-    const serviceRequestSchema = new mongoose.Schema({
-      requestId: { type: String, required: true, unique: true },
-      userId: { type: String, required: true },
-      firstName: String,
-      lastName: String,
-      serviceType: String,
-      fleetType: String,
-      status: { type: String, default: "available" },
-      pickedByRunner: String,
-      createdAt: { type: Date, default: Date.now },
-    });
-
-    const ServiceRequest = mongoose.model("ServiceRequest", serviceRequestSchema);
-
-    // Invoice Schema
-    const invoiceSchema = new mongoose.Schema({
-      invoiceId: { type: String, required: true, unique: true },
-      chatId: { type: String, required: true },
-      runnerId: { type: String, required: true },
-      userId: { type: String, required: true },
-      marketData: {
-        name: String,
-        address: String
-      },
-      items: [{
-        id: Number,
-        name: String,
-        unitPrice: Number,
-        quantity: Number,
-        total: Number
-      }],
-      subTotal: { type: Number, required: true },
-      grandTotal: { type: Number, required: true },
-      status: {
-        type: String,
-        enum: ["pending", "accepted", "declined", "paid"],
-        default: "pending"
-      },
-      createdAt: { type: Date, default: Date.now },
-      acceptedAt: { type: Date, default: null },
-      declinedAt: { type: Date, default: null },
-      paidAt: { type: Date, default: null }
-    });
-
-    const Invoice = mongoose.model("Invoice", invoiceSchema);
-
-    // Track who's in each chat room
-    const chatRoomMembers = new Map();
-
-    const createInitialRunnerMessages = async (runnerData, serviceType, chatId, runnerId) => {
-      const fullName = `${runnerData?.firstName || ''} ${runnerData?.lastName || ''}`.trim();
-
-      const messages = [
-        {
-          id: Date.now().toString(),
-          from: 'system',
-          messageType: 'system',
-          type: 'system',
-          text: `Runner ${fullName} joined the chat`,
-          time: new Date().toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true
-          }),
-          senderId: runnerId,
-          senderType: "runner",
-          status: 'sent'
-        },
-        {
-          id: (Date.now() + 1).toString(),
-          from: 'them',
-          messageType: 'profile-card',
-          type: 'profile-card',
-          time: new Date().toLocaleTimeString('en-US', {
-            hour: '2-digit',
-            minute: '2-digit',
-            hour12: true
-          }),
-          senderId: runnerId,
-          senderType: "runner",
-          status: 'sent',
-          runnerInfo: {
-            firstName: runnerData?.firstName,
-            lastName: runnerData?.lastName || '',
-            avatar: runnerData?.profilePicture || 'https://via.placeholder.com/128',
-            rating: runnerData?.rating || 4,
-            bio: `Hello I am ${fullName} and I will be your captain for this ${serviceType.replace('-', ' ')}. I am dedicated to helping you get your tasks done efficiently and effectively.`
-          }
-        }
-      ];
-
-      try {
-        const chat = await Chat.findOne({ chatId });
-        if (chat) {
-          // Check if profile card message already exists
-          const hasProfileCard = chat.messages.some(m =>
-            m.type === 'profile-card' || m.messageType === 'profile-card'
-          );
-
-          if (!hasProfileCard) {
-            chat.messages.push(...messages);
-            await chat.save();
-            console.log(`Initial runner messages added to chat ${chatId}`);
-          } else {
-            console.log(`Profile card already exists in chat ${chatId}`);
-          }
-        }
-      } catch (error) {
-        console.error("Error creating initial runner messages:", error);
-      }
-
-      return messages;
-    };
-
-    // --- Socket.IO connection ---
     io.on("connection", (socket) => {
       console.log("New client connected:", socket.id);
 
-      socket.on("joinRunnerRoom", ({ runnerId, serviceType }) => {
-        socket.runnerId = runnerId;
-        socket.serviceType = serviceType;
-
-        const room = `runners-${serviceType}`;
-        socket.join(room);
-        runnersByService[serviceType].add(socket.id);
-
-        console.log(`Runner ${runnerId} joined room: ${room}`);
-
-        ServiceRequest.find({ serviceType, status: "available" }).then((requests) => {
-          socket.emit("existingRequests", requests);
-        });
+      process.on('uncaughtException', (error) => {
+        console.error('🔥 UNCAUGHT EXCEPTION:', error.message);
+        console.error(error.stack);
       });
 
-      socket.on("createServiceRequest", async ({ userId, firstName, lastName, serviceType, fleetType }) => {
-        try {
-          const requestId = `${userId}-${Date.now()}`;
-
-          const newRequest = await ServiceRequest.create({
-            requestId,
-            userId,
-            firstName,
-            lastName,
-            serviceType,
-            fleetType,
-            status: "available",
-          });
-
-          io.to(`runners-${serviceType}`).emit("newServiceRequest", newRequest);
-
-          console.log(`New service request created: ${requestId}`);
-        } catch (error) {
-          console.error("Error creating service request:", error);
-        }
+      process.on('unhandledRejection', (error) => {
+        console.error('🔥 UNHANDLED REJECTION:', error.message);
+        console.error(error.stack);
       });
 
-      socket.on("pickService", async ({ requestId, runnerId, runnerName }) => {
-        try {
-          const request = await ServiceRequest.findOne({ requestId });
+      // Notification handlers
+      socket.on('saveFcmToken', (data) =>
+        notificationHandlers.handleSaveFcmToken(socket, data)
+      );
 
-          if (!request || request.status === "picked") {
-            socket.emit("serviceTaken", { requestId });
-            return;
-          }
+      socket.on('userOnline', (data) =>
+        notificationHandlers.handleUserOnline(socket, data)
+      );
 
-          request.status = "picked";
-          request.pickedByRunner = runnerId;
-          await request.save();
 
-          io.to(`runners-${request.serviceType}`).emit("servicePicked", {
-            requestId,
-            runnerId,
-            runnerName,
-          });
+      // Runner events
+      socket.on("joinRunnerRoom", (data) => socketHandlers.handleJoinRunnerRoom(socket, data));
 
-          console.log(`Service ${requestId} picked by runner ${runnerId}`);
-        } catch (error) {
-          console.error("Error picking service:", error);
-        }
+      socket.on("acceptRunnerRequest", (data) =>
+        socketHandlers.handleAcceptRunnerRequest(socket, io, data)
+      );
+
+      // user 
+      socket.on("requestRunner", (data) =>
+        socketHandlers.handleRequestRunner(socket, io, data)
+      );
+
+      socket.on("userJoinChat", (data) =>
+        socketHandlers.handleUserJoinChat(socket, io, data)
+      );
+
+      socket.on("runnerJoinChat", (data) =>
+        socketHandlers.handleRunnerJoinChat(socket, io, data)
+      );
+
+      // Chat events
+      socket.on("sendMessage", async (data) => {
+        await socketHandlers.handleSendMessage(io, data);
+
+        // Send push notification for new message
+        await notificationHandlers.sendMessageNotification(
+          data.chatId,
+          data.message,
+          data.message.senderId,
+          data.message.senderType
+        );
       });
 
-      socket.on("joinChat", async (chatId) => {
-        socket.join(chatId);
+      // Status update event
+      socket.on("updateStatus", async (data) => {
+        await chatStatusHandlers.handleUpdateStatus(socket, io, data);
 
-        let chat = await Chat.findOne({ chatId });
-        if (!chat) chat = await Chat.create({ chatId, messages: [] });
-
-        socket.emit("chatHistory", chat.messages);
+        // Send push notification for status update
+        await notificationHandlers.sendStatusUpdateNotification(
+          data.chatId,
+          data.status,
+          data.updatedBy,
+          data.updatedByType
+        );
       });
 
-      socket.on("sendMessage", async ({ chatId, message }) => {
-        console.log(`Received message for chat ${chatId}:`, message);
+      // Media message event
+      socket.on("sendMedia", (data) =>
+        chatStatusHandlers.handleSendMedia(socket, io, data)
+      );
 
-        try {
-          const chat = await Chat.findOne({ chatId });
+      // LEGACY: joinChat (read-only, for reconnections or chat screen navigation)
+      // Do not create chats - only joins existing ones
+      socket.on("joinChat", async (data) => {
+        const { chatId, taskId, serviceType } = data;
 
-          if (!chat) {
-            console.log(`Chat ${chatId} not found, creating new one`);
-            chat = await Chat.create({ chatId, messages: [] });
-          }
-
-          chat.messages.push(message);
-          await chat.save();
-
-          console.log(`Emitting message to room ${chatId}`);
-          io.to(chatId).emit("message", message);
-        } catch (error) {
-          console.error("Error sending message:", error);
-          // Still emit to room even if save fails
-          io.to(chatId).emit("message", message);
-        }
-      });
-
-      socket.on("requestRunner", async ({ runnerId, userId, chatId, serviceType }) => {
-        console.log('SERVER: Received requestRunner from user:', userId, 'to runner:', runnerId);
+        console.log('joinChat (legacy/readonly) received:', { chatId, taskId, serviceType });
 
         socket.join(chatId);
 
-        try {
-          // findOneAndUpdate with upsert to prevent duplicates
-          await Chat.findOneAndUpdate(
-            { chatId },
-            { $setOnInsert: { chatId, messages: [] } },
-            { upsert: true, new: true }
-          );
-          console.log(`Chat ${chatId} ready`);
-        } catch (error) {
-          console.error("Error with chat:", error);
-        }
+        // Just find and send history, NEVER create
+        const chat = await Chat.findOne({ chatId });
 
-        // Emit to the specific runner
-        io.to(`runners-${serviceType}`).emit("runnerRequested", {
-          runnerId,
-          userId,
-          chatId,
-          serviceType
-        });
-      });
-
-      socket.on("acceptRunnerRequest", async ({ runnerId, userId, chatId, serviceType }) => {
-        console.log(`Runner ${runnerId} accepting request from user ${userId}`);
-
-        try {
-          const runnerData = await User.findById(runnerId);
-
-          if (!runnerData) {
-            console.error(`Runner ${runnerId} not found in database`);
-            return;
-          }
-
-          // Set both users unavailable
-          await Promise.all([
-            User.findByIdAndUpdate(runnerId, { isAvailable: false }),
-            User.findByIdAndUpdate(userId, { isAvailable: false })
-          ]);
-
-          console.log(`Runner ${runnerId} and User ${userId} availability set to FALSE`);
-
-          // Runner joins the chat room
-          socket.join(chatId);
-
-          // Track runner in this chat
-          if (!chatRoomMembers.has(chatId)) {
-            chatRoomMembers.set(chatId, new Set());
-          }
-          chatRoomMembers.get(chatId).add(runnerId);
-
-          console.log(`Runner ${runnerId} joined chat ${chatId}`);
-
-          const initialMessages = await createInitialRunnerMessages(
-            runnerData,
-            serviceType,
-            chatId,
-            runnerId
-          );
-
-          // Emit the initial messages to the chat room
-          for (const message of initialMessages) {
-            io.to(chatId).emit("message", message);
-          }
-
-          // Notify that runner has accepted and is in the room
-          io.to(chatId).emit("runnerAccepted", {
-            runnerId,
-            userId,
-            chatId,
-            runnerInRoom: true,
-            timestamp: new Date().toISOString()
-          });
-
-          console.log(`Emitted runnerAccepted to chat room: ${chatId}`);
-        } catch (error) {
-          console.error("Error in acceptRunnerRequest:", error);
-
-
-
-          
-          // Still emit acceptance even if DB update fails
-          socket.join(chatId);
-          if (!chatRoomMembers.has(chatId)) {
-            chatRoomMembers.set(chatId, new Set());
-          }
-          chatRoomMembers.get(chatId).add(runnerId);
-
-          io.to(chatId).emit("runnerAccepted", {
-            runnerId,
-            userId,
-            chatId,
-            runnerInRoom: true,
-            timestamp: new Date().toISOString()
-          });
-        }
-      });
-
-      // user attempting to join chat
-      socket.on("userJoinChat", async ({ userId, runnerId, chatId }) => {
-        console.log(`User ${userId} attempting to join chat ${chatId}`);
-
-
-        const runnerInRoom = chatRoomMembers.has(chatId) &&
-          chatRoomMembers.get(chatId).has(runnerId);
-
-        if (runnerInRoom) {
-          socket.join(chatId);
-          if (!chatRoomMembers.has(chatId)) chatRoomMembers.set(chatId, new Set());
-          chatRoomMembers.get(chatId).add(userId);
-
-          console.log(`User ${userId} joined chat ${chatId} (runner already present)`);
-
-          // 1. Tell the User they are successful
-          socket.emit("chatJoinSuccess", {
-            chatId,
-            userId,
-            runnerId,
-            immediate: true
-          });
-
-          // Tell the Runner that the user has joined
-          // Trigger the runner UI to move from "Waiting for user" to the Chat
-          io.to(chatId).emit("runnerAccepted", {
-            runnerId,
-            userId,
-            chatId,
-            runnerInRoom: true,
-            timestamp: new Date().toISOString()
-          });
+        if (chat) {
+          socket.emit("chatHistory", chat.messages);
+          console.log('Sent chat history for existing chat:', chatId);
         } else {
-          console.log(`User ${userId} waiting for runner ${runnerId} in chat ${chatId}`);
-          socket.join(chatId);
-
-          // Track user even if runner isn't here yet
-          if (!chatRoomMembers.has(chatId)) chatRoomMembers.set(chatId, new Set());
-          chatRoomMembers.get(chatId).add(userId);
-
-          socket.emit("waitingForRunner", {
-            chatId,
-            runnerId
-          });
+          console.log('Chat not found, sending empty history (chat may not be created yet)');
+          socket.emit("chatHistory", []);
         }
       });
 
-      // delete a message
-      socket.on("deleteMessage", async ({ chatId, messageId, userId }) => {
-        console.log(`User ${userId} deleting message ${messageId} in chat ${chatId}`);
+      // Invoice events
+      socket.on("sendInvoice", (data) => socketHandlers.handleSendInvoice(socket, io, data));
 
+      socket.on(" acceptInvoice", async ({ invoiceId, chatId, userId, runnerId }) => {
         try {
-          // Find the chat
-          const chat = await Chat.findOne({ chatId });
-
-          if (!chat) {
-            console.error(`Chat ${chatId} not found`);
-            return;
-          }
-
-          // Find the message
-          const messageIndex = chat.messages.findIndex(
-            (msg) => msg.id.toString() === messageId.toString()
-          );
-
-          if (messageIndex === -1) {
-            console.error(`Message ${messageId} not found in chat ${chatId}`);
-            return;
-          }
-
-          const message = chat.messages[messageIndex];
-
-          // Check if user owns the message
-          if (message.senderId !== userId) {
-            console.error(`User ${userId} does not own message ${messageId}`);
-            socket.emit("deleteError", {
-              error: "You can only delete your own messages"
-            });
-            return;
-          }
-
-          // Update message in database to show deleted
-          chat.messages[messageIndex] = {
-            ...message,
-            deleted: true,
-            text: "This message was deleted",
-            type: "deleted",
-            fileUrl: null,
-            fileName: null,
-            deletedAt: new Date(),
-            deletedBy: userId,
-          };
-
-          await chat.save();
-
-          console.log(`Message ${messageId} marked as deleted in database`);
-
-          // Broadcast to all users in the chat room
-          io.to(chatId).emit("messageDeleted", {
-            chatId,
-            messageId,
-            deletedBy: userId,
-            timestamp: new Date().toISOString(),
-          });
-
-          console.log(`Broadcasted messageDeleted event to chat ${chatId}`);
-        } catch (error) {
-          console.error("Error deleting message:", error);
-          socket.emit("deleteError", {
-            error: "Failed to delete message. Please try again.",
-          });
-        }
-      });
-
-
-      // INVOICE HANDLERS 
-      // Send Invoice (Runner → User)
-      socket.on("sendInvoice", async ({ invoiceData, chatId, runnerId, userId, marketData }) => {
-        console.log(`Runner ${runnerId} sending invoice to user ${userId}`);
-
-        try {
-          // Generate unique invoice ID
-          const invoiceId = `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
-          // Save invoice to database
-          const newInvoice = await Invoice.create({
-            invoiceId,
-            chatId,
-            runnerId,
-            userId,
-            marketData: marketData || {},
-            items: invoiceData.items || [],
-            subTotal: invoiceData.subTotal || 0,
-            grandTotal: invoiceData.grandTotal || 0,
-            status: "pending"
-          });
-
-          console.log(`Invoice ${invoiceId} created successfully`);
-
-          // Create invoice message
-          const invoiceMessage = {
-            id: Date.now(),
-            from: "runner",
-            type: "invoice",
-            time: new Date().toLocaleTimeString('en-US', {
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: true
-            }),
-            status: "sent",
-            senderId: runnerId,
-            senderType: "runner",
-            invoiceData: {
-              invoiceId,
-              marketData: marketData || {},
-              items: invoiceData.items || [],
-              subTotal: invoiceData.subTotal || 0,
-              grandTotal: invoiceData.grandTotal || 0
-            },
-            invoiceId
-          };
-
-          // Save message to chat
-          const chat = await Chat.findOne({ chatId });
-          if (chat) {
-            chat.messages.push(invoiceMessage);
-            await chat.save();
-          }
-
-          // Emit to chat room
-          io.to(chatId).emit("receiveInvoice", {
-            message: invoiceMessage,
-            invoiceId,
-            invoiceData: invoiceMessage.invoiceData
-          });
-
-          console.log(`Invoice ${invoiceId} sent to chat ${chatId}`);
-        } catch (error) {
-          console.error("Error sending invoice:", error);
-
-          // Emit error to sender
-          socket.emit("invoiceError", {
-            error: "Failed to send invoice. Please try again."
-          });
-        }
-      });
-
-      // Accept Invoice (User → Runner)
-      socket.on("acceptInvoice", async ({ invoiceId, chatId, userId, runnerId }) => {
-        console.log(`User ${userId} accepting invoice ${invoiceId}`);
-
-        try {
-
           const invoice = await Invoice.findOneAndUpdate(
             { invoiceId },
-            {
-              status: "accepted",
-              acceptedAt: new Date()
-            },
+            { status: "accepted", acceptedAt: new Date() },
             { new: true }
           );
 
           if (!invoice) {
-            console.error(`Invoice ${invoiceId} not found`);
             socket.emit("invoiceError", { error: "Invoice not found" });
             return;
           }
-
-          console.log(`Invoice ${invoiceId} status updated to accepted`);
 
           const systemMessage = {
             id: Date.now(),
@@ -626,13 +172,11 @@ mongoose
             style: "success"
           };
 
-          // Save system message
           const chat = await Chat.findOne({ chatId });
           if (chat) {
             chat.messages.push(systemMessage);
             await chat.save();
           }
-
 
           io.to(chatId).emit("message", systemMessage);
 
@@ -654,155 +198,70 @@ mongoose
               showPayButton: true
             };
 
-            // Save pay message
             if (chat) {
               chat.messages.push(payMessage);
               await chat.save();
             }
 
-            // Emit pay message
             io.to(chatId).emit("message", payMessage);
-
-            console.log(`Payment message sent for invoice ${invoiceId}`);
           }, 500);
-
         } catch (error) {
           console.error("Error accepting invoice:", error);
-          socket.emit("invoiceError", {
-            error: "Failed to accept invoice. Please try again."
-          });
+          socket.emit("invoiceError", { error: "Failed to accept invoice" });
         }
       });
 
-      // Decline Invoice (User → Runner)
-      socket.on("declineInvoice", async ({ invoiceId, chatId, userId, runnerId }) => {
-        console.log(`User ${userId} declining invoice ${invoiceId}`);
+      socket.on("uploadFile", (data) =>
+        fileUploadHandlers.handleFileUpload(socket, io, data)
+      );
 
-        try {
-          // Update invoice status
-          const invoice = await Invoice.findOneAndUpdate(
-            { invoiceId },
-            {
-              status: "declined",
-              declinedAt: new Date()
-            },
-            { new: true }
-          );
+      socket.on("deleteMessage", (data) =>
+        socketHandlers.handleDeleteMessage(socket, io, data)
+      );
 
-          if (!invoice) {
-            console.error(`Invoice ${invoiceId} not found`);
-            socket.emit("invoiceError", { error: "Invoice not found" });
-            return;
-          }
+      // Tracking event
+      socket.on("startTrackRunner", (data) => socketHandlers.handleStartTrackRunner(io, data));
 
-          console.log(`Invoice ${invoiceId} status updated to declined`);
+      // call
+      socket.on('rejoinUserRoom', ({ userId, userType }) => {
+        const room = userType === 'runner' ? `runner-${userId}` : `user-${userId}`;
+        socket.join(room);
 
-          // Send system message: "Invoice Declined" (red text)
-          const systemMessage = {
-            id: Date.now(),
-            from: "system",
-            messageType: "system",
-            text: "Invoice Declined",
-            type: "system",
-            time: new Date().toLocaleTimeString('en-US', {
-              hour: '2-digit',
-              minute: '2-digit',
-              hour12: true
-            }),
-            status: "sent",
-            senderId: "system",
-            senderType: "system",
-            style: "error" // Red text indicator
-          };
-
-          // Save system message
-          const chat = await Chat.findOne({ chatId });
-          if (chat) {
-            chat.messages.push(systemMessage);
-            await chat.save();
-          }
-
-          // Emit system message
-          io.to(chatId).emit("message", systemMessage);
-
-          // Notify runner to reset status bar
-          io.to(chatId).emit("invoiceDeclined", {
-            invoiceId,
-            statusToRemove: "send_invoice"
-          });
-
-          console.log(`Invoice ${invoiceId} declined, status bar reset signal sent`);
-        } catch (error) {
-          console.error("Error declining invoice:", error);
-          socket.emit("invoiceError", {
-            error: "Failed to decline invoice. Please try again."
-          });
-        }
+        const roomSockets = io.sockets.adapter.rooms.get(room);
+        console.log(` ${userType || 'User'} ${userId} re-joined personal room: ${room}`);
+        console.log(`Room ${room} now has ${roomSockets?.size || 0} sockets:`, Array.from(roomSockets || []));
       });
 
-      // Runner starts delivery tracking
-      socket.on("startTrackRunner", (data) => {
-        // handler is in raw.jsx
-        console.log("SERVER RECEIVED startTrackRunner:", data);
+      callHandlers.register(socket, io);
 
-        if (!data) {
-          console.error("SERVER ERROR: No data received");
-          return;
-        }
+      // typing indicator
+      socket.on('typing', ({ chatId, userId, userType, isTyping }) => {
+        console.log(`${userType} ${userId} ${isTyping ? 'started' : 'stopped'} typing in ${chatId}`);
 
-        const { chatId, runnerId, userId } = data;
-
-        if (!chatId || !runnerId) {
-          console.error("SERVER ERROR: Missing chatId or runnerId in payload!", data);
-          return;
-        }
-
-        const clients = io.sockets.adapter.rooms.get(chatId);
-        console.log(`Users in room ${chatId}:`, clients ? Array.from(clients) : "Empty");
-
-        const trackingPayload = {
-          chatId,
-          runnerId,
+        // Broadcast to everyone in the chat EXCEPT the sender
+        socket.to(chatId).emit('userTyping', {
           userId,
-          status: "on_way_to_delivery",
-          trackingData: {
-            lat: null,   // placeholder
-            lng: null,   // placeholder
-            eta: null
-          },
-          timestamp: new Date().toISOString()
-        };
-
-        // Emit ONLY to users in this chat
-        io.to(chatId).emit("receiveTrackRunner", trackingPayload);
-
-        console.log(`Emitted receiveTrackRunner to ${chatId}`);
-      });
-
-
-      // Track Runner - check if runner sent on the way to deliver and broadcast here to user
-      // receiveTrackRunner
-
-
-      socket.on("disconnect", () => {
-        if (socket.serviceType && runnersByService[socket.serviceType]) {
-          runnersByService[socket.serviceType].delete(socket.id);
-        }
-
-        // chat room clean-up
-        chatRoomMembers.forEach((members, chatId) => {
-          if (members.has(socket.userId) || members.has(socket.runnerId)) {
-            members.delete(socket.userId);
-            members.delete(socket.runnerId);
-
-            // If the room is now empty, delete the key entirely
-            if (members.size === 0) {
-              chatRoomMembers.delete(chatId);
-            }
-          }
+          userType,
+          isTyping,
+          timestamp: new Date(),
         });
-        console.log("Client disconnected and cleaned from memory:", socket.id);
       });
+
+      // recording
+      socket.on('recording', ({ chatId, userId, userType, isRecording }) => {
+        console.log(`${userType} ${userId} ${isRecording ? 'started' : 'stopped'} recording in ${chatId}`);
+
+        // Broadcast to everyone in the chat EXCEPT the sender
+        socket.to(chatId).emit('userRecording', {
+          userId,
+          userType,
+          isRecording,
+          timestamp: new Date(),
+        });
+      });
+
+      // Disconnect
+      socket.on("disconnect", () => socketHandlers.handleDisconnect(socket));
     });
 
     server.listen(4001, () => console.log("Socket.IO server running on port 4001"));

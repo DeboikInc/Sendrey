@@ -1,297 +1,230 @@
-// controllers/kyc.controller.js
+// controllers/kycController.js
+const BaseController = require('./BaseController');
 const KYCService = require('../services/kycService');
-const User = require('../models/User');
+const Runner = require('../models/Runner');
 
-class KYCController {
+class KYCController extends BaseController {
     constructor() {
-        this.kycService = new KYCService();
+        super(new KYCService());
+
+
+        this.verifyNIN = this.verifyNIN.bind(this);
+        this.verifyDriverLicense = this.verifyDriverLicense.bind(this);
+        this.verifySelfie = this.verifySelfie.bind(this);
+        this.getVerificationStatus = this.getVerificationStatus.bind(this);
+        this.getNextKYCSteps = this.getNextKYCSteps.bind(this);
+        this.getPendingKYC = this.getPendingKYC.bind(this);
+        this.getRunnerDetails = this.getRunnerDetails.bind(this);
+        this.approveDocument = this.approveDocument.bind(this);
+        this.rejectDocument = this.rejectDocument.bind(this);
+        this.approveSelfie = this.approveSelfie.bind(this);
+        this.rejectSelfie = this.rejectSelfie.bind(this);
+        this.getVerifiedRunners = this.getVerifiedRunners.bind(this);
     }
 
-    // Verify NIN - Only image needed
-    async verifyNIN(req, res) {
-        try {
-            const userId = req.user.id;
+    // ==================== RUNNER METHODS ====================
 
-            const user = await User.findById(userId);
-            if (!user) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'User not found'
-                });
+    async verifyNIN(req, res) {
+        console.log('=== DEBUG: verifyNIN called ===');
+        console.log('Request user:', req.user);
+        console.log('Request files:', req.file);
+        console.log('Request body:', req.body);
+
+        try {
+            const userId = req.user.id || req.user._id;
+
+            console.log('=== NIN Verification Request ===');
+            console.log('User ID:', userId);
+
+            const runner = await Runner.findById(userId);
+            if (!runner) {
+                return this.notFound(res, 'Runner not found');
             }
 
             if (!req.file) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'NIN document image is required'
-                });
+                console.log('ERROR: No file uploaded');
+                return this.badRequest(res, 'NIN document image is required');
             }
+
+            console.log('File received:', req.file.originalname, req.file.size, 'bytes');
 
             const userInfo = {
                 userId,
-                firstName: user.firstName,
-                lastName: user.lastName,
-                dateOfBirth: user.dateOfBirth || null
+                firstName: runner.firstName,
+                lastName: runner.lastName,
+                dateOfBirth: runner.dateOfBirth || null
             };
 
-            const result = await this.kycService.submitNIN(
-                null, // No NIN number needed
+            console.log('DEBUG: Calling service.submitNIN with userInfo:', userInfo);
+
+            const result = await this.service.submitNIN(
+                null,
                 req.file.buffer,
                 req.file.originalname,
                 userInfo
             );
 
+            console.log('Service result:', result);
+
             if (result.success) {
-                const runnerProfile = user.runnerProfile || {};
-                const verificationDocuments = runnerProfile.verificationDocuments || {};
-
-                verificationDocuments.nin = {
-                    verified: false,
-                    status: 'pending_review',
-                    submittedAt: new Date(),
-                    documentPath: result.data.documentPath,
-                    verificationData: result.data
-                };
-
-                await User.findByIdAndUpdate(userId, {
-                    runnerProfile: {
-                        ...runnerProfile,
-                        verificationDocuments
+                await Runner.findByIdAndUpdate(userId, {
+                    'verificationDocuments.nin': {
+                        verified: false,
+                        status: 'pending_review',
+                        submittedAt: new Date(),
+                        documentPath: result.data.documentPath,
+                        verificationData: result.data
                     },
                     runnerStatus: 'pending_verification'
                 });
 
-                return res.status(200).json({
-                    success: true,
-                    message: 'NIN submitted for verification. Please wait for admin approval.',
-                    data: {
-                        status: 'pending_review',
-                        submittedAt: result.data.submittedAt
-                    }
-                });
+                console.log('NIN document saved successfully');
+
+                return this.success(res, {
+                    status: 'pending_review',
+                    submittedAt: result.data.submittedAt
+                }, 'NIN submitted for verification. Please wait for admin approval.');
             } else {
-                return res.status(400).json({
-                    success: false,
-                    message: 'NIN submission failed',
-                    error: result.error
-                });
+                return this.badRequest(res, 'NIN submission failed', { error: result.error });
             }
 
         } catch (error) {
             console.error('NIN submission error:', error);
-            return res.status(500).json({
-                success: false,
-                message: 'Internal server error'
-            });
+            return this.error(res, 'Internal server error');
         }
     }
 
-    // Verify Driver's License - Only image needed
     async verifyDriverLicense(req, res) {
-        try {
-            const userId = req.user.id;
+        console.log('=== DEBUG: verifyDriverLicense called ===');
+        console.log('Request user:', req.user);
+        console.log('Request files:', req.file);
+        console.log('Request body:', req.body);
 
-            const user = await User.findById(userId);
-            if (!user) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'User not found'
-                });
+        try {
+            const userId = req.user.id || req.user._id;
+
+            console.log('=== Driver License Verification Request ===');
+            console.log('User ID from token:', userId);
+
+            const runner = await Runner.findById(userId);
+            console.log('Found runner:', runner ? 'Yes' : 'No');
+
+            if (!runner) {
+                return this.notFound(res, 'User not found');
             }
 
             if (!req.file) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Driver license document image is required'
-                });
+                return this.badRequest(res, 'Driver license document image is required');
             }
 
             const userInfo = {
                 userId,
-                firstName: user.firstName,
-                lastName: user.lastName,
-                dateOfBirth: user.dateOfBirth || null
+                firstName: runner.firstName,
+                lastName: runner.lastName,
+                dateOfBirth: runner.dateOfBirth || null
             };
 
-            const result = await this.kycService.submitDriverLicense(
-                null, // No license number needed
+            console.log('DEBUG: Calling service.submitDriverLicense');
+
+            const result = await this.service.submitDriverLicense(
+                null,
                 req.file.buffer,
                 req.file.originalname,
                 userInfo
             );
 
             if (result.success) {
-                const runnerProfile = user.runnerProfile || {};
-                const verificationDocuments = runnerProfile.verificationDocuments || {};
-
-                verificationDocuments.driverLicense = {
-                    verified: false,
-                    status: 'pending_review',
-                    submittedAt: new Date(),
-                    documentPath: result.data.documentPath,
-                    verificationData: result.data
-                };
-
-                await User.findByIdAndUpdate(userId, {
-                    runnerProfile: {
-                        ...runnerProfile,
-                        verificationDocuments
+                await Runner.findByIdAndUpdate(userId, {
+                    'verificationDocuments.driverLicense': {
+                        verified: false,
+                        status: 'pending_review',
+                        submittedAt: new Date(),
+                        documentPath: result.data.documentPath,
+                        verificationData: result.data
                     },
                     runnerStatus: 'pending_verification'
                 });
 
-                return res.status(200).json({
-                    success: true,
-                    message: 'Driver license submitted for verification. Please wait for admin approval.',
-                    data: {
-                        status: 'pending_review',
-                        submittedAt: result.data.submittedAt
-                    }
-                });
+                console.log('Driver license saved successfully');
+
+                return this.success(res, {
+                    status: 'pending_review',
+                    submittedAt: result.data.submittedAt
+                }, 'Driver license submitted for verification. Please wait for admin approval.');
             } else {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Driver license submission failed',
-                    error: result.error
-                });
+                return this.badRequest(res, 'Driver license submission failed', { error: result.error });
             }
 
         } catch (error) {
             console.error('Driver license submission error:', error);
-            return res.status(500).json({
-                success: false,
-                message: 'Internal server error'
-            });
+            return this.error(res, 'Internal server error');
         }
     }
 
-    // Verify Selfie - Only image needed
     async verifySelfie(req, res) {
         try {
-            const userId = req.user.id;
-            const user = await User.findById(userId);
+            const userId = req.user.id || req.user._id;
+            const runner = await Runner.findById(userId);
 
-            if (!user || user.role !== 'runner') {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Only runners can verify selfie'
-                });
+            if (!runner || runner.role !== 'runner') {
+                return this.badRequest(res, 'Only runners can verify selfie');
             }
 
             if (!req.file) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Selfie image is required'
-                });
+                return this.badRequest(res, 'Selfie image is required');
             }
 
-            const runnerProfile = user.runnerProfile || {};
-            const docs = runnerProfile.verificationDocuments || {};
+            const docs = runner.verificationDocuments || {};
             const hasSubmittedDoc = docs.nin || docs.driverLicense;
 
             if (!hasSubmittedDoc) {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Please submit at least one document (NIN or Driver License) first'
-                });
+                return this.badRequest(res, 'Please submit at least one document (NIN or Driver License) first');
             }
 
-            const result = await this.kycService.submitSelfie(
+            const result = await this.service.submitSelfie(
                 req.file.buffer,
                 req.file.originalname,
                 userId
             );
 
             if (result.success) {
-                await User.findByIdAndUpdate(userId, {
-                    $set: {
-                        'runnerProfile.biometricVerification': {
-                            selfieVerified: false,
-                            status: 'pending_review',
-                            selfiePath: result.data.selfiePath,
-                            submittedAt: new Date()
-                        }
-                    }
+                await Runner.findByIdAndUpdate(userId, {
+                    'biometricVerification.selfieVerified': false,
+                    'biometricVerification.status': 'pending_review',
+                    'biometricVerification.selfieImage': result.data.selfiePath,
+                    'biometricVerification.submittedAt': new Date()
                 });
 
-                return res.status(200).json({
-                    success: true,
-                    message: 'Selfie submitted for verification. Please wait for admin approval.',
-                    data: {
-                        status: 'pending_review',
-                        submittedAt: result.data.submittedAt
-                    }
-                });
+                console.log('Selfie saved successfully');
+
+                return this.success(res, {
+                    status: 'pending_review',
+                    submittedAt: result.data.submittedAt
+                }, 'Selfie submitted for verification. Please wait for admin approval.');
             } else {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Selfie submission failed',
-                    error: result.error
-                });
+                return this.badRequest(res, 'Selfie submission failed', { error: result.error });
             }
 
         } catch (error) {
             console.error('Selfie submission error:', error);
-            return res.status(500).json({
-                success: false,
-                message: 'Internal server error'
-            });
-        }
-    }
-
-    // Rest of the methods remain the same...
-    async calculateRunnerStatus(userId) {
-        const user = await User.findById(userId);
-
-        if (!user || user.role !== 'runner') {
-            return 'pending_verification';
-        }
-
-        const runnerProfile = user.runnerProfile || {};
-        const docs = runnerProfile.verificationDocuments || {};
-        const biometrics = runnerProfile.biometricVerification || {};
-
-        const verifiedDocs = [];
-        if (docs.nin?.verified) verifiedDocs.push('nin');
-        if (docs.driverLicense?.verified) verifiedDocs.push('driverLicense');
-
-        const pendingDocs = [];
-        if (docs.nin?.status === 'pending_review') pendingDocs.push('nin');
-        if (docs.driverLicense?.status === 'pending_review') pendingDocs.push('driverLicense');
-
-        if (pendingDocs.length > 0 || biometrics.status === 'pending_review') {
-            return 'pending_verification';
-        }
-
-        if (verifiedDocs.length === 0) {
-            return 'pending_verification';
-        } else if (verifiedDocs.length >= 1 && biometrics.selfieVerified) {
-            return 'approved_full';
-        } else if (verifiedDocs.length >= 1) {
-            return 'approved_limited';
-        } else {
-            return 'pending_verification';
+            return this.error(res, 'Internal server error');
         }
     }
 
     async getVerificationStatus(req, res) {
         try {
-            const userId = req.user.id;
-            const user = await User.findById(userId);
+            const userId = req.user.id || req.user._id;
+            const runner = await Runner.findById(userId);
 
-            if (!user) {
-                return res.status(404).json({
-                    success: false,
-                    message: 'User not found'
-                });
+            if (!runner) {
+                return this.notFound(res, 'User not found');
             }
 
-            const runnerProfile = user.runnerProfile || {};
-            const docs = runnerProfile.verificationDocuments || {};
-            const biometrics = runnerProfile.biometricVerification || {};
+            const docs = runner.verificationDocuments || {};
+            const biometrics = runner.biometricVerification || {};
 
             const verificationStatus = {
-                runnerStatus: user.runnerStatus,
+                runnerStatus: runner.runnerStatus,
                 documents: {
                     nin: {
                         verified: docs.nin?.verified || false,
@@ -309,39 +242,29 @@ class KYCController {
                     status: biometrics.status || 'not_submitted',
                     submittedAt: biometrics.submittedAt || null
                 },
-                canAcceptJobs: user.runnerStatus === 'approved_full',
-                canAcceptLimitedJobs: user.runnerStatus === 'approved_limited'
+                canAcceptJobs: runner.runnerStatus === 'approved_full',
+                canAcceptLimitedJobs: runner.runnerStatus === 'approved_limited'
             };
 
-            return res.status(200).json({
-                success: true,
-                data: verificationStatus
-            });
+            return this.success(res, verificationStatus);
 
         } catch (error) {
             console.error('Get verification status error:', error);
-            return res.status(500).json({
-                success: false,
-                message: 'Internal server error'
-            });
+            return this.error(res, 'Internal server error');
         }
     }
 
     async getNextKYCSteps(req, res) {
         try {
-            const userId = req.user.id;
-            const user = await User.findById(userId);
+            const userId = req.user.id || req.user._id;
+            const runner = await Runner.findById(userId);
 
-            if (!user || user.role !== 'runner') {
-                return res.status(400).json({
-                    success: false,
-                    message: 'Only runners have KYC steps'
-                });
+            if (!runner || runner.role !== 'runner') {
+                return this.badRequest(res, 'Only runners have KYC steps');
             }
 
-            const runnerProfile = user.runnerProfile || {};
-            const docs = runnerProfile.verificationDocuments || {};
-            const biometrics = runnerProfile.biometricVerification || {};
+            const docs = runner.verificationDocuments || {};
+            const biometrics = runner.biometricVerification || {};
 
             const verifiedDocs = [];
             if (docs.nin?.verified) verifiedDocs.push('nin');
@@ -365,7 +288,7 @@ class KYCController {
                 steps.push({
                     step: 1,
                     action: 'submit_document',
-                    message: 'Submit at least one government ID (NIN, or Driver License)',
+                    message: 'Submit at least one government ID (NIN or Driver License)',
                     required: true,
                     status: 'pending'
                 });
@@ -387,7 +310,7 @@ class KYCController {
                         status: 'pending'
                     });
                 }
-            } else if (user.runnerStatus === 'approved_full') {
+            } else if (runner.runnerStatus === 'approved_full') {
                 steps.push({
                     step: 3,
                     action: 'complete',
@@ -397,34 +320,174 @@ class KYCController {
                 });
             }
 
-            return res.status(200).json({
-                success: true,
-                data: {
-                    currentStatus: user.runnerStatus,
-                    steps: steps,
-                    progress: {
-                        documentsVerified: verifiedDocs.length,
-                        documentsPending: pendingDocs.length,
-                        selfieVerified: biometrics.selfieVerified || false,
-                        selfiePending: biometrics.status === 'pending_review',
-                        overallProgress: this.calculateProgress(
-                            verifiedDocs.length,
-                            pendingDocs.length,
-                            biometrics.selfieVerified,
-                            biometrics.status === 'pending_review'
-                        )
-                    }
+            return this.success(res, {
+                currentStatus: runner.runnerStatus,
+                steps: steps,
+                progress: {
+                    documentsVerified: verifiedDocs.length,
+                    documentsPending: pendingDocs.length,
+                    selfieVerified: biometrics.selfieVerified || false,
+                    selfiePending: biometrics.status === 'pending_review',
+                    overallProgress: this.calculateProgress(
+                        verifiedDocs.length,
+                        pendingDocs.length,
+                        biometrics.selfieVerified,
+                        biometrics.status === 'pending_review'
+                    )
                 }
             });
 
         } catch (error) {
             console.error('Get KYC steps error:', error);
-            return res.status(500).json({
-                success: false,
-                message: 'Internal server error'
-            });
+            return this.error(res, 'Internal server error');
         }
     }
+
+    // ==================== ADMIN METHODS ====================
+
+    async getPendingKYC(req, res) {
+        try {
+            const pendingRunners = await this.service.getPendingVerifications();
+
+            return this.success(res, {
+                total: pendingRunners.length,
+                runners: pendingRunners
+            });
+
+        } catch (error) {
+            console.error('Error fetching pending KYC:', error);
+            return this.error(res, 'Error loading pending verifications');
+        }
+    }
+
+    async getRunnerDetails(req, res) {
+        try {
+            const { runnerId } = req.params;
+
+            const runner = await this.service.getRunnerVerificationDetails(runnerId);
+
+            if (!runner) {
+                return this.notFound(res, 'Runner not found');
+            }
+
+            return this.success(res, runner);
+
+        } catch (error) {
+            console.error('Error fetching runner details:', error);
+            return this.error(res, 'Error loading runner details');
+        }
+    }
+
+    async approveDocument(req, res) {
+        try {
+            const { runnerId } = req.params;
+            const { documentType } = req.body;
+            const adminId = req.user?.id || req.user?._id || 'admin';
+
+            const result = await this.service.approveDocument(runnerId, documentType, adminId);
+
+            if (result.success) {
+                return this.success(res, {
+                    runnerStatus: result.runnerStatus
+                }, `${documentType} approved successfully`);
+            } else {
+                return this.badRequest(res, result.error || 'Failed to approve document');
+            }
+
+        } catch (error) {
+            console.error('Error approving document:', error);
+            return this.error(res, 'Error approving document');
+        }
+    }
+
+    async rejectDocument(req, res) {
+        try {
+            const { runnerId } = req.params;
+            const { documentType, reason } = req.body;
+
+            if (!reason || reason.trim().length === 0) {
+                return this.badRequest(res, 'Rejection reason is required');
+            }
+
+            const result = await this.service.rejectDocument(runnerId, documentType, reason);
+
+            if (result.success) {
+                return this.success(res, {
+                    runnerStatus: result.runnerStatus
+                }, `${documentType} rejected`);
+            } else {
+                return this.badRequest(res, result.error || 'Failed to reject document');
+            }
+
+        } catch (error) {
+            console.error('Error rejecting document:', error);
+            return this.error(res, 'Error rejecting document');
+        }
+    }
+
+    async approveSelfie(req, res) {
+        try {
+            const { runnerId } = req.params;
+            const adminId = req.user?.id || req.user?._id || 'admin';
+
+            const result = await this.service.approveSelfie(runnerId, adminId);
+
+            if (result.success) {
+                return this.success(res, {
+                    runnerStatus: result.runnerStatus,
+                    isVerified: result.isVerified
+                }, 'Selfie approved successfully');
+            } else {
+                return this.badRequest(res, result.error || 'Failed to approve selfie');
+            }
+
+        } catch (error) {
+            console.error('Error approving selfie:', error);
+            return this.error(res, 'Error approving selfie');
+        }
+    }
+
+    async rejectSelfie(req, res) {
+        try {
+            const { runnerId } = req.params;
+            const { reason } = req.body;
+
+            if (!reason || reason.trim().length === 0) {
+                return this.badRequest(res, 'Rejection reason is required');
+            }
+
+            const result = await this.service.rejectSelfie(runnerId, reason);
+
+            if (result.success) {
+                return this.success(res, {
+                    runnerStatus: result.runnerStatus
+                }, 'Selfie rejected');
+            } else {
+                return this.badRequest(res, result.error || 'Failed to reject selfie');
+            }
+
+        } catch (error) {
+            console.error('Error rejecting selfie:', error);
+            return this.error(res, 'Error rejecting selfie');
+        }
+    }
+
+    async getVerifiedRunners(req, res) {
+        try {
+            const verifiedRunners = await this.service.getVerifiedRunners();
+
+            return this.success(res, {
+                total: verifiedRunners.length,
+                runners: verifiedRunners
+            });
+
+        } catch (error) {
+            console.error('Error fetching verified runners:', error);
+            return this.error(res, 'Error loading verified runners');
+        }
+    }
+
+    // ==================== HELPER METHODS ====================
 
     calculateProgress(docsVerified, docsPending, selfieVerified, selfiePending) {
         if (selfieVerified) return 100;
