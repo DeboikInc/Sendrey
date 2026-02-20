@@ -221,11 +221,6 @@ const userValidation = {
           'string.empty': 'Dropoff phone cannot be empty'
         }),
 
-      // specialInstructions: Joi.string().allow('').optional()
-      //   .messages({
-      //     'string.empty': 'special Instructions must be a string'
-      //   }),
-
       userId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).required()
         .messages({
           'string.pattern.base': 'Invalid user ID format',
@@ -260,9 +255,10 @@ const userValidation = {
             'any.required': 'Market items are required for errand service'
           }),
 
-        budget: Joi.string().allow('').optional()
+        budget: Joi.number().positive().optional()
           .messages({
-            'string.empty': 'Budget cannot be empty'
+            'number.base': 'Budget must be a number',
+            'number.positive': 'Budget must be a positive number'
           }),
 
         budgetFlexibility: Joi.string()
