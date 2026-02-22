@@ -7,30 +7,30 @@ const connectProducer = async () => {
   if (!isConnected) {
     await producer.connect();
     isConnected = true;
-    console.log('Email producer connected');
+    console.log('SMS producer connected');
   }
 };
 
-const sendEmailEvent = async (emailData) => {
+const sendSmsEvent = async (smsData) => {
   try {
     await connectProducer();
 
     await producer.send({
-      topic: 'emails',
+      topic: 'sms',
       messages: [{
         value: JSON.stringify({
-          ...emailData,
-          retryCount: emailData.retryCount || 0,
+          ...smsData,
+          retryCount: smsData.retryCount || 0,
           enqueuedAt: Date.now(),
         })
       }]
     });
 
-    console.log(`Email event queued: ${emailData.type} → ${emailData.to}`);
+    console.log(`SMS event queued: ${smsData.type} → ${smsData.to}`);
   } catch (error) {
-    console.error('Failed to queue email event:', error);
+    console.error('Failed to queue SMS event:', error);
     // Don't throw — request continues even if Kafka is momentarily down
   }
 };
 
-module.exports = { sendEmailEvent, connectProducer };
+module.exports = { sendSmsEvent, connectProducer };
