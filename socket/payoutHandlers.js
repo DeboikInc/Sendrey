@@ -7,6 +7,7 @@ const Order = require('../models/Order');
 const RunnerPayout = require('../models/RunnerPayout');
 const cloudinary = require('../config/cloudinary');
 const logger = require('../utils/logger');
+const { logSocketAudit } = require('../utils/socketAudit');
 
 const uploadToCloudinary = (base64String, folder = 'payout-receipts') =>
   new Promise((resolve, reject) => {
@@ -44,6 +45,10 @@ const handleGetRunnerPayout = async (socket, io, data) => {
       }
     }
 
+    logSocketAudit('GET_RUNNER_PAYOUT', {
+      runnerId: data.runnerId,
+      chatId: data.chatId,
+    });
     logger.info(`getRunnerPayout | chatId=${chatId} | found=${!!payout} | orderId=${payout?.orderId}`);
     socket.emit('runnerPayoutData', { payout: payout || null });
 
@@ -151,6 +156,12 @@ const handleSubmitPayoutReceipt = async (socket, io, data) => {
       usedPayoutSystem: true,
       receiptUrl,
       message: 'Receipt submitted. Waiting for user approval.',
+    });
+
+    logSocketAudit('SUBMIT_PAYOUT_RECEIPT', {
+      runnerId: data.runnerId,
+      chatId: data.chatId,
+      orderId: data.orderId,
     });
 
     logger.info(`Payout receipt submitted | orderId=${payout.orderId} | runner=${runnerId} | amount=₦${spentAmount}`);

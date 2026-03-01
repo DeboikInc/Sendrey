@@ -597,6 +597,28 @@ class PaymentService {
     });
   }
 
+  async getTransactionHistory(userId, page = 1, limit = 20) {
+    const skip = (page - 1) * limit;
+
+    const entries = await LedgerEntry.find({ userId })
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    const total = await LedgerEntry.countDocuments({ userId });
+
+    return {
+      transactions: entries,
+      pagination: {
+        page,
+        limit,
+        total,
+        pages: Math.ceil(total / limit),
+      }
+    };
+  }
+
   async submitPayoutReceipt({
     orderId, runnerId, userId, chatId,
     vendorName, amountSpent, changeAmount,

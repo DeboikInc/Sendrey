@@ -12,6 +12,7 @@ const disputeRoutes = require('./disputeRoutes');
 const ratingRoutes = require('./ratingRoutes');
 const termRoutes = require('./termRoutes');
 const payoutRoutes = require('./payoutRoutes');
+const orderRoutes = require('./orderRoutes');
 
 const waitlistRoutes = require('./waitlistRoutes')
 
@@ -27,6 +28,7 @@ router.use('/ratings', ratingRoutes);
 router.use('/terms', termRoutes);
 router.use('/waitlist', waitlistRoutes)
 router.use('/payouts', payoutRoutes);
+router.use('/orders', orderRoutes);
 
 // Export the router
 module.exports = router;

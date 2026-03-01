@@ -7,6 +7,7 @@ const Order = require('../models/Order');
 const RunnerPayout = require('../models/RunnerPayout');
 const User = require('../models/User');
 const logger = require('../utils/logger');
+const { logSocketAudit } = require('../utils/socketAudit');
 
 const handlePaymentSuccess = async (socket, io, data) => {
   try {
@@ -57,8 +58,15 @@ const handlePaymentSuccess = async (socket, io, data) => {
       note: 'Payment confirmed'
     });
 
-    // Always save — was previously only saved inside the chatId guard
+
     await order.save();
+    logSocketAudit('PAYMENT_SUCCESS', {
+      orderId: data.orderId,
+      chatId: data.chatId,
+      escrowId: data.escrowId,
+      reference: data.reference,
+    });
+    
     logger.info(`✅ Order ${order.orderId} saved with paymentStatus: paid`);
 
     // Get user info for system message

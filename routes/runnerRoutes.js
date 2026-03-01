@@ -1,10 +1,11 @@
+// ratingRoutes
 const express = require('express');
 const router = express.Router();
 const runnerController = require('../controllers/runnerController');
 const { authenticate, authorize, auditLog } = require('../middleware/auth');
 const { validate } = require('../middleware/validation');
 const { userParamsValidation, userValidation } = require('../validations/userValidation');
-
+const upload = require('../middleware/upload');
 
 // Protected routes (require authentication)
 router.use(authenticate);
@@ -19,6 +20,8 @@ router.get('/profile',
   authorize(['runner']),
   runnerController.getProfile
 );
+
+
 
 router.put('/profile',
   authorize(['runner']),
@@ -68,6 +71,14 @@ router.get('/service/:serviceType',
   validate(userParamsValidation.serviceType, 'params'),
   authorize(['user', 'runner']),
   runnerController.getRunnersByServiceType
+);
+
+router.patch(
+    '/:runnerId/avatar',
+    authorize(['runner']),
+    upload.single('avatar'),
+    auditLog('UPDATE_RUNNER_AVATAR'),
+    runnerController.updateAvatar
 );
 
 module.exports = router;

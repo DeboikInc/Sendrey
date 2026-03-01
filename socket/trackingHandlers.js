@@ -3,7 +3,29 @@ const locationStore = require('../services/locationTracking/locationStore');
 const Order = require('../models/Order');
 const socketOrderMap = new Map();
 
+// Track which orders have already fired arrival events to avoid repeated emits
+const arrivedAtSourceSet = new Set();   // orderId — runner reached market/pickup
+const arrivedAtDeliverySet = new Set(); // orderId — runner reached delivery
+
+// Haversine distance in meters between two {lat, lng} points
+const getDistanceMeters = (a, b) => {
+    if (!a || !b) return Infinity;
+    const R = 6371000;
+    const toRad = (deg) => (deg * Math.PI) / 180;
+    const dLat = toRad(b.lat - a.lat);
+    const dLng = toRad(b.lng - a.lng);
+    const sinLat = Math.sin(dLat / 2);
+    const sinLng = Math.sin(dLng / 2);
+    const c =
+        sinLat * sinLat +
+        Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * sinLng * sinLng;
+    return R * 2 * Math.atan2(Math.sqrt(c), Math.sqrt(1 - c));
+};
+
+const ARRIVAL_THRESHOLD_METERS = 50;
+
 const registerTrackingHandlers = (io, socket) => {
+
     // Runner location update
     socket.on('runner:locationUpdate', async (data) => {
         const { orderId, lat, lng, heading = 0, speed = 0 } = data;
@@ -14,7 +36,9 @@ const registerTrackingHandlers = (io, socket) => {
         }
 
         try {
-            const order = await Order.findOne({ orderId }).select('runnerId userId status');
+            const order = await Order.findOne({ orderId })
+                .select('runnerId userId status serviceType marketCoordinates pickupCoordinates deliveryCoordinates');
+
             if (!order) return socket.emit('tracking:error', { message: 'Order not found' });
 
             const locationPayload = {
@@ -29,11 +53,40 @@ const registerTrackingHandlers = (io, socket) => {
             // Store in Redis
             await locationStore.setLocation(orderId, order.runnerId, locationPayload);
 
-            // Broadcast to everyone watching this order
+            // Broadcast live location to everyone watching
             io.to(`tracking:${orderId}`).emit('runner:locationUpdate', {
                 orderId,
                 ...locationPayload
             });
+
+            const runnerCoords = { lat, lng };
+
+            // ── Geofence: runner reached market (errand) or pickup location ──────
+            if (!arrivedAtSourceSet.has(orderId)) {
+                const sourceCoords = order.serviceType === 'run-errand'
+                    ? order.marketCoordinates
+                    : order.pickupCoordinates;
+
+                if (sourceCoords?.lat && sourceCoords?.lng) {
+                    const dist = getDistanceMeters(runnerCoords, sourceCoords);
+                    if (dist <= ARRIVAL_THRESHOLD_METERS) {
+                        arrivedAtSourceSet.add(orderId);
+                        io.to(`tracking:${orderId}`).emit('runner:arrivedAtSource', { orderId });
+                    }
+                }
+            }
+
+            // ── Geofence: runner reached delivery location ────────────────────────
+            if (!arrivedAtDeliverySet.has(orderId)) {
+                const delivCoords = order.deliveryCoordinates;
+                if (delivCoords?.lat && delivCoords?.lng) {
+                    const dist = getDistanceMeters(runnerCoords, delivCoords);
+                    if (dist <= ARRIVAL_THRESHOLD_METERS) {
+                        arrivedAtDeliverySet.add(orderId);
+                        io.to(`tracking:${orderId}`).emit('runner:arrivedAtDelivery', { orderId });
+                    }
+                }
+            }
 
         } catch (err) {
             console.error('runner:locationUpdate error:', err.message);
@@ -56,15 +109,10 @@ const registerTrackingHandlers = (io, socket) => {
             // Get last known location from Redis
             const lastKnown = await locationStore.getLocation(orderId);
 
-            // Send immediately if exists
             if (lastKnown) {
-                socket.emit('runner:locationUpdate', {
-                    orderId,
-                    ...lastKnown
-                });
+                socket.emit('runner:locationUpdate', { orderId, ...lastKnown });
             }
 
-            // Prepare response based on service type
             const trackingData = {
                 orderId,
                 serviceType: order.serviceType,
@@ -75,18 +123,15 @@ const registerTrackingHandlers = (io, socket) => {
                 hasActiveLocation: !!lastKnown,
             };
 
-            // Add appropriate location data based on service type
             if (order.serviceType === 'run-errand') {
-                // For run-errand: show market location on map
                 trackingData.destinationLocation = order.marketLocation?.address || null;
-                trackingData.destinationCoordinates = order.marketCoordinates; 
-                trackingData.deliveryLocation = order.deliveryLocation?.address || null; 
-                trackingData.deliveryCoordinates = order.deliveryCoordinates; 
+                trackingData.destinationCoordinates = order.marketCoordinates;
+                trackingData.deliveryLocation = order.deliveryLocation?.address || null;
+                trackingData.deliveryCoordinates = order.deliveryCoordinates;
             } else {
-                // For pick-up: show pickup location on map initially
                 trackingData.destinationLocation = order.pickupLocation?.address || null;
                 trackingData.destinationCoordinates = order.pickupCoordinates;
-                trackingData.deliveryLocation = order.deliveryLocation?.address || null; 
+                trackingData.deliveryLocation = order.deliveryLocation?.address || null;
                 trackingData.deliveryCoordinates = order.deliveryCoordinates;
             }
 
@@ -104,11 +149,13 @@ const registerTrackingHandlers = (io, socket) => {
     });
 
     // Runner stops tracking
-    socket.on('runner:stopTracking', async ({ orderId, userId }) => {
+    socket.on('runner:stopTracking', async ({ orderId }) => {
         if (!orderId) return;
-
         try {
             await locationStore.removeLocation(orderId);
+            // Clean up arrival sets when order ends
+            arrivedAtSourceSet.delete(orderId);
+            arrivedAtDeliverySet.delete(orderId);
             io.to(`tracking:${orderId}`).emit('runner:offline', { orderId });
         } catch (err) {
             console.error('runner:stopTracking error:', err.message);
@@ -119,7 +166,6 @@ const registerTrackingHandlers = (io, socket) => {
     socket.on('disconnect', async () => {
         const orderId = socketOrderMap.get(socket.id);
         if (orderId) {
-            // Optionally notify that runner went offline
             io.to(`tracking:${orderId}`).emit('runner:offline', { orderId });
             socketOrderMap.delete(socket.id);
         }

@@ -1,6 +1,7 @@
 const { sendPushNotification } = require('../utils/sendPushNotification');
 const User = require('../models/User');
 const Runner = require('../models/Runner');
+const { logSocketAudit } = require('../utils/socketAudit');
 
 /**
  * Save FCM token for a user/runner
@@ -8,13 +9,13 @@ const Runner = require('../models/Runner');
 const handleSaveFcmToken = async (socket, { userId, userType, fcmToken }) => {
   try {
     if (userType === 'user') {
-      await User.findByIdAndUpdate(userId, { 
+      await User.findByIdAndUpdate(userId, {
         fcmToken,
         isOnline: true,
         lastSeen: new Date(),
       });
     } else if (userType === 'runner') {
-      await Runner.findByIdAndUpdate(userId, { 
+      await Runner.findByIdAndUpdate(userId, {
         fcmToken,
         isOnline: true,
         lastSeen: new Date(),
@@ -35,12 +36,12 @@ const handleUserOnline = async (socket, { userId, userType }) => {
 
   try {
     if (userType === 'user') {
-      await User.findByIdAndUpdate(userId, { 
+      await User.findByIdAndUpdate(userId, {
         isOnline: true,
         lastSeen: new Date(),
       });
     } else if (userType === 'runner') {
-      await Runner.findByIdAndUpdate(userId, { 
+      await Runner.findByIdAndUpdate(userId, {
         isOnline: true,
         lastSeen: new Date(),
       });
@@ -61,7 +62,7 @@ const handleUserDisconnect = async (socket, io) => {
 
   try {
     if (userType === 'user') {
-      const user = await User.findByIdAndUpdate(userId, { 
+      const user = await User.findByIdAndUpdate(userId, {
         isOnline: false,
         lastSeen: new Date(),
       }, { new: true });
@@ -69,7 +70,7 @@ const handleUserDisconnect = async (socket, io) => {
       // Check if user has active task with a runner
       if (user.currentRunnerId) {
         const runner = await Runner.findById(user.currentRunnerId);
-        
+
         // Send push notification to runner if they're offline
         if (runner && runner.fcmToken && !runner.isOnline) {
           await sendPushNotification(runner.fcmToken, {
@@ -93,7 +94,7 @@ const handleUserDisconnect = async (socket, io) => {
         });
       }
     } else if (userType === 'runner') {
-      const runner = await Runner.findByIdAndUpdate(userId, { 
+      const runner = await Runner.findByIdAndUpdate(userId, {
         isOnline: false,
         lastSeen: new Date(),
       }, { new: true });
@@ -101,7 +102,7 @@ const handleUserDisconnect = async (socket, io) => {
       // Check if runner has active task with a user
       if (runner.currentUserId) {
         const user = await User.findById(runner.currentUserId);
-        
+
         // Send push notification to user if they're offline
         if (user && user.fcmToken && !user.isOnline) {
           await sendPushNotification(user.fcmToken, {
@@ -138,10 +139,20 @@ const handleUserDisconnect = async (socket, io) => {
  */
 const sendMessageNotification = async (chatId, message, senderId, senderType) => {
   try {
+    if (!chatId || !senderId || !senderType) {
+      console.warn('sendMessageNotification: missing required fields, skipping');
+      return;
+    }
+
     // Extract userId and runnerId from chatId
     const parts = chatId.split('-runner-');
     const userId = parts[0]?.replace('user-', '');
     const runnerId = parts[1];
+
+    if (!userId || !runnerId || userId === 'undefined' || runnerId === 'undefined') {
+      console.warn('Bad chatId, skipping notification:', chatId);
+      return;
+    }
 
     let recipient;
     let recipientType;
@@ -162,12 +173,12 @@ const sendMessageNotification = async (chatId, message, senderId, senderType) =>
 
     // Send push notification only if recipient is offline
     if (recipient && !recipient.isOnline && recipient.fcmToken) {
-      const messagePreview = message.text 
+      const messagePreview = message.text
         ? (message.text.length > 50 ? message.text.substring(0, 50) + '...' : message.text)
         : message.type === 'image' ? '📷 Photo'
-        : message.type === 'video' ? '🎥 Video'
-        : message.type === 'audio' ? '🎵 Audio'
-        : '📎 File';
+          : message.type === 'video' ? '🎥 Video'
+            : message.type === 'audio' ? '🎵 Audio'
+              : '📎 File';
 
       await sendPushNotification(recipient.fcmToken, {
         title: senderName,
@@ -228,7 +239,7 @@ const sendStatusUpdateNotification = async (chatId, status, updatedBy, updatedBy
         link: `/chat/${chatId}`,
       });
 
-      console.log(`📤 Status update notification sent to user ${user._id}`);
+      console.log(`Status update notification sent to user ${user._id}`);
     }
   } catch (error) {
     console.error('❌ Error sending status update notification:', error);

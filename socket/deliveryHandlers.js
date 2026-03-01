@@ -5,6 +5,7 @@ const paymentService = require('../services/paymentServices');
 const User = require('../models/User');
 const Runner = require('../models/Runner');
 const orderStateMachine = require('../services/orderStateMachine');
+const { logSocketAudit } = require('../utils/socketAudit');
 
 const {
     notifyDeliveryConfirmationRequest,
@@ -19,28 +20,21 @@ const handleMarkDeliveryComplete = async (io, socket, data) => {
     try {
         const { chatId, orderId, runnerId, deliveryProof } = data;
 
-        console.log('Runner marking delivery complete:', orderId);
+        // console.log('Runner marking delivery complete:', orderId);
 
         const order = await Order.findOne({ orderId });
-        if (!order) {
-            socket.emit('error', { message: 'Order not found' });
-            return;
-        }
+        if (!order) return socket.emit('error', { message: 'Order not found' });
 
         if (order.status === 'delivered') {
-            socket.emit('error', { message: 'Delivery already marked as complete' });
-            return;
+            return socket.emit('error', { message: 'Delivery already marked as complete' });
         }
 
-        // Update order status
         await orderStateMachine.transition(orderId, 'delivered', {
             triggeredBy: 'runner',
             triggeredById: runnerId,
             note: 'Runner marked as delivered'
         });
 
-
-        // Update escrow status to delivery_pending
         if (order.escrowId) {
             const escrow = await Escrow.findById(order.escrowId);
             if (escrow) {
@@ -49,7 +43,10 @@ const handleMarkDeliveryComplete = async (io, socket, data) => {
             }
         }
 
-        // Send confirmation request message to user
+        // Fetch runner name to show in confirmation card
+        const runner = await Runner.findById(runnerId).select('firstName lastName');
+        const runnerName = [runner?.firstName, runner?.lastName].filter(Boolean).join(' ') || 'Runner';
+
         const confirmationMessage = {
             id: `delivery-confirm-${Date.now()}`,
             from: 'system',
@@ -62,31 +59,32 @@ const handleMarkDeliveryComplete = async (io, socket, data) => {
             senderType: 'system',
             orderId: order.orderId,
             deliveryProof: deliveryProof || null,
-            confirmationStatus: 'pending'
+            confirmationStatus: 'pending',
+            runnerName,  // needed for DeliveryConfirmationMessage
         };
 
-        // Save to chat
         await Chat.findOneAndUpdate(
             { chatId },
             { $push: { messages: confirmationMessage } },
             { upsert: true }
         );
 
-        // Emit to both parties
         io.to(chatId).emit('message', confirmationMessage);
         io.to(chatId).emit('deliveryMarkedComplete', {
             orderId: order.orderId,
             status: 'awaiting_confirmation'
         });
 
-        await notifyDeliveryConfirmationRequest(order.userId, {
-            orderId: order.orderId
+        logSocketAudit('ORDER_DELIVERED', {
+            runnerId,
+            chatId,
+            orderId
         });
 
-        // Schedule auto-confirm after 24 hours
+        await notifyDeliveryConfirmationRequest(order.userId, { orderId: order.orderId });
         scheduleAutoConfirm(io, chatId, orderId, order.escrowId);
 
-        console.log('Delivery marked complete, awaiting user confirmation');
+        // console.log('Delivery marked complete, awaiting user confirmation');
 
     } catch (error) {
         console.error('Error marking delivery complete:', error);
@@ -99,19 +97,15 @@ const handleMarkDeliveryComplete = async (io, socket, data) => {
  */
 const handleConfirmDelivery = async (io, socket, data) => {
     try {
-        const { chatId, orderId, userId, rating, feedback } = data;
+        const { chatId, orderId, userId } = data;
 
-        console.log('User confirming delivery:', orderId);
+        // console.log('User confirming delivery:', orderId);
 
         const order = await Order.findOne({ orderId });
-        if (!order) {
-            socket.emit('error', { message: 'Order not found' });
-            return;
-        }
+        if (!order) return socket.emit('error', { message: 'Order not found' });
 
         if (order.deliveryConfirmedAt) {
-            socket.emit('error', { message: 'Delivery already confirmed' });
-            return;
+            return socket.emit('error', { message: 'Delivery already confirmed' });
         }
 
         await orderStateMachine.transition(orderId, 'completed', {
@@ -124,71 +118,69 @@ const handleConfirmDelivery = async (io, socket, data) => {
         order.deliveryConfirmedBy = 'user';
         await order.save();
 
-        // Release escrow and payout runner
         if (order.escrowId) {
             const escrow = await Escrow.findById(order.escrowId);
             if (escrow && !escrow.deliveryFeeReleased) {
-                // Release delivery fee to runner
                 await paymentService.payoutToRunner(escrow._id);
-
-                console.log('Delivery fee released to runner');
+                // console.log('Delivery fee released to runner');
             }
         }
 
+        await User.findByIdAndUpdate(userId, { activeOrderId: null, currentRunnerId: null });
+        await Runner.findByIdAndUpdate(order.runnerId, { activeOrderId: null, currentUserId: null });
 
-        await User.findByIdAndUpdate(userId, {
-            activeOrderId: null,
-            currentRunnerId: null
-        });
+        // Fetch user name for system messages
+        const user = await User.findById(userId).select('firstName lastName');
+        const userName = [user?.firstName, user?.lastName].filter(Boolean).join(' ') || 'User';
 
-        await Runner.findByIdAndUpdate(order.runnerId, {
-            activeOrderId: null,
-            currentUserId: null
-        });
-
-        // Send confirmation success message
-        const successMessage = {
-            id: `delivery-confirmed-${Date.now()}`,
-            from: 'system',
-            type: 'system',
-            messageType: 'system',
-            text: 'Delivery confirmed! Order completed successfully.',
+        const userSystemMsg = {
+            id: `delivery-confirmed-user-${Date.now()}`,
+            from: 'system', type: 'system', messageType: 'system',
+            text: 'You confirmed delivery. Order completed successfully.',
             time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-            status: 'sent',
-            senderId: 'system',
-            senderType: 'system',
-            style: 'success'
+            status: 'sent', senderId: 'system', senderType: 'system', style: 'success'
+        };
+
+        const runnerSystemMsg = {
+            id: `delivery-confirmed-runner-${Date.now() + 1}`,
+            from: 'system', type: 'system', messageType: 'system',
+            text: `${userName} confirmed the delivery of their item(s). Order completed.`,
+            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            status: 'sent', senderId: 'system', senderType: 'system', style: 'success'
         };
 
         await Chat.findOneAndUpdate(
             { chatId },
-            { $push: { messages: successMessage } },
-            { upsert: true }
+            { $push: { messages: { $each: [userSystemMsg, runnerSystemMsg] } } }
         );
 
-        io.to(chatId).emit('message', successMessage);
-        io.to(chatId).emit('deliveryConfirmed', {
-            orderId: order.orderId,
-            status: 'completed'
-        });
+        // Update confirmation card status for both parties
+        io.to(chatId).emit('deliveryConfirmed', { orderId: order.orderId, status: 'completed' });
 
-        // Trigger rating prompt (will implement in next PRD)
+        // Personal system messages
+        io.to(`user-${userId.toString()}`).emit('message', userSystemMsg);
+        io.to(`user-${order.runnerId.toString()}`).emit('message', runnerSystemMsg);
+
+        // Advance stage 4 on TrackDeliveryScreen
+        io.to(`tracking:${orderId}`).emit('runner:delivered', { orderId });
+
+        // Prompt rating
         io.to(`user-${userId}`).emit('promptRating', {
             orderId: order.orderId,
             runnerId: order.runnerId
         });
 
-        const runner = await Runner.findById(order.runnerId)
-            .select('firstName lastName');
-
-        await notifyDeliveryConfirmed(order.runnerId, {
-            orderId: order.orderId,
-            amount: order.runnerPayout
-        });
-
+        const runner = await Runner.findById(order.runnerId).select('firstName lastName');
+        await notifyDeliveryConfirmed(order.runnerId, { orderId: order.orderId, amount: order.runnerPayout });
         await notifyRatingPrompt(userId, {
             orderId: order.orderId,
-            runnerName: `${runner.firstName} ${runner.lastName}`
+            runnerName: [runner?.firstName, runner?.lastName].filter(Boolean).join(' ')
+        });
+
+        logSocketAudit('USER_CONFIRMED_ORDER_DELIVERED', {
+            userId,
+            chatId,
+            orderId
         });
 
         console.log('Delivery confirmed successfully');
@@ -200,19 +192,95 @@ const handleConfirmDelivery = async (io, socket, data) => {
 };
 
 /**
+ * User denies delivery
+ */
+const handleDenyDelivery = async (io, socket, data) => {
+    try {
+        const { chatId, orderId, userId } = data;
+
+        // console.log('User denying delivery:', orderId);
+
+        const order = await Order.findOne({ orderId });
+        if (!order) return socket.emit('error', { message: 'Order not found' });
+
+        if (order.deliveryConfirmedAt) {
+            return socket.emit('error', { message: 'Delivery already confirmed' });
+        }
+
+        // Revert order back to active so runner can try again
+        await orderStateMachine.transition(orderId, 'in_progress', {
+            triggeredBy: 'user',
+            triggeredById: userId,
+            note: 'Delivery denied by user'
+        });
+
+        // Revert escrow status
+        if (order.escrowId) {
+            const escrow = await Escrow.findById(order.escrowId);
+            if (escrow) {
+                escrow.status = 'held';
+                await escrow.save();
+            }
+        }
+
+        const user = await User.findById(userId).select('firstName lastName');
+        const userName = [user?.firstName, user?.lastName].filter(Boolean).join(' ') || 'User';
+
+        const userSystemMsg = {
+            id: `delivery-denied-user-${Date.now()}`,
+            from: 'system', type: 'system', messageType: 'system',
+            text: 'You reported that your item(s) were not delivered.',
+            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            status: 'sent', senderId: 'system', senderType: 'system', style: 'error'
+        };
+
+        const runnerSystemMsg = {
+            id: `delivery-denied-runner-${Date.now() + 1}`,
+            from: 'system', type: 'system', messageType: 'system',
+            text: `${userName} denied the delivery of their item(s). Please Ensure You deliver their Order.`,
+            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            status: 'sent', senderId: 'system', senderType: 'system', style: 'error'
+        };
+
+        // if user denies once more?
+
+        await Chat.findOneAndUpdate(
+            { chatId },
+            { $push: { messages: { $each: [userSystemMsg, runnerSystemMsg] } } }
+        );
+
+        // Update confirmation card to denied state
+        io.to(chatId).emit('deliveryDenied', { orderId: order.orderId, status: 'denied' });
+
+        // Personal system messages
+        io.to(`user-${userId.toString()}`).emit('message', userSystemMsg);
+        io.to(`user-${order.runnerId.toString()}`).emit('message', runnerSystemMsg);
+
+        logSocketAudit('USER_DENIED_ORDER_DELIVERED', {
+            userId,
+            chatId,
+            orderId
+        });
+
+        // console.log('Delivery denied by user:', orderId);
+
+    } catch (error) {
+        console.error('Error denying delivery:', error);
+        socket.emit('error', { message: error.message });
+    }
+};
+
+/**
  * Schedule auto-confirm after 24 hours
  */
 const scheduleAutoConfirm = (io, chatId, orderId, escrowId) => {
-    const AUTO_CONFIRM_DELAY = 24 * 60 * 60 * 1000; // 24 hours
+    const AUTO_CONFIRM_DELAY = 24 * 60 * 60 * 1000;
 
     setTimeout(async () => {
         try {
             const order = await Order.findOne({ orderId });
-
-            // Only auto-confirm if user hasn't confirmed yet
             if (order && !order.deliveryConfirmedAt && order.status === 'delivered') {
                 console.log('Auto-confirming delivery for order:', orderId);
-
 
                 await orderStateMachine.transition(orderId, 'completed', {
                     triggeredBy: 'system',
@@ -223,62 +291,49 @@ const scheduleAutoConfirm = (io, chatId, orderId, escrowId) => {
                 order.deliveryConfirmedBy = 'system';
                 await order.save();
 
-                // Release escrow
                 if (escrowId) {
                     const escrow = await Escrow.findById(escrowId);
                     if (escrow && !escrow.deliveryFeeReleased) {
                         await paymentService.payoutToRunner(escrow._id);
-                        console.log('Auto-confirmed: Delivery fee released to runner');
+                        // console.log('Auto-confirmed: Delivery fee released to runner');
                     }
                 }
 
-                // Clear active orders
-                const User = require('../models/User');
-                const Runner = require('../models/Runner');
+                await User.findByIdAndUpdate(order.userId, { activeOrderId: null, currentRunnerId: null });
+                await Runner.findByIdAndUpdate(order.runnerId, { activeOrderId: null, currentUserId: null });
 
-                await User.findByIdAndUpdate(order.userId, {
-                    activeOrderId: null,
-                    currentRunnerId: null
-                });
-
-                await Runner.findByIdAndUpdate(order.runnerId, {
-                    activeOrderId: null,
-                    currentUserId: null
-                });
-
-                // Send auto-confirm message
                 const autoConfirmMessage = {
                     id: `auto-confirm-${Date.now()}`,
-                    from: 'system',
-                    type: 'system',
-                    messageType: 'system',
+                    from: 'system', type: 'system', messageType: 'system',
                     text: '✅ Delivery auto-confirmed (24hr timeout). Order completed.',
                     time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-                    status: 'sent',
-                    senderId: 'system',
-                    senderType: 'system',
-                    style: 'success'
+                    status: 'sent', senderId: 'system', senderType: 'system', style: 'success'
                 };
 
                 await Chat.findOneAndUpdate(
                     { chatId },
-                    { $push: { messages: autoConfirmMessage } },
-                    { upsert: true }
+                    { $push: { messages: autoConfirmMessage } }
                 );
 
                 io.to(chatId).emit('message', autoConfirmMessage);
-                io.to(chatId).emit('deliveryAutoConfirmed', {
-                    orderId: order.orderId,
-                    status: 'completed'
+                io.to(chatId).emit('deliveryAutoConfirmed', { orderId, status: 'completed' });
+
+                //  Also advance tracking stage on auto-confirm
+                io.to(`tracking:${orderId}`).emit('runner:delivered', { orderId });
+
+                logSocketAudit('ORDER_AUTO_CONFIRM_DELIVERED', {
+                    chatId,
+                    orderId
                 });
             }
         } catch (error) {
-            console.error('❌ Error auto-confirming delivery:', error);
+            console.error('Error auto-confirming delivery:', error);
         }
     }, AUTO_CONFIRM_DELAY);
 };
 
 module.exports = {
     handleMarkDeliveryComplete,
-    handleConfirmDelivery
+    handleConfirmDelivery,
+    handleDenyDelivery,
 };
