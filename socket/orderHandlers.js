@@ -6,6 +6,8 @@ const Escrow = require('../models/Escrows');
 const { DELIVERY_FEE_PERCENTAGE, BASE_DELIVERY_FEE, RUNNER_SHARE } = require('../config/pricing');
 const orderStateMachine = require('../services/orderStateMachine');
 const { notifyPaymentRequest } = require('../services/notificationService');
+const logger = require('../utils/logger');
+const { logSocketAudit } = require('../utils/socketAudit');
 
 const handleRunnerAccept = async (io, socket, data) => {
     try {
@@ -114,6 +116,14 @@ const handleRunnerAccept = async (io, socket, data) => {
         await notifyPaymentRequest(userId, {
             orderId: order.orderId,
             amount: order.totalAmount
+        });
+
+        logSocketAudit('RUNNER_ACCEPTED_ORDER', {
+            runnerId,
+            userId,
+            serviceType,
+            chatId,
+            orderId:order.orderId
         });
 
         console.log('Order created:', order.orderId, '| itemBudget:', itemBudget, '| deliveryFee:', deliveryFee, '| total:', totalAmount);

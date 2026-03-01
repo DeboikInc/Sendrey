@@ -8,6 +8,7 @@ const Order = require("../models/Order");
 const { logMetric } = require('../utils/metricsLogger');
 const { DELIVERY_FEE_PERCENTAGE, BASE_DELIVERY_FEE, RUNNER_SHARE } = require('../config/pricing');
 const { canRunnerAcceptErrand, incrementErrandCount } = require('../utils/verificationCheck');
+const { logSocketAudit } = require('../utils/socketAudit');
 
 // Global state trackers
 const runnersByService = {
@@ -38,6 +39,12 @@ const cleanForEmit = (data) => {
 const createInitialRunnerMessages = (runnerData, serviceType, runnerId) => {
   const fullName =
     `${runnerData?.firstName || ""} ${runnerData?.lastName || ""}`.trim();
+
+  logSocketAudit('INITIAL_RUNNER_MESSAGE', {
+    runnerData,
+    runnerId,
+    serviceType,
+  });
 
   return [
     {
@@ -108,6 +115,11 @@ const handleJoinRunnerRoom = async (socket, { runnerId, serviceType }) => {
 
   const requests = await ServiceRequest.find({ serviceType, status: "available" });
   socket.emit("existingRequests", requests);
+
+  logSocketAudit('RUNNER_JOINED_ROOM', {
+    runnerId,
+    serviceType,
+  });
 };
 
 const handleAcceptRunnerRequest = async (
@@ -185,6 +197,13 @@ const handleAcceptRunnerRequest = async (
         }
       }, 30000);
     }
+
+    logSocketAudit('USER_ACCEPTED_RUNNER_REQUEST', {
+      runnerId,
+      serviceType,
+      chatId,
+      userId
+    });
   } catch (error) {
     console.error("Error in acceptRunnerRequest:", error);
   }
@@ -233,6 +252,14 @@ const handleRequestRunner = async (socket, io, data) => {
       }
     }, 30000);
   }
+
+
+  logSocketAudit('RUNNER_REQUESTED', {
+    runnerId,
+    userId,
+    chatId,
+    serviceType,
+  });
 };
 
 const lockAndProceed = async (io, chatId, state) => {
@@ -246,6 +273,11 @@ const lockAndProceed = async (io, chatId, state) => {
   console.log(` Locked availability for user ${userId} and runner ${runnerId}`);
 
   await initializeChatAndProceed(io, chatId, state);
+
+  logSocketAudit('CHAT_LOCKED', {
+    runnerId,
+    userId,
+  });
 };
 
 const sanitizeSpecialInstructions = (specialInstructions) => {
@@ -331,6 +363,12 @@ const initializeChatAndProceed = async (io, chatId, state) => {
     });
 
     preRoomState.delete(chatId);
+
+    logSocketAudit('PROCEED_TO_CHATROOM', {
+      runnerId,
+      userId,
+      serviceType,
+    });
   } catch (error) {
     console.error("Error initializing chat:", error);
   }
@@ -439,6 +477,13 @@ const handleUserJoinChat = async (socket, io, data) => {
       }
     }
 
+
+    logSocketAudit('USER_JOINED_CHAT', {
+      userId,
+      runnerId,
+      chatId,
+    });
+
     // Send full history AFTER all mutations — client gets everything including payment prompt
     const freshChat = await Chat.findOne({ chatId });
     socket.emit("chatHistory", freshChat.messages);
@@ -491,6 +536,13 @@ const handleRunnerJoinChat = async (socket, io, data) => {
     chatId,
     runnerInRoom: true,
     timestamp: new Date().toISOString(),
+  });
+
+
+  logSocketAudit('RUNNER_JOINED_CHAT', {
+    runnerId,
+    chatId,
+    userId
   });
 };
 
@@ -560,6 +612,11 @@ const handleStartTrackRunner = (io, data) => {
   );
 
   console.log(`Emitted receiveTrackRunner to ${chatId}`);
+  logSocketAudit('TRACK_RUNNER', {
+    chatId,
+    runnerId,
+    userId
+  });
 };
 
 const handleDeleteMessage = async (
@@ -593,6 +650,13 @@ const handleDeleteMessage = async (
     } else {
       socket.emit("messageDeletedForMe", { messageId, chatId });
     }
+
+
+    logSocketAudit('MESSAGE_DELETED', {
+      messageId,
+      deletedBy:userId,
+      chatId,
+    });
   } catch (error) {
     console.error("Error deleting message:", error);
   }

@@ -1,6 +1,7 @@
 const disputeService = require('../services/disputeService');
 const { Chat } = require('../models/Chat');
 const { notifyDisputeRaised, notifyDisputeResolved } = require('../services/notificationService');
+const { logSocketAudit } = require('../utils/socketAudit');
 
 const cleanForEmit = (data) => {
   if (data && typeof data === 'object') {
@@ -82,6 +83,13 @@ const handleRaiseDispute = async (socket, io, data) => {
       message: 'Dispute raised successfully'
     });
 
+    logSocketAudit('DISPUTE_RAISED', {
+      userId,
+      runnerId,
+      disputeId: dispute.disputeId,
+      orderId,
+    });
+
     await notifyDisputeRaised({
       userId: data.userId,
       runnerId: data.runnerId,
@@ -153,6 +161,11 @@ const handleResolveDispute = async (socket, io, data) => {
     });
 
     socket.emit('disputeResolvedSuccess', { disputeId, outcome });
+
+    logSocketAudit('DISPUTE_RESOLVED', {
+      resolvedBy,
+      disputeId
+    });
 
     await notifyDisputeResolved({
       userId: dispute.userId,

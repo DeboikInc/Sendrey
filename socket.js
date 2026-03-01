@@ -15,13 +15,14 @@ const fileUploadHandlers = require('./socket/fileUploadHandlers');
 const notificationHandlers = require('./socket/notificationHandlers');
 const { handleRunnerAccept } = require('./socket/orderHandlers');
 const { handleSubmitItems, handleApproveItems, handleRejectItems } = require("./socket/itemHandlers");
-const { handleMarkDeliveryComplete, handleConfirmDelivery } = require('./socket/deliveryHandlers');
+const { handleMarkDeliveryComplete, handleConfirmDelivery, handleDenyDelivery } = require('./socket/deliveryHandlers');
 const { handleRaiseDispute, handleResolveDispute } = require('./socket/disputeHandlers');
 const { handleSubmitRating } = require('./socket/ratingHandlers');
 const callHandlers = require("./socket/callHandlers");
 const { handlePaymentSuccess } = require('./socket/paymentHandlers');
 const { handleGetRunnerPayout, handleSubmitPayoutReceipt } = require('./socket/payoutHandlers');
 const { registerTrackingHandlers } = require('./socket/trackingHandlers');
+const { handleCancelOrder, handleTaskCompleted } = require('./socket/cancelHandlers');
 
 // Import models
 const { Chat } = require("./models/Chat");
@@ -147,12 +148,16 @@ mongoose.connect(database.url, database.options)
       socket.on("sendMessage", async (data) => {
         try {
           await socketHandlers.handleSendMessage(io, data);
-          await notificationHandlers.sendMessageNotification(
-            data.chatId,
-            data.message,
-            data.message.senderId,
-            data.message.senderType
-          );
+
+          const { chatId, message } = data;
+          if (chatId && message?.senderId && message?.senderType) {
+            await notificationHandlers.sendMessageNotification(
+              chatId,
+              message,
+              message.senderId,
+              message.senderType
+            );
+          }
         } catch (error) {
           console.error('SendMessage error:', error);
           socket.emit("error", { message: "Failed to send message" });
@@ -264,6 +269,7 @@ mongoose.connect(database.url, database.options)
       // delivery handlers
       socket.on('markDeliveryComplete', (data) => safeHandler(handleMarkDeliveryComplete, io, socket, data));
       socket.on('confirmDelivery', (data) => safeHandler(handleConfirmDelivery, io, socket, data));
+      socket.on('denyDelivery', (data) => safeHandler(handleDenyDelivery, io, socket, data));
 
       // dispute handlers
       socket.on('raiseDispute', (data) => safeHandler(handleRaiseDispute, socket, io, data));
@@ -318,6 +324,9 @@ mongoose.connect(database.url, database.options)
       socket.on("error", (error) => {
         console.error(`Socket error for ${socket.id}:`, error);
       });
+
+      // cancel an order
+      socket.on('cancelOrder', (data) => safeHandler(handleCancelOrder, socket, io, data));
 
       // Disconnect
       socket.on("disconnect", (reason) => {

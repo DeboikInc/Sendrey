@@ -5,6 +5,7 @@ const MediaService = require('../services/mediaService');
 const { STATUS_FLOWS, TASK_TYPES } = require('../config/constants');
 const { logMetric } = require('../utils/metricsLogger');
 const Order = require('../models/Order');
+const { handleTaskCompleted } = require('./cancelHandlers');
 
 // Map backend status codes to human-readable labels
 const getStatusLabel = (status) => {
@@ -22,7 +23,7 @@ const getStatusLabel = (status) => {
 };
 
 const handleUpdateStatus = async (socket, io, data) => {
-  const startTime = Date.now(); // FIX: was missing, caused ReferenceError
+  const startTime = Date.now();
 
   try {
     const { chatId, status, serviceType: clientServiceType, updatedBy, updatedByType } = data;
@@ -134,6 +135,8 @@ const handleUpdateStatus = async (socket, io, data) => {
         message: 'Runner is on the way'
       });
 
+      const resolvedOrderId = order?.orderId || chat.taskId || chat.orderId;
+      io.to(`tracking:${resolvedOrderId}`).emit('runner:enRoute', { orderId: resolvedOrderId });
       console.log(`Emitted trackingStarted to chat ${chatId}`);
     }
 
@@ -165,6 +168,18 @@ const handleUpdateStatus = async (socket, io, data) => {
         { orderId: chat.taskId || chat.orderId },
         { $set: { status: 'completed' } }
       );
+
+      await handleTaskCompleted(io, {
+        chatId,
+        orderId: chat.taskId || chat.orderId,
+        runnerId,
+        userId: chat.userId?.toString(),
+      });
+
+      io.to(chatId).emit('task_completed', {
+        orderId: chat.taskId || chat.orderId,
+        chatId,
+      });
 
       setTimeout(() => {
         io.to(chatId).emit('promptRating', {

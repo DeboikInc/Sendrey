@@ -5,6 +5,7 @@ const logger = require('../utils/logger');
 const Runner = require('../models/Runner');
 
 const { MAX_DISTANCE } = require('../config/constants');
+const cloudinary = require('../config/cloudinary');
 
 class RunnerController extends BaseController {
   constructor() {
@@ -24,6 +25,7 @@ class RunnerController extends BaseController {
     this.updateBiometricVerification = this.updateBiometricVerification.bind(this);
     this.updateRunnerStatus = this.updateRunnerStatus.bind(this);
     this.searchRunners = this.searchRunners.bind(this);
+    this.updateAvatar = this.updateAvatar.bind(this);
     this.deleteRunner = this.deleteRunner.bind(this);
     this._sanitizeRunner = this._sanitizeRunner.bind(this);
   }
@@ -376,6 +378,56 @@ class RunnerController extends BaseController {
       next(error);
     }
   }
+
+  async updateAvatar(req, res, next) {
+    try {
+      const runnerId = req.params.runnerId;
+
+      if (!req.file) {
+        return this.badRequest(res, 'No image file provided');
+      }
+
+      // Upload buffer to cloudinary as a stream
+      const uploadResult = await new Promise((resolve, reject) => {
+        const stream = cloudinary.uploader.upload_stream(
+          {
+            folder: 'sendrey/runner-avatars',
+            public_id: `runner-${runnerId}`,
+            overwrite: true,
+            transformation: [
+              { width: 400, height: 400, crop: 'fill', gravity: 'face' },
+              { quality: 'auto', fetch_format: 'auto' }
+            ]
+          },
+          (error, result) => {
+            if (error) reject(error);
+            else resolve(result);
+          }
+        );
+        stream.end(req.file.buffer);
+      });
+
+      const runner = await this.service.updateRunner(runnerId, {
+        profilePicture: uploadResult.secure_url
+      });
+
+      if (!runner) {
+        return this.notFound(res, 'Runner not found');
+      }
+
+      logger.info(`Avatar updated for runner: ${runnerId}`);
+
+      return this.success(res, {
+        runner: this._sanitizeRunner(runner),
+        avatarUrl: uploadResult.secure_url
+      }, 'Profile picture updated successfully');
+
+    } catch (error) {
+      logger.error('Update avatar error:', error);
+      next(error);
+    }
+  }
+
 
   /**
    * Delete runner (admin only)
