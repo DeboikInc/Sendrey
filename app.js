@@ -65,7 +65,7 @@ const startServer = async () => {
     }, express.static(path.join(__dirname, 'uploads')));
 
     // Start all Kafka consumers
-    // await startAllConsumers();
+    await startAllConsumers();
 
     // start redis
     await redis.connect();
