@@ -25,16 +25,16 @@ class KYCController extends BaseController {
     // ==================== RUNNER METHODS ====================
 
     async verifyNIN(req, res) {
-        console.log('=== DEBUG: verifyNIN called ===');
-        console.log('Request user:', req.user);
-        console.log('Request files:', req.file);
-        console.log('Request body:', req.body);
+        // console.log('=== DEBUG: verifyNIN called ===');
+        // console.log('Request user:', req.user);
+        // console.log('Request files:', req.file);
+        // console.log('Request body:', req.body);
 
         try {
             const userId = req.user.id || req.user._id;
 
-            console.log('=== NIN Verification Request ===');
-            console.log('User ID:', userId);
+            // console.log('=== NIN Verification Request ===');
+            // console.log('User ID:', userId);
 
             const runner = await Runner.findById(userId);
             if (!runner) {
@@ -46,7 +46,7 @@ class KYCController extends BaseController {
                 return this.badRequest(res, 'NIN document image is required');
             }
 
-            console.log('File received:', req.file.originalname, req.file.size, 'bytes');
+            // console.log('File received:', req.file.originalname, req.file.size, 'bytes');
 
             const userInfo = {
                 userId,
@@ -55,7 +55,7 @@ class KYCController extends BaseController {
                 dateOfBirth: runner.dateOfBirth || null
             };
 
-            console.log('DEBUG: Calling service.submitNIN with userInfo:', userInfo);
+            // console.log('DEBUG: Calling service.submitNIN with userInfo:', userInfo);
 
             const result = await this.service.submitNIN(
                 null,
@@ -64,7 +64,7 @@ class KYCController extends BaseController {
                 userInfo
             );
 
-            console.log('Service result:', result);
+            // console.log('Service result:', result);
 
             if (result.success) {
                 await Runner.findByIdAndUpdate(userId, {
@@ -78,7 +78,7 @@ class KYCController extends BaseController {
                     runnerStatus: 'pending_verification'
                 });
 
-                console.log('NIN document saved successfully');
+                // console.log('NIN document saved successfully');
 
                 // Notify runner their NIN is under review
                 sendPushNotification({
@@ -104,19 +104,19 @@ class KYCController extends BaseController {
     }
 
     async verifyDriverLicense(req, res) {
-        console.log('=== DEBUG: verifyDriverLicense called ===');
-        console.log('Request user:', req.user);
-        console.log('Request files:', req.file);
-        console.log('Request body:', req.body);
+        // console.log('=== DEBUG: verifyDriverLicense called ===');
+        // console.log('Request user:', req.user);
+        // console.log('Request files:', req.file);
+        // console.log('Request body:', req.body);
 
         try {
             const userId = req.user.id || req.user._id;
 
-            console.log('=== Driver License Verification Request ===');
-            console.log('User ID from token:', userId);
+            // console.log('=== Driver License Verification Request ===');
+            // console.log('User ID from token:', userId);
 
             const runner = await Runner.findById(userId);
-            console.log('Found runner:', runner ? 'Yes' : 'No');
+            // console.log('Found runner:', runner ? 'Yes' : 'No');
 
             if (!runner) {
                 return this.notFound(res, 'User not found');
@@ -133,7 +133,7 @@ class KYCController extends BaseController {
                 dateOfBirth: runner.dateOfBirth || null
             };
 
-            console.log('DEBUG: Calling service.submitDriverLicense');
+            // console.log('DEBUG: Calling service.submitDriverLicense');
 
             const result = await this.service.submitDriverLicense(
                 null,
@@ -154,7 +154,7 @@ class KYCController extends BaseController {
                     runnerStatus: 'pending_verification'
                 });
 
-                console.log('Driver license saved successfully');
+                // console.log('Driver license saved successfully');
 
                 // Notify runner their license is under review
                 sendPushNotification({
@@ -213,7 +213,7 @@ class KYCController extends BaseController {
                     'biometricVerification.submittedAt': new Date()
                 });
 
-                console.log('Selfie saved successfully');
+                // console.log('Selfie saved successfully');
 
                 // Notify runner their selfie is under review
                 sendPushNotification({

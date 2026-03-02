@@ -296,7 +296,7 @@ class PaymentService {
         status: 'completed',
       }], { session });
 
-      console.log(`✅ Wallet funded: ₦${grossAmount} for user ${userId}`);
+      // console.log(`✅ Wallet funded: ₦${grossAmount} for user ${userId}`);
       return { balance: wallet.balance, amount: grossAmount };
     });
   }
@@ -312,7 +312,7 @@ class PaymentService {
       wallet.lockedBalance = (wallet.lockedBalance || 0) + amount;
       await wallet.save({ session });
 
-      console.log(`🔒 Locked ₦${amount} for escrow ${escrowId}`);
+      // console.log(`🔒 Locked ₦${amount} for escrow ${escrowId}`);
     });
   }
 
@@ -325,7 +325,7 @@ class PaymentService {
       wallet.balance += amount;
       await wallet.save({ session });
 
-      console.log(` Unlocked ₦${amount} for user ${userId}`);
+      // console.log(` Unlocked ₦${amount} for user ${userId}`);
     });
   }
 
@@ -361,7 +361,7 @@ class PaymentService {
       if (usedPayoutSystem) {
         runnerWallet.balance += escrow.runnerPayout;
         await runnerWallet.save({ session });
-        console.log(`✅ Runner credited ₦${escrow.runnerPayout}`);
+        // console.log(`✅ Runner credited ₦${escrow.runnerPayout}`);
       } else {
         console.warn(`⚠️ Runner ${escrow.runnerId} forfeiting delivery fee ₦${escrow.runnerPayout}`);
       }
@@ -443,7 +443,7 @@ class PaymentService {
         { session }
       );
 
-      console.log(`payoutToRunner | runner: ₦${usedPayoutSystem ? escrow.runnerPayout : 0} | platform net: ₦${netPlatformFee} | paystack fee: ₦${providerFee}`);
+      // console.log(`payoutToRunner | runner: ₦${usedPayoutSystem ? escrow.runnerPayout : 0} | platform net: ₦${netPlatformFee} | paystack fee: ₦${providerFee}`);
 
       return {
         runnerPayout: usedPayoutSystem ? escrow.runnerPayout : 0,
@@ -496,7 +496,7 @@ class PaymentService {
           status: 'completed',
         }], { session });
 
-        console.log(` RunnerPayout created: ₦${escrow.itemBudget} for order ${order.orderId}`);
+        // console.log(` RunnerPayout created: ₦${escrow.itemBudget} for order ${order.orderId}`);
       }
 
       escrow.itemBudgetReleased = true;
@@ -562,7 +562,7 @@ class PaymentService {
 
       if (!transfer.status || !transfer.data) throw new Error('Transfer initiation failed');
 
-      console.log(`Transfer initiated to ${vendorName}: ₦${amount} | ref: ${transfer.data.reference}`);
+      // console.log(`Transfer initiated to ${vendorName}: ₦${amount} | ref: ${transfer.data.reference}`);
 
       return {
         success: true,
@@ -669,7 +669,7 @@ class PaymentService {
         { new: true, session }
       );
 
-      console.log(`✅ Payout receipt submitted: order=${orderId} vendor=${vendorName} amount=₦${amountSpent} ref=${transferResult.reference}`);
+      // console.log(`✅ Payout receipt submitted: order=${orderId} vendor=${vendorName} amount=₦${amountSpent} ref=${transferResult.reference}`);
 
       await this.notifyUserOfPayoutReceipt({
         chatId, userId, orderId, vendorName,
@@ -725,7 +725,7 @@ class PaymentService {
         });
       }
 
-      console.log(`Notified user ${userId} of payout receipt submission`);
+      // console.log(`Notified user ${userId} of payout receipt submission`);
     } catch (error) {
       console.error('Error notifying user of payout receipt:', error);
     }

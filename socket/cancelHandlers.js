@@ -107,7 +107,7 @@ const handleCancelOrder = async (socket, io, data) => {
             chatId,
             cancelledBy: 'runner',
         });
-        console.log(`Order ${order.orderId} cancelled by runner ${runnerId}`);
+        // console.log(`Order ${order.orderId} cancelled by runner ${runnerId}`);
 
     } catch (error) {
         logger.error('Falied to cancel Order', orderId);
@@ -154,7 +154,7 @@ const handleTaskCompleted = async (io, data) => {
             }
         }
 
-        console.log(`Task ${orderId} completed. Runner ${runnerId} and user ${userId} freed.`);
+        // console.log(`Task ${orderId} completed. Runner ${runnerId} and user ${userId} freed.`);
 
     } catch (error) {
         logger.info('Order or chatId not found', { chatId, orderId, runnerId,});

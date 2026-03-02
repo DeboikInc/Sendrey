@@ -27,15 +27,15 @@ const settlePlatformEarnings = async () => {
     const pending = await PlatformEarnings.find({ status: 'pending' });
 
     if (pending.length === 0) {
-      console.log('No pending platform earnings to settle.');
+      // console.log('No pending platform earnings to settle.');
       return;
     }
 
     const totalAmount = pending.reduce((sum, e) => sum + e.amount, 0);
-    console.log(`Found ${pending.length} pending earnings totalling ₦${totalAmount.toLocaleString()}`);
+    // console.log(`Found ${pending.length} pending earnings totalling ₦${totalAmount.toLocaleString()}`);
 
     if (totalAmount < 100) {
-      console.log('Total too small to transfer (min ₦100). Skipping.');
+      // console.log('Total too small to transfer (min ₦100). Skipping.');
       return;
     }
 

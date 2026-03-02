@@ -24,9 +24,9 @@ const register = (socket, io) => {
     } = data;
 
     const roomSockets = io.sockets.adapter.rooms.get(`runner-${data.receiverId}`);
-    console.log(`Room runner-${data.receiverId} has ${roomSockets?.size || 0} sockets:`, roomSockets)
+    // console.log(`Room runner-${data.receiverId} has ${roomSockets?.size || 0} sockets:`, roomSockets)
 
-    console.log(`${callerType} ${callerId} initiating ${callType} call to ${receiverType} ${receiverId}`);
+    // console.log(`${callerType} ${callerId} initiating ${callType} call to ${receiverType} ${receiverId}`);
 
     // Signal the receiver — they're in their personal room (user-{id} or runner-{id})
     const receiverRoom = `${receiverType}-${receiverId}`;
@@ -42,7 +42,7 @@ const register = (socket, io) => {
       token,
     });
 
-    console.log(` incomingCall emitted to room: ${receiverRoom}`);
+    // console.log(` incomingCall emitted to room: ${receiverRoom}`);
 
     const callerRoom = `${callerType}-${callerId}`;
     io.to(callerRoom).emit("callToken", {
@@ -50,7 +50,7 @@ const register = (socket, io) => {
       channelName,
       token,
     });
-    console.log(` callToken emitted to room: ${callerRoom}`);
+    // console.log(` callToken emitted to room: ${callerRoom}`);
   });
 
   /**
@@ -60,7 +60,7 @@ const register = (socket, io) => {
   socket.on("acceptCall", (data) => {
     const { callId, chatId, callType, channelName, callerId, callerType, receiverId } = data;
 
-    console.log(` Call ${callId} accepted by ${receiverId}`);
+    // console.log(` Call ${callId} accepted by ${receiverId}`);
 
     // Tell the caller — they're in their personal room
     // callerType tells us which room format to use
@@ -73,7 +73,7 @@ const register = (socket, io) => {
       channelName,
     });
 
-    console.log(`callAccepted emitted to room: ${callerRoom}`);
+    // console.log(`callAccepted emitted to room: ${callerRoom}`);
   });
 
   /**
@@ -83,12 +83,12 @@ const register = (socket, io) => {
   socket.on("declineCall", (data) => {
     const { callId, chatId, callerId, callerType, receiverId } = data;
 
-    console.log(`❌ Call ${callId} declined by ${receiverId}`);
+    // console.log(`❌ Call ${callId} declined by ${receiverId}`);
 
     const callerRoom = `${callerType}-${callerId}`;
     io.to(callerRoom).emit("callDeclined", { callId, chatId });
 
-    console.log(` callDeclined emitted to room: ${callerRoom}`);
+    // console.log(` callDeclined emitted to room: ${callerRoom}`);
   });
 
   /**
@@ -107,7 +107,7 @@ const register = (socket, io) => {
       receiverType,
     } = data;
 
-    console.log(` Call ${callId} ended. Duration: ${duration}s`);
+    // console.log(` Call ${callId} ended. Duration: ${duration}s`);
 
     // Notify the other party in the chat room
     io.to(chatId).emit("callEnded", { callId, chatId });
@@ -147,7 +147,7 @@ const register = (socket, io) => {
       });
 
 
-      console.log(` Call log saved: ${callId}, duration: ${duration}s`);
+      // console.log(` Call log saved: ${callId}, duration: ${duration}s`);
     } catch (error) {
       console.error("Error saving call log:", error);
 

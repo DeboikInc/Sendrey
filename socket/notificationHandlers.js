@@ -21,7 +21,7 @@ const handleSaveFcmToken = async (socket, { userId, userType, fcmToken }) => {
         lastSeen: new Date(),
       });
     }
-    console.log(` FCM token saved for ${userType} ${userId}`);
+    // console.log(` FCM token saved for ${userType} ${userId}`);
   } catch (error) {
     console.error(' Error saving FCM token:', error);
   }
@@ -46,7 +46,7 @@ const handleUserOnline = async (socket, { userId, userType }) => {
         lastSeen: new Date(),
       });
     }
-    console.log(` ${userType} ${userId} is online`);
+    // console.log(` ${userType} ${userId} is online`);
   } catch (error) {
     console.error('Error updating online status:', error);
   }
@@ -83,7 +83,7 @@ const handleUserDisconnect = async (socket, io) => {
             },
             link: `/runner/chat/user-${user._id}-runner-${runner._id}`,
           });
-          console.log(`Offline alert sent to runner ${runner._id}`);
+          // console.log(`Offline alert sent to runner ${runner._id}`);
         }
 
         // Also emit socket event if runner is online
@@ -115,7 +115,7 @@ const handleUserDisconnect = async (socket, io) => {
             },
             link: `/chat/user-${user._id}-runner-${runner._id}`,
           });
-          console.log(`Offline alert sent to user ${user._id}`);
+          // console.log(`Offline alert sent to user ${user._id}`);
         }
 
         // Also emit socket event if user is online
@@ -127,7 +127,7 @@ const handleUserDisconnect = async (socket, io) => {
       }
     }
 
-    console.log(`${userType} ${userId} went offline`);
+    // console.log(`${userType} ${userId} went offline`);
   } catch (error) {
     console.error('Error handling disconnect:', error);
   }
@@ -193,7 +193,7 @@ const sendMessageNotification = async (chatId, message, senderId, senderType) =>
         link: `/${recipientType}/chat/${chatId}`,
       });
 
-      console.log(`Message notification sent to ${recipientType} ${recipient._id}`);
+      // console.log(`Message notification sent to ${recipientType} ${recipient._id}`);
     }
   } catch (error) {
     console.error('Error sending message notification:', error);
@@ -239,7 +239,7 @@ const sendStatusUpdateNotification = async (chatId, status, updatedBy, updatedBy
         link: `/chat/${chatId}`,
       });
 
-      console.log(`Status update notification sent to user ${user._id}`);
+      // console.log(`Status update notification sent to user ${user._id}`);
     }
   } catch (error) {
     console.error('❌ Error sending status update notification:', error);

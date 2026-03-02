@@ -118,7 +118,7 @@ class UserController extends BaseController {
       const verificationCheck = await canRunnerAcceptErrand(runnerId)
 
       if (!verificationCheck.canAccept) {
-        console.log(`⛔ Runner ${runnerId} cannot view users: ${verificationCheck.reason}`);
+        // console.log(`⛔ Runner ${runnerId} cannot view users: ${verificationCheck.reason}`);
 
         return res.status(403).json({
           success: false,
@@ -169,10 +169,10 @@ class UserController extends BaseController {
         maxDistance: MAX_DISTANCE
       });
 
-      console.log('DEBUG IN USERS CONTROLLER');
-      console.log('Users Results:', users.length);
-      console.log('  Runner:', runnerId, '| Status:', verificationCheck.status);
-      console.log('  Query params:', { lat, lng, serviceType, fleetType });
+      // console.log('DEBUG IN USERS CONTROLLER');
+      // console.log('Users Results:', users.length);
+      // console.log('  Runner:', runnerId, '| Status:', verificationCheck.status);
+      // console.log('  Query params:', { lat, lng, serviceType, fleetType });
 
       this.success(res, {
         success: true,

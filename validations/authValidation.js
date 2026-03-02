@@ -366,15 +366,15 @@ const validate = (schema, property = 'body') => {
     });
 
     if (error) {
-      console.log('❌ Validation errors:', JSON.stringify(error.details, null, 2));
-      console.log('🔧 Error message:', error.message);
+      // console.log('Validation errors:', JSON.stringify(error.details, null, 2));
+      // console.log('Error message:', error.message);
 
       const errorDetails = error.details.map(detail => ({
         field: detail.path.join('.'),
         message: detail.message
       }));
 
-      console.log('📝 Formatted errors:', JSON.stringify(errorDetails, null, 2));
+      // console.log('Formatted errors:', JSON.stringify(errorDetails, null, 2));
 
       return res.status(400).json({
         success: false,

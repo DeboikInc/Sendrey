@@ -97,7 +97,7 @@ const handleRaiseDispute = async (socket, io, data) => {
       raisedBy: data.raisedBy
     });
 
-    console.log(`Dispute raised: ${dispute.disputeId}`);
+    // console.log(`Dispute raised: ${dispute.disputeId}`);
 
   } catch (error) {
     console.error('Error raising dispute:', error);
@@ -174,7 +174,7 @@ const handleResolveDispute = async (socket, io, data) => {
       outcome
     });
 
-    console.log(`Dispute resolved: ${disputeId}`);
+    // console.log(`Dispute resolved: ${disputeId}`);
 
   } catch (error) {
     console.error('Error resolving dispute:', error);

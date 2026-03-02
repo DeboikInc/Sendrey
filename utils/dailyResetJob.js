@@ -27,7 +27,7 @@ const startDailyResetJob = () => {
       );
 
       logger.info(`Daily reset complete: ${result.modifiedCount} runners reset`);
-      console.log(`Reset ${result.modifiedCount} runners to 0 errands, isAvailable: true`);
+      // console.log(`Reset ${result.modifiedCount} runners to 0 errands, isAvailable: true`);
       
     } catch (error) {
       logger.error('Daily reset job error:', error);

@@ -82,7 +82,7 @@ const handleRunnerAccept = async (io, socket, data) => {
             { new: true }
         );
 
-        console.log('Chat updated with orderId:', order.orderId, '| chatId:', chatId);
+        // console.log('Chat updated with orderId:', order.orderId, '| chatId:', chatId);
 
         await Runner.findByIdAndUpdate(runnerId, {
             activeOrderId: order.orderId,
@@ -126,7 +126,7 @@ const handleRunnerAccept = async (io, socket, data) => {
             orderId:order.orderId
         });
 
-        console.log('Order created:', order.orderId, '| itemBudget:', itemBudget, '| deliveryFee:', deliveryFee, '| total:', totalAmount);
+        // console.log('Order created:', order.orderId, '| itemBudget:', itemBudget, '| deliveryFee:', deliveryFee, '| total:', totalAmount);
         return order;
 
     } catch (error) {

@@ -148,28 +148,28 @@ class RunnerController extends BaseController {
         return runner.isOnline && runner.isAvailable;
       });
 
-      console.log('DEBUG IN RUNNER CONTROLLER');
-      console.log('Nearby runners search:');
-      console.log('  Query params:', { lat, lng, serviceType, fleetType });
-      console.log('  Raw results:', runners.length);
-      console.log('  Eligible after KYC filter:', eligibleRunners.length);
+      // console.log('DEBUG IN RUNNER CONTROLLER');
+      // console.log('Nearby runners search:');
+      // console.log('  Query params:', { lat, lng, serviceType, fleetType });
+      // console.log('  Raw results:', runners.length);
+      // console.log('  Eligible after KYC filter:', eligibleRunners.length);
 
       const filteredOut = runners.filter(r => !eligibleRunners.includes(r));
       if (filteredOut.length > 0) {
-        console.log('  Filtered out runners (pending KYC):', filteredOut.map(r => ({
-          id: r._id,
-          name: `${r.firstName} ${r.lastName}`,
-          runnerStatus: r.runnerStatus,
-          docStatus: {
-            nin: r.verificationDocuments?.nin?.status,
-            driverLicense: r.verificationDocuments?.driverLicense?.status,
-            biometric: r.biometricVerification?.status
-          },
-          serviceType: r.serviceType,
-          fleetType: r.fleetType,
-          isOnline: r.isOnline,
-          isAvailable: r.isAvailable
-        })));
+        // console.log('  Filtered out runners (pending KYC):', filteredOut.map(r => ({
+        //   id: r._id,
+        //   name: `${r.firstName} ${r.lastName}`,
+        //   runnerStatus: r.runnerStatus,
+        //   docStatus: {
+        //     nin: r.verificationDocuments?.nin?.status,
+        //     driverLicense: r.verificationDocuments?.driverLicense?.status,
+        //     biometric: r.biometricVerification?.status
+        //   },
+        //   serviceType: r.serviceType,
+        //   fleetType: r.fleetType,
+        //   isOnline: r.isOnline,
+        //   isAvailable: r.isAvailable
+        // })));
       }
 
       return this.success(res, {
