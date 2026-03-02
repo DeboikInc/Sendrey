@@ -1,5 +1,5 @@
 const kafka = require('../config/kafka');
-const { handlers } = require('./paymentConsumer');
+const { handlers } = require('../consumers/paymentConsumer');
 
 const producer = kafka.producer();
 let isConnected = false;
