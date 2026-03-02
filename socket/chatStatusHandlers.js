@@ -4,9 +4,8 @@ const StatusEngine = require('../services/statusEngine');
 const MediaService = require('../services/mediaService');
 const { STATUS_FLOWS, TASK_TYPES } = require('../config/constants');
 const { logMetric } = require('../utils/metricsLogger');
-const Order = require('../models/Order');
-const { handleTaskCompleted } = require('./cancelHandlers');
-
+const Task = require('../models/Task');
+const User = require('../models/User');
 // Map backend status codes to human-readable labels
 const getStatusLabel = (status) => {
   const labels = {
@@ -16,22 +15,62 @@ const getStatusLabel = (status) => {
     'en_route_to_delivery': 'En route to delivery',
     'task_completed': 'Task completed',
     'arrived_at_pickup_location': 'Arrived at pickup location',
-    'item_delivered': 'Item delivered'
+    'item_collected': 'Item collected'
   };
 
   return labels[status] || status.replace(/_/g, ' ');
 };
+const snapshotCompletedTask = async(chat,runnerId)=>{
+  try{ // pull the user's currentRequest so we can snapshot it before it gets wiped
+   const userId = chat.participants?.find(p => p.userType === 'user')?.userId;
+     if (!userId) return;
+     const user = await User.findById(userId).lean();
+    if (!user || !user.currentRequest) return;
+    const cr = user.currentRequest;
 
+    // don't create a duplicate if this task was already snapshotted
+    const existing = await Task.findOne({ taskId: chat.taskId || chat.chatId });
+    if (existing) return;
+    await Task.create({
+       taskId: chat.taskId || chat.chatId,
+      userId: user._id,
+      runnerId,
+      businessAccount: cr.businessAccount || null,
+      createdByMember: cr.createdByMember || null,
+      serviceType: cr.serviceType,
+      fleetType: cr.fleetType,
+      pickupLocation: cr.pickupLocation || null,
+      pickupPhone: cr.pickupPhone || null,
+      pickupItems: cr.pickupItems || null,
+      pickupCoordinates: cr.pickupCoordinates || null,
+      marketLocation: cr.marketLocation || null,
+      marketItems: cr.marketItems || null,
+      budget: cr.budget || null,
+      budgetFlexibility: cr.budgetFlexibility || null,
+      marketCoordinates: cr.marketCoordinates || null,
+      deliveryLocation: cr.deliveryLocation || null,
+      dropoffPhone: cr.dropoffPhone || null,
+      specialInstructions: cr.specialInstructions || null,
+      // amount comes from the invoice — we'll update this separately
+      amount: 0,
+      status: "completed",
+      completedAt: new Date(),
+    });
+ console.log(`Task snapshotted for chat ${chat.chatId}`);   
+} catch (err) {
+    // log but don't crash the status update if snapshot fails
+    console.error('Failed to snapshot task:', err.message);
+  }
+}
 const handleUpdateStatus = async (socket, io, data) => {
-  const startTime = Date.now();
-
   try {
-    const { chatId, status, serviceType: clientServiceType, updatedBy, updatedByType } = data;
+    const { chatId, status, serviceType: clientServiceType } = data;
 
     // Extract runnerId from chatId if socket.runnerId is not set
     let runnerId = socket.runnerId;
 
     if (!runnerId) {
+      // Parse from chatId format: user-{userId}-runner-{runnerId}
       const match = chatId.match(/runner-(.+)$/);
       if (match) {
         runnerId = match[1];
@@ -40,58 +79,42 @@ const handleUpdateStatus = async (socket, io, data) => {
     }
 
     if (!runnerId) {
-      console.error('No runnerId found on socket or in chatId:', chatId);
+      console.error(' No runnerId found on socket or in chatId:', chatId);
       return socket.emit('error', { message: 'Runner ID not found' });
     }
 
     console.log('updateStatus received:', { chatId, status, runnerId });
 
     const chat = await Chat.findOne({ chatId });
-
-    // Backfill taskId/orderId if missing (for orders created before the fix)
-    if (!chat.taskId && !chat.orderId) {
-      const order = await Order.findOne({ chatId });
-      if (order) {
-        chat.taskId = order.orderId;
-        chat.orderId = order.orderId;
-        chat.userId = order.userId;
-        chat.runnerId = order.runnerId;
-        await Chat.findOneAndUpdate(
-          { chatId },
-          { $set: { taskId: order.orderId, orderId: order.orderId, userId: order.userId, runnerId: order.runnerId } }
-        );
-        console.log('Backfilled chat with orderId:', order.orderId);
-      }
-    }
-
     if (!chat) {
-      console.error('Chat not found:', chatId);
+      console.error(' Chat not found:', chatId);
       return socket.emit('error', { message: 'Chat not found' });
     }
 
+    // Map serviceType to taskType
     const resolvedServiceType = chat.serviceType || clientServiceType;
 
-    console.log('Resolved serviceType:', resolvedServiceType);
+    console.log('Resolved serviceType:', resolvedServiceType, '(chat:', chat.serviceType, ', client:', clientServiceType, ')');
 
     if (!resolvedServiceType) {
       return socket.emit('error', { message: 'Cannot determine service type' });
     }
 
-
-    const taskType = (resolvedServiceType === 'run_errand' || resolvedServiceType === 'run-errand')
-      ? TASK_TYPES.RUN_ERRAND
+    const taskType = resolvedServiceType === 'run-errand'
+      ? TASK_TYPES.SHOPPING
       : TASK_TYPES.PICKUP_DELIVERY;
 
     console.log('Task type:', taskType);
 
     const validStatuses = STATUS_FLOWS[taskType];
     if (!validStatuses.includes(status)) {
-      console.error('Invalid status:', status, 'for task type:', taskType);
+      console.error(' Invalid status:', status, 'for task type:', taskType);
       return socket.emit('error', {
         message: `Invalid status "${status}" for task type "${taskType}". Valid: ${validStatuses.join(', ')}`
       });
     }
 
+    // Get human-readable label
     const displayText = getStatusLabel(status);
 
     // Create system message
@@ -100,9 +123,6 @@ const handleUpdateStatus = async (socket, io, data) => {
       from: 'system',
       messageType: 'system',
       type: 'system',
-      orderId: status === 'task_completed'
-        ? (chat.taskId || chat.orderId || data.orderId || null)
-        : null,
       text: displayText,
       time: new Date().toLocaleTimeString('en-US', {
         hour: '2-digit',
@@ -115,35 +135,18 @@ const handleUpdateStatus = async (socket, io, data) => {
       style: 'info'
     };
 
+    // Save message to chat
     chat.messages.push(systemMessage);
     chat.lastActivity = new Date();
     await chat.save();
 
     console.log(`Status updated to ${status} (${displayText}) in chat ${chatId}`);
 
+    // Emit to chat room
     io.to(chatId).emit('message', systemMessage);
-
-    if (status === 'en_route_to_delivery') {
-      const order = await Order.findOne({
-        orderId: chat.taskId || chat.orderId
-      }).select('orderId runnerId userId');
-
-      io.to(chatId).emit('trackingStarted', {
-        orderId: order?.orderId || chat.taskId || chat.orderId,
-        runnerId: runnerId,
-        chatId,
-        message: 'Runner is on the way'
-      });
-
-      const resolvedOrderId = order?.orderId || chat.taskId || chat.orderId;
-      io.to(`tracking:${resolvedOrderId}`).emit('runner:enRoute', { orderId: resolvedOrderId });
-      console.log(`Emitted trackingStarted to chat ${chatId}`);
-    }
-
-    console.log(`order id: ${systemMessage.orderId}`);
     console.log(`Emitted system message to room ${chatId}`);
 
-    // Update status via StatusEngine
+    // Update status via StatusEngine (if you still need it for tracking)
     if (chat.taskId) {
       try {
         await StatusEngine.update(chat.taskId, runnerId, status, taskType);
@@ -159,38 +162,18 @@ const handleUpdateStatus = async (socket, io, data) => {
       displayText,
       serviceType: chat.serviceType
     });
+// when the task is fully done, save a permanent record for expense reporting
+if (status === 'task_completed') {
+  await snapshotCompletedTask(chat, runnerId);
+}
 
-    // task_completed should prompt rating on user side
-    if (status === 'task_completed') {
-
-      // Update order status to completed
-      await Order.findOneAndUpdate(
-        { orderId: chat.taskId || chat.orderId },
-        { $set: { status: 'completed' } }
-      );
-
-      await handleTaskCompleted(io, {
-        chatId,
-        orderId: chat.taskId || chat.orderId,
-        runnerId,
-        userId: chat.userId?.toString(),
-      });
-
-      io.to(chatId).emit('task_completed', {
-        orderId: chat.taskId || chat.orderId,
-        chatId,
-      });
-
-      setTimeout(() => {
-        io.to(chatId).emit('promptRating', {
-          orderId: chat.taskId || chat.orderId || data.orderId,
-          chatId,
-          userId: chat.userId,
-          runnerId: chat.runnerId,
-        });
-        console.log('Emitted promptRating to', chatId);
-      }, 1000);
-    }
+// Confirm to sender
+socket.emit('statusUpdated', {
+  status,
+  chatId,
+  displayText,
+  serviceType: chat.serviceType
+});
 
     const latency = Date.now() - startTime;
     await logMetric({
@@ -198,22 +181,19 @@ const handleUpdateStatus = async (socket, io, data) => {
       status: 'success',
       latency,
       chatId,
-      userId: updatedBy || runnerId,
-      userType: updatedByType || 'runner',
+      userId: updatedBy,
+      userType: updatedByType,
       metadata: { newStatus: status }
     });
-
   } catch (error) {
-    console.error('Error updating status:', error);
+    console.error(' Error updating status:', error);
 
-    const latency = Date.now() - startTime;
     await logMetric({
       type: 'status_update',
       status: 'failed',
-      latency,
       chatId: data.chatId,
-      userId: data.updatedBy || data.runnerId || 'unknown',
-      userType: data.updatedByType || 'runner',  // FIX: never null
+      userId: data.updatedBy,
+      userType: data.updatedByType,
       error: error.message
     });
 
@@ -231,6 +211,7 @@ const handleSendMedia = async (socket, io, data) => {
     const chat = await Chat.findOne({ chatId });
     if (!chat) return socket.emit('error', { message: 'Chat not found' });
 
+    // Create media record
     if (chat.taskId) {
       await MediaService.createMediaRecord({
         taskId: chat.taskId,
@@ -242,6 +223,7 @@ const handleSendMedia = async (socket, io, data) => {
       });
     }
 
+    // Create message object matching your format
     const message = {
       id: Date.now().toString(),
       from: senderType === 'user' ? 'them' : 'me',
@@ -260,10 +242,12 @@ const handleSendMedia = async (socket, io, data) => {
       status: 'sent'
     };
 
+    // Save to chat
     chat.messages.push(message);
     chat.lastActivity = new Date();
     await chat.save();
 
+    // Broadcast to chat room
     io.to(chatId).emit('message', message);
     socket.emit('mediaSent', { success: true });
   } catch (error) {

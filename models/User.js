@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
-const { GENDER, ROLE, SERVICE_TYPE, FLEET_TYPE, MAX_DISTANCE } = require('../config/constants');
+const { GENDER, ROLE, SERVICE_TYPE, FLEET_TYPE } = require('../config/constants');
 
 const userSchema = new mongoose.Schema({
   // Authentication & Basic Info
@@ -62,6 +62,32 @@ const userSchema = new mongoose.Schema({
     },
     default: 'male'
   },
+  accountType:{
+    type:String,
+    enum:["personal","business"],
+    default:"personal"
+  },
+  businessProfile:{
+  businessName:String,
+  convertedAt: Date,
+  members:[{
+      userId: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+      role: {
+        type: String,
+        enum: ["admin", "manager", "staff"],
+        default: "staff",
+      },
+      joinedAt: { type: Date, default: Date.now },
+    },
+  ],
+  scheduledConversations: [{
+    label: { type: String },
+    cronExpression: { type: String },
+    isActive: { type: Boolean, default: true },
+    lastTriggeredAt: { type: Date },
+  }],
+  },
+ 
 
   // Location
   location: {
@@ -90,13 +116,6 @@ const userSchema = new mongoose.Schema({
     enum: ROLE,
     default: 'user'
   },
-  // terms and condition
-  termsAccepted: {
-    version: String,
-    acceptedAt: Date,
-    ipAddress: String
-  },
-
   isActive: {
     type: Boolean,
     default: true
@@ -120,20 +139,6 @@ const userSchema = new mongoose.Schema({
     ref: 'Runner',  // references the Runner model
     default: null,
   },
-
-  activeOrderId: {
-    type: String,
-    default: null,
-    index: true
-  },
-
-  orderHistory: [{
-    orderId: String,
-    runnerId: mongoose.Schema.Types.ObjectId,
-    serviceType: String,
-    completedAt: Date,
-    amountPaid: Number
-  }],
 
   // Verification Tokens
   verificationToken: String,
@@ -233,20 +238,15 @@ const userSchema = new mongoose.Schema({
       enum: ['idle', 'searching', 'active', 'awaiting_runner_connection', 'completed', 'cancelled'],
       default: 'awaiting_runner_connection'
     },
-    // for both services
-    deliveryCoordinates: {
-      lat: { type: Number, default: null },
-      lng: { type: Number, default: null }
-    },
 
     // ERAND-SPECIFIC FIELDS
     marketLocation: { type: String },
     marketItems: { type: String },
-    budget: { type: Number },
+    budget: { type: String },
     budgetFlexibility: { type: String, enum: ['stay within budget', 'can adjust slightly'] },
     marketCoordinates: {
-      lat: { type: Number, default: null },
-      lng: { type: Number, default: null }
+      lat: { type: Number },
+      lng: { type: Number }
     },
 
     // PICKUP-SPECIFIC FIELDS
@@ -254,10 +254,29 @@ const userSchema = new mongoose.Schema({
     pickupPhone: { type: String },
     pickupItems: { type: String },
     pickupCoordinates: {
-      lat: { type: Number, default: null },
-      lng: { type: Number, default: null }
+      lat: { type: Number },
+      lng: { type: Number }
     },
-  }
+    businessAccount: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: "User", 
+    default: null 
+  },
+  createdByMember: { 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: "User", 
+    default: null 
+  },
+  },
+  pendingPrompts: [
+  {
+    message: { type: String },
+    type: { type: String, default: 'general' }, // 'general' | 'expense_report'
+    reportId: { type: mongoose.Schema.Types.ObjectId, ref: 'ExpenseReport', default: null },
+    createdAt: { type: Date, default: Date.now },
+    read: { type: Boolean, default: false },
+  },
+],
 
 }, {
   timestamps: true,
@@ -305,16 +324,12 @@ userSchema.virtual('accountAge').get(function () {
 // Indexes
 userSchema.index({ email: 1 });
 userSchema.index({ phone: 1 }, { sparse: true });
+userSchema.index({ role: 1 });
+userSchema.index({ isActive: 1 });
 userSchema.index({ isVerified: 1 });
 userSchema.index({ createdAt: -1 });
 userSchema.index({ lastLogin: -1 });
-userSchema.index({
-  role: 1,
-  isActive: 1,
-  'currentRequest.status': 1,
-  location: '2dsphere'
-});
-
+userSchema.index({ location: '2dsphere' });
 
 // Pre-save middlewares
 userSchema.pre('save', async function (next) {
@@ -445,7 +460,7 @@ userSchema.statics.findNearbyUsers = async function ({
   longitude,
   serviceType,
   fleetType,
-  maxDistance = MAX_DISTANCE
+  maxDistance = 50000
 }) {
   const query = {
     role: 'user',
@@ -471,18 +486,28 @@ userSchema.statics.findNearbyUsers = async function ({
     query['currentRequest.fleetType'] = fleetType;
   }
 
+  // console.log(' USER SEARCH QUERY:', JSON.stringify(query, null, 2));
+  // const allUsers = await this.find({ role: 'user' })
+  //   .select('firstName lastName currentRequest latitude longitude')
+  //   .limit(5)
+
+  // console.log(' ACTUAL USERS IN DB (first 5):');
+  // allUsers.forEach(user => {
+  //   console.log(`  - ${user.firstName}:`, {
+  //     hasCurrentRequest: !!user.currentRequest,
+  //     serviceType: user.currentRequest?.serviceType,
+  //     fleetType: user.currentRequest?.fleetType,
+  //     status: user.currentRequest?.status,
+  //     lat: user.latitude,
+  //     lng: user.longitude
+  //   });
+  // });
+
   const results = await this.find(query)
-    .select({
-      'firstName': 1,
-      'lastName': 1,
-      'phone': 1,
-      'avatar': 1,
-      'currentRequest': 1,
-      'location': 1,
-      'latitude': 1,
-      'longitude': 1
-    })
+    .select('firstName lastName phone currentRequest location latitude longitude avatar')
     .lean();
+
+  // console.log('Search returned:', results.length, 'users');
 
   return results;
 };

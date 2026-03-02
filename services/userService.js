@@ -181,9 +181,9 @@ class UserService {
    */
   async updateUser(id, updateData) {
     try {
-      // console.log('🔄 UPDATE USER CALLED:');
-      // console.log('  User ID:', id);  // Changed from userId to id
-      // console.log('  Update data:', JSON.stringify(updateData, null, 2));
+      console.log('🔄 UPDATE USER CALLED:');
+      console.log('  User ID:', id);  // Changed from userId to id
+      console.log('  Update data:', JSON.stringify(updateData, null, 2));
 
       const user = await User.findById(id);
       if (!user) {
@@ -191,7 +191,7 @@ class UserService {
       }
 
       // Debug what's being set
-      // console.log('Setting updateData:', updateData);
+      console.log('Setting updateData:', updateData);
 
       const updatedUser = await User.findByIdAndUpdate(
         id,
@@ -199,13 +199,13 @@ class UserService {
         { new: true, runValidators: true }
       );
 
-      // console.log('✅ UPDATED USER:');
-      // console.log('  fleetType:', updatedUser.currentRequest?.fleetType);
-      // console.log('  Full data:', updatedUser.currentRequest);
+      console.log('✅ UPDATED USER:');
+      console.log('  fleetType:', updatedUser.currentRequest?.fleetType);
+      console.log('  Full data:', updatedUser.currentRequest);
 
       return updatedUser;
     } catch (error) {
-      // console.log('❌ UPDATE ERROR:', error.message);
+      console.log('❌ UPDATE ERROR:', error.message);
       throw error;
     }
   }
@@ -419,48 +419,17 @@ class UserService {
   }
 
   /**
- * Find nearby users (for runners to find customers)
- */
-  async findNearbyUsers({ latitude, longitude, serviceType, fleetType, maxDistance = MAX_DISTANCE }) {
+   * Find nearby users (for runners to find customers)
+   */
+  async findNearbyUsers({ latitude, longitude, serviceType, fleetType, maxDistance = 50000 }) {
     try {
-      const users = await User.findNearbyUsers({
+      return await User.findNearbyUsers({
         latitude,
         longitude,
         serviceType,
         fleetType,
         maxDistance
       });
-
-      // Format each user to ensure coordinates are properly structured
-      return users.map(user => ({
-        _id: user._id,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        phone: user.phone,
-        avatar: user.avatar,
-        currentRequest: {
-          serviceType: user.currentRequest?.serviceType,
-          fleetType: user.currentRequest?.fleetType,
-          deliveryLocation: user.currentRequest?.deliveryLocation,
-          deliveryCoordinates: user.currentRequest?.deliveryCoordinates || null,
-          marketLocation: user.currentRequest?.marketLocation,
-          marketCoordinates: user.currentRequest?.marketCoordinates || null,
-          pickupLocation: user.currentRequest?.pickupLocation,
-          pickupCoordinates: user.currentRequest?.pickupCoordinates || null,
-          marketItems: user.currentRequest?.marketItems,
-          budget: user.currentRequest?.budget,
-          budgetFlexibility: user.currentRequest?.budgetFlexibility,
-          pickupItems: user.currentRequest?.pickupItems,
-          pickupPhone: user.currentRequest?.pickupPhone,
-          dropoffPhone: user.currentRequest?.dropoffPhone,
-          status: user.currentRequest?.status,
-          userId: user.currentRequest?.userId,
-          timestamp: user.currentRequest?.timestamp
-        },
-        location: user.location,
-        latitude: user.latitude,
-        longitude: user.longitude
-      }));
     } catch (error) {
       logger.error('UserService - Find nearby users error:', error);
       throw error;
