@@ -7,11 +7,12 @@ const Runner = require('../models/Runner')
 //  $env:DATABASE_URL = ""
 
 const connectDb = async () => {
+  console.log('DATABASE_URL:', process.env.DATABASE_URL);
+  
   try {
     const currentDB = database.url
-    // console.log('DATABASE_URL:', process.env.DATABASE_URL);
     const dbConnect = await mongoose.connect(currentDB);
-    // console.log("Connecting to:", process.env.DATABASE_URL);
+    console.log("Connecting to:", process.env.DATABASE_URL);
 
     // console.log(`Database connected successfully to ${dbConnect.connection.name}`);
     const totalUsers = await User.countDocuments({});
@@ -25,7 +26,11 @@ const connectDb = async () => {
 
 
   } catch (error) {
-    // console.log(error);
+    console.error('MongoDB connection error DETAILS:', {
+      message: error.message,
+      code: error.code,
+      name: error.name
+    });
     process.exit(1)
   }
 }

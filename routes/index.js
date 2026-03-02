@@ -14,6 +14,7 @@ const ratingRoutes = require('./ratingRoutes');
 const termRoutes = require('./termRoutes');
 const payoutRoutes = require('./payoutRoutes');
 const orderRoutes = require('./orderRoutes');
+const waitlistRoutes = require('./waitlistRoutes')
 
 // Use route modules
 router.use('/auth', authRoutes);
