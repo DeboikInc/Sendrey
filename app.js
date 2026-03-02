@@ -65,7 +65,14 @@ const startServer = async () => {
     }, express.static(path.join(__dirname, 'uploads')));
 
     // Start all Kafka consumers
-    await startAllConsumers();
+    try {
+      console.log('Starting Kafka consumers...');
+      await startAllConsumers();
+      console.log(' Kafka consumers started');
+    } catch (kafkaError) {
+      console.error('⚠️ Kafka consumers failed to start - continuing without Kafka:', kafkaError.message);
+      // Don't exit - continue running without Kafka
+    }
 
     // start redis
     await redis.connect();

@@ -220,71 +220,77 @@ const handlers = {
 // ─── Consumer
 
 const startPaymentConsumer = async () => {
-  await consumer.connect();
-  await producer.connect();
+  try {
+    await consumer.connect();
+    await producer.connect();
 
-  for (const topic of PAYMENT_TOPICS) {
-    await consumer.subscribe({ topic, fromBeginning: false });
-  }
+    for (const topic of PAYMENT_TOPICS) {
+      await consumer.subscribe({ topic, fromBeginning: false });
+    }
 
-  await consumer.subscribe({ topic: 'payments-retry', fromBeginning: false });
+    await consumer.subscribe({ topic: 'payments-retry', fromBeginning: false });
 
-  await consumer.run({
-    eachMessage: async ({ topic, partition, message }) => {
-      const eventData = JSON.parse(message.value.toString());
-      const retryCount = eventData.retryCount || 0;
-      const eventType = eventData.type;
+    await consumer.run({
+      eachMessage: async ({ topic, partition, message }) => {
+        const eventData = JSON.parse(message.value.toString());
+        const retryCount = eventData.retryCount || 0;
+        const eventType = eventData.type;
 
-      // console.log(`Processing payment event [attempt ${retryCount + 1}]: ${eventType}`);
+        // console.log(`Processing payment event [attempt ${retryCount + 1}]: ${eventType}`);
 
-      try {
-        const handler = handlers[eventType];
-        if (!handler) {
-          console.warn(`No handler for payment event type: ${eventType} — skipping`);
-          return;
-        }
+        try {
+          const handler = handlers[eventType];
+          if (!handler) {
+            console.warn(`No handler for payment event type: ${eventType} — skipping`);
+            return;
+          }
 
-        await handler(eventData);
-        // console.log(`✅ Payment event handled: ${eventType}`);
+          await handler(eventData);
+          // console.log(`✅ Payment event handled: ${eventType}`);
 
-      } catch (error) {
-        console.error(`❌ Payment event failed [attempt ${retryCount + 1}]: ${eventType}`, error.message);
+        } catch (error) {
+          console.error(`❌ Payment event failed [attempt ${retryCount + 1}]: ${eventType}`, error.message);
 
-        const isPermanent =
-          error.message?.includes('not found') ||
-          error.message?.includes('invalid') ||
-          retryCount >= MAX_RETRIES;
+          const isPermanent =
+            error.message?.includes('not found') ||
+            error.message?.includes('invalid') ||
+            retryCount >= MAX_RETRIES;
 
-        if (isPermanent) {
-          console.error('Payment event dead lettered:', { ...eventData, error: error.message });
+          if (isPermanent) {
+            console.error('Payment event dead lettered:', { ...eventData, error: error.message });
+            await producer.send({
+              topic: 'payments-dlq',
+              messages: [{
+                value: JSON.stringify({
+                  ...eventData,
+                  error: error.message,
+                  deadLetteredAt: Date.now(),
+                }),
+              }],
+            });
+            return;
+          }
+
+          const delay = Math.pow(2, retryCount) * BASE_DELAY;
+          console.log(`Retrying payment event in ${delay}ms (${retryCount + 1}/${MAX_RETRIES})`);
+          await new Promise(r => setTimeout(r, delay));
+
           await producer.send({
-            topic: 'payments-dlq',
+            topic: 'payments-retry',
             messages: [{
-              value: JSON.stringify({
-                ...eventData,
-                error: error.message,
-                deadLetteredAt: Date.now(),
-              }),
+              value: JSON.stringify({ ...eventData, retryCount: retryCount + 1 }),
             }],
           });
-          return;
         }
+      },
+    });
 
-        const delay = Math.pow(2, retryCount) * BASE_DELAY;
-        console.log(`Retrying payment event in ${delay}ms (${retryCount + 1}/${MAX_RETRIES})`);
-        await new Promise(r => setTimeout(r, delay));
-
-        await producer.send({
-          topic: 'payments-retry',
-          messages: [{
-            value: JSON.stringify({ ...eventData, retryCount: retryCount + 1 }),
-          }],
-        });
-      }
-    },
-  });
-
-  console.log('Payment consumer started');
+    console.log('Payment consumer started');
+  } catch (error) {
+    console.error('Payment consumer failed to connect - continuing without Kafka:', error.message);
+    // Don't throw - just log and return
+    return;
+  }
 };
 
 module.exports = { startPaymentConsumer };
