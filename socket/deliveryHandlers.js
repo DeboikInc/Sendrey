@@ -183,7 +183,7 @@ const handleConfirmDelivery = async (io, socket, data) => {
             orderId
         });
 
-        console.log('Delivery confirmed successfully');
+        // console.log('Delivery confirmed successfully');
 
     } catch (error) {
         console.error('Error confirming delivery:', error);
@@ -280,7 +280,7 @@ const scheduleAutoConfirm = (io, chatId, orderId, escrowId) => {
         try {
             const order = await Order.findOne({ orderId });
             if (order && !order.deliveryConfirmedAt && order.status === 'delivered') {
-                console.log('Auto-confirming delivery for order:', orderId);
+                // console.log('Auto-confirming delivery for order:', orderId);
 
                 await orderStateMachine.transition(orderId, 'completed', {
                     triggeredBy: 'system',

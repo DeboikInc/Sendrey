@@ -140,7 +140,7 @@ class PaymentController extends BaseController {
                     await paymentService.verifyPayment(reference);
                 }
 
-                console.log('✅ Payment successful:', reference);
+                // console.log('✅ Payment successful:', reference);
                 break;
             }
             case 'transfer.success':

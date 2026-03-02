@@ -75,43 +75,6 @@ class EmailService {
     }
   }
 
-  /**
-    * Send email using Elastic Email API (raw HTML)
-    */
-  // async sendEmail(to, subject, templateName, data = {}) {
-  //   try {
-  //     const html = await this.compileTemplate(templateName, data);
-
-  //     const payload = {
-  //       Recipients: {To: [to] },
-  //       Content: {
-  //         From: `${this.fromName} <${this.fromEmail}>`,
-  //         Subject: subject,
-  //         Body: [
-  //           {
-  //             ContentType: 'HTML',
-  //             Charset: 'utf-8',
-  //             Content: html,
-  //           },
-  //         ],
-  //       },
-  //     };
-
-  //     const res = await axios.post(`${this.baseUrl}/emails/transactional`, payload, {
-  //       headers: {
-  //         'Content-Type': 'application/json',
-  //         'X-ElasticEmail-ApiKey': this.apiKey,
-  //       },
-  //     });
-
-  //     logger.info(`Email sent via Elastic Email API to ${to}`, res.data);
-  //     return res.data;
-  //   } catch (error) {
-
-  //     logger.error('Email sending error:', error.response?.data || error.message);
-  //     throw new Error('Failed to send email');
-  //   }
-  // }
 
   async sendEmail(to, subject, templateName, data = {}) {
     try {

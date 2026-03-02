@@ -16,14 +16,14 @@ router.post('/', async (req, res) => {
   try {
 
     const auth = new google.auth.GoogleAuth({
-      keyFile: 'path/to/your-service-account.json', // Download from Google Cloud
+      keyFile: './savvy-range-471515-f8-8b8f853ff092', // Download from Google Cloud
       scopes: ['https://www.googleapis.com/auth/spreadsheets'],
     });
 
     const sheets = google.sheets({ version: 'v4', auth: await auth.getClient() });
     
     await sheets.spreadsheets.values.append({
-      spreadsheetId: 'YOUR_GOOGLE_SHEET_ID', // Get from sheet URL
+      spreadsheetId: '1wffvCeDYS7zqrzplGF0BKX5p724TE1g5GLA_KlJi_rk', // Get from sheet URL
       range: 'Sheet1!A:C',
       valueInputOption: 'USER_ENTERED',
       requestBody: {
@@ -45,7 +45,7 @@ router.post('/', async (req, res) => {
 
     // 3. Optional: Send notification to yourself
     await sendEmail({
-      to: 'deboikinternational@gmail.com',
+      to: 'deboik193@gmail.com',
       subject: 'New Waitlist Signup',
       html: `<p>New signup: ${email} ${name ? `(${name}), role: ${role}` : ''}</p>`
     });

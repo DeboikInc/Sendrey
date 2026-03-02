@@ -278,38 +278,38 @@ mongoose.connect(database.url, database.options)
       socket.on('submitRating', (data) => safeHandler(handleSubmitRating, socket, io, data));
 
       // mock
-      socket.on('mockPayment', async ({ chatId, orderId }) => {
-        try {
-          console.log('Mock payment received | chatId:', chatId, '| orderId:', orderId);
-          const Order = require('./models/Order');
-          let order = null;
-          if (orderId) {
-            order = await Order.findOne({ orderId });
-          }
-          if (!order) {
-            order = await Order.findOne({ chatId });
-          }
-          if (!order) {
-            console.error('Mock payment: order not found for chatId:', chatId);
-            return;
-          }
-          console.log('Mock payment applied for order:', order.orderId);
-          await handlePaymentSuccess(socket, io, {
-            chatId,
-            orderId: order.orderId,
-            escrowId: null,
-            reference: `mock-${Date.now()}`,
-          });
-          io.to(chatId).emit('paymentSuccess', {
-            escrowId: null,
-            orderId: order.orderId,
-            chatId,
-            paymentStatus: 'paid',
-          });
-        } catch (error) {
-          console.error('MockPayment error:', error);
-        }
-      });
+      // socket.on('mockPayment', async ({ chatId, orderId }) => {
+      //   try {
+      //     console.log('Mock payment received | chatId:', chatId, '| orderId:', orderId);
+      //     const Order = require('./models/Order');
+      //     let order = null;
+      //     if (orderId) {
+      //       order = await Order.findOne({ orderId });
+      //     }
+      //     if (!order) {
+      //       order = await Order.findOne({ chatId });
+      //     }
+      //     if (!order) {
+      //       console.error('Mock payment: order not found for chatId:', chatId);
+      //       return;
+      //     }
+      //     console.log('Mock payment applied for order:', order.orderId);
+      //     await handlePaymentSuccess(socket, io, {
+      //       chatId,
+      //       orderId: order.orderId,
+      //       escrowId: null,
+      //       reference: `mock-${Date.now()}`,
+      //     });
+      //     io.to(chatId).emit('paymentSuccess', {
+      //       escrowId: null,
+      //       orderId: order.orderId,
+      //       chatId,
+      //       paymentStatus: 'paid',
+      //     });
+      //   } catch (error) {
+      //     console.error('MockPayment error:', error);
+      //   }
+      // });
 
       // Payment handler
       socket.on('paymentSuccess', (data) => safeHandler(handlePaymentSuccess, socket, io, data));

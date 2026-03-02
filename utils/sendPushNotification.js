@@ -36,7 +36,7 @@ const sendPushNotification = async (fcmToken, notification) => {
     // Handle invalid token
     if (error.code === 'messaging/invalid-registration-token' ||
         error.code === 'messaging/registration-token-not-registered') {
-      console.log('Invalid FCM token');
+      // console.log('Invalid FCM token');
       return { error: 'invalid_token' };
     }
     

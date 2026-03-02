@@ -102,7 +102,7 @@ const handleSubmitItems = async (socket, io, data) => {
       totalAmount
     });
 
-    console.log(`Item submission ${submissionId} sent to chat ${chatId}`);
+    // console.log(`Item submission ${submissionId} sent to chat ${chatId}`);
 
   } catch (error) {
     console.error("Error submitting items:", error);
@@ -172,13 +172,13 @@ const handleApproveItems = async (socket, io, data) => {
     // Emit to personal rooms
     io.to(`user-${userId.toString()}`).emit('message', cleanForEmit(userSystemMsg));
 
-    console.log('Emitting approval to runner room:', `user-${order.runnerId}`);
+    // console.log('Emitting approval to runner room:', `user-${order.runnerId}`);
     io.to(`user-${order.runnerId.toString()}`).emit('message', cleanForEmit(runnerSystemMsg));
 
     if (escrowId) {
       try {
         const result = await paymentService.releaseItemBudget(escrowId);
-        console.log(`Item budget released for escrow ${escrowId}:`, result);
+        // console.log(`Item budget released for escrow ${escrowId}:`, result);
       } catch (err) {
         console.error("Failed to release item budget:", err.message);
         socket.emit("itemBudgetReleaseError", { escrowId, error: err.message });
@@ -186,7 +186,7 @@ const handleApproveItems = async (socket, io, data) => {
     }
 
     await notifyItemApproved(order.runnerId, { orderId: order.orderId });
-    console.log(`Items approved for submission ${submissionId}`);
+    // console.log(`Items approved for submission ${submissionId}`);
 
 
   } catch (error) {
@@ -257,7 +257,7 @@ const handleRejectItems = async (socket, io, data) => {
     io.to(`user-${order.runnerId.toString()}`).emit('message', cleanForEmit(runnerSystemMsg));
 
     await notifyItemRejected(order.runnerId, { orderId: order.orderId, reason });
-    console.log(`Items rejected for submission ${submissionId}. Reason: ${reason}`);
+    // console.log(`Items rejected for submission ${submissionId}. Reason: ${reason}`);
 
   } catch (error) {
     console.error("Error rejecting items:", error);

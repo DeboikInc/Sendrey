@@ -235,7 +235,7 @@ const startPaymentConsumer = async () => {
       const retryCount = eventData.retryCount || 0;
       const eventType = eventData.type;
 
-      console.log(`Processing payment event [attempt ${retryCount + 1}]: ${eventType}`);
+      // console.log(`Processing payment event [attempt ${retryCount + 1}]: ${eventType}`);
 
       try {
         const handler = handlers[eventType];
@@ -245,7 +245,7 @@ const startPaymentConsumer = async () => {
         }
 
         await handler(eventData);
-        console.log(`✅ Payment event handled: ${eventType}`);
+        // console.log(`✅ Payment event handled: ${eventType}`);
 
       } catch (error) {
         console.error(`❌ Payment event failed [attempt ${retryCount + 1}]: ${eventType}`, error.message);

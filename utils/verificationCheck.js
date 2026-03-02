@@ -119,7 +119,7 @@ const canRunnerAcceptErrand = async (runnerId) => {
 
                 if (runner.isAvailable) {
                     await Runner.findByIdAndUpdate(runnerId, { isAvailable: false });
-                    console.log(`Runner ${runnerId} reached daily limit, set isAvailable: false`);
+                    // console.log(`Runner ${runnerId} reached daily limit, set isAvailable: false`);
                 }
 
                 // Calculate time until midnight reset
@@ -139,7 +139,7 @@ const canRunnerAcceptErrand = async (runnerId) => {
             // Still under limit - make sure they're available
             if (!runner.isAvailable) {
                 await Runner.findByIdAndUpdate(runnerId, { isAvailable: true });
-                console.log(`Runner ${runnerId} under limit, set isAvailable: true`);
+                // console.log(`Runner ${runnerId} under limit, set isAvailable: true`);
             }
 
             return {
@@ -182,7 +182,7 @@ const incrementErrandCount = async (runnerId) => {
                 $inc: { dailyErrandCount: 1 }
             });
 
-            console.log(`✅ Incremented errand count for runner ${runnerId} (approved_limited)`);
+            // console.log(`✅ Incremented errand count for runner ${runnerId} (approved_limited)`);
             return true;
         }
 
