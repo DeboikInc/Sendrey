@@ -6,9 +6,6 @@ const smsService = require('../services/smsService');
 const logger = require('../utils/logger');
 const User = require('../models/User');
 
-const { MAX_DISTANCE } = require('../config/constants');
-const { canRunnerAcceptErrand } = require('../utils/verificationCheck');
-
 class UserController extends BaseController {
   constructor() {
     super(userService);
@@ -37,6 +34,7 @@ class UserController extends BaseController {
 
   // Get current user profile
   async getProfile(req, res, next) {
+    
     try {
       const user = await userService.getUserById(req.user.id);
       this.success(res, { user: this._sanitizeUser(user) });
@@ -48,6 +46,7 @@ class UserController extends BaseController {
 
   // Get public user profile
   async getPublicProfile(req, res, next) {
+    
     try {
       const { userId } = req.params;
       const user = await userService.getPublicProfile(userId);
@@ -59,6 +58,7 @@ class UserController extends BaseController {
 
   // Update user profile
   async updateProfile(req, res, next) {
+     
     try {
       const userId = req.params.userId || req.user.id;
       const updateData = req.body;
@@ -85,6 +85,7 @@ class UserController extends BaseController {
 
   // Get all user profiles
   async listUsers(req, res, next) {
+    
     try {
       const filters = req.query;
       const result = await userService.listUsers(filters);
@@ -104,34 +105,9 @@ class UserController extends BaseController {
 
   // Get nearby users (for runners to find customers)
   async getNearbyUsers(req, res, next) {
+    
     try {
       const { latitude, longitude, serviceType, fleetType } = req.query;
-
-      // Get runner ID from authenticated request
-      const runnerId = req.user?._id;
-
-      if (!runnerId) {
-        return this.error(res, 'Authentication required', 401);
-      }
-
-      // check verification status
-      const verificationCheck = await canRunnerAcceptErrand(runnerId)
-
-      if (!verificationCheck.canAccept) {
-        // console.log(`⛔ Runner ${runnerId} cannot view users: ${verificationCheck.reason}`);
-
-        return res.status(403).json({
-          success: false,
-          canAccept: false,
-          reason: verificationCheck.reason,
-          status: verificationCheck.status,
-          dailyCount: verificationCheck.dailyCount,
-          maxDaily: verificationCheck.maxDaily,
-          resetIn: verificationCheck.resetIn,
-          isBanned: verificationCheck.isBanned,
-          message: verificationCheck.reason
-        });
-      }
 
       if (!latitude || !longitude) {
         return this.error(res, 'Latitude and longitude are required', 400);
@@ -166,23 +142,18 @@ class UserController extends BaseController {
         longitude: lng,
         serviceType,
         fleetType,
-        maxDistance: MAX_DISTANCE
+        maxDistance: 50000
       });
 
-      // console.log('DEBUG IN USERS CONTROLLER');
-      // console.log('Users Results:', users.length);
-      // console.log('  Runner:', runnerId, '| Status:', verificationCheck.status);
-      // console.log('  Query params:', { lat, lng, serviceType, fleetType });
+      console.log('DEBUG IN USERS CONTROLLER');
+      console.log('Users Results:', users.length);
+      console.log('Nearby users search:');
+      console.log('  Query params:', { lat, lng, serviceType, fleetType });
 
       this.success(res, {
         success: true,
         count: users.length,
         users,
-        verificationStatus: {
-          status: verificationCheck.status,
-          dailyCount: verificationCheck.dailyCount,
-          maxDaily: verificationCheck.maxDaily
-        },
         message: `Found ${users.length} nearby user${users.length !== 1 ? 's' : ''}`
       });
     } catch (error) {
@@ -193,6 +164,7 @@ class UserController extends BaseController {
 
   // Get single user by ID
   async getSingleUser(req, res, next) {
+    
     try {
       const { userId } = req.params;
       const result = await userService.getUserById(userId);
@@ -204,6 +176,7 @@ class UserController extends BaseController {
 
   // Update notification preferences
   async updateNotificationPreferences(req, res, next) {
+    
     try {
       const userId = req.user.id;
       const preferences = req.body;
@@ -223,6 +196,7 @@ class UserController extends BaseController {
   // Update user role (admin only)
   async updateUserRole(req, res, next) {
     try {
+      
       const { userId } = req.params;
       const { role } = req.body;
 
@@ -240,6 +214,7 @@ class UserController extends BaseController {
 
   // Update user status
   async updateUserStatus(req, res, next) {
+   
     try {
       const { userId } = req.params;
       const { isActive, reason, isAvailable, isOnline } = req.body;
@@ -315,6 +290,7 @@ class UserController extends BaseController {
 
   // Search users
   async searchUsers(req, res, next) {
+    
     try {
       const filters = req.query;
       const result = await userService.searchUsers(filters);
@@ -326,6 +302,7 @@ class UserController extends BaseController {
 
   // Bulk user actions
   async bulkUserAction(req, res, next) {
+    
     try {
       const { userIds, action, role } = req.body;
       const result = await userService.bulkUserAction(userIds, action, role);
@@ -341,6 +318,7 @@ class UserController extends BaseController {
 
   // Export users
   async exportUsers(req, res, next) {
+    
     try {
       const { format, fields, dateFrom, dateTo } = req.body;
       const result = await userService.exportUsers({ format, fields, dateFrom, dateTo });

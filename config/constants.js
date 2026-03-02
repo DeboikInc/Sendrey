@@ -11,7 +11,6 @@ const RUNNER_STATUS = [
   'suspended',
   'banned'
 ]
-
 // For individual document/KYC verification status
 const VERIFICATION_STATUS = [
   'not_submitted',
