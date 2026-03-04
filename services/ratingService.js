@@ -20,9 +20,9 @@ const submitRating = async ({
   console.log('Order found:', order?.orderId, '| status:', order?.status, '| isRated:', order?.isRated);
   if (!order) throw new Error('Order not found');
 
-  // if (order.status !== 'completed') {
-  //   throw new Error('Can only rate after order is completed');
-  // }
+  if (order.status !== 'completed') {
+    throw new Error('Can only rate after order is completed');
+  }
 
   // Prevent duplicate ratings
   const existingRating = await Rating.findOne({ orderId });
@@ -114,7 +114,7 @@ const canRateOrder = async (orderId, userId) => {
   const order = await Order.findOne({ orderId });
   if (!order) return { canRate: false, reason: 'Order not found' };
 
-  // if (order.status !== 'completed') return { canRate: false, reason: 'Order not completed' };
+  if (order.status !== 'completed') return { canRate: false, reason: 'Order not completed' };
 
   const existing = await Rating.findOne({ taskId: orderId });
   if (existing) return { canRate: false, reason: 'Already rated' };

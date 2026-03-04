@@ -85,7 +85,7 @@ class SMSService {
     }
 
     const formattedTo = this.formatPhoneNumber(to);
-    // console.log('Sending SMS - To:', formattedTo, 'From:', this.fromNumber);
+    console.log('Sending SMS - To:', formattedTo, 'From:', this.fromNumber);
 
     if (!this.validatePhoneNumber(formattedTo)) {
       throw new Error(`Invalid phone number: ${formattedTo}`);
@@ -103,13 +103,6 @@ class SMSService {
     logger.info(`SMS sent: ${result.sid}`);
     return result;
     } catch (error) {
-      // console.error('TWILIO ERROR DETAILS:', {
-      //   message: error.message,
-      //   code: error.code,
-      //   status: error.status,
-      //   moreInfo: error.moreInfo
-      // });
-      // throw error;
       logger.error('SMS sending error:', {
         message: error?.message,
         code: error?.code,
