@@ -61,13 +61,13 @@ class AuthController extends BaseController {
       }
 
       // Queue OTP SMS via Kafka
-      if (user.phone) {
-        await sendSmsEvent({
-          type: 'otp',
-          to: user.phone,
-          otp,
-        });
-      }
+      // if (user.phone) {
+      //   await sendSmsEvent({
+      //     type: 'otp',
+      //     to: user.phone,
+      //     otp,
+      //   });
+      // }
 
       // Virtual account (non-blocking)
       try {
@@ -119,13 +119,13 @@ class AuthController extends BaseController {
       }
 
       // Queue OTP SMS via Kafka
-      if (runner.phone) {
-        await sendSmsEvent({
-          type: 'otp',
-          to: runner.phone,
-          otp,
-        });
-      }
+      // if (runner.phone) {
+      //   await sendSmsEvent({
+      //     type: 'otp',
+      //     to: runner.phone,
+      //     otp,
+      //   });
+      // }
 
       // Virtual account (non-blocking)
       try {
