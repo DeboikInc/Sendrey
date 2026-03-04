@@ -49,8 +49,8 @@ const ALL_STATUSES = [
   ])
 ];
 
-// const MAX_DISTANCE = 50000 
-const MAX_DISTANCE = 2000 // prod code
+const MAX_DISTANCE = 50000 
+// const MAX_DISTANCE = 2000 // prod code
 
 const ACTIVITIES = ['login',
   'logout',
