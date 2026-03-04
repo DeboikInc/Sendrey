@@ -67,8 +67,8 @@ class RunnerService {
    * Find runners by service type
    */
   async findRunnersByServiceType(serviceType) {
-    return await Runner.find({ 
-      serviceType 
+    return await Runner.find({
+      serviceType
     })
       .select('firstName lastName phone fleetType serviceType location latitude longitude isOnline isAvailable avatar')
       .lean();
@@ -118,11 +118,11 @@ class RunnerService {
    */
   async setRunnerOnlineStatus(userId, isOnline, isAvailable) {
     const updateData = { lastActive: new Date() };
-    
+
     if (typeof isOnline === 'boolean') {
       updateData.isOnline = isOnline;
     }
-    
+
     if (typeof isAvailable === 'boolean') {
       updateData.isAvailable = isAvailable;
     }
@@ -157,19 +157,30 @@ class RunnerService {
    * Update runner profile
    */
   async updateRunner(id, updateData) {
-    const runner = await Runner.findById(id);
 
-    if (!runner) {
-      throw new Error('Runner does not exist');
+    try {
+      console.log('Update Runner called:');
+      console.log('User ID:', id); 
+      console.log('Update data:', JSON.stringify(updateData, null, 2))
+
+      const runner = await Runner.findById(id);
+
+      if (!runner) {
+        throw new Error('Runner does not exist');
+      }
+
+      const updatedRunner = await Runner.findByIdAndUpdate(
+        id,
+        { $set: updateData },
+        { new: true, runValidators: true }
+      );
+
+      return updatedRunner;
+
+    } catch (error) {
+      console.log('❌ UPDATE ERROR:', error.message);
+      throw error;
     }
-
-    const updatedRunner = await Runner.findByIdAndUpdate(
-      id,
-      { $set: updateData },
-      { new: true, runValidators: true }
-    );
-
-    return updatedRunner;
   }
 
   /**
@@ -178,8 +189,8 @@ class RunnerService {
   async getRunnerStats() {
     const totalRunners = await Runner.countDocuments();
     const onlineRunners = await Runner.countDocuments({ isOnline: true });
-    const availableRunners = await Runner.countDocuments({ 
-      isOnline: true, 
+    const availableRunners = await Runner.countDocuments({
+      isOnline: true,
       isAvailable: true,
       runnerStatus: 'verified'
     });
@@ -362,7 +373,7 @@ class RunnerService {
   async updateVerificationDocuments(runnerId, documentType, documentData) {
     try {
       const updateField = `verificationDocuments.${documentType}`;
-      
+
       const runner = await Runner.findByIdAndUpdate(
         runnerId,
         {

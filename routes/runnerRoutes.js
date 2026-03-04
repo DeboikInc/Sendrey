@@ -23,7 +23,7 @@ router.get('/profile',
 );
 
 
-router.put('/profile',
+router.put('/update-profile',
   authorize(['runner']),
   validate(userValidation.updateProfile),
   auditLog('UPDATE_RUNNER_PROFILE'),
