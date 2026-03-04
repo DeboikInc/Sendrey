@@ -25,7 +25,7 @@ class AuthController extends BaseController {
   }
 
   register = async (req, res, next) => {
-    // console.log('Incoming user registration body:', req.body);
+    console.log('Incoming user registration body:', req.body);
     try {
       const userData = req.body;
       const creatorRole = req.user?.role;
@@ -93,7 +93,7 @@ class AuthController extends BaseController {
   }
 
   registerRunner = async (req, res, next) => {
-    // console.log('Incoming runner registration body:', req.body);
+    console.log('Incoming runner registration body:', req.body);
     try {
       const runnerData = req.body;
       runnerData.role = 'runner';
