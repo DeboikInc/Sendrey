@@ -36,6 +36,14 @@ const locationCleanup = require('./services/locationTracking/locationCleanup');
 // Database connection
 const connectDb = require('./config/database');
 const startServer = async () => {
+
+  if (process.env.NODE_ENV === 'production') {
+    console.log = () => { };
+    console.error = () => { };
+    console.warn = () => { };
+    console.debug = () => { };
+  }
+  
   try {
 
     // 1. Await the database connection first
@@ -73,7 +81,7 @@ const startServer = async () => {
       await startAllConsumers();
       console.log(' Kafka consumers started');
     } catch (kafkaError) {
-      console.error('⚠️ Kafka consumers failed to start - continuing without Kafka:', kafkaError.message);
+      console.error(' Kafka consumers failed to start - continuing without Kafka:', kafkaError.message);
       // Don't exit - continue running without Kafka
     }
 

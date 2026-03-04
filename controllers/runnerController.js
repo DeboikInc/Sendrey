@@ -148,11 +148,11 @@ class RunnerController extends BaseController {
         return runner.isOnline && runner.isAvailable;
       });
 
-      // console.log('DEBUG IN RUNNER CONTROLLER');
-      // console.log('Nearby runners search:');
-      // console.log('  Query params:', { lat, lng, serviceType, fleetType });
-      // console.log('  Raw results:', runners.length);
-      // console.log('  Eligible after KYC filter:', eligibleRunners.length);
+      console.log('DEBUG IN RUNNER CONTROLLER');
+      console.log('Nearby runners search:');
+      console.log('  Query params:', { lat, lng, serviceType, fleetType });
+      console.log('  Raw results:', runners.length);
+      console.log('  Eligible after KYC filter:', eligibleRunners.length);
 
       const filteredOut = runners.filter(r => !eligibleRunners.includes(r));
       if (filteredOut.length > 0) {
