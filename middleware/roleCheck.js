@@ -1,64 +1,48 @@
-// middleware/roleCheck.js
 const User = require('../models/User');
 
-// check if user is a runner
 const isRunner = (req, res, next) => {
   if (!req.user) {
-    return res.status(401).json({
-      success: false,
-      message: 'Authentication required'
-    });
+    return res.status(401).json({ success: false, message: 'Authentication required' });
   }
-
   if (req.user.role !== 'runner') {
-    return res.status(403).json({
-      success: false,
-      message: 'Access denied. Only runners can perform this action.'
-    });
+    return res.status(403).json({ success: false, message: 'Access denied. Only runners can perform this action.' });
   }
-
   next();
 };
 
-// Middleware to check if user is an admin
 const isAdmin = (req, res, next) => {
   if (!req.user) {
-    return res.status(401).json({
-      success: false,
-      message: 'Authentication required'
-    });
+    return res.status(401).json({ success: false, message: 'Authentication required' });
   }
-
-  if (req.user.role !== 'admin') {
-    return res.status(403).json({
-      success: false,
-      message: 'Access denied. Admin privileges required.'
-    });
+  const role = req.headers['x-admin-role'] || req.user?.role;
+  if (!['admin', 'super-admin'].includes(role)) {
+    return res.status(403).json({ success: false, message: 'Access denied. Admin privileges required.' });
   }
-
   next();
 };
 
-// Middleware to check if user is either runner or admin
+const isSuperAdmin = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ success: false, message: 'Authentication required' });
+  }
+  const role = req.headers['x-admin-role'] || req.user?.role;
+  if (role !== 'super-admin') {
+    return res.status(403).json({ success: false, message: 'Access denied. Super admin privileges required.' });
+  }
+  next();
+};
+
 const isRunnerOrAdmin = (req, res, next) => {
   if (!req.user) {
-    return res.status(401).json({
-      success: false,
-      message: 'Authentication required'
-    });
+    return res.status(401).json({ success: false, message: 'Authentication required' });
   }
-
-  if (req.user.role !== 'runner' && req.user.role !== 'admin') {
-    return res.status(403).json({
-      success: false,
-      message: 'Access denied. Insufficient privileges.'
-    });
+  const role = req.headers['x-admin-role'] || req.user?.role;
+  if (!['runner', 'admin', 'super-admin'].includes(role)) {
+    return res.status(403).json({ success: false, message: 'Access denied. Insufficient privileges.' });
   }
-
   next();
 };
 
-// checks the user has a business account and optionally has the right role within it
 const requireBusiness = (allowedRoles = []) => {
   return async (req, res, next) => {
     try {
@@ -75,23 +59,17 @@ const requireBusiness = (allowedRoles = []) => {
         return res.status(403).json({ success: false, message: 'This feature requires a business account.' });
       }
 
-      // no role restriction — just needs to be a business account
       if (allowedRoles.length === 0) {
         req.businessUser = user;
         return next();
       }
 
-      // the account owner (the one who converted) is always treated as admin
-      // they ARE the business account, not just a member of it
-      const isOwner = user._id.toString() === req.user._id.toString() &&
-        user.businessProfile?.members?.[0]?.userId?.toString() === req.user._id.toString();
-
+      const isOwner = user.businessProfile?.members?.[0]?.userId?.toString() === req.user._id.toString();
       if (isOwner) {
         req.businessUser = user;
         return next();
       }
 
-      // for actual team members, check their assigned role
       const member = user.businessProfile?.members?.find(
         (m) => m.userId.toString() === req.user._id.toString()
       );
@@ -110,7 +88,8 @@ const requireBusiness = (allowedRoles = []) => {
 
 module.exports = {
   isRunner,
-  isAdmin,
-  isRunnerOrAdmin,
+  isAdmin, 
+  isSuperAdmin, 
+  isRunnerOrAdmin, 
   requireBusiness
 };

@@ -70,14 +70,6 @@ router.put('/:userId',
   userController.updateProfile
 );
 
-router.patch('/:userId/role',
-  validate(userParamsValidation.userId, 'params'),
-  validate(userValidation.updateRole),
-  authorize(['admin', 'super-admin']), // Only admin can change roles
-  auditLog('UPDATE_USER_ROLE'),
-  userController.updateUserRole
-);
-
 // is available, online offline etc
 router.patch('/:userId/status',
   validate(userParamsValidation.userId, 'params'),
@@ -87,25 +79,6 @@ router.patch('/:userId/status',
   userController.updateUserStatus
 );
 
-router.delete('/:userId',
-  validate(userParamsValidation.userId, 'params'),
-  authorize(['super-admin']), // Only admin can delete users
-  auditLog('DELETE_USER'),
-  userController.deleteUser
-);
-
-router.post('/bulk/action',
-  validate(userValidation.bulkAction),
-  authorize(['admin', 'super-admin']),
-  auditLog('BULK_USER_ACTION'),
-  userController.bulkUserAction
-);
-
-router.post('/export',
-  validate(userValidation.exportUsers),
-  authorize(['admin', 'super-admin', 'manager', 'sales']),
-  userController.exportUsers
-);
 
 
 module.exports = router;
