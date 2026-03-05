@@ -6,8 +6,6 @@ const { validate } = require('../middleware/validation');
 const { authValidation } = require('../validations/authValidation');
 const {
   authenticate,
-  authenticateOptional,
-  authorize,
   userRateLimit,
   auditLog
 } = require('../middleware/auth');
@@ -27,15 +25,6 @@ router.post('/register-user',
   authController.register
 );
 
-router.post('/register-admin',
-  // authenticate,
-  // authorize(['admin', 'super-admin']),
-  userRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 3 }), // 3 registrations per hour
-  validate(authValidation.createAdmin),
-  auditLog('REGISTER-ADMIN'),
-  authController.register
-);
-
 router.post('/login',
   userRateLimit({ windowMs: 15 * 60 * 1000, maxRequests: 5 }), // 5 login attempts per 15 minutes
   validate(authValidation.login),
@@ -43,12 +32,6 @@ router.post('/login',
   authController.login
 );
 
-router.post('/admin/login',
-  userRateLimit({ windowMs: 15 * 60 * 1000, maxRequests: 5 }),
-  validate(authValidation.adminLogin),
-  auditLog('ADMIN_LOGIN'),
-  authController.adminLogin
-);
 
 router.post('/verify-email',
   validate(authValidation.verifyEmail),
@@ -94,8 +77,8 @@ router.post('/verify-phone',
 
 router.post('/resend-phone-verification',
   userRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 3 }), // 3 resends per hour
-  // validate(authValidation.resendVerification),
-  // authController.resendVerification
+  validate(authValidation.resendVerification),
+  authController.resendVerification
 );
 
 router.post('/logout',

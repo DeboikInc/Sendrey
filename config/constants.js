@@ -1,4 +1,4 @@
-const ROLE = ['user', 'runner', 'sales', 'manager', 'admin', 'super-admin'];
+const ROLE = ['user', 'runner', 'admin', 'super-admin']; // 'sales', 'manager', 
 const GENDER = ['male', 'female'];
 const FLEET = ['cycling', 'bike', 'car', 'van', 'pedestrian'];
 const EDUCATION = ['graduate', 'undergraduate', 'high-school'];

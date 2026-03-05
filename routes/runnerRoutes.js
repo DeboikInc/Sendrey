@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const runnerController = require('../controllers/runnerController');
-const { authenticate, authorize, auditLog } = require('../middleware/auth');
+const { authenticate, authorize, auditLog, userRateLimit } = require('../middleware/auth');
 const { validate } = require('../middleware/validation');
 const { userParamsValidation, userValidation } = require('../validations/userValidation');
 const upload = require('../middleware/upload');
@@ -26,6 +26,7 @@ router.get('/profile',
 router.put('/update-profile',
   authorize(['runner']),
   validate(userValidation.updateProfile),
+  userRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 3 }),
   auditLog('UPDATE_RUNNER_PROFILE'),
   runnerController.updateProfile
 );
@@ -77,6 +78,7 @@ router.patch(
     '/:runnerId/avatar',
     authorize(['runner']),
     upload.single('avatar'),
+    userRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 3 }),
     auditLog('UPDATE_RUNNER_AVATAR'),
     runnerController.updateAvatar
 );
