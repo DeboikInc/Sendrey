@@ -22,13 +22,19 @@ const handlePaymentSuccess = async (socket, io, data) => {
     }
 
     // Find order
-    const order = await Order.findOne({
-      $or: [
-        ...(orderId ? [{ orderId }] : []),
-        { chatId },
-        ...(escrowId ? [{ escrowId }] : []),
-      ]
-    });
+    let order;
+
+    if (orderId) {
+      order = await Order.findOne({ orderId });
+    } else if (escrowId) {
+      order = await Order.findOne({ escrowId });
+    } else {
+      // Find the most recent UNPAID order for this chat
+      order = await Order.findOne({
+        chatId,
+        paymentStatus: { $ne: 'paid' }
+      }).sort({ createdAt: -1 });
+    }
 
     if (!order) {
       logger.error('Order not found for payment');
@@ -36,38 +42,35 @@ const handlePaymentSuccess = async (socket, io, data) => {
     }
 
     // Idempotency guard — don't double-process
-    if (order.paymentStatus === 'paid') {
-      logger.warn(`Order ${order.orderId} already paid — skipping`);
-      return;
+    const alreadyPaid = order.paymentStatus === 'paid';
+
+    if (!alreadyPaid) {
+      order.paymentStatus = 'paid';
+      order.status = 'paid';
+      if (escrowId) order.escrowId = escrowId;
+      if (reference) order.paystackReference = reference;
+      if (!order.chatId && chatId) order.chatId = chatId;
+
+      order.statusHistory.push({
+        status: 'paid',
+        timestamp: new Date(),
+        triggeredBy: 'user',
+        triggeredById: chat.userId,
+        note: 'Payment confirmed'
+      });
+
+      await order.save();
+      logSocketAudit('PAYMENT_SUCCESS', {
+        orderId: data.orderId,
+        chatId: data.chatId,
+        escrowId: data.escrowId,
+        reference: data.reference,
+      });
+
+      logger.info(`✅ Order ${order.orderId} saved with paymentStatus: paid`);
+    } else {
+      logger.info(`Order ${order.orderId} already paid — skipping DB update but still notifying room`);
     }
-
-    logger.info(`Order found: ${order.orderId} | chatId stored on order: ${order.chatId}`);
-
-    // Update order fields
-    order.paymentStatus = 'paid';
-    order.status = 'paid';
-    if (escrowId) order.escrowId = escrowId;
-    if (reference) order.paystackReference = reference;
-    if (!order.chatId && chatId) order.chatId = chatId;
-
-    order.statusHistory.push({
-      status: 'paid',
-      timestamp: new Date(),
-      triggeredBy: 'user',
-      triggeredById: chat.userId,
-      note: 'Payment confirmed'
-    });
-
-
-    await order.save();
-    logSocketAudit('PAYMENT_SUCCESS', {
-      orderId: data.orderId,
-      chatId: data.chatId,
-      escrowId: data.escrowId,
-      reference: data.reference,
-    });
-    
-    logger.info(`✅ Order ${order.orderId} saved with paymentStatus: paid`);
 
     // Get user info for system message
     const user = await User.findById(chat.userId).lean();
@@ -96,6 +99,9 @@ const handlePaymentSuccess = async (socket, io, data) => {
     await chat.save();
 
     // Emit to room
+    const room = io.sockets.adapter.rooms.get(chatId);
+    console.log(`Room ${chatId} has ${room?.size ?? 0} sockets`);
+    logger.info(`Room ${chatId} has ${room?.size ?? 0} sockets`);
     io.to(chatId).emit('message', systemMessage);
 
     io.to(chatId).emit('paymentConfirmed', {

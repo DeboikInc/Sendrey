@@ -68,6 +68,12 @@ router.get(
 
 router.get('/wallet/banks', authenticate, paymentController.getBanks);
 
+router.post(
+    '/wallet/verify-funding', 
+    authenticate, 
+    auditLog('VERIFY_WALLET_FUNDING'), 
+    paymentController.verifyWalletFunding
+);
 
 // escrow routes
 router.post(

@@ -79,12 +79,19 @@ const calculateFeeSplit = (deliveryFee) => {
  * @param {object} user          User document or lean object
  * @returns {{ distanceInMeters: number, legs: object, error: string|null }}
  */
-const calculateRouteDistance = (serviceType, runner, user) => {
+const calculateRouteDistance = (serviceType, user) => {
   // ── Delivery / drop-off location ──────────────────────────────────────────
-  const deliveryCoords =
-    user.latitude != null && user.longitude != null
-      ? { lat: Number(user.latitude), lng: Number(user.longitude) }
-      : null;
+  const deliveryCoords = (() => {
+    const dc = user.currentRequest?.deliveryCoordinates;
+    if (dc?.lat != null && dc?.lng != null) {
+      return { lat: Number(dc.lat), lng: Number(dc.lng) };
+    }
+    // fallback to user's profile location
+    // if (user.latitude != null && user.longitude != null) {
+    //   return { lat: Number(user.latitude), lng: Number(user.longitude) };
+    // }
+    return null;
+  })();
 
   // ── Mid-point: market (errand) or pickup location ─────────────────────────
   const isErrand = serviceType === 'run-errand';
@@ -158,6 +165,8 @@ const computeDeliveryFeeFromDocs = (serviceType, user) => {
   }
 
   const deliveryFee = calculateDeliveryFee(distanceInMeters);
+
+
 
   return {
     distanceInMeters: Math.round(distanceInMeters),

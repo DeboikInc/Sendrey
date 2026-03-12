@@ -22,15 +22,15 @@ const checkTransactionLimits = async (req, res, next) => {
     }
 
     // KYC check for high value
-    if (amount >= KYC_REQUIRED_AMOUNT) {
-      const user = await require('../models/User').findById(userId);
-      if (!user?.kycVerified) {
-        return res.status(403).json({
-          error: 'KYC verification required for transactions above ₦100,000',
-          requiresKyc: true
-        });
-      }
-    }
+    // if (amount >= KYC_REQUIRED_AMOUNT) {
+    //   const user = await require('../models/User').findById(userId);
+    //   if (!user?.kycVerified) {
+    //     return res.status(403).json({
+    //       error: 'KYC verification required for transactions above ₦100,000',
+    //       requiresKyc: true
+    //     });
+    //   }
+    // }
 
     // Daily limits
     const today = new Date();

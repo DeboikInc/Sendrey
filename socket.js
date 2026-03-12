@@ -22,7 +22,7 @@ const callHandlers = require("./socket/callHandlers");
 const { handlePaymentSuccess } = require('./socket/paymentHandlers');
 const { handleGetRunnerPayout, handleSubmitPayoutReceipt } = require('./socket/payoutHandlers');
 const { registerTrackingHandlers } = require('./socket/trackingHandlers');
-const { handleCancelOrder, handleTaskCompleted } = require('./socket/cancelHandlers');
+const { handleCancelOrder, handleTaskCompleted, handleRunnerStartedNewOrder  } = require('./socket/cancelHandlers');
 
 // Import models
 const { Chat } = require("./models/Chat");
@@ -330,6 +330,8 @@ mongoose.connect(database.url, database.options)
 
       // cancel an order
       socket.on('cancelOrder', (data) => safeHandler(handleCancelOrder, socket, io, data));
+      socket.on('runnerStartedNewOrder', (data) => safeHandler(handleRunnerStartedNewOrder, socket, data));
+      socket.on('taskCompleted', (data) => safeHandler(handleTaskCompleted, io, data))
 
       // Disconnect
       socket.on("disconnect", (reason) => {

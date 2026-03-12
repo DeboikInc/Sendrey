@@ -13,6 +13,29 @@ const handleRunnerAccept = async (io, socket, data) => {
     try {
         const { runnerId, userId, chatId, serviceType } = data;
 
+        // Cancel any existing unpaid orders for this chatId before creating new one
+        await Order.updateMany(
+            {
+                chatId,
+                paymentStatus: { $ne: 'paid' },
+                status: { $nin: ['completed', 'cancelled'] }
+            },
+            {
+                $set: {
+                    status: 'cancelled',
+                    paymentStatus: 'cancelled',
+                },
+                $push: {
+                    statusHistory: {
+                        status: 'cancelled',
+                        timestamp: new Date(),
+                        triggeredBy: 'system',
+                        note: 'Superseded by new order from runner re-accept'
+                    }
+                }
+            }
+        );
+
         // Fetch runner and user in parallel — both documents needed for distance calc
         const [runner, user] = await Promise.all([
             Runner.findById(runnerId).lean(),
@@ -29,7 +52,7 @@ const handleRunnerAccept = async (io, socket, data) => {
         // run-errand:  runner → marketCoords  + marketCoords  → user location
         // pick-up:     runner → pickupCoords  + pickupCoords  → user location
         const { deliveryFee, distanceInMeters, legs, error: distanceError } =
-            computeDeliveryFeeFromDocs(serviceType, runner, user);
+            computeDeliveryFeeFromDocs(serviceType, user);
 
         if (distanceError) {
             console.warn(`[orderHandlers] Distance calculation issue for order (${chatId}): ${distanceError}`);
@@ -51,12 +74,12 @@ const handleRunnerAccept = async (io, socket, data) => {
             runnerId,
             serviceType,
             taskType: isErrand ? 'run-errand' : 'pick-up',
-            pickupLocation:  request.pickupLocation  || {},
+            pickupLocation: request.pickupLocation || {},
             deliveryLocation: request.deliveryLocation || {},
-            marketLocation:  request.marketLocation  || {},
+            marketLocation: request.marketLocation || {},
 
-            marketCoordinates:  request.marketCoordinates  || null,
-            pickupCoordinates:  request.pickupCoordinates  || null,
+            marketCoordinates: request.marketCoordinates || null,
+            pickupCoordinates: request.pickupCoordinates || null,
             deliveryCoordinates: request.deliveryCoordinates || null,
 
             // Store computed distance for reference / auditing
@@ -85,8 +108,8 @@ const handleRunnerAccept = async (io, socket, data) => {
             { chatId },
             {
                 $set: {
-                    orderId:  order.orderId,
-                    taskId:   order.orderId,
+                    orderId: order.orderId,
+                    taskId: order.orderId,
                     userId,
                     runnerId,
                 }
@@ -100,22 +123,22 @@ const handleRunnerAccept = async (io, socket, data) => {
         });
 
         await User.findByIdAndUpdate(userId, {
-            activeOrderId:   order.orderId,
+            activeOrderId: order.orderId,
             currentRunnerId: runnerId
         });
 
         const orderPayload = {
             order: {
-                orderId:        order.orderId,
-                escrowId:       order.escrowId,
-                itemBudget:     order.itemBudget,
-                deliveryFee:    order.deliveryFee,
-                totalAmount:    order.totalAmount,
-                runnerPayout:   order.runnerPayout,
-                taskType:       order.taskType,
-                serviceType:    order.serviceType,
-                status:         order.status,
-                paymentStatus:  order.paymentStatus,
+                orderId: order.orderId,
+                escrowId: order.escrowId,
+                itemBudget: order.itemBudget,
+                deliveryFee: order.deliveryFee,
+                totalAmount: order.totalAmount,
+                runnerPayout: order.runnerPayout,
+                taskType: order.taskType,
+                serviceType: order.serviceType,
+                status: order.status,
+                paymentStatus: order.paymentStatus,
                 approvalStatus: order.approvalStatus,
                 routeDistanceMeters: order.routeDistanceMeters,
             }
@@ -133,7 +156,7 @@ const handleRunnerAccept = async (io, socket, data) => {
 
         await notifyPaymentRequest(userId, {
             orderId: order.orderId,
-            amount:  order.totalAmount
+            amount: order.totalAmount
         });
 
         logSocketAudit('RUNNER_ACCEPTED_ORDER', {
