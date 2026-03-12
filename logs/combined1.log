@@ -12361,3 +12361,77 @@
 {"environment":"development","level":"info","logLevel":"info","message":"Logger Service started successfully","nodeVersion":"v22.13.0","service":"Logger Service","timestamp":"2026-03-12 22:25:38","type":"startup"}
 {"environment":"development","level":"info","message":"Twilio SMS service initialized successfully","service":"sendrey-server","timestamp":"2026-03-12 22:25:39"}
 {"environment":"development","level":"info","logLevel":"info","message":"Logger Service started successfully","nodeVersion":"v22.13.0","service":"Logger Service","timestamp":"2026-03-12 22:26:02","type":"startup"}
+{"environment":"development","level":"info","logLevel":"info","message":"Logger Service started successfully","nodeVersion":"v22.13.0","service":"Logger Service","timestamp":"2026-03-12 22:26:02","type":"startup"}
+{"environment":"development","level":"info","message":"Twilio SMS service initialized successfully","service":"sendrey-server","timestamp":"2026-03-12 22:26:03"}
+{"environment":"development","level":"info","logLevel":"info","message":"Logger Service started successfully","nodeVersion":"v22.13.0","service":"Logger Service","timestamp":"2026-03-12 22:31:25","type":"startup"}
+{"environment":"development","level":"info","logLevel":"info","message":"Logger Service started successfully","nodeVersion":"v22.13.0","service":"Logger Service","timestamp":"2026-03-12 22:31:25","type":"startup"}
+{"environment":"development","level":"info","message":"Twilio SMS service initialized successfully","service":"sendrey-server","timestamp":"2026-03-12 22:31:26"}
+{"environment":"development","level":"info","logLevel":"info","message":"Logger Service started successfully","nodeVersion":"v22.13.0","service":"Logger Service","timestamp":"2026-03-12 23:23:03","type":"startup"}
+{"environment":"development","level":"info","message":"Twilio SMS service initialized successfully","service":"sendrey-server","timestamp":"2026-03-12 23:23:04"}
+{"environment":"development","level":"info","logLevel":"info","message":"Logger Service started successfully","nodeVersion":"v22.13.0","service":"Logger Service","timestamp":"2026-03-12 23:26:56","type":"startup"}
+{"environment":"development","level":"info","logLevel":"info","message":"Logger Service started successfully","nodeVersion":"v22.13.0","service":"Logger Service","timestamp":"2026-03-12 23:27:58","type":"startup"}
+{"environment":"development","level":"info","logLevel":"info","message":"Logger Service started successfully","nodeVersion":"v22.13.0","service":"Logger Service","timestamp":"2026-03-12 23:27:58","type":"startup"}
+{"environment":"development","level":"info","message":"Twilio SMS service initialized successfully","service":"sendrey-server","timestamp":"2026-03-12 23:27:59"}
+{"environment":"development","level":"info","message":"User registered: 09038876009","service":"sendrey-server","timestamp":"2026-03-12 23:28:21"}
+{"duration":2393,"environment":"development","level":"warn","message":"Slow request: POST /register-user took 2393ms","method":"POST","service":"sendrey-server","threshold":1000,"timestamp":"2026-03-12 23:28:21","url":"/register-user"}
+{"MessageID":"q7UoFYsDpCxNanPxGjP3Kg2","TransactionID":"331cd558-38e8-4105-e058-ed8d61fb6555","environment":"development","level":"info","message":"Email sent via Elastic Email API to paul@gmail.com","service":"sendrey-server","timestamp":"2026-03-12 23:28:27"}
+{"environment":"development","level":"info","message":"User authenticated: paul@gmail.com - POST /verify-phone","service":"sendrey-server","timestamp":"2026-03-12 23:28:45"}
+{"environment":"development","level":"info","message":"Phone verified for user: paul@gmail.com","service":"sendrey-server","timestamp":"2026-03-12 23:28:45"}
+{"environment":"development","level":"info","message":"User authenticated: paul@gmail.com - POST /accept","service":"sendrey-server","timestamp":"2026-03-12 23:28:50"}
+{"environment":"development","level":"info","message":"User registered: 09038876009","service":"sendrey-server","timestamp":"2026-03-12 23:28:52"}
+{"duration":1676,"environment":"development","level":"warn","message":"Slow request: POST /register-user took 1676ms","method":"POST","service":"sendrey-server","threshold":1000,"timestamp":"2026-03-12 23:28:52","url":"/register-user"}
+{"MessageID":"kaShFgsVhsNIynFWzZ0jvQ2","TransactionID":"331cd56a-5de8-01f9-c06a-b8bf53c957e1","environment":"development","level":"info","message":"Email sent via Elastic Email API to paul@gmail.com","service":"sendrey-server","timestamp":"2026-03-12 23:29:06"}
+{"environment":"development","level":"info","message":"Runner registered: 08048876009","service":"sendrey-server","timestamp":"2026-03-12 23:29:30"}
+{"duration":1804,"environment":"development","level":"warn","message":"Slow request: POST /register-runner took 1804ms","method":"POST","service":"sendrey-server","threshold":1000,"timestamp":"2026-03-12 23:29:30","url":"/register-runner"}
+{"environment":"development","level":"info","message":"User authenticated: max@gmail.com - POST /verify-phone","service":"sendrey-server","timestamp":"2026-03-12 23:29:43"}
+{"environment":"development","level":"info","message":"Phone verified for runner: max@gmail.com","service":"sendrey-server","timestamp":"2026-03-12 23:29:44"}
+{"environment":"development","level":"info","message":"User authenticated: max@gmail.com - GET /status","service":"sendrey-server","timestamp":"2026-03-12 23:29:44"}
+{"environment":"development","level":"info","message":"User authenticated: max@gmail.com - POST /accept","service":"sendrey-server","timestamp":"2026-03-12 23:29:47"}
+{"environment":"development","level":"error","message":"Email sending error:","service":"sendrey-server","timestamp":"2026-03-12 23:29:50"}
+{"environment":"development","level":"info","message":"User authenticated: max@gmail.com - POST /verify/nin","service":"sendrey-server","timestamp":"2026-03-12 23:29:59"}
+{"duration":4119,"environment":"development","level":"warn","message":"Slow request: POST /verify/nin took 4119ms","method":"POST","service":"sendrey-server","threshold":1000,"timestamp":"2026-03-12 23:30:03","url":"/verify/nin"}
+{"environment":"development","level":"info","message":"User authenticated: max@gmail.com - POST /verify/selfie","service":"sendrey-server","timestamp":"2026-03-12 23:30:13"}
+{"duration":3699,"environment":"development","level":"warn","message":"Slow request: POST /verify/selfie took 3699ms","method":"POST","service":"sendrey-server","threshold":1000,"timestamp":"2026-03-12 23:30:17","url":"/verify/selfie"}
+{"environment":"development","level":"info","message":"User authenticated: paul@gmail.com - GET /suggestion/status","service":"sendrey-server","timestamp":"2026-03-12 23:30:45"}
+{"environment":"development","level":"info","message":"User authenticated: paul@gmail.com - PUT /profile","service":"sendrey-server","timestamp":"2026-03-12 23:30:53"}
+{"environment":"development","level":"info","message":"User authenticated: paul@gmail.com - GET /nearby-runners","service":"sendrey-server","timestamp":"2026-03-12 23:30:54"}
+{"environment":"development","level":"info","message":"User authenticated: max@gmail.com - GET /nearby-users","service":"sendrey-server","timestamp":"2026-03-12 23:31:01"}
+{"environment":"development","level":"info","message":"User authenticated: paul@gmail.com - GET /by-chat/user-69b33e0272fb109528c8e85f-runner-69b33e4872fb109528c8e86c","service":"sendrey-server","timestamp":"2026-03-12 23:31:07"}
+{"environment":"development","level":"info","message":"User authenticated: paul@gmail.com - GET /by-chat/user-69b33e0272fb109528c8e85f-runner-69b33e4872fb109528c8e86c","service":"sendrey-server","timestamp":"2026-03-12 23:31:07"}
+{"environment":"development","level":"info","message":"User authenticated: max@gmail.com - GET /by-chat/user-69b33e0272fb109528c8e85f-runner-69b33e4872fb109528c8e86c","service":"sendrey-server","timestamp":"2026-03-12 23:31:08"}
+{"environment":"development","level":"info","message":"User authenticated: max@gmail.com - GET /by-chat/user-69b33e0272fb109528c8e85f-runner-69b33e4872fb109528c8e86c","service":"sendrey-server","timestamp":"2026-03-12 23:31:08"}
+{"environment":"development","level":"info","message":"User authenticated: paul@gmail.com - POST /wallet/virtual-account","service":"sendrey-server","timestamp":"2026-03-12 23:31:11"}
+{"environment":"development","level":"info","message":"User authenticated: paul@gmail.com - GET /wallet/transactions","service":"sendrey-server","timestamp":"2026-03-12 23:31:11"}
+{"environment":"development","level":"info","message":"User authenticated: paul@gmail.com - GET /wallet/balance","service":"sendrey-server","timestamp":"2026-03-12 23:31:11"}
+{"environment":"development","level":"info","message":"User authenticated: paul@gmail.com - POST /wallet/virtual-account","service":"sendrey-server","timestamp":"2026-03-12 23:31:11"}
+{"environment":"development","level":"info","message":"User authenticated: paul@gmail.com - GET /wallet/transactions","service":"sendrey-server","timestamp":"2026-03-12 23:31:12"}
+{"environment":"development","level":"info","message":"User authenticated: paul@gmail.com - GET /wallet/balance","service":"sendrey-server","timestamp":"2026-03-12 23:31:12"}
+{"duration":1509,"environment":"development","level":"warn","message":"Slow request: POST /wallet/virtual-account took 1509ms","method":"POST","service":"sendrey-server","threshold":1000,"timestamp":"2026-03-12 23:31:12","url":"/wallet/virtual-account"}
+{"environment":"development","ip":"::1","level":"error","message":"Server error: POST /wallet/virtual-account - 500","method":"POST","service":"sendrey-server","statusCode":500,"timestamp":"2026-03-12 23:31:12","url":"/wallet/virtual-account","userId":"69b33e0272fb109528c8e85f"}
+{"duration":1683,"environment":"development","level":"warn","message":"Slow request: POST /wallet/virtual-account took 1683ms","method":"POST","service":"sendrey-server","threshold":1000,"timestamp":"2026-03-12 23:31:12","url":"/wallet/virtual-account"}
+{"environment":"development","ip":"::1","level":"error","message":"Server error: POST /wallet/virtual-account - 500","method":"POST","service":"sendrey-server","statusCode":500,"timestamp":"2026-03-12 23:31:12","url":"/wallet/virtual-account","userId":"69b33e0272fb109528c8e85f"}
+{"environment":"development","level":"info","message":"User authenticated: paul@gmail.com - POST /wallet/fund","service":"sendrey-server","timestamp":"2026-03-12 23:31:15"}
+{"duration":1488,"environment":"development","level":"warn","message":"Slow request: POST /wallet/fund took 1488ms","method":"POST","service":"sendrey-server","threshold":1000,"timestamp":"2026-03-12 23:31:17","url":"/wallet/fund"}
+{"MessageID":"acCo10lxm42xKCfgatqj5Q2","TransactionID":"331cd51d-dde8-c1fe-e01d-d0c824be205c","environment":"development","level":"info","message":"Email sent via Elastic Email API to paul@gmail.com","service":"sendrey-server","timestamp":"2026-03-12 23:31:17"}
+{"environment":"development","level":"info","message":"User authenticated: paul@gmail.com - POST /wallet/verify-funding","service":"sendrey-server","timestamp":"2026-03-12 23:31:43"}
+{"duration":2212,"environment":"development","level":"warn","message":"Slow request: POST /wallet/verify-funding took 2212ms","method":"POST","service":"sendrey-server","threshold":1000,"timestamp":"2026-03-12 23:31:45","url":"/wallet/verify-funding"}
+{"environment":"development","level":"info","message":"User authenticated: paul@gmail.com - GET /wallet/transactions","service":"sendrey-server","timestamp":"2026-03-12 23:31:45"}
+{"environment":"development","level":"info","message":"User authenticated: paul@gmail.com - GET /wallet/balance","service":"sendrey-server","timestamp":"2026-03-12 23:31:45"}
+{"environment":"development","level":"info","message":"User authenticated: paul@gmail.com - GET /profile","service":"sendrey-server","timestamp":"2026-03-12 23:31:52"}
+{"environment":"development","level":"info","message":"User authenticated: paul@gmail.com - GET /suggestion/status","service":"sendrey-server","timestamp":"2026-03-12 23:31:52"}
+{"environment":"development","level":"info","message":"User authenticated: paul@gmail.com - GET /profile","service":"sendrey-server","timestamp":"2026-03-12 23:31:53"}
+{"environment":"development","level":"info","message":"User authenticated: paul@gmail.com - GET /suggestion/status","service":"sendrey-server","timestamp":"2026-03-12 23:31:53"}
+{"environment":"development","level":"info","message":"User authenticated: paul@gmail.com - POST /set-pin","service":"sendrey-server","timestamp":"2026-03-12 23:31:59"}
+{"environment":"development","level":"info","message":"User authenticated: paul@gmail.com - POST /verify-pin","service":"sendrey-server","timestamp":"2026-03-12 23:32:06"}
+{"environment":"development","level":"info","message":"User authenticated: paul@gmail.com - POST /intent","service":"sendrey-server","timestamp":"2026-03-12 23:32:07"}
+{"duration":2623,"environment":"development","level":"warn","message":"Slow request: POST /intent took 2623ms","method":"POST","service":"sendrey-server","threshold":1000,"timestamp":"2026-03-12 23:32:09","url":"/intent"}
+{"chatId":"user-69b33e0272fb109528c8e85f-runner-69b33e4872fb109528c8e86c","environment":"development","level":"info","message":"💰 Payment success received:","orderId":"ORD-MMO1KX2E-SQG85","service":"sendrey-server","timestamp":"2026-03-12 23:32:09"}
+{"environment":"development","level":"info","message":"Order ORD-MMO1KX2E-SQG85 already paid — skipping DB update but still notifying room","service":"sendrey-server","timestamp":"2026-03-12 23:32:10"}
+{"environment":"development","level":"info","message":"Room user-69b33e0272fb109528c8e85f-runner-69b33e4872fb109528c8e86c has 2 sockets","service":"sendrey-server","timestamp":"2026-03-12 23:32:10"}
+{"environment":"development","level":"info","message":"✅ Payment confirmed for order ORD-MMO1KX2E-SQG85, system message sent","service":"sendrey-server","timestamp":"2026-03-12 23:32:10"}
+{"environment":"development","level":"info","message":"RunnerPayout created for order ORD-MMO1KX2E-SQG85 | itemBudget: ₦30000","service":"sendrey-server","timestamp":"2026-03-12 23:32:11"}
+{"environment":"development","level":"info","message":"Daily reset complete: 0 runners reset","service":"sendrey-server","timestamp":"2026-03-13 00:00:00"}
+{"environment":"development","level":"info","logLevel":"info","message":"Logger Service started successfully","nodeVersion":"v22.13.0","service":"Logger Service","timestamp":"2026-03-13 00:17:10","type":"startup"}
+{"environment":"development","level":"info","logLevel":"info","message":"Logger Service started successfully","nodeVersion":"v22.13.0","service":"Logger Service","timestamp":"2026-03-13 00:17:25","type":"startup"}
+{"environment":"development","level":"info","logLevel":"info","message":"Logger Service started successfully","nodeVersion":"v22.13.0","service":"Logger Service","timestamp":"2026-03-13 00:17:25","type":"startup"}
+{"environment":"development","level":"info","message":"Twilio SMS service initialized successfully","service":"sendrey-server","timestamp":"2026-03-13 00:17:26"}
