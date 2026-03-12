@@ -6,6 +6,8 @@ const Runner = require('../models/Runner')
 
 //  $env:DATABASE_URL = ""
 
+// npm run seed:admin
+
 const connectDb = async () => {
   console.log('DATABASE_URL:', process.env.DATABASE_URL);
 
@@ -22,8 +24,8 @@ const connectDb = async () => {
     const totalRunners = await Runner.countDocuments({});
     console.log(`Total runners in DB: ${totalRunners}`);
 
-    await User.deleteMany({});
-    await Runner.deleteMany({})
+    // await User.deleteMany({});
+    // await Runner.deleteMany({})
 
 
   } catch (error) {

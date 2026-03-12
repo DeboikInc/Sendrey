@@ -246,14 +246,16 @@ class AuthController extends BaseController {
       const isPasswordValid = await bcrypt.compare(password, admin.password);
       if (!isPasswordValid) throw new Error('Invalid admin credentials');
 
-      const token = this.service.generateToken(admin);
+      const { accessToken, refreshToken } = this.service.generateTokens(admin);
+      await User.findByIdAndUpdate(admin._id, { refreshToken });
       await this.userService.updateLastLogin(admin._id);
 
       logger.info(`Admin logged in: ${email}`);
 
       this.success(res, {
         user: this._sanitizeUser(admin),
-        token,
+        token: accessToken,
+        refreshToken,
         message: 'Admin login successful'
       });
 
