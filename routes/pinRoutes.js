@@ -18,17 +18,32 @@ router.post(
     pinController.verifyPin);
 
 router.put(
-    '/reset-pin', 
+    '/reset-pin',
     authenticate,
     userRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 5 }),
     auditLog('RESET_PIN'),
     pinController.resetPin);
 
 router.put(
-    '/forgot-pin', 
+    '/forgot-pin',
     authenticate,
     auditLog('FORGOT_PIN'),
-    requireOtpVerified, 
     pinController.forgotPin);
+
+router.post(
+    '/forgot-pin/send-otp',
+    authenticate,
+    userRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 3 }),
+    auditLog('FORGOT_PIN_OTP'),
+    pinController.sendForgotPinOtp
+);
+
+router.post(
+    '/forgot-pin/verify-otp',
+    authenticate,
+    userRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 5 }),
+    auditLog('FORGOT_PIN_VERIFY_OTP'),
+    pinController.verifyForgotPinOtp
+);
 
 module.exports = router;

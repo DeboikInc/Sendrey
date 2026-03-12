@@ -53,16 +53,16 @@ class PaymentService {
       await User.findByIdAndUpdate(userId, {
         paystackCustomerCode: customerCode,
         virtualAccount: {
-          bankName:      virtualAccount.data.bank.name,
+          bankName: virtualAccount.data.bank.name,
           accountNumber: virtualAccount.data.account_number,
-          accountName:   virtualAccount.data.account_name,
+          accountName: virtualAccount.data.account_name,
         }
       }) || await Runner.findByIdAndUpdate(userId, {
         paystackCustomerCode: customerCode,
         virtualAccount: {
-          bankName:      virtualAccount.data.bank.name,
+          bankName: virtualAccount.data.bank.name,
           accountNumber: virtualAccount.data.account_number,
-          accountName:   virtualAccount.data.account_name,
+          accountName: virtualAccount.data.account_name,
         }
       });
 
@@ -104,67 +104,67 @@ class PaymentService {
         await wallet.save({ session });
 
         const [escrow] = await Escrow.create([{
-          taskId:       orderId,
-          userId:       order.userId,
-          runnerId:     order.runnerId,
-          taskType:     order.taskType,
-          itemBudget:   order.itemBudget,
-          deliveryFee:  order.deliveryFee,
-          totalAmount:  order.totalAmount,
-          platformFee:  feeSplit.platformFee,
+          taskId: orderId,
+          userId: order.userId,
+          runnerId: order.runnerId,
+          taskType: order.taskType,
+          itemBudget: order.itemBudget,
+          deliveryFee: order.deliveryFee,
+          totalAmount: order.totalAmount,
+          platformFee: feeSplit.platformFee,
           runnerPayout: feeSplit.runnerPayout,
-          providerFee:  feeSplit.providerFee,
+          providerFee: feeSplit.providerFee,
           netPlatformFee: feeSplit.netPlatformFee,
-          status:        'funded',
+          status: 'funded',
           paymentStatus: 'paid',
         }], { session });
 
-        order.escrowId     = escrow._id;
+        order.escrowId = escrow._id;
         order.paymentStatus = 'paid';
-        order.status        = 'paid';
+        order.status = 'paid';
         await order.save({ session });
 
         await LedgerEntry.create([{
-          userId:        order.userId,
-          userModel:     'User',
-          runnerId:      order.runnerId,
-          type:          'escrow_lock',
-          grossAmount:   order.totalAmount,
-          netAmount:     order.totalAmount - feeSplit.providerFee,
-          providerFee:   feeSplit.providerFee,
-          platformFee:   feeSplit.platformFee,
+          userId: order.userId,
+          userModel: 'User',
+          runnerId: order.runnerId,
+          type: 'escrow_lock',
+          grossAmount: order.totalAmount,
+          netAmount: order.totalAmount - feeSplit.providerFee,
+          providerFee: feeSplit.providerFee,
+          platformFee: feeSplit.platformFee,
           netPlatformFee: feeSplit.netPlatformFee,
-          runnerFee:     feeSplit.runnerPayout,
-          provider:      'wallet',
+          runnerFee: feeSplit.runnerPayout,
+          provider: 'wallet',
           orderId,
-          escrowId:      escrow._id,
-          description:   `Escrow funded via wallet for order ${orderId}`,
-          status:        'completed',
+          escrowId: escrow._id,
+          description: `Escrow funded via wallet for order ${orderId}`,
+          status: 'completed',
         }], { session });
 
         console.log(`✅ Wallet payment | runner: ₦${feeSplit.runnerPayout} | platform net: ₦${feeSplit.netPlatformFee} | paystack fee: ₦${feeSplit.providerFee}`);
 
         return {
-          escrowId:      escrow._id,
+          escrowId: escrow._id,
           paymentStatus: 'paid',
-          totalAmount:   order.totalAmount,
+          totalAmount: order.totalAmount,
           feeSplit,
         };
       });
 
     } else if (paymentMethod === 'card') {
       const paystackResponse = await paystack.initializeTransaction({
-        email:  userEmail,
+        email: userEmail,
         amount: order.totalAmount,
         metadata: { orderId, userId: userId.toString() }
       });
 
       console.log('Paystack payment initialized');
       return {
-        reference:        paystackResponse.data.reference,
+        reference: paystackResponse.data.reference,
         authorizationUrl: paystackResponse.data.authorization_url,
-        amount:           order.totalAmount,
-        paymentStatus:    'pending',
+        amount: order.totalAmount,
+        paymentStatus: 'pending',
         feeSplit,
       };
     }
@@ -196,44 +196,44 @@ class PaymentService {
       const feeSplit = calculateFeeSplit(order.deliveryFee);
 
       const [escrow] = await Escrow.create([{
-        taskId:        orderId,
-        userId:        order.userId,
-        runnerId:      order.runnerId,
-        taskType:      order.taskType,
-        itemBudget:    order.itemBudget,
-        deliveryFee:   order.deliveryFee,
-        totalAmount:   order.totalAmount,
-        platformFee:   feeSplit.platformFee,
-        runnerPayout:  feeSplit.runnerPayout,
-        providerFee:   feeSplit.providerFee,
+        taskId: orderId,
+        userId: order.userId,
+        runnerId: order.runnerId,
+        taskType: order.taskType,
+        itemBudget: order.itemBudget,
+        deliveryFee: order.deliveryFee,
+        totalAmount: order.totalAmount,
+        platformFee: feeSplit.platformFee,
+        runnerPayout: feeSplit.runnerPayout,
+        providerFee: feeSplit.providerFee,
         netPlatformFee: feeSplit.netPlatformFee,
-        status:         'funded',
-        paymentStatus:  'paid',
+        status: 'funded',
+        paymentStatus: 'paid',
         paystackReference: reference,
       }], { session });
 
-      order.escrowId      = escrow._id;
+      order.escrowId = escrow._id;
       order.paymentStatus = 'paid';
-      order.status        = 'paid';
+      order.status = 'paid';
       await order.save({ session });
 
       await LedgerEntry.create([{
-        userId:        order.userId,
-        userModel:     'User',
-        runnerId:      order.runnerId,
-        type:          'escrow_lock',
-        grossAmount:   order.totalAmount,
-        netAmount:     order.totalAmount - feeSplit.providerFee,
-        providerFee:   feeSplit.providerFee,
-        platformFee:   feeSplit.platformFee,
+        userId: order.userId,
+        userModel: 'User',
+        runnerId: order.runnerId,
+        type: 'escrow_lock',
+        grossAmount: order.totalAmount,
+        netAmount: order.totalAmount - feeSplit.providerFee,
+        providerFee: feeSplit.providerFee,
+        platformFee: feeSplit.platformFee,
         netPlatformFee: feeSplit.netPlatformFee,
-        runnerFee:     feeSplit.runnerPayout,
-        provider:      'paystack',
+        runnerFee: feeSplit.runnerPayout,
+        provider: 'paystack',
         providerReference: reference,
         orderId,
-        escrowId:      escrow._id,
-        description:   `Escrow funded via card for order ${orderId}`,
-        status:        'completed',
+        escrowId: escrow._id,
+        description: `Escrow funded via card for order ${orderId}`,
+        status: 'completed',
       }], { session });
 
       console.log(`✅ Card payment verified | runner: ₦${feeSplit.runnerPayout} | platform net: ₦${feeSplit.netPlatformFee} | paystack fee: ₦${feeSplit.providerFee}`);
@@ -245,16 +245,16 @@ class PaymentService {
     if (amount < 100) throw new Error('Minimum funding amount is ₦100');
 
     const paystackResponse = await paystack.initializeTransaction({
-      email:  userEmail,
+      email: userEmail,
       amount,
       metadata: { userId: userId.toString(), type: 'wallet_funding' }
     });
 
     console.log('✅ Wallet funding initialized');
     return {
-      reference:        paystackResponse.data.reference,
+      reference: paystackResponse.data.reference,
       authorizationUrl: paystackResponse.data.authorization_url,
-      accessCode:       paystackResponse.data.access_code,
+      accessCode: paystackResponse.data.access_code,
     };
   }
 
@@ -283,15 +283,15 @@ class PaymentService {
 
       await LedgerEntry.create([{
         userId,
-        userModel:   'User',
-        type:        'deposit',
+        userModel: 'User',
+        type: 'deposit',
         grossAmount,
-        netAmount:   grossAmount,
+        netAmount: grossAmount,
         providerFee: 0,
-        provider:    'paystack',
+        provider: 'paystack',
         providerReference: reference,
-        description: `Wallet funded via Paystack for user ${userId}`,
-        status:      'completed',
+        description: `Wallet funded via Paystack`,
+        status: 'completed',
       }], { session });
 
       console.log(`✅ Wallet funded: ₦${grossAmount} for user ${userId}`);
@@ -353,7 +353,7 @@ class PaymentService {
       }
 
       // Use stored fee split from escrow; recalculate only as fallback
-      const providerFee    = escrow.providerFee    ?? calculateFeeSplit(escrow.deliveryFee).providerFee;
+      const providerFee = escrow.providerFee ?? calculateFeeSplit(escrow.deliveryFee).providerFee;
       const netPlatformFee = escrow.netPlatformFee ?? (escrow.platformFee - providerFee);
 
       if (usedPayoutSystem) {
@@ -365,9 +365,9 @@ class PaymentService {
       }
 
       await PlatformEarnings.create([{
-        orderId:  escrow.taskId,
+        orderId: escrow.taskId,
         escrowId: escrow._id,
-        amount:   usedPayoutSystem
+        amount: usedPayoutSystem
           ? netPlatformFee
           : netPlatformFee + escrow.runnerPayout,
         providerFee,
@@ -379,46 +379,46 @@ class PaymentService {
 
       await LedgerEntry.create([
         {
-          userId:    escrow.userId,
+          userId: escrow.userId,
           userModel: 'User',
-          runnerId:  escrow.runnerId,
-          type:      'escrow_release',
+          runnerId: escrow.runnerId,
+          type: 'escrow_release',
           grossAmount: escrow.runnerPayout,
-          netAmount:   escrow.runnerPayout,
+          netAmount: escrow.runnerPayout,
           providerFee: 0,
-          runnerFee:   escrow.runnerPayout,
-          provider:    'paystack',
-          orderId:     escrow.taskId,
-          escrowId:    escrow._id,
+          runnerFee: escrow.runnerPayout,
+          provider: 'paystack',
+          orderId: escrow.taskId,
+          escrowId: escrow._id,
           description: `Delivery fee released to runner for order ${escrow.taskId}`,
-          status:      'completed',
+          status: 'completed',
         },
         {
-          userId:      escrow.userId,
-          userModel:   'User',
-          type:        'platform_earning',
+          userId: escrow.userId,
+          userModel: 'User',
+          type: 'platform_earning',
           grossAmount: escrow.platformFee,
-          netAmount:   netPlatformFee,
+          netAmount: netPlatformFee,
           providerFee,
           netPlatformFee,
-          provider:    'paystack',
-          orderId:     escrow.taskId,
-          escrowId:    escrow._id,
+          provider: 'paystack',
+          orderId: escrow.taskId,
+          escrowId: escrow._id,
           description: `Platform fee for order ${escrow.taskId}`,
-          status:      'completed',
+          status: 'completed',
         },
         {
-          userId:      escrow.userId,
-          userModel:   'User',
-          type:        'provider_fee',
+          userId: escrow.userId,
+          userModel: 'User',
+          type: 'provider_fee',
           grossAmount: providerFee,
-          netAmount:   providerFee,
+          netAmount: providerFee,
           providerFee,
-          provider:    'paystack',
-          orderId:     escrow.taskId,
-          escrowId:    escrow._id,
+          provider: 'paystack',
+          orderId: escrow.taskId,
+          escrowId: escrow._id,
           description: `Paystack fee for order ${escrow.taskId}`,
-          status:      'completed',
+          status: 'completed',
         },
       ], { session });
 
@@ -430,11 +430,11 @@ class PaymentService {
         escrow.runnerId,
         {
           $inc: {
-            totalEarnings:   usedPayoutSystem ? escrow.runnerPayout : 0,
+            totalEarnings: usedPayoutSystem ? escrow.runnerPayout : 0,
             completedOrders: 1,
           },
-          activeOrderId:  null,
-          currentUserId:  null,
+          activeOrderId: null,
+          currentUserId: null,
         },
         { session }
       );
@@ -443,7 +443,7 @@ class PaymentService {
 
       return {
         runnerPayout: usedPayoutSystem ? escrow.runnerPayout : 0,
-        platformFee:  netPlatformFee,
+        platformFee: netPlatformFee,
         providerFee,
         usedPayoutSystem,
       };
@@ -465,28 +465,28 @@ class PaymentService {
 
       if (!existingPayout) {
         await RunnerPayout.create([{
-          orderId:    order.orderId,
-          chatId:     order.chatId,
-          runnerId:   escrow.runnerId,
-          userId:     escrow.userId,
-          escrowId:   escrow._id,
+          orderId: order.orderId,
+          chatId: order.chatId,
+          runnerId: escrow.runnerId,
+          userId: escrow.userId,
+          escrowId: escrow._id,
           itemBudget: escrow.itemBudget,
-          status:     'pending',
+          status: 'pending',
         }], { session });
 
         await LedgerEntry.create([{
-          userId:    escrow.userId,
+          userId: escrow.userId,
           userModel: 'User',
-          runnerId:  escrow.runnerId,
-          type:      'item_budget',
+          runnerId: escrow.runnerId,
+          type: 'item_budget',
           grossAmount: escrow.itemBudget,
-          netAmount:   escrow.itemBudget,
+          netAmount: escrow.itemBudget,
           providerFee: 0,
-          provider:    'system',
-          orderId:     order.orderId,
-          escrowId:    escrow._id,
+          provider: 'system',
+          orderId: order.orderId,
+          escrowId: escrow._id,
           description: `Item budget of ₦${escrow.itemBudget} released for order ${order.orderId}`,
-          status:      'completed',
+          status: 'completed',
         }], { session });
 
         console.log(`RunnerPayout created: ₦${escrow.itemBudget} for order ${order.orderId}`);
@@ -498,21 +498,21 @@ class PaymentService {
 
       return {
         payoutCreated: !existingPayout,
-        itemBudget:    escrow.itemBudget,
-        orderId:       order.orderId,
+        itemBudget: escrow.itemBudget,
+        orderId: order.orderId,
       };
     });
   }
 
   async getBankCode(bankName) {
     const banks = await paystack.getBanks();
-    const bank  = banks.data.find(b => b.name.toLowerCase().includes(bankName.toLowerCase()));
+    const bank = banks.data.find(b => b.name.toLowerCase().includes(bankName.toLowerCase()));
     if (!bank) throw new Error(`Bank not found: ${bankName}`);
     return bank.code;
   }
 
   async verifyVendorAccount({ accountNumber, bankName }) {
-    const bankCode     = await this.getBankCode(bankName);
+    const bankCode = await this.getBankCode(bankName);
     const verification = await paystack.verifyAccountNumber({ account_number: accountNumber, bank_code: bankCode });
 
     if (!verification.status || !verification.data) {
@@ -520,7 +520,7 @@ class PaymentService {
     }
 
     return {
-      accountName:   verification.data.account_name,
+      accountName: verification.data.account_name,
       accountNumber: verification.data.account_number,
       bankCode,
     };
@@ -535,9 +535,9 @@ class PaymentService {
       }
 
       const recipient = await paystack.createTransferRecipient({
-        name:           verified.accountName,
+        name: verified.accountName,
         account_number: accountNumber,
-        bank_code:      verified.bankCode,
+        bank_code: verified.bankCode,
       });
       if (!recipient.status || !recipient.data) throw new Error('Failed to create transfer recipient');
 
@@ -551,13 +551,13 @@ class PaymentService {
       console.log(`Transfer initiated to ${vendorName}: ₦${amount} | ref: ${transfer.data.reference}`);
 
       return {
-        success:       true,
-        reference:     transfer.data.reference,
-        transferId:    transfer.data.id,
-        transferCode:  transfer.data.transfer_code,
+        success: true,
+        reference: transfer.data.reference,
+        transferId: transfer.data.id,
+        transferCode: transfer.data.transfer_code,
         recipientCode: recipient.data.recipient_code,
         amount,
-        status:        transfer.data.status,
+        status: transfer.data.status,
       };
     } catch (error) {
       console.error('❌ transferToVendor error:', error);
@@ -595,7 +595,11 @@ class PaymentService {
     const total = await LedgerEntry.countDocuments({ userId });
 
     return {
-      transactions: entries,
+      transactions: entries.map(e => ({
+        ...e,
+        amount: e.grossAmount,
+        type: e.type === 'deposit' || e.type === 'escrow_release' ? 'credit' : 'debit',
+      })),
       pagination: {
         page,
         limit,
@@ -619,7 +623,7 @@ class PaymentService {
       throw new Error(`Amount spent (₦${amountSpent}) exceeds budget (₦${payout.itemBudget})`);
     }
 
-    const receiptUrl     = await this.uploadReceipt(receiptBase64);
+    const receiptUrl = await this.uploadReceipt(receiptBase64);
     const transferResult = await this.transferToVendor({
       amount: amountSpent, bankName, accountNumber,
       accountName, vendorName, orderId, runnerId,
@@ -633,9 +637,9 @@ class PaymentService {
         amountSpent,
         changeAmount,
         submittedAt: new Date(),
-        status:      'pending',
+        status: 'pending',
         transferReference: transferResult.reference,
-        transferId:        transferResult.transferId,
+        transferId: transferResult.transferId,
       };
 
       const updatedPayout = await RunnerPayout.findOneAndUpdate(
@@ -643,12 +647,12 @@ class PaymentService {
         {
           $set: {
             vendorName, amountSpent, changeAmount, receiptUrl,
-            status:      'submitted',
+            status: 'submitted',
             submittedAt: new Date(),
             usedPayoutSystem: true,
             bankDetails: { bankName, accountNumber, accountName },
             transferReference: transferResult.reference,
-            transferStatus:    transferResult.status,
+            transferStatus: transferResult.status,
           },
           $push: { receiptHistory: receiptEntry },
         },
@@ -663,8 +667,8 @@ class PaymentService {
       });
 
       return {
-        success:           true,
-        payout:            updatedPayout,
+        success: true,
+        payout: updatedPayout,
         transferReference: transferResult.reference,
         receiptUrl,
       };
@@ -675,18 +679,18 @@ class PaymentService {
     try {
       const submissionId = `payout-receipt-${Date.now()}`;
       const message = {
-        id:          submissionId,
-        type:        'item_submission',
+        id: submissionId,
+        type: 'item_submission',
         messageType: 'item_submission',
-        senderId:    runnerId,
-        senderType:  'runner',
+        senderId: runnerId,
+        senderType: 'runner',
         chatId,
         submissionId,
         items: [{
-          name:     `Shopping at ${vendorName}`,
+          name: `Shopping at ${vendorName}`,
           quantity: 1,
-          price:    amountSpent,
-          note:     changeAmount > 0 ? `₦${changeAmount.toLocaleString()} change to be returned` : undefined,
+          price: amountSpent,
+          note: changeAmount > 0 ? `₦${changeAmount.toLocaleString()} change to be returned` : undefined,
         }],
         receiptUrl,
         totalAmount: amountSpent,

@@ -111,6 +111,16 @@ class RunnerController extends BaseController {
       });
 
       const eligibleRunners = runners.filter(runner => {
+        console.log('Runner KYC check:', {
+          id: runner._id,
+          runnerStatus: runner.runnerStatus,
+          isOnline: runner.isOnline,
+          isAvailable: runner.isAvailable,
+          isPhoneVerified: runner.isPhoneVerified,
+          selfieStatus: runner.verificationDocuments?.selfie?.status,
+          ninStatus: runner.verificationDocuments?.nin?.status,
+          licenseStatus: runner.verificationDocuments?.driverLicense?.status,
+        })
         if (runner.runnerStatus === 'suspended' || runner.runnerStatus === 'banned') {
           return false;
         }
@@ -127,23 +137,26 @@ class RunnerController extends BaseController {
           return false;
         }
 
+        // Check ID doc — must have at least one approved/pending (not rejected/not_submitted)
         const blockedDocStatuses = ['not_submitted', 'rejected'];
         const ninBlocked = blockedDocStatuses.includes(runner.verificationDocuments?.nin?.status);
         const licenseBlocked = blockedDocStatuses.includes(runner.verificationDocuments?.driverLicense?.status);
         const hasValidIdDoc = !ninBlocked || !licenseBlocked;
 
-        if (!hasValidIdDoc) {
-          return false;
-        }
+        if (!hasValidIdDoc) return false;
+
+        // Check selfie — must be submitted or approved
+        const selfieStatus = runner.biometricVerification?.status;
+        const validSelfieStatuses = ['submitted', 'approved', 'pending_review'];
+        if (!validSelfieStatuses.includes(selfieStatus)) return false;
+
+        // Check phone verified
+        if (!runner.isPhoneVerified) return false;
 
         return runner.isOnline && runner.isAvailable;
       });
 
-      console.log('DEBUG IN RUNNER CONTROLLER');
-      console.log('Nearby runners search:');
-      console.log('  Query params:', { lat, lng, serviceType, fleetType });
-      console.log('  Raw results:', runners.length);
-      console.log('  Eligible after KYC filter:', eligibleRunners.length);
+
 
       return this.success(res, {
         count: eligibleRunners.length,

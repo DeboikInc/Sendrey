@@ -12,6 +12,7 @@ const connectDb = async () => {
   try {
     const currentDB = database.url
     const dbConnect = await mongoose.connect(currentDB);
+    
     console.log("Connecting to database");
 
     // console.log(`Database connected successfully to ${dbConnect.connection.name}`);

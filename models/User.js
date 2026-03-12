@@ -257,7 +257,13 @@ const userSchema = new mongoose.Schema({
   currentRequest: {
     serviceType: { type: String, enum: SERVICE_TYPE },
     fleetType: { type: String, enum: FLEET_TYPE },
+
     deliveryLocation: { type: String },
+    deliveryCoordinates: {
+      lat: { type: Number },
+      lng: { type: Number }
+    },
+
     dropoffPhone: { type: String },
     specialInstructions: { type: String },
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
@@ -526,7 +532,7 @@ userSchema.statics.findNearbyUsers = async function ({
   if (fleetType) query['currentRequest.fleetType'] = fleetType;
 
   const results = await this.find(query)
-    .select('firstName lastName phone currentRequest location latitude longitude avatar')
+    .select('firstName lastName phone currentRequest location latitude longitude avatar isPhoneVerified')
     .lean();
 
   console.log('DB query results before distance filter:', results.length);

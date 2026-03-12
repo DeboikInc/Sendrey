@@ -17,25 +17,28 @@ const uploadToCloudinary = (base64String, folder = 'payout-receipts') =>
 class PayoutController extends BaseController {
   constructor() {
     super(null);
-    this.getRunnerPayout      = this.getRunnerPayout.bind(this);
-    this.getPayoutHistory     = this.getPayoutHistory.bind(this);
-    this.getRunnerReceipts    = this.getRunnerReceipts.bind(this);
-    this.submitReceipt        = this.submitReceipt.bind(this);
-    this.transferToVendor     = this.transferToVendor.bind(this);
-    this.adminGetAllReceipts  = this.adminGetAllReceipts.bind(this);
-    this.adminReviewReceipt   = this.adminReviewReceipt.bind(this);
-    this.adminPayoutStats     = this.adminPayoutStats.bind(this);
+    this.getRunnerPayout = this.getRunnerPayout.bind(this);
+    this.getPayoutHistory = this.getPayoutHistory.bind(this);
+    this.getRunnerReceipts = this.getRunnerReceipts.bind(this);
+    this.submitReceipt = this.submitReceipt.bind(this);
+    this.transferToVendor = this.transferToVendor.bind(this);
+    this.adminGetAllReceipts = this.adminGetAllReceipts.bind(this);
+    this.adminReviewReceipt = this.adminReviewReceipt.bind(this);
+    this.adminPayoutStats = this.adminPayoutStats.bind(this);
   }
 
   // GET /payouts/current?chatId=...
   async getRunnerPayout(req, res) {
     try {
-      const { chatId } = req.query;
+      const { chatId, orderId } = req.query;
       const runnerId = req.user.id;
 
-      if (!chatId) return this.badRequest(res, 'chatId required');
+      if (!chatId && !orderId) return this.badRequest(res, 'chatId or orderId required');
 
-      const order = await Order.findOne({ chatId });
+      const order = chatId
+        ? await Order.findOne({ chatId })
+        : await Order.findOne({ orderId });
+        
       if (!order) return this.success(res, { payout: null });
 
       const payout = await RunnerPayout.findOne({ orderId: order.orderId, runnerId }).lean();
@@ -124,13 +127,13 @@ class PayoutController extends BaseController {
       };
 
       payout.receiptHistory.push(receiptEntry);
-      payout.vendorName    = vendorName;
-      payout.amountSpent   = parseFloat(amountSpent) || 0;
-      payout.changeAmount  = receiptEntry.changeAmount;
-      payout.receiptUrl    = receiptUrl;
+      payout.vendorName = vendorName;
+      payout.amountSpent = parseFloat(amountSpent) || 0;
+      payout.changeAmount = receiptEntry.changeAmount;
+      payout.receiptUrl = receiptUrl;
       payout.usedPayoutSystem = true;
-      payout.status        = 'submitted';
-      payout.submittedAt   = new Date();
+      payout.status = 'submitted';
+      payout.submittedAt = new Date();
 
       if (bankName || accountNumber || accountName) {
         payout.bankDetails = { bankName, accountNumber, accountName };
@@ -156,15 +159,15 @@ class PayoutController extends BaseController {
     try {
       const { orderId, vendorName, amountSpent, changeAmount, bankName, accountNumber, accountName, pin } = req.body;
 
-      if (!orderId)                                   return this.badRequest(res, 'orderId is required');
-      if (!vendorName || !amountSpent)                return this.badRequest(res, 'vendorName and amountSpent are required');
+      if (!orderId) return this.badRequest(res, 'orderId is required');
+      if (!vendorName || !amountSpent) return this.badRequest(res, 'vendorName and amountSpent are required');
       if (!bankName || !accountNumber || !accountName) return this.badRequest(res, 'Bank details are required');
-      if (!pin)                                       return this.badRequest(res, 'PIN is required to authorise transfer');
+      if (!pin) return this.badRequest(res, 'PIN is required to authorise transfer');
 
       const { valid } = await pinService.verifyPin({ userId: req.user._id, role: req.user.role, pin });
       if (!valid) return this.error(res, 'Incorrect PIN', 401);
 
-      const spent  = parseFloat(amountSpent);
+      const spent = parseFloat(amountSpent);
       const change = changeAmount != null ? parseFloat(changeAmount) : 0;
 
       const payout = await RunnerPayout.findOneAndUpdate(
@@ -214,7 +217,7 @@ class PayoutController extends BaseController {
       const skip = (page - 1) * limit;
 
       const query = { 'receiptHistory.0': { $exists: true } };
-      if (status)   query['receiptHistory.status'] = status;
+      if (status) query['receiptHistory.status'] = status;
       if (runnerId) query.runnerId = runnerId;
 
       const [payouts, total] = await Promise.all([
@@ -273,13 +276,13 @@ class PayoutController extends BaseController {
       const receipt = payout.receiptHistory.id(receiptId);
       if (!receipt) return this.notFound(res, 'Receipt not found');
 
-      receipt.status     = action === 'approve' ? 'approved' : 'rejected';
+      receipt.status = action === 'approve' ? 'approved' : 'rejected';
       receipt.reviewedAt = new Date();
       receipt.reviewedBy = adminId;
       if (action === 'reject') receipt.rejectionReason = rejectionReason || 'Rejected by admin';
 
       if (action === 'approve') {
-        payout.status     = 'approved';
+        payout.status = 'approved';
         payout.approvedAt = new Date();
       }
 

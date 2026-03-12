@@ -8,6 +8,8 @@ class PinController extends BaseController {
     this.verifyPin = this.verifyPin.bind(this);
     this.resetPin = this.resetPin.bind(this);
     this.forgotPin = this.forgotPin.bind(this);
+    this.sendForgotPinOtp = this.sendForgotPinOtp.bind(this);
+    this.verifyForgotPinOtp = this.verifyForgotPinOtp.bind(this);
   }
 
   async setPin(req, res) {
@@ -88,6 +90,37 @@ class PinController extends BaseController {
     } catch (err) {
       if (err.statusCode === 400) return this.badRequest(res, err.message);
       if (err.statusCode === 404) return this.notFound(res, err.message);
+      return this.error(res, err.message);
+    }
+  }
+
+  async sendForgotPinOtp(req, res) {
+    try {
+      const result = await pinService.sendForgotPinOtp({
+        userId: req.user._id,
+        role: req.user.role,
+      });
+      return this.success(res, null, result.message);
+    } catch (err) {
+      if (err.statusCode === 400) return this.badRequest(res, err.message);
+      if (err.statusCode === 404) return this.notFound(res, err.message);
+      return this.error(res, err.message);
+    }
+  }
+
+  async verifyForgotPinOtp(req, res) {
+    try {
+      const { otp } = req.body;
+      if (!otp) return this.badRequest(res, 'OTP is required');
+
+      const result = await pinService.verifyForgotPinOtp({
+        userId: req.user._id,
+        otp,
+      });
+      return this.success(res, null, result.message);
+    } catch (err) {
+      if (err.statusCode === 400) return this.badRequest(res, err.message);
+      if (err.statusCode === 401) return this.error(res, err.message, 401);
       return this.error(res, err.message);
     }
   }

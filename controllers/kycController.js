@@ -20,6 +20,7 @@ class KYCController extends BaseController {
         this.approveSelfie = this.approveSelfie.bind(this);
         this.rejectSelfie = this.rejectSelfie.bind(this);
         this.getVerifiedRunners = this.getVerifiedRunners.bind(this);
+        this.validateFaceWithVision = this.validateFaceWithVision.bind(this);
     }
 
     // ==================== RUNNER METHODS ====================
@@ -179,6 +180,59 @@ class KYCController extends BaseController {
         }
     }
 
+    // google vision api
+    async validateFaceWithVision(base64Image) {
+
+        const response = await fetch(
+            `https://vision.googleapis.com/v1/images:annotate?key=${process.env.GOOGLE_VISION_KEY}`,
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    requests: [{
+                        image: { content: base64Image.replace(/^data:image\/\w+;base64,/, '') },
+                        features: [{ type: 'FACE_DETECTION', maxResults: 5 }]
+                    }]
+                })
+            }
+        );
+
+        const data = await response.json();
+
+        // fail silently and continue
+        if (data.error) {
+            console.error('[Vision] API error, failing open:', data.error.message);
+            return { valid: true, message: null };
+        }
+
+        const faces = data.responses?.[0]?.faceAnnotations || [];
+
+        if (faces.length === 0) {
+            return { valid: false, message: "No face detected. Please position your face clearly and try again." };
+        }
+
+        if (faces.length > 1) {
+            return { valid: false, message: "Multiple faces detected. Please make sure only your face is in the frame." };
+        }
+
+        const face = faces[0];
+
+        if (face.blurredLikelihood === 'VERY_LIKELY' || face.blurredLikelihood === 'LIKELY') {
+            return { valid: false, message: "Your photo is blurry. Please hold your phone steady and try again." };
+        }
+
+        if (face.underExposedLikelihood === 'VERY_LIKELY' || face.underExposedLikelihood === 'LIKELY') {
+            return { valid: false, message: "Your photo is too dark. Please move to a well-lit area and try again." };
+        }
+
+        if (face.detectionConfidence < 0.7) {
+            return { valid: false, message: "We couldn't clearly detect your face. Please look directly at the camera in a bright area." };
+        }
+
+        return { valid: true, message: null };
+    };
+
+
     async verifySelfie(req, res) {
         try {
             const userId = req.user.id || req.user._id;
@@ -197,6 +251,17 @@ class KYCController extends BaseController {
 
             if (!hasSubmittedDoc) {
                 return this.badRequest(res, 'Please submit at least one document (NIN or Driver License) first');
+            }
+
+            // verify with google vision api
+            const base64Image = req.file.buffer.toString('base64');
+            
+            if (process.env.NODE_ENV === 'production') {
+                const { valid, message } = await this.validateFaceWithVision(base64Image);
+                if (!valid) {
+                    console.log('[verifySelfie] Rejected by Vision API:', message);
+                    return this.badRequest(res, message);
+                }
             }
 
             const result = await this.service.submitSelfie(

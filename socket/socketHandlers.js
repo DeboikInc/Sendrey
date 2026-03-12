@@ -244,7 +244,7 @@ const sanitizeSpecialInstructions = (specialInstructions) => {
       fileName: m.fileName || m.name || null,
       fileType: m.fileType || m.type || null,
       fileSize: m.fileSize || null,
-      fileUrl:  m.fileUrl  || null,
+      fileUrl: m.fileUrl || null,
     })),
   };
 };
@@ -255,10 +255,20 @@ const initializeChatAndProceed = async (io, chatId, state) => {
 
   try {
     // Fetch user in parallel
-    const user = await User.findById(userId).lean();
+    const [user, runnerData] = await Promise.all([   // ← fetch both
+      User.findById(userId).lean(),
+      Runner.findById(runnerId).lean(),
+    ]);
+
+    console.log('[pricing debug - initializeChat] serviceType:', serviceType);
+    console.log('[pricing debug - initializeChat] userId:', userId);
+    console.log('[pricing debug - initializeChat] user found:', !!user);
+    console.log('[pricing debug - initializeChat] user.currentRequest:', JSON.stringify(user?.currentRequest, null, 2))
 
     // ── Delivery fee: DELIVERY_FEE_PER_METER × runner 1km from market/pickup + market distance to dropoff/delivery
     const { deliveryFee } = computeDeliveryFeeFromDocs(serviceType, user);
+    console.log('user.currentRequest:', user?.currentRequest);
+
 
     // Item budget only applies to run-errand
     const isErrand = serviceType === 'run-errand';
@@ -318,7 +328,7 @@ const initializeChatAndProceed = async (io, chatId, state) => {
 const handleUserJoinChat = async (socket, io, data) => {
   const { userId, runnerId, chatId } = data;
 
-  socket.userId  = userId;
+  socket.userId = userId;
   socket.runnerId = runnerId;
   socket.join(chatId);
   socket.join(`user-${userId}`);
@@ -343,7 +353,7 @@ const handleUserJoinChat = async (socket, io, data) => {
             status: "sent",
             paymentData: {
               serviceType: existingOrder.serviceType,
-              itemBudget:  existingOrder.itemBudget  || 0,
+              itemBudget: existingOrder.itemBudget || 0,
               deliveryFee: existingOrder.deliveryFee || 0,
               totalAmount: existingOrder.totalAmount || 0,
               currency: "NGN",
@@ -378,6 +388,12 @@ const handleUserJoinChat = async (socket, io, data) => {
       ]);
 
       const serviceType = user?.currentRequest?.serviceType || chat.serviceType;
+
+      console.log('[pricing debug] userId used for fetch:', userId);
+      console.log('[pricing debug] user found:', !!user);
+      console.log('[pricing debug] serviceType:', serviceType);
+      console.log('[pricing debug] user.currentRequest:', JSON.stringify(user?.currentRequest, null, 2));
+
       const { deliveryFee } = computeDeliveryFeeFromDocs(serviceType, user);
 
       const isErrand = serviceType === 'run-errand' || serviceType === 'run_errand';
@@ -429,7 +445,7 @@ const handleRunnerJoinChat = async (socket, io, data) => {
   const { runnerId, userId, chatId } = data;
 
   socket.runnerId = runnerId;
-  socket.userId   = userId;
+  socket.userId = userId;
   socket.currentChatId = chatId;
   socket.join(chatId);
   socket.join(`runner-${runnerId}`);

@@ -33,15 +33,29 @@ class PaymentController extends BaseController {
         this.withdrawFromWallet = this.withdrawFromWallet.bind(this);
         this.getBanks = this.getBanks.bind(this);
         this.verifyAccount = this.verifyAccount.bind(this);
+        this.verifyWalletFunding = this.verifyWalletFunding.bind(this);
     }
 
     async createPaymentIntent(req, res) {
+        console.log('[paymentIntent] full req.body:', JSON.stringify(req.body, null, 2));
+        console.log('[paymentIntent] pin received:', req.body.pin);
+        console.log('[paymentIntent] paymentMethod:', req.body.paymentMethod);
         try {
-            const { orderId, paymentMethod, pin } = req.body;
+            const { orderId, chatId, paymentMethod, pin } = req.body;
             console.log('createPaymentIntent body:', req.body); // ← add this
             console.log('Looking for orderId:', orderId);
             const userId = req.user._id;
             const userEmail = req.user.email;
+
+            let resolvedOrderId = orderId;
+            if (!resolvedOrderId && chatId) {
+                const fallbackOrder = await Order.findOne({
+                    chatId,
+                    paymentStatus: { $ne: 'paid' }  
+                }).sort({ createdAt: -1 });
+                resolvedOrderId = fallbackOrder?.orderId;
+            }
+            if (!resolvedOrderId) return res.status(400).json({ success: false, message: 'Order not found' });
 
             // verify user pin
             if (paymentMethod === 'wallet') {
@@ -55,7 +69,7 @@ class PaymentController extends BaseController {
             }
 
             const result = await paymentService.payForOrder(
-                orderId,
+                resolvedOrderId,
                 paymentMethod,
                 userId,
                 userEmail
@@ -476,6 +490,20 @@ class PaymentController extends BaseController {
             this.success(res, result.data);
         } catch (error) {
             console.error('Error fetching banks:', error);
+            this.error(res, error.message);
+        }
+    }
+
+    async verifyWalletFunding(req, res) {
+        try {
+            const { reference } = req.body;
+            const result = await paymentService.verifyWalletFunding(reference);
+            if (result.alreadyProcessed) {
+                return this.success(res, { message: 'Already processed' });
+            }
+            this.success(res, { message: 'Wallet funded successfully', balance: result.balance, amount: result.amount });
+        } catch (error) {
+            console.error('Error verifying wallet funding:', error);
             this.error(res, error.message);
         }
     }

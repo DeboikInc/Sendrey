@@ -81,17 +81,18 @@ class AuthController extends BaseController {
 
       // send welcome email
       if (user.email) {
-        const emailLinkToken = jwt.sign(
-          { id: user._id, role: user.role },
-          process.env.JWT_SECRET,
-          { expiresIn: '7d' }
-        );
-        console.log('User for welcome email:', user.firstName, user.name, userData.firstName)
-        emailService.sendWelcomeEmail(
-          { email: user.email, firstName: userData.firstName || user.firstName, name: userData.firstName || user.firstName },
-          emailLinkToken,
-        ).catch((err) => {
-          console.error('Welcome email failed:', err.message);
+        setImmediate(() => {
+          const emailLinkToken = jwt.sign(
+            { id: user._id, role: user.role },
+            process.env.JWT_SECRET,
+            { expiresIn: '7d' }
+          );
+          emailService.sendWelcomeEmail(
+            { email: user.email, firstName: userData.firstName || user.firstName, name: userData.firstName || user.firstName },
+            emailLinkToken,
+          ).catch((err) => {
+            console.error('Welcome email failed:', err.message);
+          });
         });
       }
 
@@ -141,17 +142,19 @@ class AuthController extends BaseController {
       }
 
       if (runner.email) {
-        const emailLinkToken = jwt.sign(
-          { id: runner._id, role: runner.role },
-          process.env.JWT_SECRET,
-          { expiresIn: '7d' }
-        );
-        emailService.sendWelcomeEmail(
-          { email: runner.email, firstName: runnerData.firstName || runner.firstName, name: runnerData.firstName || runner.firstName },
-          emailLinkToken
-        ).catch((err) => {
-          console.error('Welcome email failed:', err.message);
-        });
+        setImmediate(() => {
+          const emailLinkToken = jwt.sign(
+            { id: runner._id, role: runner.role },
+            process.env.JWT_SECRET,
+            { expiresIn: '7d' }
+          );
+          emailService.sendWelcomeEmail(
+            { email: runner.email, firstName: runnerData.firstName || runner.firstName, name: runnerData.firstName || runner.firstName },
+            emailLinkToken
+          ).catch((err) => {
+            console.error('Welcome email failed:', err.message);
+          });
+        })
       }
 
       // Virtual account (non-blocking)

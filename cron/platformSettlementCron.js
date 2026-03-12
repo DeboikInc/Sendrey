@@ -3,10 +3,6 @@
  * 
  * Runs daily at midnight — sweeps all pending platform earnings
  * and transfers them to your Paystack account via bulk transfer.
- * 
- * Setup in app.js:
- *   const { startPlatformSettlementCron } = require('./cron/platformSettlementCron');
- *   startPlatformSettlementCron();
  */
 
 const cron = require('node-cron');
@@ -17,7 +13,6 @@ const paystack = require('../config/paystack');
 // Get this by creating a transfer recipient on Paystack dashboard
 // or via API: POST https://api.paystack.co/transferrecipient
 const PLATFORM_RECIPIENT_CODE = process.env.PLATFORM_PAYSTACK_RECIPIENT_CODE;
-const PLATFORM_BANK_ACCOUNT = process.env.PLATFORM_BANK_ACCOUNT; // for logging
 
 const settlePlatformEarnings = async () => {
   console.log(' Platform settlement cron started...');

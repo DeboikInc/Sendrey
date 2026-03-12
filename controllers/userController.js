@@ -149,6 +149,7 @@ class UserController extends BaseController {
         return this.error(res, `Invalid fleet type. Must be one of: ${validFleetTypes.join(', ')}`, 400);
       }
 
+
       const users = await userService.findNearbyUsers({
         latitude: lat,
         longitude: lng,
@@ -156,16 +157,19 @@ class UserController extends BaseController {
         fleetType,
       });
 
-      console.log('DEBUG IN USERS CONTROLLER');
-      console.log('Users Results:', users.length);
-      console.log('Nearby users search:');
-      console.log('  Query params:', { lat, lng, serviceType, fleetType });
+      const eligibleUsers = users.filter(user => {
+        console.log('User phone check:', {
+          id: user._id,
+          isPhoneVerified: user.isPhoneVerified,
+        });
+        return user.isPhoneVerified === true;
+      });
 
       return this.success(res, {
         success: true,
-        count: users.length,
-        users,
-        message: `Found ${users.length} nearby user${users.length !== 1 ? 's' : ''}`
+        count: eligibleUsers.length,
+        users: eligibleUsers,
+        message: `Found ${eligibleUsers.length} nearby user${users.length !== 1 ? 's' : ''}`
       });
     } catch (error) {
       logger.error('Error finding nearby users:', error);

@@ -50,8 +50,8 @@ const ALL_STATUSES = [
   ])
 ];
 
-const PICKUP_MAX_DISTANCE  = 5000
-const TOTAL_MAX_DISTANCE = 5000 // runner to market/pickup location
+const PICKUP_MAX_DISTANCE  = 50000 // runner model
+const TOTAL_MAX_DISTANCE = 50000 // runner to market/pickup location, user model
 
 const ACTIVITIES = ['login',
   'logout',

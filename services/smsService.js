@@ -81,37 +81,58 @@ class SMSService {
   async sendSMS(to, templateName, data = {}) {
     try {
       if (!this.isConfigured) {
-      return { development: true, message: 'SMS not configured' };
-    }
+        return { development: true, message: 'SMS not configured' };
+      }
 
-    const formattedTo = this.formatPhoneNumber(to);
-    console.log('Sending SMS - To:', formattedTo, 'From:', this.fromNumber);
-    console.log('Twilio SID:', process.env.TWILIO_ACCOUNT_SID);
+      const formattedTo = this.formatPhoneNumber(to);
+      console.log('Sending SMS - To:', formattedTo, 'From:', this.fromNumber);
 
-    if (!this.validatePhoneNumber(formattedTo)) {
-      throw new Error(`Invalid phone number: ${formattedTo}`);
-    }
+      if (!this.validatePhoneNumber(formattedTo)) {
+        throw new Error(`Invalid phone number: ${formattedTo}`);
+      }
 
-    const message = await this.compileSMSTemplate(templateName, data);
-    console.log('SMS Message:', message);
+      const message = await this.compileSMSTemplate(templateName, data);
 
-    const result = await this.client.messages.create({
-      to: formattedTo,
-      from: this.fromNumber, // Use stored fromNumber
-      body: message,
-    });
-
-    logger.info(`SMS sent: ${result.sid}`);
-    return result;
-    } catch (error) {
-      logger.error('SMS sending error:', {
-        message: error?.message,
-        code: error?.code,
-        status: error?.status,
-        moreInfo: error?.moreInfo,
-        stack: error?.stack,
-        raw: error
+      const result = await this.client.messages.create({
+        to: formattedTo,
+        from: this.fromNumber,
+        body: message,
       });
+
+      logger.info(`SMS sent: ${result.sid}`);
+      return result;
+
+    } catch (error) {
+      // Twilio-specific error
+      if (error.code) {
+        logger.error('Twilio SMS error:', {
+          code: error.code,
+          message: error.message,
+          moreInfo: error.moreInfo,
+          status: error.status,
+        });
+
+        // Common Twilio error codes
+        const twilioErrors = {
+          21211: 'Invalid phone number',
+          21214: 'Phone number not verified (trial account)',
+          21408: 'SMS not supported for this region',
+          21610: 'Number is blacklisted/unsubscribed',
+          21614: 'Not a mobile number',
+          30003: 'Unreachable destination handset',
+          30004: 'Message blocked',
+          30005: 'Unknown destination handset',
+          30006: 'Landline or unreachable carrier',
+        };
+
+        const friendlyMessage = twilioErrors[error.code] || `Twilio error ${error.code}`;
+        logger.error(`Twilio error reason: ${friendlyMessage}`);
+        return { error: true, code: error.code, message: friendlyMessage };
+      }
+
+      // Generic error
+      logger.error('SMS sending error:', error.message);
+      return { error: true, message: error.message };
     }
   }
 
@@ -122,7 +143,7 @@ class SMSService {
     if (process.env.NODE_ENV === 'development') {
       console.log(`📱 DEVELOPMENT MODE: OTP for ${phoneNumber} is ${otpCode}`);
       console.log(`Use this OTP to verify: ${otpCode}`);
-      console.log('at sms service line 129')
+      console.log('at sms service line 129, dont forget to change back for prod')
       return {
         development: true,
         otp: otpCode,
