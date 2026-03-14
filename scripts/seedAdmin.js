@@ -16,13 +16,12 @@ const seedAdmin = async () => {
             process.exit(0);
         }
 
-        const hashedPassword = await bcrypt.hash(process.env.SEED_ADMIN_PASSWORD, 12);
 
         await User.create({
             firstName: 'Super',
             lastName: 'Admin',
             email: process.env.SEED_ADMIN_EMAIL,
-            password: hashedPassword,
+            password: process.env.SEED_ADMIN_PASSWORD,
             role: 'super-admin',
             isVerified: true, 
             isEmailVerified: true,
