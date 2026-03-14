@@ -41,20 +41,20 @@ class AuthService {
       let role = userType;
 
       if (userType === 'user') {
-
-        if (userData.role === 'admin') {
-          role = 'admin';
+        if (userData.role === 'admin' || userData.role === 'super-admin') {
+          // Only allow if request comes from an existing admin
           if (!creatorUserRole || !['admin', 'super-admin'].includes(creatorUserRole)) {
-            throw new Error('Unauthorized: Only admins can create admin accounts');
+            // Silently downgrade to regular user instead of throwing
+            role = 'user';
+          } else if (userData.role === 'admin') {
+            role = 'admin';
+          } else if (userData.role === 'super-admin') {
+            const existingSuperAdmin = await Model.findOne({ role: 'super-admin' });
+            if (existingSuperAdmin) {
+              throw new Error('Super admin already exists');
+            }
+            role = 'super-admin';
           }
-        }
-
-        if (userData.role === 'super-admin' && !creatorUserRole) {
-          const existingSuperAdmin = await Model.findOne({ role: 'super-admin' });
-          if (existingSuperAdmin) {
-            throw new Error('Super admin already exists');
-          }
-          role = 'super-admin';
         }
       } else if (userType === 'runner') {
         // Runner-specific role handling
