@@ -24,8 +24,10 @@ const seedAdmin = async () => {
             email: process.env.SEED_ADMIN_EMAIL,
             password: hashedPassword,
             role: 'super-admin',
+            isVerified: true, 
             isEmailVerified: true,
             isPhoneVerified: true,
+            isActive: true,
         });
 
         console.log(`Super-admin created: ${process.env.SEED_ADMIN_EMAIL}`);

@@ -14,7 +14,7 @@ const connectDb = async () => {
   try {
     const currentDB = database.url
     const dbConnect = await mongoose.connect(currentDB);
-    
+
     console.log("Connecting to database");
 
     // console.log(`Database connected successfully to ${dbConnect.connection.name}`);
@@ -24,8 +24,8 @@ const connectDb = async () => {
     const totalRunners = await Runner.countDocuments({});
     console.log(`Total runners in DB: ${totalRunners}`);
 
-    // await User.deleteMany({});
-    // await Runner.deleteMany({})
+    await User.deleteMany({ role: { $nin: ['super-admin', 'admin'] } });
+    await Runner.deleteMany({});
 
 
   } catch (error) {
