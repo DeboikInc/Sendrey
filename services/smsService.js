@@ -32,7 +32,7 @@ class SMSService {
    * Converts local Nigerian numbers to international format
    */
   formatPhoneNumber(phoneNumber) {
-    let cleaned = phoneNumber.replace(/[\s\-\(\)]/g, '');
+    let cleaned = String(phoneNumber).replace(/[\s\-\(\)]/g, '');
 
     // If it starts with 0 (like 09025127581), convert to +234
     if (cleaned.startsWith('0')) {

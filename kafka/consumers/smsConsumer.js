@@ -95,7 +95,7 @@ const startSmsConsumer = async () => {
 const sendSmsDirect = async (smsData) => {
   const { type, to, otp, message, resetToken } = smsData;
 
-  const buildMessage = () => {
+  const body = (() => {
     switch (type) {
       case 'otp':
         return `Your Sendrey verification code is: ${otp}. Valid for 10 minutes.`;
@@ -106,11 +106,14 @@ const sendSmsDirect = async (smsData) => {
       default:
         return message || 'Message from Sendrey';
     }
-  };
+  })();
 
-  await smsService.sendSMS({
-    to,
-    message: buildMessage(),
+  // Call Twilio directly — bypass smsService.sendSMS template system
+  const formatted = smsService.formatPhoneNumber(to);
+  await smsService.client.messages.create({
+    to: formatted,
+    from: smsService.fromNumber,
+    body,
   });
 
   console.log(`SMS sent directly: ${type} → ${to}`);
