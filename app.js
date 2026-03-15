@@ -75,18 +75,18 @@ const startServer = async () => {
     }, express.static(path.join(__dirname, 'uploads')));
 
     // Start all Kafka consumers
-    try {
-      console.log('Starting Kafka consumers...');
-      await startAllConsumers();
-      console.log(' Kafka consumers started');
-    } catch (kafkaError) {
-      console.error(' Kafka consumers failed to start - continuing without Kafka:', kafkaError.message);
-      // Don't exit - continue running without Kafka
-    }
+    // try {
+    //   console.log('Starting Kafka consumers...');
+    //  // await startAllConsumers();
+    //   console.log(' Kafka consumers started');
+    // } catch (kafkaError) {
+    //   console.error(' Kafka consumers failed to start - continuing without Kafka:', kafkaError.message);
+    //   // Don't exit - continue running without Kafka
+    // }
 
     // start redis
-    await redis.connect();
-    locationCleanup.start(); // Start cleanup service
+   // await redis.connect();
+    //locationCleanup.start(); // Start cleanup service
 
     // 3. Routes
     app.use('/api/v1', routes);
@@ -132,9 +132,9 @@ const startServer = async () => {
 
   // Graceful shutdown
   process.on('SIGTERM', async () => {
-    locationCleanup.stop();
-    await redis.disconnect();
-    process.exit(0);
+    //locationCleanup.stop();
+    //await redis.disconnect();
+   // process.exit(0);
   });
 };
 

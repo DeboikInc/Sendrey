@@ -13,7 +13,7 @@ router.get('/suggestions/stats',
   controller.adminGetStats);
 
 router.patch('/suggestions/:userId/reset-opt-out',
-  auditLog('ADMIN_RESET_OPT_OUT'),
+ auditLog('ADMIN_RESET_OPT_OUT'),
   controller.adminResetOptOut);
 
 router.post('/suggestions/:userId/force-suggest',
@@ -22,11 +22,11 @@ router.post('/suggestions/:userId/force-suggest',
 
 // ── Business Accounts ─────────────────────────────────────────────────────────
 router.get('/accounts',
-  auditLog('ADMIN_GET_ALL_BUSINESSES'),
+ auditLog('ADMIN_GET_ALL_BUSINESSES'),
   controller.adminGetAllBusinesses);
 
 router.get('/accounts/:userId',
-  auditLog('ADMIN_GET_BUSINESS'),
+ auditLog('ADMIN_GET_BUSINESS'),
   controller.adminGetBusiness);
 
 router.patch('/accounts/:userId/convert',
