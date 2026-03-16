@@ -153,7 +153,7 @@ class SMSService {
 
     if (!this.isConfigured) {
       logger.warn('SMS not configured - would send OTP:', { phoneNumber, otpCode });
-      if (process.env.NODE_ENV === 'development') {
+      if (process.env.NODE_ENV === 'production') {
         console.log(`📱 DEVELOPMENT: OTP for ${phoneNumber} is ${otpCode}`);
         return { development: true, otp: otpCode };
       }
