@@ -22,7 +22,7 @@ const callHandlers = require("./socket/callHandlers");
 const { handlePaymentSuccess } = require('./socket/paymentHandlers');
 const { handleGetRunnerPayout, handleSubmitPayoutReceipt } = require('./socket/payoutHandlers');
 const { registerTrackingHandlers } = require('./socket/trackingHandlers');
-const { handleCancelOrder, handleTaskCompleted, handleRunnerStartedNewOrder  } = require('./socket/cancelHandlers');
+const { handleCancelOrder, handleTaskCompleted, handleRunnerStartedNewOrder } = require('./socket/cancelHandlers');
 
 // Import models
 const { Chat } = require("./models/Chat");
@@ -113,7 +113,7 @@ mongoose.connect(database.url, database.options)
       // rejoin chat
       socket.on("rejoinChat", (data) =>
         safeHandler(socketHandlers.handleRejoinChat, socket, io, data)
-      
+
       );
 
       // Runner events
@@ -342,7 +342,40 @@ mongoose.connect(database.url, database.options)
       });
     });
 
+    app.get('/health', (req, res) => {
+      res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
+    });
+
+    app.get('/', (req, res) => {
+      res.status(200).json({ status: 'OK', service: 'Sendrey Socket Server' });
+    });
+
     server.listen(4001, () => console.log("✅ Socket.IO server running on port 4001"));
+
+
+    // Self-ping to prevent Render spin-down
+    if (process.env.NODE_ENV === 'production') {
+      setInterval(async () => {
+        try {
+          await fetch('https://sendrey-server-socket.onrender.com/health');
+          console.log('[keep-alive] socket server pinged');
+        } catch (e) {
+          console.error('[keep-alive] ping failed:', e.message);
+        }
+      }, 5 * 60 * 1000);
+    }
+
+    // Graceful shutdown
+    process.on('SIGTERM', async () => {
+      console.log('SIGTERM received — shutting down socket server');
+      io.close(() => console.log('Socket.IO closed'));
+      server.close(() => {
+        mongoose.connection.close(false, () => {
+          console.log('MongoDB connection closed');
+          process.exit(0);
+        });
+      });
+    });
   })
   .catch((err) => {
     console.error("MongoDB connection error:", err);
