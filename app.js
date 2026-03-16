@@ -36,13 +36,13 @@ const locationCleanup = require('./services/locationTracking/locationCleanup');
 const connectDb = require('./config/database');
 const startServer = async () => {
 
-  // if (process.env.NODE_ENV === 'production') {
-  //   console.log = () => { };
-  //   console.error = () => { };
-  //   console.warn = () => { };
-  //   console.debug = () => { };
-  // }
-  
+  if (process.env.NODE_ENV === 'production') {
+    console.log = () => { };
+    console.error = () => { };
+    console.warn = () => { };
+    console.debug = () => { };
+  }
+
   try {
 
     // 1. Await the database connection first
@@ -51,7 +51,7 @@ const startServer = async () => {
 
     // restore any scheduled cron jobs that were active before the server restarted
     await startExpenseReportJobs();
-    
+
     // 2. Middlewares
     app.use(helmet(
       {
@@ -84,9 +84,25 @@ const startServer = async () => {
       // Don't exit - continue running without Kafka
     }
 
+    if (process.env.NODE_ENV === 'production') {
+      setInterval(async () => {
+        try {
+          const url = process.env.SOCKET_SERVER_URL || 'https://sendrey-server-socket.onrender.com';
+          await fetch(`${url}/health`);
+          console.log('[keep-alive] pinged');
+        } catch (e) {
+          console.error('[keep-alive] ping failed:', e.message);
+        }
+      }, 5 * 60 * 1000); // every 5 minutes
+    }
+
     // start redis
-    await redis.connect();
-    locationCleanup.start(); // Start cleanup service
+    try {
+      await redis.connect();
+      locationCleanup.start();
+    } catch (err) {
+      console.error('Redis unavailable — skipping location cleanup:', err.message);
+    }
 
     // 3. Routes
     app.use('/api/v1', routes);

@@ -54,8 +54,10 @@ class RedisClient {
 
       return this.client;
     } catch (error) {
-      console.error('Failed to connect to Redis:', error);
-      throw error;
+      console.error('Failed to connect to Redis:', error.message);
+      this.client = null;
+      this.subscriber = null;
+      // throw error;
     }
   }
 
