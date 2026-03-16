@@ -95,6 +95,7 @@ const startSmsConsumer = async () => {
 const sendSmsDirect = async (smsData) => {
   const { type, to, otp, message, resetToken } = smsData;
     console.log('[sendSmsDirect] called with:', { type: smsData.type, to: smsData.to });
+    console.log('[sendSmsDirect] otp value:', smsData.otp);
 
   const body = (() => {
     switch (type) {
