@@ -142,13 +142,12 @@ class AuthController extends BaseController {
       const verificationToken = await authService.generateVerificationToken(runner._id, 'runner');
       const otp = await authService.generatePhoneVerificationOTP(runner._id, runnerData.phone, 'runner');
 
-
       logger.info('Sending OTP SMS', {
-        to: userData.phone,
-        userId: user._id,
-        userType: 'user',
-        existing: !!user.existing,
-        endpoint: 'register-user'
+        to: runnerData.phone,
+        userId: runner._id,
+        userType: 'runner',
+        existing: !!runner.existing,
+        endpoint: 'register-runner'
       });
 
       // Queue OTP SMS via Kafka
