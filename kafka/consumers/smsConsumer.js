@@ -100,33 +100,18 @@ const startSmsConsumer = async () => {
 
 const sendSmsDirect = async (smsData) => {
   const { type, to, otp, message, resetToken } = smsData;
-    console.log('[sendSmsDirect] called with:', { type: smsData.type, to: smsData.to });
-    console.log('[sendSmsDirect] otp value:', smsData.otp);
+  console.log('[sendSmsDirect] called with:', { type, to });
 
-  const body = (() => {
-    switch (type) {
-      case 'otp':
-        return `Your Sendrey verification code is: ${otp}. Valid for 10 minutes.`;
-      case 'password-reset':
-        return `Your Sendrey password reset code is: ${resetToken}. Valid for 1 hour.`;
-      case 'alert':
-        return message;
-      default:
-        return message || 'Message from Sendrey';
-    }
-  })();
-
-  // Call Twilio directly — bypass smsService.sendSMS template system
-  const formatted = smsService.formatPhoneNumber(to);
-  await smsService.client.messages.create({
-    to: formatted,
-    from: smsService.fromNumber,
-    body,
-  });
-
-    console.log(`[sendSmsDirect] Twilio message created: ${smsData.type} → ${to}`);
-
-  console.log(`SMS sent directly: ${type} → ${to}`);
+  switch (type) {
+    case 'otp':
+      return await smsService.sendOTP(to, otp);
+    case 'password-reset':
+      return await smsService.sendPasswordResetSMS(to, resetToken);
+    case 'alert':
+      return await smsService.sendAlertSMS(to, { message });
+    default:
+      return await smsService.sendSMS(to, type, smsData.data || {});
+  }
 };
 
 module.exports = { startSmsConsumer, sendSmsDirect };
