@@ -569,6 +569,29 @@ class AuthController extends BaseController {
     }
   }
 
+  me = async (req, res, next) => {
+    try {
+      const userId = req.user.id;
+      const userType = req.user.role === 'runner' ? 'runner' : 'user';
+
+      let entity;
+      if (userType === 'runner') {
+        entity = await Runner.findById(userId).lean();
+      } else {
+        entity = await User.findById(userId).lean();
+      }
+
+      if (!entity) return this.error(res, 'User not found', 404);
+
+      return this.success(res, {
+        [userType]: userType === 'runner' ? this._sanitizeRunner(entity) : this._sanitizeUser(entity),
+        userType,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   _sanitizeUser(user) {
     if (!user) return null;
     const userObj = user.toObject ? user.toObject() : { ...user };

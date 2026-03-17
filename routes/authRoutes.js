@@ -48,6 +48,8 @@ router.post(
   authController.refreshToken
 );
 
+router.get('/me', authController.me);
+
 router.post('/resend-email-verification',
   userRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 3 }), // 3 resends per hour
   validate(authValidation.resendVerification),
