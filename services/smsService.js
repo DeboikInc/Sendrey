@@ -14,6 +14,7 @@ class SMSService {
 
       if (twilioConfig?.accountSid && twilioConfig?.authToken && twilioConfig?.fromNumber) {
         this.client = twilio(twilioConfig.accountSid, twilioConfig.authToken);
+        console.log('[Twilio] initialized with SID:', twilioConfig.accountSid?.substring(0, 10) + '...');
         this.fromNumber = twilioConfig.fromNumber;
         this.isConfigured = true;
         logger.info('Twilio SMS service initialized successfully');
