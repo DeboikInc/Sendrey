@@ -51,7 +51,7 @@ class PaymentController extends BaseController {
             if (!resolvedOrderId && chatId) {
                 const fallbackOrder = await Order.findOne({
                     chatId,
-                    paymentStatus: { $ne: 'paid' }  
+                    paymentStatus: { $ne: 'paid' }
                 }).sort({ createdAt: -1 });
                 resolvedOrderId = fallbackOrder?.orderId;
             }
@@ -423,15 +423,23 @@ class PaymentController extends BaseController {
             const runnerId = req.user._id; // only runners withdraw
             const { amount, bankDetails, pin } = req.body;
 
+            console.log('withdrawFromWallet body:', { amount, bankDetails: !!bankDetails, pin: !!pin });
+            console.log('bankDetails:', bankDetails);
+
             if (!amount || amount < 100) {
+                console.log('Failed: amount check', amount);
                 return this.badRequest(res, 'Minimum withdrawal amount is ₦100');
             }
 
             if (!bankDetails?.accountNumber || !bankDetails?.bankCode) {
+                console.log('Failed: bankDetails check', bankDetails);
                 return this.badRequest(res, 'Bank details are required');
             }
 
-            if (!pin) return res.status(400).json({ success: false, message: 'PIN is required' });
+            if (!pin) {
+                console.log('Failed: pin missing');
+                return res.status(400).json({ success: false, message: 'PIN is required' });
+            }
 
             // pin
             const { valid } = await pinService.verifyPin({

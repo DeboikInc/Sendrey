@@ -157,7 +157,12 @@ const handleUpdateStatus = async (socket, io, data) => {
 
 
     try {
-      const order = await Order.findOne({ chatId }).select('orderId').lean();
+      const order = await Order.findOne({
+        chatId,
+        status: { $nin: ['completed', 'cancelled'] }
+      }).sort({ createdAt: -1 }).select('orderId').lean();
+
+
       const trackingOrderId = order?.orderId;
       if (trackingOrderId) {
         if (status === 'arrived_at_market' || status === 'arrived_at_pickup_location') {

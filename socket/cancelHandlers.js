@@ -89,6 +89,22 @@ const handleTaskCompleted = async (io, data) => {
 
     try {
         logger.info('Task Completed:', { chatId, orderId, runnerId, userId });
+
+        // ── Release escrow and pay runner ─────────────────────────────────────
+        const order = await Order.findOne({ orderId });
+        if (order?.escrowId) {
+            try {
+                const paymentService = require('../services/paymentServices');
+                const result = await paymentService.payoutToRunner(order.escrowId);
+                logger.info(`✅ Runner paid | orderId=${orderId} | payout=₦${result.runnerPayout} | usedPayoutSystem=${result.usedPayoutSystem}`);
+            } catch (err) {
+                // Don't block task completion if payout fails
+                logger.error(`payoutToRunner failed for order ${orderId}:`, err.message);
+            }
+        } else {
+            logger.warn(`handleTaskCompleted: no escrowId on order ${orderId} — payout skipped`);
+        }
+
         // Set runner and user available
         await Runner.findByIdAndUpdate(runnerId, {
             isAvailable: true,

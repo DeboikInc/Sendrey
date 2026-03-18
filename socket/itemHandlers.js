@@ -27,11 +27,11 @@ const uploadToCloudinary = (base64String, folder = 'item-receipts') =>
   new Promise((resolve, reject) => {
     cloudinary.uploader.upload(
       base64String,
-      { 
-        folder, 
+      {
+        folder,
         resource_type: 'image',
-        timeout: 60000, // 60s timeout
-        transformation: [{ quality: 'auto:low', fetch_format: 'auto' }], // compress
+        timeout: 120000, // 120s timeout
+        transformation: [{ quality: 'auto:low', fetch_format: 'auto', width: 800, crop: 'limit' }], // compress
       },
       (err, result) => (err ? reject(err) : resolve(result))
     );
@@ -44,20 +44,39 @@ const handleSubmitItems = async (socket, io, data) => {
   } = data;
 
   try {
-    let finalReceiptUrl = receiptUrl || null;
-    if (receiptBase64) {
-      const uploaded = await uploadToCloudinary(receiptBase64, "item-receipts");
-      finalReceiptUrl = uploaded.secure_url;
+    const order = await Order.findOne({
+      chatId,
+      status: { $nin: ['completed', 'cancelled'] }
+    }).sort({ createdAt: -1 });
+
+    if (order) {
+      await orderStateMachine.transition(order.orderId, 'items_submitted', {
+        triggeredBy: 'runner',
+        triggeredById: runnerId,
+        note: `Items submitted, total: ₦${totalAmount}`
+      });
     }
 
-    const finalItems = await Promise.all(
-      items.map(async (item) => {
-        const { photoBase64, ...rest } = item;
-        if (!photoBase64) return rest;
-        const uploaded = await uploadToCloudinary(photoBase64, "item-photos");
-        return { ...rest, photoUrl: uploaded.secure_url };
-      })
-    );
+    // Upload receipt and all item photos in PARALLEL
+    const [receiptResult, ...itemResults] = await Promise.all([
+      receiptBase64
+        ? uploadToCloudinary(receiptBase64, 'item-receipts')
+        : Promise.resolve(null),
+      ...items.map(item =>
+        item.photoBase64
+          ? uploadToCloudinary(item.photoBase64, 'item-photos')
+          : Promise.resolve(null)
+      ),
+    ]);
+
+    const finalReceiptUrl = receiptResult?.secure_url || receiptUrl || null;
+
+    const finalItems = items.map((item, i) => {
+      const { photoBase64, ...rest } = item;
+      return itemResults[i]
+        ? { ...rest, photoUrl: itemResults[i].secure_url }
+        : rest;
+    });
 
     const message = {
       id: submissionId,
@@ -85,15 +104,6 @@ const handleSubmitItems = async (socket, io, data) => {
       await chat.save();
     }
 
-    // Transition order state
-    const order = await Order.findOne({ chatId });
-    if (order) {
-      await orderStateMachine.transition(order.orderId, 'items_submitted', {
-        triggeredBy: 'runner',
-        triggeredById: runnerId,
-        note: `Items submitted, total: ₦${totalAmount}`
-      });
-    }
 
     io.to(chatId).emit("message", cleanForEmit(message));
 
@@ -129,7 +139,10 @@ const handleApproveItems = async (socket, io, data) => {
       }
     }
 
-    const order = await Order.findOne({ chatId });
+    const order = await Order.findOne({
+      chatId,
+      status: { $nin: ['completed', 'cancelled',] }
+    }).sort({ createdAt: -1 });
     if (order) {
       await orderStateMachine.transition(order.orderId, 'items_approved', {
         triggeredBy: 'user',
@@ -169,8 +182,6 @@ const handleApproveItems = async (socket, io, data) => {
     });
 
 
-    io.to(chatId).emit('message', cleanForEmit(userSystemMsg));
-    io.to(chatId).emit('message', cleanForEmit(runnerSystemMsg));
     // Emit to personal rooms
     io.to(`user-${userId.toString()}`).emit('message', cleanForEmit(userSystemMsg));
     // console.log('Emitting approval to runner room:', `user-${order.runnerId}`);
@@ -212,7 +223,10 @@ const handleRejectItems = async (socket, io, data) => {
       }
     }
 
-    const order = await Order.findOne({ chatId });
+    const order = await Order.findOne({
+      chatId,
+      status: { $nin: ['completed', 'cancelled'] }
+    }).sort({ createdAt: -1 });
     if (order) {
       await orderStateMachine.transition(order.orderId, 'in_progress', {
         triggeredBy: 'user',
@@ -254,8 +268,7 @@ const handleRejectItems = async (socket, io, data) => {
     });
 
 
-    io.to(chatId).emit('message', cleanForEmit(userSystemMsg));
-    io.to(chatId).emit('message', cleanForEmit(runnerSystemMsg));
+
     //  Emit to personal rooms
     io.to(`user-${userId.toString()}`).emit('message', cleanForEmit(userSystemMsg));
     io.to(`runner-${order.runnerId.toString()}`).emit('message', cleanForEmit(runnerSystemMsg));

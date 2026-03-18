@@ -36,7 +36,7 @@ const persistMessages = async (chatId, messages) => {
 const handleMarkDeliveryComplete = async (io, socket, data) => {
     const { chatId, orderId, runnerId, deliveryProof } = data;
 
-    
+
     let order;
     try {
         order = await Order.findOne({ orderId });
@@ -111,12 +111,29 @@ const handleMarkDeliveryComplete = async (io, socket, data) => {
 
         // Revert order state so runner can retry
         try {
+            // If order is still in 'paid' state, transition through required states first
+            if (order.status === 'paid') {
+                await orderStateMachine.transition(orderId, 'in_progress', {
+                    triggeredBy: 'system',
+                    note: 'Auto-progressed from paid to in_progress',
+                });
+            }
+
             await orderStateMachine.transition(orderId, 'in_progress', {
                 triggeredBy: 'system',
                 note: 'Reverted after DB failure on delivery mark',
             });
+
+            if (order.escrowId) {
+                const escrow = await Escrow.findById(order.escrowId);
+                if (escrow) {
+                    escrow.status = 'delivery_pending';
+                    await escrow.save();
+                }
+            }
         } catch (revertErr) {
             console.error('[markDeliveryComplete] State revert failed:', revertErr.message);
+            return socket.emit('error', { message: 'Failed to update order state. Please try again.' });
         }
 
         const errMsg = makeErrorMsg('delivery-mark');
@@ -267,7 +284,7 @@ const handleDenyDelivery = async (io, socket, data) => {
         return socket.emit('error', { message: 'Failed to process denial. Please try again.' });
     }
 
-    
+
     let userName = 'User';
     try {
         const user = await User.findById(userId).select('firstName lastName');
