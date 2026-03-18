@@ -145,7 +145,8 @@ const handleRunnerAccept = async (io, socket, data) => {
         };
 
         io.to(`runner-${runnerId}`).emit('orderCreated', orderPayload);
-        io.to(`user-${userId}`).emit('orderCreated', orderPayload);
+        // io.to(`user-${userId}`).emit('orderCreated', orderPayload);
+        io.to(chatId).emit('orderCreated', { ...orderPayload, isNewOrder: true });
 
         console.log('Order created:', order.orderId,
             '| distance:', order.routeDistanceMeters + 'm',

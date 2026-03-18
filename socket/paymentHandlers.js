@@ -8,10 +8,25 @@ const RunnerPayout = require('../models/RunnerPayout');
 const User = require('../models/User');
 const logger = require('../utils/logger');
 const { logSocketAudit } = require('../utils/socketAudit');
+const paymentService = require('../services/paymentServices');
 
 const handlePaymentSuccess = async (socket, io, data) => {
   try {
     const { chatId, escrowId, reference, orderId } = data;
+
+    if (reference) {
+      try {
+        const verification = await paymentService.verifyPayment(reference);
+        if (verification?.alreadyPaid) {
+          logger.info(`Payment already verified for ref ${reference}`);
+        } else {
+          logger.info(`Payment verified via socket for ref ${reference}`);
+        }
+      } catch (err) {
+        logger.error('verifyPayment via socket failed:', err.message);
+        // Don't block — continue with rest of handler
+      }
+    }
 
     logger.info('💰 Payment success received:', { chatId, escrowId, reference, orderId });
 
@@ -143,14 +158,16 @@ const handlePaymentSuccess = async (socket, io, data) => {
           escrowId: order.escrowId,
           itemBudget: order.itemBudget,
           status: 'pending',
-          usedPayoutSystem: false,
+
+          // change back to false in prod
+          usedPayoutSystem: true,
         });
 
         logger.info(`RunnerPayout created for order ${order.orderId} | itemBudget: ₦${order.itemBudget}`);
       }
     }
 
-    console.log('[payment] runner socket in room?', chatId, 'room size:', room?.size);
+    console.log('[payment]- change usedpayout to false line 163 paymnethandlers runner socket in room?', chatId, 'room size:', room?.size);
 
     console.log('[payment] emitting paymentSuccess to room:', chatId, 'data:', { escrowId, orderId });
     io.to(chatId).emit('paymentSuccess', { escrowId, orderId, paymentStatus: 'paid' });

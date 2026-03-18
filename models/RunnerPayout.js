@@ -41,8 +41,7 @@ const runnerPayoutSchema = new mongoose.Schema({
 
   // Runner must submit receipt via payout system to unlock runner fee
   // If false at task_completed, runner forfeits delivery earnings
-  // flip back in prod
-  usedPayoutSystem: { type: Boolean, default: true },
+  usedPayoutSystem: { type: Boolean, default: false },
 
   status: {
     type: String,
