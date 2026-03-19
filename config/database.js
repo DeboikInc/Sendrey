@@ -26,7 +26,7 @@ const connectDb = async () => {
 
     // await User.deleteMany({ role: { $nin: ['super-admin', 'admin'] } });
     // await Runner.deleteMany({});
-    // await User.deleteOne({ phone: '08108371555' });
+    await User.deleteOne({ phone: '09028876009' });
 
 
   } catch (error) {

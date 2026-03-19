@@ -147,8 +147,34 @@ const handleTaskCompleted = async (io, data) => {
 };
 
 const handleRunnerStartedNewOrder = async (socket, data) => {
-    const { runnerId } = data;
+    const { runnerId, previousOrderId } = data;
     try {
+        // Cancel any lingering unpaid orders for this runner
+        await Order.updateMany(
+            {
+                runnerId,
+                paymentStatus: { $ne: 'paid' },
+                status: { $nin: ['completed', 'cancelled'] },
+                ...(previousOrderId ? { orderId: { $ne: previousOrderId } } : {})
+            },
+            {
+                $set: {
+                    status: 'cancelled',
+                    cancelledBy: 'system',
+                    cancelledAt: new Date(),
+                    cancellationReason: 'Runner started new order',
+                },
+                $push: {
+                    statusHistory: {
+                        status: 'cancelled',
+                        timestamp: new Date(),
+                        triggeredBy: 'system',
+                        note: 'Runner started new order — stale pending order auto-cancelled',
+                    }
+                }
+            }
+        );
+
         await Runner.findByIdAndUpdate(runnerId, {
             isAvailable: true,
             activeOrderId: null,

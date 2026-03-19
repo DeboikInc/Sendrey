@@ -103,6 +103,7 @@ const startServer = async () => {
       locationCleanup.start();
     } catch (err) {
       console.error('Redis unavailable — skipping location cleanup:', err.message);
+      
     }
 
     // 3. Routes
