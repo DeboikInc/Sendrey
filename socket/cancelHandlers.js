@@ -110,6 +110,7 @@ const handleTaskCompleted = async (io, data) => {
             isAvailable: true,
             activeOrderId: null,
             currentUserId: null,
+            $inc: { completedOrders: 1, totalRuns: 1 }
         });
 
         await User.findByIdAndUpdate(userId, {

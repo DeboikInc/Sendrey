@@ -298,6 +298,21 @@ const runnerSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+
+  rating: {
+    type: Number,
+    default: 5.0
+  },
+  totalRatings: {
+    type: Number,
+    default: 0
+  },
+  // completedOrders already exists, totalRuns is just an alias — add this:
+  totalRuns: {
+    type: Number,
+    default: 0
+  },
+
   lastActive: {
     type: Date,
     default: Date.now
