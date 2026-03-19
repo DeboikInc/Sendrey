@@ -52,6 +52,7 @@ const ALL_STATUSES = [
   ])
 ];
 
+// in meters, 1000 = 1km
 const PICKUP_MAX_DISTANCE  = 99999999; // runner model
 const TOTAL_MAX_DISTANCE = 99999999; // runner to market/pickup location, user model
 
