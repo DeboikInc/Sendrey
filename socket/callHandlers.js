@@ -38,8 +38,8 @@ const addSystemMessage = async (chatId, text, metadata = {}) => {
     const systemMessage = {
       id: `call-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
       from: 'system',
-      type: 'system',
-      messageType: 'system',
+      type: 'call',
+      messageType: 'call',
       text: text,
       time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
       senderId: 'system',
@@ -92,7 +92,7 @@ const register = (socket, io) => {
     const callerName = await getDisplayName(callerId, callerType);
 
     // Add system message to chat: "{user} is calling you..."
-    await addSystemMessage(chatId, `${callerName} is calling you...`, {
+    await addSystemMessage(chatId, `${callerName} is calling ...`, {
       callId,
       callType,
       callerId,
@@ -169,7 +169,7 @@ const register = (socket, io) => {
     const receiverName = await getDisplayName(receiverId, receiverType);
 
     // Add system message to chat: "{user} declined your call"
-    await addSystemMessage(chatId, `${receiverName} declined your call`, {
+    await addSystemMessage(chatId, `${receiverName} declined the call`, {
       callId,
       receiverId,
       receiverType,
