@@ -363,7 +363,7 @@ const initializeChatAndProceed = async (io, chatId, state) => {
   }
 };
 
-// ─── User joins chat ──────────────────────────────────────────────────────────
+// ─── User joins chat 
 
 const handleUserJoinChat = async (socket, io, data) => {
   const { userId, runnerId, chatId } = data;
