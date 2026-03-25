@@ -48,7 +48,7 @@ const startServer = async () => {
     // 1. Await the database connection first
     await connectDb();
     console.log(' Database connected');
-
+     
     // restore any scheduled cron jobs that were active before the server restarted
     await startExpenseReportJobs();
     
@@ -137,6 +137,7 @@ const startServer = async () => {
    // process.exit(0);
   });
 };
+
 
 startServer();
 module.exports = app;

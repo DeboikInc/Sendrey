@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const receiptSchema = new mongoose.Schema({
-  receiptUrl: { type: String, required: true },
+  receiptUrl: { type: String, default:null },
   vendorName: { type: String },
   amountSpent: { type: Number },
   changeAmount: { type: Number },

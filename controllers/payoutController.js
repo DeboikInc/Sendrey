@@ -38,7 +38,7 @@ class PayoutController extends BaseController {
       const order = chatId
         ? await Order.findOne({ chatId })
         : await Order.findOne({ orderId });
-        
+
       if (!order) return this.success(res, { payout: null });
 
       const payout = await RunnerPayout.findOne({ orderId: order.orderId, runnerId }).lean();
@@ -233,6 +233,7 @@ class PayoutController extends BaseController {
 
       const receipts = payouts.flatMap(p =>
         p.receiptHistory.map(r => ({
+          payoutId: p._id,          // ✅ added — frontend needs this to build the PATCH URL
           receiptId: r._id,
           receiptUrl: r.receiptUrl,
           vendorName: r.vendorName || p.vendorName,
