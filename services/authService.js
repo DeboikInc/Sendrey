@@ -231,6 +231,49 @@ class AuthService {
   }
 
   /**
+ * Generate OTP for email verification
+ */
+  async generateEmailVerificationOTP(userId, email, userType = 'user') {
+    const otp = crypto.randomInt(100000, 999999).toString();
+    const expires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    const Model = userType === 'runner' ? Runner : User;
+
+    const updated = await Model.findByIdAndUpdate(userId, {
+      emailVerificationOTP: otp,
+      emailVerificationExpires: expires,
+    }, { new: true }).select('+emailVerificationOTP');
+
+    console.log('[generateEmailVerificationOTP] saved OTP:', updated?.emailVerificationOTP);
+
+    return otp;
+  }
+
+  /**
+   * Verify email OTP
+   */
+  async verifyEmailOTPCode(otp, userType = 'user') {
+    const Model = userType === 'runner' ? Runner : User;
+
+    const user = await Model.findOne({
+      emailVerificationOTP: otp,
+      emailVerificationExpires: { $gt: Date.now() }
+    }).select('+emailVerificationOTP +emailVerificationExpires');
+
+    if (!user) {
+      throw new Error('Invalid or expired OTP');
+    }
+
+    user.isVerified = true;
+    user.isEmailVerified = true;
+    user.emailVerificationOTP = undefined;
+    user.emailVerificationExpires = undefined;
+    await user.save();
+
+    return user;
+  }
+
+  /**
    * Generate password reset token
    */
   async generatePasswordResetToken(email, phone, userType = 'user') {

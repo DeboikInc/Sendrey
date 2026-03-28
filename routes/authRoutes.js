@@ -50,10 +50,9 @@ router.post(
 
 router.get('/me', authController.me);
 
-router.post('/resend-email-verification',
-  userRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 3 }), // 3 resends per hour
-  validate(authValidation.resendVerification),
-  authController.resendVerification
+router.post('/verify-email-otp',
+  validate(authValidation.verifyEmailOTP),
+  authController.verifyEmailOTP
 );
 
 router.post('/forgot-password',
@@ -67,8 +66,25 @@ router.post('/reset-password',
   authController.resetPassword
 );
 
+
+router.post('/verify-phone',
+  validate(authValidation.verifyPhone),
+  authController.verifyPhone
+);
+
+router.post('/request-phone-verification',
+  validate(authValidation.requestPhoneVerification),
+  authController.requestPhoneVerification
+);
+
+
+router.post('/resend-phone-verification',
+  userRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 3 }), // 3 resends per hour
+  validate(authValidation.resendVerification),
+  authController.resendPhoneVerification
+);
 // Protected routes
-router.use(authenticate);
+// router.use(authenticate);
 
 // Protected routes (require authentication)
 router.post('/change-password',
@@ -77,20 +93,18 @@ router.post('/change-password',
   authController.changePassword
 );
 
-router.post('/request-phone-verification',
-  validate(authValidation.requestPhoneVerification),
-  authController.requestPhoneVerification
+
+// emails
+router.post('/request-email-verification',
+  validate(authValidation.requestEmailVerification),
+  authController.requestEmailVerification
 );
 
-router.post('/verify-phone',
-  validate(authValidation.verifyPhone),
-  authController.verifyPhone
-);
 
-router.post('/resend-phone-verification',
+router.post('/resend-email-verification',
   userRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 3 }), // 3 resends per hour
   validate(authValidation.resendVerification),
-  authController.resendVerification
+  authController.resendEmailVerification
 );
 
 router.post('/logout',

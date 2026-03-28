@@ -1,10 +1,16 @@
 const mongoose = require('mongoose');
 
 const receiptSchema = new mongoose.Schema({
-  receiptUrl: { type: String, required: true },
+  submissionId: { type: String, default: null },
+  receiptUrl: { type: String, default: null },
   vendorName: { type: String },
   amountSpent: { type: Number },
   changeAmount: { type: Number },
+  bankDetails: {
+    bankName: { type: String, default: null },
+    accountNumber: { type: String, default: null },
+    accountName: { type: String, default: null },
+  },
   submittedAt: { type: Date, default: Date.now },
   status: {
     type: String,

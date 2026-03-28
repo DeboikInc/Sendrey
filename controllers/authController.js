@@ -27,26 +27,9 @@ class AuthController extends BaseController {
   }
 
 
-  refreshToken = async (req, res, next) => {
-    try {
-      const { refreshToken } = req.body;
-      if (!refreshToken) return this.error(res, 'Refresh token required', 401);
-
-      const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
-      const user = await User.findById(decoded.id).select('+refreshToken');
-
-      if (!user || user.refreshToken !== refreshToken) {
-        return this.error(res, 'Invalid refresh token', 401);
-      }
-
-      const { accessToken, refreshToken: newRefresh } = this.service.generateTokens(user);
-      await User.findByIdAndUpdate(user._id, { refreshToken: newRefresh });
-
-      return this.success(res, { token: accessToken, refreshToken: newRefresh });
-    } catch (err) {
-      return this.error(res, 'Invalid or expired refresh token', 401);
-    }
-  }
+  // ─────────────────────────────────────────────
+  // REGISTRATION
+  // ─────────────────────────────────────────────
 
   register = async (req, res, next) => {
     console.log('Incoming user registration body:', req.body);
@@ -66,12 +49,12 @@ class AuthController extends BaseController {
         });
       }
 
-      // Generate tokens
       const verificationToken = await authService.generateVerificationToken(user._id, 'user');
-      const otp = await authService.generatePhoneVerificationOTP(user._id, userData.phone, 'user');
+      // const otp = await authService.generatePhoneVerificationOTP(user._id, userData.phone, 'user');
+      const otp = await authService.generateEmailVerificationOTP(user._id, userData.email, 'user');
 
-      logger.info('Sending OTP SMS', {
-        to: userData.phone,
+      logger.info('Sending EMAIL SMS', {
+        to: userData.email,
         userId: user._id,
         userType: 'user',
         existing: !!user.existing,
@@ -79,30 +62,40 @@ class AuthController extends BaseController {
       });
 
       // Queue OTP SMS via Kafka
-      if (user.phone && !user.existing) {
-        await sendSmsEvent({
+      // if (user.phone && !user.existing) {
+      //   await sendSmsEvent({
+      //     type: 'otp',
+      //     to: user.phone,
+      //     otp,
+      //   });
+      // }
+
+      if (user.email && !user.existing) {
+        await sendEmailEvent({
           type: 'otp',
-          to: user.phone,
-          otp,
+          to: user.email,
+          subject: 'Your Sendrey Verification Code',
+          template: 'otpEmail',
+          data: { name: user.firstName, otp },
         });
       }
 
       // send welcome email
-      if (user.email) {
-        setImmediate(() => {
-          const emailLinkToken = jwt.sign(
-            { id: user._id, role: user.role },
-            process.env.JWT_SECRET,
-            { expiresIn: '7d' }
-          );
-          emailService.sendWelcomeEmail(
-            { email: user.email, firstName: userData.firstName || user.firstName, name: userData.firstName || user.firstName },
-            emailLinkToken,
-          ).catch((err) => {
-            console.error('Welcome email failed:', err.message);
-          });
-        });
-      }
+      // if (user.email) {
+      //   setImmediate(() => {
+      //     const emailLinkToken = jwt.sign(
+      //       { id: user._id, role: user.role },
+      //       process.env.JWT_SECRET,
+      //       { expiresIn: '7d' }
+      //     );
+      //     emailService.sendWelcomeEmail(
+      //       { email: user.email, firstName: userData.firstName || user.firstName, name: userData.firstName || user.firstName },
+      //       emailLinkToken,
+      //     ).catch((err) => {
+      //       console.error('Welcome email failed:', err.message);
+      //     });
+      //   });
+      // }
 
       // Virtual account (non-blocking)
       try {
@@ -134,13 +127,14 @@ class AuthController extends BaseController {
       const runnerData = req.body;
       runnerData.role = 'runner';
 
-
       const { user: runner, token: tokens } = await authService.register(runnerData, null, 'runner');
 
       console.log('[registerRunner] runner.phone:', runner.phone, 'runnerData.phone:', runnerData.phone);
 
       const verificationToken = await authService.generateVerificationToken(runner._id, 'runner');
-      const otp = await authService.generatePhoneVerificationOTP(runner._id, runnerData.phone, 'runner');
+      // const otp = await authService.generatePhoneVerificationOTP(runner._id, runnerData.phone, 'runner');
+      const otp = await authService.generateEmailVerificationOTP(runner._id, runnerData.email, 'runner');
+
 
       logger.info('Sending OTP SMS', {
         to: runnerData.phone,
@@ -151,29 +145,40 @@ class AuthController extends BaseController {
       });
 
       // Queue OTP SMS via Kafka
-      if (runnerData.phone && !runner.existing) {
-        await sendSmsEvent({
+      // if (runnerData.phone && !runner.existing) {
+      //   await sendSmsEvent({
+      //     type: 'otp',
+      //     to: runnerData.phone,
+      //     otp,
+      //   });
+      // }
+
+      if (runner.email) {
+        await sendEmailEvent({
           type: 'otp',
-          to: runnerData.phone,
-          otp,
+          to: runner.email,
+          subject: 'Your Sendrey Verification Code',
+          template: 'otpEmail',
+          data: { name: runner.firstName, otp },
         });
       }
 
-      if (runner.email) {
-        setImmediate(() => {
-          const emailLinkToken = jwt.sign(
-            { id: runner._id, role: runner.role },
-            process.env.JWT_SECRET,
-            { expiresIn: '7d' }
-          );
-          emailService.sendWelcomeEmail(
-            { email: runner.email, firstName: runnerData.firstName || runner.firstName, name: runnerData.firstName || runner.firstName },
-            emailLinkToken
-          ).catch((err) => {
-            console.error('Welcome email failed:', err.message);
-          });
-        })
-      }
+      // welcome email
+      // if (runner.email) {
+      //   setImmediate(() => {
+      //     const emailLinkToken = jwt.sign(
+      //       { id: runner._id, role: runner.role },
+      //       process.env.JWT_SECRET,
+      //       { expiresIn: '7d' }
+      //     );
+      //     emailService.sendWelcomeEmail(
+      //       { email: runner.email, firstName: runnerData.firstName || runner.firstName, name: runnerData.firstName || runner.firstName },
+      //       emailLinkToken
+      //     ).catch((err) => {
+      //       console.error('Welcome email failed:', err.message);
+      //     });
+      //   })
+      // }
 
       // Virtual account (non-blocking)
       if (!['admin', 'super-admin'].includes(runner.role)) {
@@ -190,7 +195,7 @@ class AuthController extends BaseController {
 
       this.created(res, {
         runner: this._sanitizeRunner(runner),
-        message: 'Runner registration successful. Please verify your phone number.',
+        message: 'Runner registration successful. Please verify your email or phone number.',
         token: tokens.accessToken,
         refreshToken: tokens.refreshToken,
       });
@@ -219,6 +224,11 @@ class AuthController extends BaseController {
       next(error);
     }
   }
+
+
+  // ─────────────────────────────────────────────
+  // LOGIN
+  // ─────────────────────────────────────────────
 
   login = async (req, res, next) => {
     try {
@@ -287,7 +297,6 @@ class AuthController extends BaseController {
       if (!admin) throw new Error('Invalid admin credentials');
       if (!admin.isActive) throw new Error('Admin account has been deactivated');
 
-
       const isPasswordValid = await bcrypt.compare(password, admin.password);
       if (!isPasswordValid) throw new Error('Invalid admin credentials');
 
@@ -310,13 +319,55 @@ class AuthController extends BaseController {
     }
   }
 
+  logout = async (req, res, next) => {
+    try {
+      const token = req.headers.authorization?.split(' ')[1];
+      const userType = req.user.role === 'runner' ? 'runner' : 'user';
+
+      await ActivityLogger.logLogout(req.user, req.ip, req.get('User-Agent'), userType);
+      if (token) await authService.blacklistToken(token);
+
+      logger.info(`${userType} logged out: ${req.user.email || req.user.phone}`);
+      this.success(res, { message: 'Logged out successfully' });
+
+    } catch (error) {
+      logger.error('Logout error:', error);
+      next(error);
+    }
+  }
+
+
+  // ─────────────────────────────────────────────
+  // TOKEN & SESSION
+  // ─────────────────────────────────────────────
+
+  refreshToken = async (req, res, next) => {
+    try {
+      const { refreshToken } = req.body;
+      if (!refreshToken) return this.error(res, 'Refresh token required', 401);
+
+      const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+      const user = await User.findById(decoded.id).select('+refreshToken');
+
+      if (!user || user.refreshToken !== refreshToken) {
+        return this.error(res, 'Invalid refresh token', 401);
+      }
+
+      const { accessToken, refreshToken: newRefresh } = this.service.generateTokens(user);
+      await User.findByIdAndUpdate(user._id, { refreshToken: newRefresh });
+
+      return this.success(res, { token: accessToken, refreshToken: newRefresh });
+    } catch (err) {
+      return this.error(res, 'Invalid or expired refresh token', 401);
+    }
+  }
+
   verifyEmailToken = async (req, res, next) => {
     try {
       const { token } = req.body;
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
       let entity = await User.findById(decoded.id);
 
-      // check both models
       let isRunner = false;
 
       if (!entity) {
@@ -345,34 +396,33 @@ class AuthController extends BaseController {
     }
   }
 
-  verifyEmail = async (req, res, next) => {
+  me = async (req, res, next) => {
     try {
-      const { token, userType = 'user' } = req.body;
-      const user = await authService.verifyEmail(token, userType);
+      const userId = req.user.id;
+      const userType = req.user.role === 'runner' ? 'runner' : 'user';
 
-      // Queue confirmation email via Kafka
-      if (user.email) {
-        await sendEmailEvent({
-          type: 'email-verified',
-          to: user.email,
-          subject: 'Email Verified Successfully',
-          template: 'emailVerified',
-          data: { name: user.firstName },
-        });
+      let entity;
+      if (userType === 'runner') {
+        entity = await Runner.findById(userId).lean();
+      } else {
+        entity = await User.findById(userId).lean();
       }
 
-      logger.info(`${userType} email verified: ${user.email || user.phone}`);
+      if (!entity) return this.error(res, 'User not found', 404);
 
-      this.success(res, {
-        [userType]: userType === 'user' ? this._sanitizeUser(user) : this._sanitizeRunner(user),
-        message: 'Email verified successfully'
+      return this.success(res, {
+        [userType]: userType === 'runner' ? this._sanitizeRunner(entity) : this._sanitizeUser(entity),
+        userType,
       });
-
     } catch (error) {
-      logger.error('Email verification error:', error);
       next(error);
     }
   }
+
+
+  // ─────────────────────────────────────────────
+  // PASSWORD
+  // ─────────────────────────────────────────────
 
   forgotPassword = async (req, res, next) => {
     try {
@@ -380,11 +430,9 @@ class AuthController extends BaseController {
 
       const resetToken = await authService.generatePasswordResetToken(email, phone, userType);
       if (!resetToken) {
-        // User not found — don't reveal
         return this.success(res, { message: 'If the phone or email exists, password reset instructions have been sent' });
       }
 
-      // Queue via Kafka — email takes priority, fall back to SMS
       if (email) {
         await sendEmailEvent({
           type: 'password-reset',
@@ -420,7 +468,6 @@ class AuthController extends BaseController {
       const { token, newPassword, userType = 'user' } = req.body;
       const user = await authService.resetPassword(token, newPassword, userType);
 
-      // Queue confirmation via Kafka
       if (user.email) {
         await sendEmailEvent({
           type: 'password-reset-success',
@@ -454,7 +501,6 @@ class AuthController extends BaseController {
 
       const user = await authService.changePassword(userId, currentPassword, newPassword, userType);
 
-      // Queue confirmation via Kafka
       if (user.email) {
         await sendEmailEvent({
           type: 'password-changed',
@@ -480,12 +526,120 @@ class AuthController extends BaseController {
     }
   }
 
+
+  // ─────────────────────────────────────────────
+  // EMAIL VERIFICATION
+  // ─────────────────────────────────────────────
+
+  verifyEmail = async (req, res, next) => {
+    try {
+      const { token, userType = 'user' } = req.body;
+      const user = await authService.verifyEmail(token, userType);
+
+      if (user.email) {
+        await sendEmailEvent({
+          type: 'email-verified',
+          to: user.email,
+          subject: 'Email Verified Successfully',
+          template: 'emailVerified',
+          data: { name: user.firstName },
+        });
+      }
+
+      logger.info(`${userType} email verified: ${user.email || user.phone}`);
+
+      this.success(res, {
+        [userType]: userType === 'user' ? this._sanitizeUser(user) : this._sanitizeRunner(user),
+        message: 'Email verified successfully'
+      });
+
+    } catch (error) {
+      logger.error('Email verification error:', error);
+      next(error);
+    }
+  }
+
+  verifyEmailOTP = async (req, res, next) => {
+    try {
+      const { otp } = req.body;
+      const userType = req.body.userType || 'user';
+
+      const user = await authService.verifyEmailOTPCode(otp, userType);
+
+      logger.info(`${userType} email verified via OTP: ${user.email}`);
+
+      this.success(res, {
+        [userType]: userType === 'user' ? this._sanitizeUser(user) : this._sanitizeRunner(user),
+        message: 'Email verified successfully',
+      });
+
+    } catch (error) {
+      logger.error('Email OTP verification error:', error);
+      next(error);
+    }
+  }
+
+  requestEmailVerification = async (req, res, next) => {
+    try {
+      const userId = req.user.id;
+      const { email, userType = 'user' } = req.body;
+
+      const token = await authService.generateVerificationToken(userId, userType);
+
+      await sendEmailEvent({
+        type: 'email-verification',
+        to: email,
+        subject: 'Verify Your Sendrey Email',
+        template: 'emailVerification',
+        data: {
+          name: req.user.firstName,
+          verificationToken: token,
+          verificationUrl: `${process.env.FRONTEND_URL}/verify-email?token=${token}`,
+        },
+      });
+
+      logger.info(`Email verification token queued for ${userType}: ${email}`);
+      this.success(res, { message: 'Verification email sent to your inbox' });
+
+    } catch (error) {
+      logger.error('Email verification request error:', error);
+      next(error);
+    }
+  }
+
+  resendEmailVerification = async (req, res, next) => {
+    try {
+      const { email, userType = 'user' } = req.body;
+      const { user, token } = await authService.resendVerificationEmail(email, userType);
+
+      if (user.email) {
+        await sendEmailEvent({
+          type: 'email-verification',
+          to: user.email,
+          subject: 'Verify Your Sendrey Account',
+          template: 'emailVerification',
+          data: {
+            name: user.firstName,
+            verificationToken: token,
+            verificationUrl: `${process.env.FRONTEND_URL}/verify-email?token=${token}`,
+          },
+        });
+      }
+
+      logger.info(`Verification email resent to ${userType}: ${email}`);
+      this.success(res, { message: 'Verification email sent successfully' });
+
+    } catch (error) {
+      logger.error('Resend email verification error:', error);
+      next(error);
+    }
+  }
+
   resendVerification = async (req, res, next) => {
     try {
       const { email, userType = 'user' } = req.body;
       const { user, token } = await authService.resendVerificationEmail(email, userType);
 
-      // Queue via Kafka
       if (user.email) {
         await sendEmailEvent({
           type: 'email-verification',
@@ -509,22 +663,10 @@ class AuthController extends BaseController {
     }
   }
 
-  logout = async (req, res, next) => {
-    try {
-      const token = req.headers.authorization?.split(' ')[1];
-      const userType = req.user.role === 'runner' ? 'runner' : 'user';
 
-      await ActivityLogger.logLogout(req.user, req.ip, req.get('User-Agent'), userType);
-      if (token) await authService.blacklistToken(token);
-
-      logger.info(`${userType} logged out: ${req.user.email || req.user.phone}`);
-      this.success(res, { message: 'Logged out successfully' });
-
-    } catch (error) {
-      logger.error('Logout error:', error);
-      next(error);
-    }
-  }
+  // ─────────────────────────────────────────────
+  // PHONE VERIFICATION
+  // ─────────────────────────────────────────────
 
   requestPhoneVerification = async (req, res, next) => {
     try {
@@ -533,7 +675,6 @@ class AuthController extends BaseController {
 
       const otp = await authService.generatePhoneVerificationOTP(userId, phone, userType);
 
-      // Queue OTP via Kafka
       await sendSmsEvent({
         type: 'otp',
         to: phone,
@@ -569,28 +710,32 @@ class AuthController extends BaseController {
     }
   }
 
-  me = async (req, res, next) => {
+  resendPhoneVerification = async (req, res, next) => {
     try {
       const userId = req.user.id;
-      const userType = req.user.role === 'runner' ? 'runner' : 'user';
+      const { phone, userType = 'user' } = req.body;
 
-      let entity;
-      if (userType === 'runner') {
-        entity = await Runner.findById(userId).lean();
-      } else {
-        entity = await User.findById(userId).lean();
-      }
+      const otp = await authService.generatePhoneVerificationOTP(userId, phone, userType);
 
-      if (!entity) return this.error(res, 'User not found', 404);
-
-      return this.success(res, {
-        [userType]: userType === 'runner' ? this._sanitizeRunner(entity) : this._sanitizeUser(entity),
-        userType,
+      await sendSmsEvent({
+        type: 'otp',
+        to: phone,
+        otp,
       });
+
+      logger.info(`Phone verification OTP resent for ${userType}: ${phone}`);
+      this.success(res, { message: 'Verification code resent to your phone' });
+
     } catch (error) {
+      logger.error('Resend phone verification error:', error);
       next(error);
     }
   }
+
+
+  // ─────────────────────────────────────────────
+  // SANITIZERS
+  // ─────────────────────────────────────────────
 
   _sanitizeUser(user) {
     if (!user) return null;

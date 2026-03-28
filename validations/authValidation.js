@@ -294,6 +294,17 @@ const authValidation = {
     otp: commonSchemas.otp
   }).messages(validationMessages),
 
+  requestEmailVerification: Joi.object({
+    email: commonSchemas.email.required().messages({
+      'any.required': 'Email address is required'
+    })
+  }).messages(validationMessages),
+
+  verifyEmailOTP: Joi.object({
+    otp: commonSchemas.otp,
+    userType: Joi.string().valid('user', 'runner').optional()
+  }).messages(validationMessages),
+
   // Social login validation
   socialLogin: Joi.object({
     provider: Joi.string()

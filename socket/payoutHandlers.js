@@ -70,31 +70,73 @@ const handleGetRunnerPayout = async (socket, io, data) => {
  */
 const handleSubmitPayoutReceipt = async (socket, io, data) => {
   try {
-    const result = await paymentService.submitPayoutReceipt({
-      orderId: data.orderId,
-      runnerId: data.runnerId,
-      userId: data.userId,
-      chatId: data.chatId,
-      vendorName: data.vendorName,
-      amountSpent: data.amountSpent,
-      changeAmount: data.changeAmount,
-      bankName: data.bankName,
-      accountNumber: data.accountNumber,
-      accountName: data.accountName,
-      receiptBase64: data.receiptBase64,
-    });
+    const {
+      orderId, runnerId, userId, chatId,
+      vendorName, amountSpent, changeAmount,
+      bankName, accountNumber, accountName,
+      receiptBase64,
+    } = data;
+
+    let receiptUrl = null;
+    if (receiptBase64) {
+      const uploaded = await uploadToCloudinary(receiptBase64, 'payout-receipts');
+      receiptUrl = uploaded.secure_url;
+    }
+
+    const submissionId = `payout-receipt-${Date.now()}`;
+
+    const receiptEntry = {
+      submissionId,
+      receiptUrl,
+      vendorName,
+      amountSpent,
+      changeAmount,
+      bankDetails: {
+        bankName: bankName || null,
+        accountNumber: accountNumber || null,
+        accountName: accountName || null,
+      },
+      submittedAt: new Date(),
+      status: 'pending',
+    };
+
+    // Update payout record — save top-level fields AND push to history
+    const payout = await RunnerPayout.findOneAndUpdate(
+      { orderId },
+      {
+        $set: {
+          status: 'submitted',
+          usedPayoutSystem: true,
+          submittedAt: new Date(),
+          vendorName,
+          amountSpent,
+          changeAmount,
+          receiptUrl,
+          'bankDetails.bankName': bankName || null,
+          'bankDetails.accountNumber': accountNumber || null,
+          'bankDetails.accountName': accountName || null,
+        },
+        $push: { receiptHistory: receiptEntry },
+      },
+      { new: true }
+    );
+
+    if (!payout) {
+      return socket.emit('error', { message: 'Payout record not found' });
+    }
+
+    logger.info(`submitPayoutReceipt | orderId=${orderId} | vendor=${vendorName} | amount=₦${amountSpent}`);
 
     socket.emit('payoutReceiptSuccess', {
-      submissionId: `payout-receipt-${Date.now()}`,
+      submissionId,
       status: 'submitted',
       usedPayoutSystem: true,
-      receiptUrl: result.receiptUrl,
+      receiptUrl,
       message: 'Receipt saved.',
     });
 
-    // Notify runner's room so RunnerChatScreen can update currentOrder
-    io.to(`runner-${data.runnerId}`).emit('payoutReceiptSubmitted', {
-      orderId: data.orderId,
+    io.to(`runner-${runnerId}`).emit('payoutReceiptSubmitted', {
+      orderId,
       usedPayoutSystem: true,
     });
 

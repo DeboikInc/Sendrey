@@ -158,11 +158,13 @@ class UserController extends BaseController {
       });
 
       const eligibleUsers = users.filter(user => {
-        console.log('User phone check:', {
+        console.log('User phone/email check:', {
           id: user._id,
           isPhoneVerified: user.isPhoneVerified,
+          isEmailVerified: user.isEmailVerified
         });
-        return user.isPhoneVerified === true;
+        // return user.isPhoneVerified === true;
+        return user.isEmailVerified === true;
       });
 
       return this.success(res, {

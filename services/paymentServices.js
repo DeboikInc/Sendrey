@@ -359,8 +359,15 @@ class PaymentService {
       console.log("change back to false in line 360 paymentservices")
       let usedPayoutSystem = false;
       if (order) {
-        const payout = await RunnerPayout.findOne({ orderId: order.orderId }).session(session);
-        if (payout) usedPayoutSystem = payout.usedPayoutSystem;
+        console.log("Order.serviceType", order.serviceType)
+        // Only check payout for run-errand orders
+        if (order.serviceType === 'run-errand' || order.serviceType === 'run_errand') {
+          const payout = await RunnerPayout.findOne({ orderId: order.orderId }).session(session);
+          if (payout) usedPayoutSystem = payout.usedPayoutSystem;
+        } else {
+          // For pick-up orders, runner always gets paid
+          usedPayoutSystem = true;
+        }
       }
 
       // Use stored fee split from escrow; recalculate only as fallback
