@@ -149,12 +149,17 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  
   isVerified: {
     type: Boolean,
     default: false
   },
   isPhoneVerified: {
     type: Boolean,
+    default: false
+  },
+  isEmailVerified: {
+    type :Boolean,
     default: false
   },
 
@@ -176,6 +181,8 @@ const userSchema = new mongoose.Schema({
   resetPasswordExpires: Date,
   phoneVerificationOTP: String,
   phoneVerificationExpires: Date,
+  emailVerificationOTP: { type: String, select: false },
+  emailVerificationExpires: { type: Date },
 
   // Privacy Settings
   isEmailPublic: {
@@ -325,6 +332,8 @@ const userSchema = new mongoose.Schema({
       delete ret.resetPasswordExpires;
       delete ret.phoneVerificationOTP;
       delete ret.phoneVerificationExpires;
+      delete ret.emailVerificationOTP;
+      delete ret.emailVerificationExpires;
       delete ret.failedLoginAttempts;
       delete ret.lockUntil;
       return ret;
@@ -340,6 +349,8 @@ const userSchema = new mongoose.Schema({
       delete ret.resetPasswordExpires;
       delete ret.phoneVerificationOTP;
       delete ret.phoneVerificationExpires;
+      delete ret.emailVerificationOTP;
+      delete ret.emailVerificationExpires;
       delete ret.failedLoginAttempts;
       delete ret.lockUntil;
       return ret;
@@ -463,7 +474,9 @@ userSchema.statics.cleanupExpiredTokens = function () {
       resetPasswordToken: 1,
       resetPasswordExpires: 1,
       phoneVerificationOTP: 1,
-      phoneVerificationExpires: 1
+      phoneVerificationExpires: 1,
+      emailVerificationOTP: 1,
+      emailVerificationExpires: 1,
     }
   });
 };
@@ -532,7 +545,7 @@ userSchema.statics.findNearbyUsers = async function ({
   if (fleetType) query['currentRequest.fleetType'] = fleetType;
 
   const results = await this.find(query)
-    .select('firstName lastName phone currentRequest location latitude longitude avatar isPhoneVerified')
+    .select('firstName lastName phone currentRequest location latitude longitude avatar isPhoneVerified isEmailVerified')
     .lean();
 
   console.log('DB query results before distance filter:', results.length);

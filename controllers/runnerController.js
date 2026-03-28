@@ -117,7 +117,8 @@ class RunnerController extends BaseController {
           runnerStatus: runner.runnerStatus,
           isOnline: runner.isOnline,
           isAvailable: runner.isAvailable,
-          isPhoneVerified: runner.isPhoneVerified,
+          // isPhoneVerified: runner.isPhoneVerified,
+          isEmailVerified: runner.isEmailVerified,
           selfieStatus: runner.verificationDocuments?.selfie?.status,
           ninStatus: runner.verificationDocuments?.nin?.status,
           licenseStatus: runner.verificationDocuments?.driverLicense?.status,
@@ -152,7 +153,9 @@ class RunnerController extends BaseController {
         if (!validSelfieStatuses.includes(selfieStatus)) return false;
 
         // Check phone verified
-        if (!runner.isPhoneVerified) return false;
+        // if (!runner.isPhoneVerified) return false;
+
+        if (!runner.isEmailVerified) return false;
 
         return runner.isOnline && runner.isAvailable;
       });

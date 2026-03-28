@@ -236,6 +236,11 @@ const runnerSchema = new mongoose.Schema({
     default: false
   },
 
+  isEmailVerified: {
+    type: Boolean,
+    default: false
+  },
+
   // Verification Tokens (same as user)
   verificationToken: String,
   verificationExpires: Date,
@@ -243,6 +248,8 @@ const runnerSchema = new mongoose.Schema({
   resetPasswordExpires: Date,
   phoneVerificationOTP: String,
   phoneVerificationExpires: Date,
+  emailVerificationOTP: { type: String, select: false },
+  emailVerificationExpires: { type: Date },
 
   // Privacy Settings
   isEmailPublic: {
@@ -374,6 +381,8 @@ const runnerSchema = new mongoose.Schema({
       delete ret.resetPasswordExpires;
       delete ret.phoneVerificationOTP;
       delete ret.phoneVerificationExpires;
+      delete ret.emailVerificationOTP;
+      delete ret.emailVerificationExpires;
       delete ret.failedLoginAttempts;
       delete ret.lockUntil;
       return ret;
@@ -389,6 +398,8 @@ const runnerSchema = new mongoose.Schema({
       delete ret.resetPasswordExpires;
       delete ret.phoneVerificationOTP;
       delete ret.phoneVerificationExpires;
+      delete ret.emailVerificationOTP;
+      delete ret.emailVerificationExpires;
       delete ret.failedLoginAttempts;
       delete ret.lockUntil;
       return ret;
@@ -522,7 +533,9 @@ runnerSchema.statics.cleanupExpiredTokens = function () {
       resetPasswordToken: 1,
       resetPasswordExpires: 1,
       phoneVerificationOTP: 1,
-      phoneVerificationExpires: 1
+      phoneVerificationExpires: 1,
+      emailVerificationOTP: 1,
+      emailVerificationExpires: 1,
     }
   });
 };
@@ -595,7 +608,7 @@ runnerSchema.statics.findNearbyRunners = async function ({
   const results = await this.find(query)
     .select('firstName lastName phone currentRequest location latitude longitude avatar ' +
       'runnerStatus verificationDocuments biometricVerification isOnline isAvailable ' +
-      'serviceType fleetType isPhoneVerified rating totalRatings totalRuns')
+      'serviceType fleetType isPhoneVerified isEmailVerified rating totalRatings totalRuns')
     .lean();
 
   console.log('[findNearbyRunners] Results from exact match:', results.length);

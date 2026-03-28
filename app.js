@@ -19,6 +19,7 @@ const { errorHandler, notFound } = require('./middleware/errorHandler');
 const { requestLogger, enhancedRequestLogger } = require('./middleware/logger');
 const { startAllConsumers } = require('./kafka/consumers');
 const { startExpenseReportJobs } = require('./jobs/expenseReports');
+const dedupe = require('./middleware/dedupe');
 
 const cron = require('node-cron');
 const { archiveOldOrders } = require('./services/orderStateMachine');
@@ -36,12 +37,12 @@ const locationCleanup = require('./services/locationTracking/locationCleanup');
 const connectDb = require('./config/database');
 const startServer = async () => {
 
-  // if (process.env.NODE_ENV === 'production') {
-  //   console.log = () => { };
-  //   console.error = () => { };
-  //   console.warn = () => { };
-  //   console.debug = () => { };
-  // }
+  if (process.env.NODE_ENV === 'production') {
+    console.log = () => { };
+    console.error = () => { };
+    console.warn = () => { };
+    console.debug = () => { };
+  }
 
   try {
 
@@ -63,9 +64,17 @@ const startServer = async () => {
     app.options('*', cors(corsOptions));
     app.use(compression());
 
-    // ... (rest of your app.use calls)
     app.use(express.json({ limit: '10mb' }));
     app.use(express.urlencoded({ extended: true }));
+
+    app.use(dedupe(3000, {
+      skip: [
+        '/kyc/verify',
+        '/business/reports/generate',
+        '/business/reports',        // covers /reports/:id/export/csv and /pdf
+      ]
+    }));
+
     app.use(requestLogger);
     app.use(enhancedRequestLogger);
 
@@ -103,7 +112,7 @@ const startServer = async () => {
       locationCleanup.start();
     } catch (err) {
       console.error('Redis unavailable — skipping location cleanup:', err.message);
-      
+
     }
 
     // 3. Routes

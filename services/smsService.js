@@ -156,7 +156,7 @@ class SMSService {
     }
 
 
-    console.log(`PRODUCTION DEBUG: OTP for ${phoneNumber} is ${otpCode}`);
+    // console.log(`PRODUCTION DEBUG: OTP for ${phoneNumber} is ${otpCode}`);
     console.log(`[sendOTP] formatted number: ${formatted}`);
     console.log(`[sendOTP] isConfigured: ${this.isConfigured}`);
     console.log(`[sendOTP] SID prefix: ${this.client?.username?.substring(0, 10)}`);

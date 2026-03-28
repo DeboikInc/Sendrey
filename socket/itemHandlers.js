@@ -1,6 +1,7 @@
 const { Chat } = require("../models/Chat");
 const Order = require("../models/Order");
 const User = require('../models/User');
+const RunnerPayout = require('../models/RunnerPayout');
 
 const paymentService = require("../services/paymentServices");
 const orderStateMachine = require("../services/orderStateMachine");
@@ -149,7 +150,27 @@ const handleApproveItems = async (socket, io, data) => {
         triggeredById: userId,
         note: 'Items approved by user'
       });
+
+      await RunnerPayout.findOneAndUpdate(
+        { orderId: order.orderId, 'receiptHistory.submissionId': submissionId },
+        {
+          $set: {
+            status: 'approved',
+            approvedAt: new Date(),
+            'receiptHistory.$.status': 'approved',
+            'receiptHistory.$.reviewedAt': new Date(),
+          }
+        }
+      );
+
+      
+      io.to(`runner-${order.runnerId.toString()}`).emit('payoutStatusUpdated', {
+        orderId: order.orderId,
+        staus: 'approved',
+      });
     }
+
+
 
     // Fetch user name
     const user = await User.findById(userId).select('firstName lastName');

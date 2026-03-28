@@ -371,6 +371,16 @@ const initializeChatAndProceed = async (io, chatId, state) => {
       await existingChat.save();
       chat = existingChat;
 
+      // Verify the write landed before emitting proceedToChat
+      const verified = await Chat.findOne({ chatId }).lean();
+      const hasInitial = verified?.messages?.some(
+        m => m.type === 'system' && m.text?.includes('joined the chat')
+      );
+      if (!hasInitial) {
+        console.error('[initializeChat] DB write not confirmed — aborting proceedToChat');
+        return;
+      }
+
       const room = io.sockets.adapter.rooms.get(chatId);
       if (room) {
         for (const socketId of room) {
