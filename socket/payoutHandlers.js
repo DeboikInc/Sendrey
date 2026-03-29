@@ -30,6 +30,9 @@ const handleGetRunnerPayout = async (socket, io, data) => {
 
     if (!chatId) return socket.emit('runnerPayoutData', { payout: null });
 
+    console.log('QUERY chatId:', JSON.stringify(chatId));
+    console.log('QUERY runnerId:', JSON.stringify(runnerId));
+    
     console.log('Looking for payout with chatId:', chatId);
     const allPayouts = await RunnerPayout.find({ runnerId }).lean();
     console.log('All payouts for runner:', allPayouts.map(p => ({ orderId: p.orderId, chatId: p.chatId, itemBudget: p.itemBudget })));

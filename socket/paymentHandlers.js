@@ -185,28 +185,6 @@ const handlePaymentSuccess = async (socket, io, data) => {
 
     logger.info(`✅ Payment confirmed for order ${order.orderId}, system message sent`);
 
-    // Create RunnerPayout for run-errand tasks
-    if (order.serviceType === 'run-errand' || order.serviceType === 'run_errand') {
-      const existingPayout = await RunnerPayout.findOne({ orderId: order.orderId });
-
-      if (!existingPayout) {
-        await RunnerPayout.create({
-          orderId: order.orderId,
-          chatId: order.chatId,
-          runnerId: order.runnerId,
-          userId: order.userId,
-          escrowId: order.escrowId,
-          itemBudget: order.itemBudget,
-          status: 'pending',
-
-          // change back to false in prod
-          usedPayoutSystem: false,
-        });
-
-        logger.info(`RunnerPayout created for order ${order.orderId} | itemBudget: ₦${order.itemBudget}`);
-      }
-    }
-
     console.log('[payment]- changed usedpayout to false line 163 paymnethandlers runner socket in room?', chatId, 'room size:', room?.size);
 
     console.log('[payment] emitting paymentSuccess to room:', chatId, 'data:', { escrowId, orderId });

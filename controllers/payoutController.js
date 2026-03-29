@@ -4,6 +4,10 @@ const Order = require('../models/Order');
 const cloudinary = require('../config/cloudinary');
 const logger = require('../utils/logger');
 const pinService = require('../services/pinService');
+const paymentService = require('../services/paymentServices');
+const { withTransaction } = require('../utils/withTransaction');
+const Wallet = require('../models/Wallet');
+const LedgerEntry = require('../models/LedgerEntry');
 
 const uploadToCloudinary = (base64String, folder = 'payout-receipts') =>
   new Promise((resolve, reject) => {
@@ -38,7 +42,7 @@ class PayoutController extends BaseController {
       const order = chatId
         ? await Order.findOne({ chatId })
         : await Order.findOne({ orderId });
-        
+
       if (!order) return this.success(res, { payout: null });
 
       const payout = await RunnerPayout.findOne({ orderId: order.orderId, runnerId }).lean();
@@ -157,19 +161,100 @@ class PayoutController extends BaseController {
   // POST /payouts/transfer-to-vendor
   async transferToVendor(req, res) {
     try {
-      const { orderId, vendorName, amountSpent, changeAmount, bankName, accountNumber, accountName, pin } = req.body;
+      const {
+        orderId, vendorName, amountSpent, changeAmount,
+        bankName, accountNumber, accountName, pin,
+      } = req.body;
 
       if (!orderId) return this.badRequest(res, 'orderId is required');
       if (!vendorName || !amountSpent) return this.badRequest(res, 'vendorName and amountSpent are required');
       if (!bankName || !accountNumber || !accountName) return this.badRequest(res, 'Bank details are required');
       if (!pin) return this.badRequest(res, 'PIN is required to authorise transfer');
 
+      // Verify PIN 
       const { valid } = await pinService.verifyPin({ userId: req.user._id, role: req.user.role, pin });
       if (!valid) return this.error(res, 'Incorrect PIN', 401);
 
       const spent = parseFloat(amountSpent);
       const change = changeAmount != null ? parseFloat(changeAmount) : 0;
 
+      // Atomic claim — prevent double submission
+      const claimed = await RunnerPayout.findOneAndUpdate(
+        { orderId, status: 'pending' },
+        { $set: { status: 'processing' } },
+        { new: true }
+      );
+      if (!claimed) return this.error(res, 'Transfer already submitted or currently processing', 409);
+
+      if (spent > claimed.itemBudget) {
+        await RunnerPayout.findOneAndUpdate({ orderId }, { $set: { status: 'pending' } });
+        return this.badRequest(res, `Amount ₦${spent} exceeds budget ₦${claimed.itemBudget}`);
+      }
+
+      // ── 3. Deduct from user's locked wallet balance ───────────────────────────
+      // The item budget is sitting in the user's lockedBalance since payment.
+      // We deduct it here — money leaves their wallet when the runner spends it.
+
+      const order = await Order.findOne({ orderId }).lean();
+      if (!order) {
+        await RunnerPayout.findOneAndUpdate({ orderId }, { $set: { status: 'pending' } });
+        return this.notFound(res, 'Order not found');
+      }
+
+      try {
+        await withTransaction(async (session) => {
+          const userWallet = await Wallet.findOne({ userId: order.userId }).session(session);
+          if (!userWallet) throw new Error('User wallet not found');
+          if (userWallet.lockedBalance < spent) throw new Error('Insufficient locked balance');
+
+          userWallet.lockedBalance -= spent;
+          await userWallet.save({ session });
+
+          await LedgerEntry.create([{
+            userId: order.userId,
+            userModel: 'User',
+            runnerId: order.runnerId,
+            type: 'item_budget_spent',
+            grossAmount: spent,
+            netAmount: spent,
+            providerFee: 0,
+            provider: 'paystack',
+            orderId,
+            description: `Item budget spent at ${vendorName} for order ${orderId}`,
+            status: 'completed',
+          }], { session });
+        });
+      } catch (walletErr) {
+        await RunnerPayout.findOneAndUpdate({ orderId }, { $set: { status: 'pending' } });
+        logger.error('transferToVendor wallet deduction failed:', walletErr);
+        return this.error(res, walletErr.message || 'Wallet deduction failed');
+      }
+
+      // transfer to vendor
+      const transferResult = await paymentService.transferToVendor({
+        amount: spent,
+        bankName,
+        accountNumber,
+        accountName,
+        vendorName,
+        orderId,
+        runnerId: order.runnerId,
+      });
+
+      if (!transferResult.success) {
+        // Roll back wallet deduction — refund lockedBalance
+        await withTransaction(async (session) => {
+          const userWallet = await Wallet.findOne({ userId: order.userId }).session(session);
+          if (userWallet) {
+            userWallet.lockedBalance += spent;
+            await userWallet.save({ session });
+          }
+        });
+        await RunnerPayout.findOneAndUpdate({ orderId }, { $set: { status: 'pending' } });
+        return this.error(res, transferResult.error || 'Transfer to vendor failed');
+      }
+
+      // Persist to RunnerPayout
       const payout = await RunnerPayout.findOneAndUpdate(
         { orderId },
         {
@@ -178,21 +263,23 @@ class PayoutController extends BaseController {
             status: 'submitted', submittedAt: new Date(),
             usedPayoutSystem: true,
             bankDetails: { bankName, accountNumber, accountName },
+            transferReference: transferResult.reference,
+            transferId: transferResult.transferId,
           },
           $push: {
             receiptHistory: {
               vendorName, amountSpent: spent, changeAmount: change,
               submittedAt: new Date(), status: 'pending',
               bankDetails: { bankName, accountNumber, accountName },
+              transferReference: transferResult.reference,
+              transferId: transferResult.transferId,
             },
           },
         },
         { new: true }
       );
 
-      if (!payout) return this.notFound(res, 'Payout record not found for this order');
-
-      logger.info(`transferToVendor | orderId=${orderId} | vendor=${vendorName} | amount=₦${spent}`);
+      logger.info(`transferToVendor | orderId=${orderId} | vendor=${vendorName} | amount=₦${spent} | ref=${transferResult.reference}`);
 
       return this.success(res, {
         orderId: payout.orderId,
@@ -201,7 +288,9 @@ class PayoutController extends BaseController {
         vendorName: payout.vendorName,
         amountSpent: payout.amountSpent,
         changeAmount: payout.changeAmount,
+        transferReference: transferResult.reference,
       }, 'Transfer submitted successfully');
+
     } catch (err) {
       logger.error('transferToVendor error:', err);
       return this.error(res, err.message);

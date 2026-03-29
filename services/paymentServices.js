@@ -331,6 +331,9 @@ class PaymentService {
     return withTransaction(async (session) => {
       const escrow = await Escrow.findById(escrowId).session(session);
       if (!escrow) throw new Error('Escrow not found');
+
+      console.log(`[payoutToRunner] escrowId=${escrowId} | runnerId=${escrow.runnerId} | taskId=${escrow.taskId}`);
+
       if (escrow.deliveryFeeReleased) throw new Error('Delivery fee already released');
 
       const runner = await Runner.findById(escrow.runnerId).session(session);
@@ -355,19 +358,24 @@ class PaymentService {
         $or: [{ escrowId: escrow._id }, { orderId: escrow.taskId }]
       }).session(session);
 
+      console.log(`[payoutToRunner] order found=${!!order} | orderId=${order?.orderId} | serviceType=${order?.serviceType}`);
+
       // change back to false in prod
       console.log("change back to false in line 360 paymentservices")
       let usedPayoutSystem = false;
       if (order) {
-        console.log("Order.serviceType", order.serviceType)
+        console.log("Order.serviceType", order.serviceType);
         // Only check payout for run-errand orders
         if (order.serviceType === 'run-errand' || order.serviceType === 'run_errand') {
           const payout = await RunnerPayout.findOne({ orderId: order.orderId }).session(session);
+          console.log(`[payoutToRunner] RunnerPayout found=${!!payout} | usedPayoutSystem=${payout?.usedPayoutSystem} | status=${payout?.status}`);
           if (payout) usedPayoutSystem = payout.usedPayoutSystem;
         } else {
           // For pick-up orders, runner always gets paid
           usedPayoutSystem = true;
+           console.log(`[payoutToRunner] pick-up order — usedPayoutSystem forced true`);
         }
+        console.warn(`[payoutToRunner] NO ORDER FOUND for escrow ${escrowId}`);
       }
 
       // Use stored fee split from escrow; recalculate only as fallback
@@ -490,7 +498,7 @@ class PaymentService {
           escrowId: escrow._id,
           itemBudget: escrow.itemBudget,
           status: 'pending',
-          usedPayoutSystem: true,
+          usedPayoutSystem: false,
         }], { session });
 
         await LedgerEntry.create([{
