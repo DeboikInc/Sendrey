@@ -68,23 +68,24 @@ router.post('/reset-password',
 
 
 router.post('/verify-phone',
+  // authenticate,
   validate(authValidation.verifyPhone),
   authController.verifyPhone
 );
 
 router.post('/request-phone-verification',
+  // authenticate,
   validate(authValidation.requestPhoneVerification),
   authController.requestPhoneVerification
 );
 
 
 router.post('/resend-phone-verification',
+  // authenticate,
   userRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 3 }), // 3 resends per hour
   validate(authValidation.resendVerification),
   authController.resendPhoneVerification
 );
-// Protected routes
-// router.use(authenticate);
 
 // Protected routes (require authentication)
 router.post('/change-password',
@@ -96,12 +97,14 @@ router.post('/change-password',
 
 // emails
 router.post('/request-email-verification',
+  // authenticate,
   validate(authValidation.requestEmailVerification),
   authController.requestEmailVerification
 );
 
 
 router.post('/resend-email-verification',
+  // authenticate,
   userRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 3 }), // 3 resends per hour
   validate(authValidation.resendVerification),
   authController.resendEmailVerification
