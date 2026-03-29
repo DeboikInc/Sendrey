@@ -367,6 +367,9 @@ class AuthController extends BaseController {
       const { token } = req.body;
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
+      // console.log('JWT_SECRET in use:', process.env.JWT_SECRET);
+      // console.log('token received:', token);
+
       // Team invite token — different flow
       if (decoded.type === 'team_invite') {
         let entity = await User.findById(decoded.id);
@@ -386,8 +389,8 @@ class AuthController extends BaseController {
           refreshToken,
           isVerified: entity.isPhoneVerified,
           isRunner,
-          isTeamInvite: true,                      
-          invite: entity.pendingBusinessInvite,    
+          isTeamInvite: true,
+          invite: entity.pendingBusinessInvite,
         });
       }
 
