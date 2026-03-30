@@ -373,7 +373,7 @@ class PaymentService {
         } else {
           // For pick-up orders, runner always gets paid
           usedPayoutSystem = true;
-           console.log(`[payoutToRunner] pick-up order — usedPayoutSystem forced true`);
+          console.log(`[payoutToRunner] pick-up order — usedPayoutSystem forced true`);
         }
         console.warn(`[payoutToRunner] NO ORDER FOUND for escrow ${escrowId}`);
       }
@@ -554,6 +554,21 @@ class PaymentService {
   }
 
   async transferToVendor({ amount, bankName, accountNumber, accountName, vendorName, orderId, runnerId }) {
+    // ── DEV MOCK ───────────────────────────────────────────
+    if (process.env.NODE_ENV === 'development') {
+      console.log('⚠️  transferToVendor: DEV mock — skipping real Paystack transfer');
+      return {
+        success: true,
+        reference: `mock-ref-${Date.now()}`,
+        transferId: `mock-id-${Date.now()}`,
+        transferCode: `mock-code-${Date.now()}`,
+        recipientCode: `mock-recipient-${Date.now()}`,
+        amount,
+        status: 'success',
+      };
+    }
+    // ── PRODUCTION ─────────────────────────────────────────
+
     try {
       const verified = await this.verifyVendorAccount({ accountNumber, bankName });
 

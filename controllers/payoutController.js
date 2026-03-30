@@ -249,7 +249,16 @@ class PayoutController extends BaseController {
             userWallet.lockedBalance += spent;
             await userWallet.save({ session });
           }
+
+          // Also reverse the ledger entry
+          await LedgerEntry.deleteOne({
+            orderId,
+            type: 'item_budget_spent',
+            userId: order.userId
+          }).session(session);
         });
+
+
         await RunnerPayout.findOneAndUpdate({ orderId }, { $set: { status: 'pending' } });
         return this.error(res, transferResult.error || 'Transfer to vendor failed');
       }
