@@ -13,7 +13,7 @@ router.use(authenticate, isAdmin);
 // ── mount admin sub-routers here 
 // full url - "/api/admin/v1" join each router and routes
 router.use('/payouts', require('./payoutAdminRoutes'));
-router.use('/business-suggestions', require('./businessAdminRoutes'));
+router.use('/business', require('./businessAdminRoutes'));
 router.use('/users', require('./userAdminRoutes'));
 router.use('/runners', require('./runnerAdminRoutes'));
 router.use('/kyc', require('./kycAdminRoutes'))

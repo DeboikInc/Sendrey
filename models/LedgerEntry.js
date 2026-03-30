@@ -11,6 +11,7 @@ const ledgerEntrySchema = new mongoose.Schema({
             'escrow_lock',      // funds moved into escrow at payment
             'escrow_release',   // delivery fee paid out to runner
             'item_budget',      // item budget released after approval
+            'item_budget_spent', // budget deducted when runner pays vendor
             'platform_earning', // platform cut recorded
             'provider_fee',     // paystack fee recorded
             'withdrawal',       // runner withdrew to bank
