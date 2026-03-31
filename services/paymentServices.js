@@ -119,10 +119,11 @@ class PaymentService {
           paymentStatus: 'paid',
         }], { session });
 
-        order.escrowId = escrow._id;
-        order.paymentStatus = 'paid';
-        order.status = 'paid';
-        await order.save({ session });
+        await Order.findOneAndUpdate(
+          { orderId },
+          { $set: { escrowId: escrow._id, paymentStatus: 'paid', status: 'paid' } },
+          { session }
+        );
 
         await LedgerEntry.create([{
           userId: order.userId,
@@ -179,18 +180,14 @@ class PaymentService {
 
     const { orderId } = verification.data.metadata;
 
-    return withTransaction(async (session) => {
+    const result = await withTransaction(async (session) => {
+
       const order = await Order.findOneAndUpdate(
         { orderId, paymentStatus: { $ne: 'paid' } },
         { $set: { paymentStatus: 'processing' } },
         { new: true, session }
       );
       if (!order) return { alreadyPaid: true };
-
-      if (order.paymentStatus === 'paid') {
-        console.warn(`verifyPayment: order ${orderId} already paid — skipping`);
-        return { alreadyPaid: true };
-      }
 
       // Use the delivery fee stored on the order — set at creation using distance calc
       const feeSplit = calculateFeeSplit(order.deliveryFee);
@@ -212,10 +209,11 @@ class PaymentService {
         paystackReference: reference,
       }], { session });
 
-      order.escrowId = escrow._id;
-      order.paymentStatus = 'paid';
-      order.status = 'paid';
-      await order.save({ session });
+      await Order.findOneAndUpdate(
+        { orderId },
+        { $set: { escrowId: escrow._id, paymentStatus: 'paid', status: 'paid' } },
+        { session }
+      );
 
       await LedgerEntry.create([{
         userId: order.userId,
@@ -239,6 +237,21 @@ class PaymentService {
       console.log(`✅ Card payment verified | runner: ₦${feeSplit.runnerPayout} | platform net: ₦${feeSplit.netPlatformFee} | paystack fee: ₦${feeSplit.providerFee}`);
       return { escrow, order, feeSplit };
     });
+
+    // ← emit AFTER transaction commits
+    if (!result.alreadyPaid) {
+      const io = getSocketIO();
+      if (io && result.order?.chatId) {
+        io.to(result.order.chatId).emit('paymentSuccess', {
+          orderId,
+          escrowId: result.escrow._id,
+          paymentStatus: 'paid',
+        });
+        console.log(`✅ paymentSuccess emitted to room ${result.order.chatId}`);
+      }
+    }
+
+    return result;
   }
 
   async fundWallet(userId, amount, userEmail) {
@@ -360,21 +373,18 @@ class PaymentService {
 
       console.log(`[payoutToRunner] order found=${!!order} | orderId=${order?.orderId} | serviceType=${order?.serviceType}`);
 
-      // change back to false in prod
-      console.log("change back to false in line 360 paymentservices")
       let usedPayoutSystem = false;
+
       if (order) {
-        console.log("Order.serviceType", order.serviceType);
-        // Only check payout for run-errand orders
         if (order.serviceType === 'run-errand' || order.serviceType === 'run_errand') {
           const payout = await RunnerPayout.findOne({ orderId: order.orderId }).session(session);
           console.log(`[payoutToRunner] RunnerPayout found=${!!payout} | usedPayoutSystem=${payout?.usedPayoutSystem} | status=${payout?.status}`);
           if (payout) usedPayoutSystem = payout.usedPayoutSystem;
         } else {
-          // For pick-up orders, runner always gets paid
           usedPayoutSystem = true;
           console.log(`[payoutToRunner] pick-up order — usedPayoutSystem forced true`);
         }
+      } else {
         console.warn(`[payoutToRunner] NO ORDER FOUND for escrow ${escrowId}`);
       }
 
