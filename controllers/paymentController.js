@@ -136,8 +136,10 @@ class PaymentController extends BaseController {
     async handleWebhook(req, res) {
         const hash = req.headers['x-paystack-signature'];
         const secret = process.env.PAYSTACK_SECRET_KEY;
-
         const crypto = require('crypto');
+
+        // const body = req.body instanceof Buffer ? req.body : Buffer.from(JSON.stringify(req.body));
+
         const computedHash = crypto
             .createHmac('sha512', secret)
             .update(JSON.stringify(req.body))
@@ -147,6 +149,12 @@ class PaymentController extends BaseController {
             console.error('⚠️ Webhook signature verification failed');
             return res.status(400).send('Invalid signature');
         }
+        
+        // const event = typeof req.body === 'string'
+        //     ? JSON.parse(req.body)
+        //     : req.body instanceof Buffer
+        //         ? JSON.parse(req.body.toString())
+        //         : req.body;
 
         const event = req.body;
 

@@ -63,6 +63,9 @@ const startServer = async () => {
     app.use(cors(corsOptions));
     app.options('*', cors(corsOptions));
     app.use(compression());
+    
+    // webhooks
+    app.use('/payments/webhook', express.raw({ type: 'application/json' }));
 
     app.use(express.json({ limit: '10mb' }));
     app.use(express.urlencoded({ extended: true }));

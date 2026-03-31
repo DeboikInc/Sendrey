@@ -1,5 +1,6 @@
 const Order = require('../models/Order');
 const Runner = require('../models/Runner');
+const Escrow = require('../models/Escrows');
 const User = require('../models/User');
 const { Chat } = require('../models/Chat');
 const { logSocketAudit } = require('../utils/socketAudit');
@@ -107,7 +108,19 @@ const handleTaskCompleted = async (io, data) => {
 
         // ── Release escrow and pay runner ─────────────────────────────────────
         const order = await Order.findOne({ orderId });
-        if (order?.escrowId) {
+        let escrowId = order?.escrowId;
+        if (!escrowId) {
+            const escrow = await Escrow.findOne({ taskId: orderId }).lean();
+            if (escrow) {
+                escrowId = escrow._id;
+                await Order.findOneAndUpdate({ orderId }, { $set: { escrowId: escrow._id } });
+                logger.warn(`handleTaskCompleted: patched missing escrowId for order ${orderId}`);
+            } else {
+                logger.warn(`handleTaskCompleted: no escrow found for order ${orderId} — payout skipped`);
+            }
+        }
+
+        if (escrowId) {
             try {
                 const paymentService = require('../services/paymentServices');
                 const result = await paymentService.payoutToRunner(order.escrowId);
