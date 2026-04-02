@@ -217,6 +217,11 @@ const runnerSchema = new mongoose.Schema({
     verifiedBy: String
   },
 
+  itemRejectionCount: {
+    type: Number,
+    default: 0,
+  },
+
   // Account Status
   role: {
     type: String,

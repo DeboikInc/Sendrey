@@ -337,7 +337,7 @@ class RunnerController extends BaseController {
       const { status } = req.body;
       const updatedBy = req.user.id;
 
-      const validStatuses = ['active', 'inactive', 'suspended', 'pending'];
+      const validStatuses = ['active', 'inactive', 'suspended', 'pending', 'banned'];
       if (!validStatuses.includes(status)) {
         return this.badRequest(res, `Invalid status. Must be one of: ${validStatuses.join(', ')}`);
       }

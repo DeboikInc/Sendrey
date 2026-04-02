@@ -2,10 +2,12 @@ const { Chat } = require("../models/Chat");
 const Order = require("../models/Order");
 const User = require('../models/User');
 const RunnerPayout = require('../models/RunnerPayout');
+const Runner = require('../models/Runner');
 
 const paymentService = require("../services/paymentServices");
 const orderStateMachine = require("../services/orderStateMachine");
 const cloudinary = require("../config/cloudinary");
+const {handleRejectionStrike} = require('../utils/handleRejectionStrike');
 
 const {
   notifyItemApprovalRequest,
@@ -308,6 +310,7 @@ const handleRejectItems = async (socket, io, data) => {
     io.to(`runner-${order.runnerId.toString()}`).emit('message', cleanForEmit(runnerSystemMsg));
 
     await notifyItemRejected(order.runnerId, { orderId: order.orderId, reason });
+    await handleRejectionStrike(io, order.runnerId.toString(), chatId);
     // console.log(`Items rejected for submission ${submissionId}. Reason: ${reason}`);
 
   } catch (error) {
@@ -522,6 +525,7 @@ const handleRejectPickupItem = async (socket, io, data) => {
     io.to(`runner-${order.runnerId.toString()}`).emit('message', cleanForEmit(runnerSystemMsg));
 
     await notifyItemRejected(order.runnerId, { orderId: order.orderId, reason });
+    await handleRejectionStrike(io, order.runnerId.toString(), chatId);
 
   } catch (error) {
     console.error("Error rejecting pickup item:", error);
@@ -536,5 +540,5 @@ module.exports = {
   handleRejectItems,
   handleSubmitPickupItem,
   handleApprovePickupItem,
-  handleRejectPickupItem
+  handleRejectPickupItem,
 };

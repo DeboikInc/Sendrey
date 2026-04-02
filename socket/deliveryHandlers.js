@@ -6,6 +6,7 @@ const User = require('../models/User');
 const Runner = require('../models/Runner');
 const orderStateMachine = require('../services/orderStateMachine');
 const { logSocketAudit } = require('../utils/socketAudit');
+const { handleRejectionStrike } = require('../utils/handleRejectionStrike');
 
 const {
     notifyDeliveryConfirmationRequest,
@@ -372,6 +373,9 @@ const handleDenyDelivery = async (io, socket, data) => {
         console.error('[denyDelivery] Chat persist failed:', err);
         // No rollback needed — order already reverted above, messages already emitted
     }
+
+    // ban them
+    await handleRejectionStrike(io, order.runnerId.toString(), chatId);
 
     logSocketAudit('USER_DENIED_ORDER_DELIVERED', { userId, chatId, orderId });
 };

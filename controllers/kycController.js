@@ -484,7 +484,7 @@ class KYCController extends BaseController {
                     recipientId: runnerId,
                     recipientType: 'runner',
                     title: '✅ Document Approved',
-                    body: `Your ${documentType === 'nin' ? 'NIN' : 'Driver License'} has been approved. ${result.runnerStatus === 'approved_limited' ? 'You can now accept limited jobs!' : 'Submit your selfie to complete verification.'}`,
+                    body: `Your kyc documents have been approved. ${result.runnerStatus === 'approved_limited' ? 'You can now accept limited jobs!' : 'Submit your selfie to complete verification.'}`,
                     data: { type: 'kyc_document_approved', documentType, runnerStatus: result.runnerStatus }
                 });
 
@@ -518,7 +518,7 @@ class KYCController extends BaseController {
                     recipientId: runnerId,
                     recipientType: 'runner',
                     title: '❌ Document Rejected',
-                    body: `Your ${documentType === 'nin' ? 'NIN' : 'Driver License'} was rejected. Reason: ${reason}. Please resubmit.`,
+                    body: `Your kyc documents was rejected. Reason: ${reason}. Please resubmit.`,
                     data: { type: 'kyc_document_rejected', documentType, reason }
                 });
 
@@ -548,7 +548,7 @@ class KYCController extends BaseController {
                     recipientId: runnerId,
                     recipientType: 'runner',
                     title: '🎉 Account Fully Verified!',
-                    body: 'Your selfie has been approved. Your account is now fully verified — you can start accepting jobs!',
+                    body: 'Your kyc documents have been approved. Your account is now fully verified — you can start accepting jobs!',
                     data: { type: 'kyc_selfie_approved', runnerStatus: result.runnerStatus }
                 });
 
@@ -583,7 +583,7 @@ class KYCController extends BaseController {
                     recipientId: runnerId,
                     recipientType: 'runner',
                     title: '❌ Selfie Rejected',
-                    body: `Your selfie was rejected. Reason: ${reason}. Please take a clear photo and resubmit.`,
+                    body: `Your documents was rejected. Reason: ${reason}. Please take a clear photo and resubmit.`,
                     data: { type: 'kyc_selfie_rejected', reason }
                 });
 
