@@ -75,7 +75,9 @@ class BusinessController extends BaseController {
   // ── Team ────────────────────────────────────────────────────────────────────
   async getTeamMembers(req, res) {
     try {
-      const members = await getTeamMembers(req.user._id);
+      // Use the resolved owner ID, not the caller's ID
+      const ownerId = req.businessOwner._id;
+      const members = await getTeamMembers(ownerId);
       return this.success(res, { members });
     } catch (err) {
       return this.error(res, err.message, err.statusCode || 500);
@@ -84,7 +86,8 @@ class BusinessController extends BaseController {
 
   async getSchedules(req, res) {
     try {
-      const schedules = await getSchedules(req.user._id);
+      const ownerId = req.businessOwner._id;
+      const schedules = await getSchedules(ownerId);
       return this.success(res, { schedules });
     } catch (err) {
       return this.error(res, err.message, err.statusCode || 500);
@@ -141,8 +144,9 @@ class BusinessController extends BaseController {
   // ── Reports ─────────────────────────────────────────────────────────────────
   async getReports(req, res) {
     try {
+      const ownerId = req.businessOwner._id;
       const { period } = req.query;
-      const reports = await getReports(req.user._id, period);
+      const reports = await getReports(ownerId, period);
       return this.success(res, { reports });
     } catch (err) {
       return this.error(res, err.message, err.statusCode || 500);
@@ -151,11 +155,12 @@ class BusinessController extends BaseController {
 
   async generateExpenseReport(req, res) {
     try {
+      const ownerId = req.businessOwner._id;
       const { period } = req.body;
       if (!['weekly', 'monthly'].includes(period)) {
         return this.badRequest(res, 'period must be weekly or monthly');
       }
-      const report = await generateExpenseReport(req.user._id, period);
+      const report = await generateExpenseReport(ownerId, period);
       return this.success(res, { report }, 'Report generated successfully');
     } catch (err) {
       return this.error(res, err.message, err.statusCode || 500);
@@ -164,16 +169,17 @@ class BusinessController extends BaseController {
 
   // ── Schedules ───────────────────────────────────────────────────────────────
   async createSchedule(req, res) {
-    try {
-      const { label, scheduledAt } = req.body;
-      if (!label?.trim()) return this.badRequest(res, 'Label is required');
-      if (!scheduledAt) return this.badRequest(res, 'scheduledAt is required');
-      const schedule = await createSchedule(req.user._id, label.trim(), scheduledAt);
-      return this.success(res, { schedule }, 'Schedule created successfully');
-    } catch (err) {
-      return this.error(res, err.message, err.statusCode || 500);
-    }
+  try {
+    const ownerId = req.businessOwner._id;
+    const { label, scheduledAt } = req.body;
+    if (!label?.trim()) return this.badRequest(res, 'Label is required');
+    if (!scheduledAt) return this.badRequest(res, 'scheduledAt is required');
+    const schedule = await createSchedule(ownerId, label.trim(), scheduledAt);
+    return this.success(res, { schedule }, 'Schedule created successfully');
+  } catch (err) {
+    return this.error(res, err.message, err.statusCode || 500);
   }
+}
 
   async deleteSchedule(req, res) {
     try {

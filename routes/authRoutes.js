@@ -11,6 +11,13 @@ const {
 } = require('../middleware/auth');
 
 
+// router.get('/check-runner', authController.checkExistingUserOrRunner);
+
+router.post('/send-returning-user-otp',
+  userRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 3 }),
+  authController.sendReturningUserEmailOTP
+);
+
 router.post('/register-runner',
   userRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 3 }), // 3 registrations per hour
   validate(authValidation.registerRunner),
@@ -48,10 +55,11 @@ router.post(
   authController.refreshToken
 );
 
-router.post('/resend-email-verification',
-  userRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 3 }), // 3 resends per hour
-  validate(authValidation.resendVerification),
-  authController.resendVerification
+router.get('/me', authenticate, authController.me);
+
+router.post('/verify-email-otp',
+  validate(authValidation.verifyEmailOTP),
+  authController.verifyEmailOTP
 );
 
 router.post('/forgot-password',
@@ -65,8 +73,26 @@ router.post('/reset-password',
   authController.resetPassword
 );
 
-// Protected routes
-router.use(authenticate);
+
+router.post('/verify-phone',
+  // authenticate,
+  validate(authValidation.verifyPhone),
+  authController.verifyPhone
+);
+
+router.post('/request-phone-verification',
+  // authenticate,
+  validate(authValidation.requestPhoneVerification),
+  authController.requestPhoneVerification
+);
+
+
+router.post('/resend-phone-verification',
+  // authenticate,
+  userRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 3 }), // 3 resends per hour
+  validate(authValidation.resendVerification),
+  authController.resendPhoneVerification
+);
 
 // Protected routes (require authentication)
 router.post('/change-password',
@@ -75,20 +101,20 @@ router.post('/change-password',
   authController.changePassword
 );
 
-router.post('/request-phone-verification',
-  validate(authValidation.requestPhoneVerification),
-  authController.requestPhoneVerification
+
+// emails
+router.post('/request-email-verification',
+  // authenticate,
+  validate(authValidation.requestEmailVerification),
+  authController.requestEmailVerification
 );
 
-router.post('/verify-phone',
-  validate(authValidation.verifyPhone),
-  authController.verifyPhone
-);
 
-router.post('/resend-phone-verification',
+router.post('/resend-email-verification',
+  // authenticate,
   userRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 3 }), // 3 resends per hour
   validate(authValidation.resendVerification),
-  authController.resendVerification
+  authController.resendEmailVerification
 );
 
 router.post('/logout',

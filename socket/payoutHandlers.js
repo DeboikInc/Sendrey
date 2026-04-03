@@ -8,6 +8,8 @@ const RunnerPayout = require('../models/RunnerPayout');
 const cloudinary = require('../config/cloudinary');
 const logger = require('../utils/logger');
 const { logSocketAudit } = require('../utils/socketAudit');
+const paymentService = require('../services/paymentServices');
+
 
 const uploadToCloudinary = (base64String, folder = 'payout-receipts') =>
   new Promise((resolve, reject) => {
@@ -25,33 +27,71 @@ const uploadToCloudinary = (base64String, folder = 'payout-receipts') =>
  */
 const handleGetRunnerPayout = async (socket, io, data) => {
   try {
-    const { chatId, runnerId } = data;
+    const { chatId, runnerId, orderId } = data;
+    const order = await Order.findOne({ chatId }).sort({ createdAt: -1 }).lean();
 
-    if (!chatId) return socket.emit('runnerPayoutData', { payout: null });
+    console.log('[DB CHECK] order:', {
+      orderId: order?.orderId,
+      escrowId: order?.escrowId,
+      paymentStatus: order?.paymentStatus,
+      status: order?.status,
+    });
 
-    // Query RunnerPayout directly by chatId — created in handlePaymentSuccess
-    let payout = await RunnerPayout.findOne({ chatId }).lean();
-
-    // Fallback: try via Order lookup in case chatId is stored on Order differently
-    if (!payout) {
-      const order = await Order.findOne({
-        $or: [
-          { chatId },
-          { chatId: chatId.replace(/^chat-/, '') }, // strip prefix if any
-        ]
-      });
-      if (order) {
-        payout = await RunnerPayout.findOne({ orderId: order.orderId }).lean();
+    if (order && ['items_approved', 'in_progress', 'completed'].includes(order.status)) {
+      const existing = await RunnerPayout.findOne({ orderId: order.orderId });
+      if (!existing) {
+        console.log('[getRunnerPayout] creating missing RunnerPayout for order:', order.orderId);
+        await RunnerPayout.findOneAndUpdate(
+          { orderId: order.orderId },
+          {
+            $setOnInsert: {
+              orderId: order.orderId,
+              chatId: order.chatId,
+              runnerId: order.runnerId,
+              userId: order.userId,
+              escrowId: order.escrowId ?? null,
+              itemBudget: order.itemBudget,
+              status: 'pending',
+              usedPayoutSystem: false,
+            }
+          },
+          { upsert: true, new: true }
+        );
       }
     }
 
-    logSocketAudit('GET_RUNNER_PAYOUT', {
-      runnerId: data.runnerId,
-      chatId: data.chatId,
-    });
-    logger.info(`getRunnerPayout | chatId=${chatId} | found=${!!payout} | orderId=${payout?.orderId}`);
-    socket.emit('runnerPayoutData', { payout: payout || null });
 
+    console.log('[getRunnerPayout] raw data received:', JSON.stringify(data));
+    console.log('[getRunnerPayout] destructured:', { chatId, runnerId, orderId });
+    if (!chatId) return socket.emit('runnerPayoutData', { payout: null });
+
+    let payout = null;
+
+    // If orderId provided, query directly — avoids stale chatId match
+    if (orderId) {
+      payout = await RunnerPayout.findOne({ orderId }).lean();
+    }
+
+    // Fallback to chatId only if no orderId or no result
+    if (!payout) {
+      payout = await RunnerPayout.findOne({ chatId }).lean();
+      // If found doc belongs to a different (completed) order, suppress it
+      if (payout && orderId && payout.orderId !== orderId) {
+        console.log('[getRunnerPayout] SUPPRESSING payout — payout.orderId:', payout.orderId, 'vs requested orderId:', orderId);
+        logger.info(`getRunnerPayout | suppressing stale payout ${payout.orderId} for new order ${orderId}`);
+        payout = null;
+      }
+    }
+
+    console.log('[DB CHECK] runnerpayout:', payout ? {
+      orderId: payout.orderId,
+      itemBudget: payout.itemBudget,
+      status: payout.status,
+    } : 'NOT FOUND');
+
+
+    socket.emit('runnerPayoutData', { payout: payout || null });
+    logger.info(`getRunnerPayout | chatId=${chatId} | found=${!!payout} | orderId=${payout?.orderId} | itemBudget=${payout?.itemBudget} | usedPayoutSystem=${payout?.usedPayoutSystem}`);
   } catch (err) {
     logger.error('handleGetRunnerPayout error:', err);
     socket.emit('error', { message: 'Failed to fetch payout data' });
@@ -65,45 +105,50 @@ const handleGetRunnerPayout = async (socket, io, data) => {
 const handleSubmitPayoutReceipt = async (socket, io, data) => {
   try {
     const {
-      chatId, runnerId, userId, orderId,
+      orderId, runnerId, userId, chatId,
       vendorName, amountSpent, changeAmount,
       bankName, accountNumber, accountName,
-      receiptBase64, items = [],
+      receiptBase64,
     } = data;
 
-    // Upload receipt image
     let receiptUrl = null;
     if (receiptBase64) {
       const uploaded = await uploadToCloudinary(receiptBase64, 'payout-receipts');
       receiptUrl = uploaded.secure_url;
-      logger.info(`Receipt uploaded: ${receiptUrl}`);
     }
 
-    const spentAmount = parseFloat(amountSpent) || 0;
-    const changeAmt = changeAmount != null ? parseFloat(changeAmount) : 0;
+    const submissionId = `payout-receipt-${Date.now()}`;
 
     const receiptEntry = {
-      receiptUrl, vendorName,
-      amountSpent: spentAmount,
-      changeAmount: changeAmt,
+      submissionId,
+      receiptUrl,
+      vendorName,
+      amountSpent,
+      changeAmount,
+      bankDetails: {
+        bankName: bankName || null,
+        accountNumber: accountNumber || null,
+        accountName: accountName || null,
+      },
       submittedAt: new Date(),
       status: 'pending',
     };
 
-    // Find payout by orderId or chatId
-    const query = orderId ? { orderId } : { chatId };
+    // Update payout record — save top-level fields AND push to history
     const payout = await RunnerPayout.findOneAndUpdate(
-      query,
+      { orderId },
       {
         $set: {
-          vendorName,
-          amountSpent: spentAmount,
-          changeAmount: changeAmt,
-          receiptUrl,
           status: 'submitted',
+          usedPayoutSystem: true,
           submittedAt: new Date(),
-          usedPayoutSystem: true, // ← runner fee unlocked
-          ...(bankName && { bankDetails: { bankName, accountNumber, accountName } }),
+          vendorName,
+          amountSpent,
+          changeAmount,
+          receiptUrl,
+          'bankDetails.bankName': bankName || null,
+          'bankDetails.accountNumber': accountNumber || null,
+          'bankDetails.accountName': accountName || null,
         },
         $push: { receiptHistory: receiptEntry },
       },
@@ -111,64 +156,27 @@ const handleSubmitPayoutReceipt = async (socket, io, data) => {
     );
 
     if (!payout) {
-      logger.error(`submitPayoutReceipt: payout not found | orderId=${orderId} | chatId=${chatId}`);
       return socket.emit('error', { message: 'Payout record not found' });
     }
 
-    // Build item_submission message so user sees it in chat
-    const submissionId = `payout-receipt-${Date.now()}`;
-    const message = {
-      id: submissionId,
-      type: 'item_submission',
-      messageType: 'item_submission',
-      senderId: runnerId,
-      senderType: 'runner',
-      chatId,
-      submissionId,
-      escrowId: payout.escrowId?.toString() || null,
-      items: items.length > 0 ? items : [{
-        name: `Shopping at ${vendorName}`,
-        quantity: 1,
-        price: spentAmount,
-        note: changeAmt > 0 ? `₦${changeAmt.toLocaleString()} change to be returned` : undefined,
-      }],
-      receiptUrl,
-      totalAmount: spentAmount,
-      vendorName,
-      changeAmount: changeAmt,
-      bankDetails: payout.bankDetails,
-      status: 'pending',
-      time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
-      createdAt: new Date(),
-    };
-
-    const chat = await Chat.findOne({ chatId });
-    if (chat) { chat.messages.push(message); await chat.save(); }
-
-    io.to(chatId).emit('message', message);
-    io.to(`user-${userId}`).emit('payoutReceiptSubmitted', {
-      orderId: payout.orderId, vendorName, amountSpent: spentAmount, receiptUrl, submissionId,
-    });
+    logger.info(`submitPayoutReceipt | orderId=${orderId} | vendor=${vendorName} | amount=₦${amountSpent}`);
 
     socket.emit('payoutReceiptSuccess', {
       submissionId,
       status: 'submitted',
       usedPayoutSystem: true,
       receiptUrl,
-      message: 'Receipt submitted. Waiting for user approval.',
+      message: 'Receipt saved.',
     });
 
-    logSocketAudit('SUBMIT_PAYOUT_RECEIPT', {
-      runnerId: data.runnerId,
-      chatId: data.chatId,
-      orderId: data.orderId,
+    io.to(`runner-${runnerId}`).emit('payoutReceiptSubmitted', {
+      orderId,
+      usedPayoutSystem: true,
     });
-
-    logger.info(`Payout receipt submitted | orderId=${payout.orderId} | runner=${runnerId} | amount=₦${spentAmount}`);
 
   } catch (err) {
     logger.error('handleSubmitPayoutReceipt error:', err);
-    socket.emit('error', { message: 'Failed to submit receipt' });
+    socket.emit('error', { message: err.message || 'Failed to submit receipt' });
   }
 };
 

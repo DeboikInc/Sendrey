@@ -98,8 +98,13 @@ const handleUpdateStatus = async (socket, io, data) => {
       return socket.emit('error', { message: 'Chat not found' });
     }
 
-    // Map serviceType to taskType
-    const resolvedServiceType = chat.serviceType || clientServiceType;
+    const order = await Order.findOne({
+      chatId,
+      status: { $nin: ['completed', 'cancelled'] }
+    }).sort({ createdAt: -1 }).select('orderId serviceType').lean();
+
+    const resolvedServiceType = order?.serviceType || clientServiceType || chat.serviceType;
+
 
     console.log('Resolved serviceType:', resolvedServiceType, '(chat:', chat.serviceType, ', client:', clientServiceType, ')');
 
@@ -151,8 +156,12 @@ const handleUpdateStatus = async (socket, io, data) => {
     chat.lastActivity = new Date();
     await chat.save();
 
+    const userId = chatId.match(/user-([^-]+(?:-[^-]+)*)-runner/)?.[1];
+    io.to(chatId).emit('message', systemMessage);
+
+
     try {
-      const order = await Order.findOne({ chatId }).select('orderId').lean();
+
       const trackingOrderId = order?.orderId;
       if (trackingOrderId) {
         if (status === 'arrived_at_market' || status === 'arrived_at_pickup_location') {
@@ -241,16 +250,6 @@ const handleUpdateStatus = async (socket, io, data) => {
       }
     }
 
-
-
-    // Confirm to sender
-    socket.emit('statusUpdated', {
-      status,
-      chatId,
-      displayText,
-      serviceType: chat.serviceType
-    });
-
     const latency = Date.now() - startTime;
     await logMetric({
       type: 'status_update',
@@ -326,8 +325,8 @@ const handleSendMedia = async (socket, io, data) => {
     await chat.save();
 
     // Broadcast to chat room
-    io.to(chatId).emit('message', message);
-    socket.emit('mediaSent', { success: true });
+    socket.to(chatId).emit('message', message);
+    socket.emit('mediaSent', { success: true,  message });
   } catch (error) {
     console.error('Error sending media:', error);
     socket.emit('error', { message: error.message });

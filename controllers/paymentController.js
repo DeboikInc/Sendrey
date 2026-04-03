@@ -51,7 +51,7 @@ class PaymentController extends BaseController {
             if (!resolvedOrderId && chatId) {
                 const fallbackOrder = await Order.findOne({
                     chatId,
-                    paymentStatus: { $ne: 'paid' }  
+                    paymentStatus: { $ne: 'paid' }
                 }).sort({ createdAt: -1 });
                 resolvedOrderId = fallbackOrder?.orderId;
             }
@@ -136,8 +136,10 @@ class PaymentController extends BaseController {
     async handleWebhook(req, res) {
         const hash = req.headers['x-paystack-signature'];
         const secret = process.env.PAYSTACK_SECRET_KEY;
-
         const crypto = require('crypto');
+
+        // const body = req.body instanceof Buffer ? req.body : Buffer.from(JSON.stringify(req.body));
+
         const computedHash = crypto
             .createHmac('sha512', secret)
             .update(JSON.stringify(req.body))
@@ -147,6 +149,12 @@ class PaymentController extends BaseController {
             console.error('⚠️ Webhook signature verification failed');
             return res.status(400).send('Invalid signature');
         }
+
+        // const event = typeof req.body === 'string'
+        //     ? JSON.parse(req.body)
+        //     : req.body instanceof Buffer
+        //         ? JSON.parse(req.body.toString())
+        //         : req.body;
 
         const event = req.body;
 
@@ -423,19 +431,28 @@ class PaymentController extends BaseController {
             const runnerId = req.user._id; // only runners withdraw
             const { amount, bankDetails, pin } = req.body;
 
+            console.log('withdrawFromWallet body:', { amount, bankDetails: !!bankDetails, pin: !!pin });
+            console.log('bankDetails:', bankDetails);
+
             if (!amount || amount < 100) {
+                console.log('Failed: amount check', amount);
                 return this.badRequest(res, 'Minimum withdrawal amount is ₦100');
             }
 
             if (!bankDetails?.accountNumber || !bankDetails?.bankCode) {
+                console.log('Failed: bankDetails check', bankDetails);
                 return this.badRequest(res, 'Bank details are required');
             }
 
-            if (!pin) return res.status(400).json({ success: false, message: 'PIN is required' });
+            if (!pin) {
+                console.log('Failed: pin missing');
+                return res.status(400).json({ success: false, message: 'PIN is required' });
+            }
 
             // pin
             const { valid } = await pinService.verifyPin({
-                runnerId,
+                userId: runnerId,
+                role: 'runner',
                 pin,
             });
             if (!valid) return res.status(401).json({ status: 'fail', message: 'Incorrect PIN' });

@@ -70,12 +70,62 @@ const messageSchema = new mongoose.Schema({
   metadata: { type: mongoose.Schema.Types.Mixed, default: null },
 });
 
+
+const orderSessionSchema = new mongoose.Schema({
+  _id: false,
+  orderId: { type: String, required: true },
+  startedAt: { type: Date, default: Date.now },
+  completedAt: { type: Date, default: null },
+  status: { type: String, enum: ['completed', 'cancelled'], default: 'completed' },
+  messages: [messageSchema],
+  orderData: {
+    orderId: String,
+    serviceType: String,
+    taskType: String,
+    status: String,
+    paymentStatus: String,
+    itemBudget: Number,
+    deliveryFee: Number,
+    totalAmount: Number,
+    platformFee: Number,
+    runnerPayout: Number,
+    usedPayoutSystem: Boolean,
+    pickupLocation: mongoose.Schema.Types.Mixed,
+    pickupCoordinates: { lat: Number, lng: Number },
+    deliveryLocation: mongoose.Schema.Types.Mixed,
+    deliveryCoordinates: { lat: Number, lng: Number },
+    marketLocation: mongoose.Schema.Types.Mixed,
+    marketCoordinates: { lat: Number, lng: Number },
+    routeDistanceMeters: Number,
+    routeLegs: mongoose.Schema.Types.Mixed,
+    fleetType: String,
+    specialInstructions: mongoose.Schema.Types.Mixed,
+    createdAt: Date,
+    completedAt: Date,
+    deliveryConfirmedAt: Date,
+    statusHistory: [{
+      status: String,
+      timestamp: Date,
+      triggeredBy: String,
+      triggeredById: String,
+      note: String
+    }]
+  },
+  runnerInfo: {
+    runnerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Runner' }
+  },
+  userInfo: {
+    userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }
+  }
+});
+
 const chatSchema = new mongoose.Schema({
   chatId: { type: String, required: true, unique: true },
   messages: [messageSchema],
+  orderSessions: [orderSessionSchema],
   taskId: { type: String, required: false, index: true },
   orderId: { type: String, default: null, index: true },  // Order reference
-  userId: { type: String, default: null, index: true },  
+  userId: { type: String, default: null, index: true },
   runnerId: { type: String, default: null, index: true },
   serviceType: {
     type: String,

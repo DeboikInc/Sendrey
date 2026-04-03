@@ -1,40 +1,28 @@
-Get all runners/users
-search for a single runner/users
-get runners/users statistics
-get/edit runners/users status, e.g runner gets banned?
-export users/runners 
-delete a runners/users
 
-Admin Business Actions
-get all business suggestions
-get all business statistics e.g people who converted, ppl who opted out
-admin manual reset for opted out actions
-admin get all business accounts(no detail. just name of business, members, admin name etc)
-admin get a single business account by searching
-admin manually convert an account to business account
-admin revoke business account(maybe violation etc)
-
-Admin Dispute Actions
-admin get all disputes
-admin get a single dispute 
-admin resolve a dispute
-
-Admin order Actions
-admin get all orders, single order
-
-Admin Payout Actions
-admin get all runner payout to vendor receipts
-admin get runners payout stats
-admin get a single receipt
-
-
-Task type: run-errand
-Error confirming delivery: Error: Runner wallet not found
-    at C:\Users\timiv\Desktop\sendrey-server\services\paymentServices.js:343:32 
-    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
-    at async withTransaction (C:\Users\timiv\Desktop\sendrey-server\utils\withTransaction.js:10:20)
-    at async handleConfirmDelivery (C:\Users\timiv\Desktop\sendrey-server\socket\deliveryHandlers.js:124:17)
-
-
-
+Error saving call log: Error: CallLog validation failed: callId: Path `callId` is required.
+    at ValidationError.inspect (C:\Users\timiv\Desktop\sendrey-server\node_modules\mongoose\lib\error\validation.js:50:26)
+    at formatValue (node:internal/util/inspect:848:19)
+    at inspect (node:internal/util/inspect:386:10)
+    at formatWithOptionsInternal (node:internal/util/inspect:2349:40)
+    at formatWithOptions (node:internal/util/inspect:2211:10)
+    at console.value (node:internal/console/constructor:338:14)
+    at console.warn (node:internal/console/constructor:379:61)
+    at Socket.<anonymous> (C:\Users\timiv\Desktop\sendrey-server\socket\callHandlers.js:257:15)   
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5) {
+  errors: {
+    callId: ValidatorError: Path `callId` is required.
+        at validate (C:\Users\timiv\Desktop\sendrey-server\node_modules\mongoose\lib\schematype.js:1365:13)
+        at SchemaType.doValidate (C:\Users\timiv\Desktop\sendrey-server\node_modules\mongoose\lib\schematype.js:1349:7)
+        at C:\Users\timiv\Desktop\sendrey-server\node_modules\mongoose\lib\document.js:3004:18    
+        at process.processTicksAndRejections (node:internal/process/task_queues:85:11) {
+      properties: [Object],
+      kind: 'required',
+      path: 'callId',
+      value: null,
+      reason: undefined,
+      [Symbol(mongoose:validatorError)]: true
+    }
+  },
+  _message: 'CallLog validation failed'
+}
 

@@ -7,6 +7,12 @@ const producer = kafka.producer();
 const MAX_RETRIES = 5;
 const BASE_DELAY = 30 * 1000; // 30 seconds
 
+console.log('[SMS] Twilio config check:', {
+  hasSid: !!process.env.TWILIO_ACCOUNT_SID,
+  hasToken: !!process.env.TWILIO_AUTH_TOKEN,
+  hasFrom: !!process.env.TWILIO_FROM_NUMBER,
+});
+
 const startSmsConsumer = async () => {
   try {
     await consumer.connect();
@@ -94,29 +100,18 @@ const startSmsConsumer = async () => {
 
 const sendSmsDirect = async (smsData) => {
   const { type, to, otp, message, resetToken } = smsData;
+  console.log('[sendSmsDirect] called with:', { type, to });
 
-  const body = (() => {
-    switch (type) {
-      case 'otp':
-        return `Your Sendrey verification code is: ${otp}. Valid for 10 minutes.`;
-      case 'password-reset':
-        return `Your Sendrey password reset code is: ${resetToken}. Valid for 1 hour.`;
-      case 'alert':
-        return message;
-      default:
-        return message || 'Message from Sendrey';
-    }
-  })();
-
-  // Call Twilio directly — bypass smsService.sendSMS template system
-  const formatted = smsService.formatPhoneNumber(to);
-  await smsService.client.messages.create({
-    to: formatted,
-    from: smsService.fromNumber,
-    body,
-  });
-
-  console.log(`SMS sent directly: ${type} → ${to}`);
+  switch (type) {
+    case 'otp':
+      return await smsService.sendOTP(to, otp);
+    case 'password-reset':
+      return await smsService.sendPasswordResetSMS(to, resetToken);
+    case 'alert':
+      return await smsService.sendAlertSMS(to, { message });
+    default:
+      return await smsService.sendSMS(to, type, smsData.data || {});
+  }
 };
 
 module.exports = { startSmsConsumer, sendSmsDirect };

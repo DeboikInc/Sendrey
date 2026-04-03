@@ -8,10 +8,25 @@ const RunnerPayout = require('../models/RunnerPayout');
 const User = require('../models/User');
 const logger = require('../utils/logger');
 const { logSocketAudit } = require('../utils/socketAudit');
+const paymentService = require('../services/paymentServices');
 
 const handlePaymentSuccess = async (socket, io, data) => {
   try {
     const { chatId, escrowId, reference, orderId } = data;
+
+    if (reference) {
+      try {
+        const verification = await paymentService.verifyPayment(reference);
+        if (verification?.alreadyPaid) {
+          logger.info(`Payment already verified for ref ${reference}`);
+        } else {
+          logger.info(`Payment verified via socket for ref ${reference}`);
+        }
+      } catch (err) {
+        logger.error('verifyPayment via socket failed:', err.message);
+        // Don't block — continue with rest of handler
+      }
+    }
 
     logger.info('💰 Payment success received:', { chatId, escrowId, reference, orderId });
 
@@ -45,21 +60,30 @@ const handlePaymentSuccess = async (socket, io, data) => {
     const alreadyPaid = order.paymentStatus === 'paid';
 
     if (!alreadyPaid) {
-      order.paymentStatus = 'paid';
-      order.status = 'paid';
-      if (escrowId) order.escrowId = escrowId;
-      if (reference) order.paystackReference = reference;
-      if (!order.chatId && chatId) order.chatId = chatId;
+      await Order.findOneAndUpdate(
+        { orderId: order.orderId },
+        {
+          $set: {
+            paymentStatus: 'paid',
+            status: 'paid',
+            ...(escrowId && { escrowId }),
+            ...(reference && { paystackReference: reference }),
+            ...(!order.chatId && chatId && { chatId }),
+          },
+          $push: {
+            statusHistory: {
+              status: 'paid',
+              timestamp: new Date(),
+              triggeredBy: 'user',
+              triggeredById: chat.userId,
+              note: 'Payment confirmed',
+            }
+          }
+        }
+      );
 
-      order.statusHistory.push({
-        status: 'paid',
-        timestamp: new Date(),
-        triggeredBy: 'user',
-        triggeredById: chat.userId,
-        note: 'Payment confirmed'
-      });
-
-      await order.save();
+      // Re-fetch so order.escrowId is correct for the emit below
+      order = await Order.findOne({ orderId: order.orderId }).lean();
       logSocketAudit('PAYMENT_SUCCESS', {
         orderId: data.orderId,
         chatId: data.chatId,
@@ -94,15 +118,55 @@ const handlePaymentSuccess = async (socket, io, data) => {
       paymentConfirmed: true,
     };
 
-    chat.messages.push(systemMessage);
-    chat.lastActivity = new Date();
-    await chat.save();
+    const receiptMessage = {
+      id: `payment-receipt-${Date.now()}`,
+      from: 'system',
+      type: 'payment_confirmed',
+      messageType: 'payment_confirmed',
+      text: `${userName} made payment for this task`,
+      time: systemMessage.time,
+      senderId: 'system',
+      senderType: 'system',
+      status: 'sent',
+      paymentConfirmed: true,
+      paymentData: {
+        orderId: order.orderId,
+        itemBudget: order.itemBudget,
+        deliveryFee: order.deliveryFee,
+        totalAmount: order.totalAmount,
+        serviceType: order.serviceType,
+      },
+    };
+
+    // Re-fetch fresh chat to avoid stale read
+    const freshChat = await Chat.findOne({ chatId });
+    const alreadyHasPaymentMsg = freshChat?.messages?.some(
+      m => m.paymentConfirmed === true ||
+        m.type === 'payment_confirmed' ||
+        m.messageType === 'payment_confirmed' ||
+        (m.type === 'system' && m.text?.toLowerCase().includes('made payment for this task'))
+    );
+
+    if (!alreadyHasPaymentMsg) {
+      await Chat.findOneAndUpdate(
+        { chatId },
+        {
+          $push: { messages: { $each: [systemMessage, receiptMessage] } },
+          $set: { lastActivity: new Date() }
+        }
+      );
+    } else {
+      logger.info(`Payment messages already exist for chat ${chatId} — skipping push`);
+    }
 
     // Emit to room
     const room = io.sockets.adapter.rooms.get(chatId);
     console.log(`Room ${chatId} has ${room?.size ?? 0} sockets`);
     logger.info(`Room ${chatId} has ${room?.size ?? 0} sockets`);
+
+    // emit both system messages
     io.to(chatId).emit('message', systemMessage);
+    io.to(`user-${chat.userId}`).emit('message', receiptMessage);
 
     io.to(chatId).emit('paymentConfirmed', {
       chatId,
@@ -130,30 +194,15 @@ const handlePaymentSuccess = async (socket, io, data) => {
 
     logger.info(`✅ Payment confirmed for order ${order.orderId}, system message sent`);
 
-    // Create RunnerPayout for run-errand tasks
-    if (order.serviceType === 'run-errand' || order.serviceType === 'run_errand') {
-      const existingPayout = await RunnerPayout.findOne({ orderId: order.orderId });
-
-      if (!existingPayout) {
-        await RunnerPayout.create({
-          orderId: order.orderId,
-          chatId: order.chatId,
-          runnerId: order.runnerId,
-          userId: order.userId,
-          escrowId: order.escrowId,
-          itemBudget: order.itemBudget,
-          status: 'pending',
-          usedPayoutSystem: false,
-        });
-
-        logger.info(`RunnerPayout created for order ${order.orderId} | itemBudget: ₦${order.itemBudget}`);
-      }
-    }
-
-    console.log('[payment] runner socket in room?', chatId, 'room size:', room?.size);
+    console.log('[payment]- changed usedpayout to false line 163 paymnethandlers runner socket in room?', chatId, 'room size:', room?.size);
 
     console.log('[payment] emitting paymentSuccess to room:', chatId, 'data:', { escrowId, orderId });
-    io.to(chatId).emit('paymentSuccess', { escrowId, orderId, paymentStatus: 'paid' });
+
+    io.to(chatId).emit('paymentSuccess', {
+      escrowId: order.escrowId?.toString() ?? escrowId,  // prefer the DB value
+      orderId,
+      paymentStatus: 'paid'
+    });
 
   } catch (err) {
     logger.error('handlePaymentSuccess error:', err);

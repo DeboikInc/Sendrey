@@ -103,7 +103,7 @@ class EmailService {
         },
       };
 
-      console.log('Payload:', JSON.stringify(payload, null, 2));
+      // console.log('Payload:', JSON.stringify(payload, null, 2));
       console.log('Making API request to:', `${this.baseUrl}/emails/transactional`);
 
       const res = await axios.post(`${this.baseUrl}/emails/transactional`, payload, {
@@ -150,7 +150,7 @@ class EmailService {
         businessName,
         role,
         year: new Date().getFullYear(),
-        loginUrl: `${process.env.FRONTEND_URL}/?token=${token}`,
+        loginUrl: `${process.env.FRONTEND_URL}/?invite=${token}`,
         supportEmail: process.env.SUPPORT_EMAIL,
       }
     );
@@ -195,17 +195,23 @@ class EmailService {
     );
   }
 
-  async sendOTPEmail(user, otp) {
-    return this.sendEmail(
+  async sendOTPEmail(user, otp,) {
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`DEV DEBUG: OTP for ${user.email} is ${otp}`);
+    }
+    const result = this.sendEmail(
       user.email,
       'Your Verification Code',
       'otpEmail',
       {
         name: user.name,
+        email:user.email,
         otp: otp,
         expiryTime: '10 minutes'
       }
     );
+
+    return result;
   }
 
   // Additional email methods

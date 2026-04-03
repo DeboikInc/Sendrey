@@ -14,6 +14,9 @@ class SMSService {
 
       if (twilioConfig?.accountSid && twilioConfig?.authToken && twilioConfig?.fromNumber) {
         this.client = twilio(twilioConfig.accountSid, twilioConfig.authToken);
+        console.log('[Twilio] SID used:', twilioConfig.accountSid?.substring(0, 10));
+        console.log('[Twilio] token length:', twilioConfig.authToken?.length);
+        console.log('[Twilio] from:', twilioConfig.fromNumber);
         this.fromNumber = twilioConfig.fromNumber;
         this.isConfigured = true;
         logger.info('Twilio SMS service initialized successfully');
@@ -138,18 +141,8 @@ class SMSService {
 
   // Specific SMS methods
   async sendOTP(phoneNumber, otpCode) {
-    console.log(`Attempting to send OTP to: ${phoneNumber}, Formatted: ${this.formatPhoneNumber(phoneNumber)}`);
-
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`📱 DEVELOPMENT MODE: OTP for ${phoneNumber} is ${otpCode}`);
-      console.log(`Use this OTP to verify: ${otpCode}`);
-      console.log('at sms service line 129, dont forget to change back for prod')
-      return {
-        development: true,
-        otp: otpCode,
-        phone: phoneNumber
-      };
-    }
+    const formatted = this.formatPhoneNumber(phoneNumber);
+    console.log(`Attempting to send OTP to: ${phoneNumber}, Formatted: ${formatted}`);
 
     if (!this.isConfigured) {
       logger.warn('SMS not configured - would send OTP:', { phoneNumber, otpCode });
@@ -157,13 +150,26 @@ class SMSService {
         console.log(`📱 DEVELOPMENT: OTP for ${phoneNumber} is ${otpCode}`);
         return { development: true, otp: otpCode };
       }
+
+
       throw new Error('SMS provider not configured');
     }
 
-    return this.sendSMS(phoneNumber, 'otp', {
-      code: otpCode,
-      expiry: '10 minutes'
+
+    // console.log(`PRODUCTION DEBUG: OTP for ${phoneNumber} is ${otpCode}`);
+    console.log(`[sendOTP] formatted number: ${formatted}`);
+    console.log(`[sendOTP] isConfigured: ${this.isConfigured}`);
+    console.log(`[sendOTP] SID prefix: ${this.client?.username?.substring(0, 10)}`);
+    console.log(`[sendOTP] fromNumber: ${this.fromNumber}`);
+
+    const result = await this.client.messages.create({
+      to: formatted,
+      from: this.fromNumber,
+      body: `Your Sendrey verification code is: ${otpCode}. Valid for 10 minutes. Do not share this with anyone.`,
     });
+
+    logger.info(`OTP SMS sent: ${result.sid} → ${formatted}`);
+    return result;
   }
 
   async sendPasswordResetSMS(phoneNumber, resetToken) {

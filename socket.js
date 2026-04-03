@@ -4,6 +4,7 @@ const { Server } = require("socket.io");
 const mongoose = require("mongoose");
 const cors = require("cors");
 require("dotenv").config();
+const redis = require('./config/redis');
 
 const { database } = require("./config/index");
 const app = express();
@@ -14,7 +15,12 @@ const chatStatusHandlers = require('./socket/chatStatusHandlers');
 const fileUploadHandlers = require('./socket/fileUploadHandlers');
 const notificationHandlers = require('./socket/notificationHandlers');
 const { handleRunnerAccept } = require('./socket/orderHandlers');
-const { handleSubmitItems, handleApproveItems, handleRejectItems } = require("./socket/itemHandlers");
+const { handleSubmitItems,
+  handleApproveItems,
+  handleRejectItems,
+  handleSubmitPickupItem,
+  handleApprovePickupItem,
+  handleRejectPickupItem } = require("./socket/itemHandlers");
 const { handleMarkDeliveryComplete, handleConfirmDelivery, handleDenyDelivery } = require('./socket/deliveryHandlers');
 const { handleRaiseDispute, handleResolveDispute } = require('./socket/disputeHandlers');
 const { handleSubmitRating } = require('./socket/ratingHandlers');
@@ -22,7 +28,8 @@ const callHandlers = require("./socket/callHandlers");
 const { handlePaymentSuccess } = require('./socket/paymentHandlers');
 const { handleGetRunnerPayout, handleSubmitPayoutReceipt } = require('./socket/payoutHandlers');
 const { registerTrackingHandlers } = require('./socket/trackingHandlers');
-const { handleCancelOrder, handleTaskCompleted, handleRunnerStartedNewOrder  } = require('./socket/cancelHandlers');
+const { handleCancelOrder, handleTaskCompleted, handleRunnerStartedNewOrder } = require('./socket/cancelHandlers');
+const { handleGetOrderByChatId } = require('./socket/orderByChatIdHandlers');
 
 // Import models
 const { Chat } = require("./models/Chat");
@@ -38,7 +45,15 @@ let ioInstance;
 
 // MongoDB connection
 mongoose.connect(database.url, database.options)
-  .then(() => {
+  .then(async () => {
+
+    if (process.env.NODE_ENV === 'production') {
+      console.log = () => { };
+      console.error = () => { };
+      console.warn = () => { };
+      console.debug = () => { };
+    }
+
     console.log("MongoDB connected");
 
     const app = express();
@@ -73,6 +88,13 @@ mongoose.connect(database.url, database.options)
       console.log(`Connection attempt from ${socket.id} with transport: ${socket.conn.transport.name}`);
       next();
     });
+
+    try {
+      await redis.connect();
+      console.log('✅ Redis connected (socket server)');
+    } catch (err) {
+      console.error('Redis unavailable in socket server:', err.message);
+    }
 
     io.on("connection", (socket) => {
       console.log("✅ New client connected:", socket.id, "Transport:", socket.conn.transport.name);
@@ -113,12 +135,20 @@ mongoose.connect(database.url, database.options)
       // rejoin chat
       socket.on("rejoinChat", (data) =>
         safeHandler(socketHandlers.handleRejoinChat, socket, io, data)
-      
+
+      );
+
+      socket.on('getOrderSession', (data) =>
+        safeHandler(socketHandlers.handleGetOrderSession, socket, data)
       );
 
       // Runner events
       socket.on("joinRunnerRoom", (data) =>
         safeHandler(socketHandlers.handleJoinRunnerRoom, socket, data)
+      );
+
+      socket.on("getArchivedMessages", (data) => 
+        safeHandler(socketHandlers.handleGetArchivedMessages, socket, data)
       );
 
       socket.on("acceptRunnerRequest", async (data) => {
@@ -151,7 +181,7 @@ mongoose.connect(database.url, database.options)
       // Chat events
       socket.on("sendMessage", async (data) => {
         try {
-          await socketHandlers.handleSendMessage(io, data);
+          await socketHandlers.handleSendMessage(socket, io, data);
 
           const { chatId, message } = data;
           if (chatId && message?.senderId && message?.senderType) {
@@ -265,10 +295,18 @@ mongoose.connect(database.url, database.options)
         }
       });
 
+      socket.on("getOrderByChatId", (data) => {
+        safeHandler(handleGetOrderByChatId, socket, data)
+      });
+
       // items
       socket.on("submitItems", (data) => safeHandler(handleSubmitItems, socket, io, data));
       socket.on("approveItems", (data) => safeHandler(handleApproveItems, socket, io, data));
       socket.on("rejectItems", (data) => safeHandler(handleRejectItems, socket, io, data));
+
+      socket.on("submitPickupItem", (data) => safeHandler(handleSubmitPickupItem, socket, io, data));
+      socket.on("approvePickupItem", (data) => safeHandler(handleApprovePickupItem, socket, io, data));
+      socket.on("rejectPickupItem", (data) => safeHandler(handleRejectPickupItem, socket, io, data));
 
       // delivery handlers
       socket.on('markDeliveryComplete', (data) => safeHandler(handleMarkDeliveryComplete, io, socket, data));
@@ -342,7 +380,41 @@ mongoose.connect(database.url, database.options)
       });
     });
 
+    app.get('/health', (req, res) => {
+      res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
+    });
+
+    app.get('/', (req, res) => {
+      res.status(200).json({ status: 'OK', service: 'Sendrey Socket Server' });
+    });
+
     server.listen(4001, () => console.log("✅ Socket.IO server running on port 4001"));
+
+
+    // Self-ping to prevent Render spin-down
+    if (process.env.NODE_ENV === 'production') {
+      setInterval(async () => {
+        try {
+          await fetch('https://sendrey-server-socket.onrender.com/health');
+          console.log('[keep-alive] socket server pinged');
+        } catch (e) {
+          console.error('[keep-alive] ping failed:', e.message);
+        }
+      }, 5 * 60 * 1000);
+    }
+
+    // Graceful shutdown
+    process.on('SIGTERM', async () => {
+      console.log('SIGTERM received — shutting down socket server');
+      await redis.disconnect();
+      io.close(() => console.log('Socket.IO closed'));
+      server.close(async () => {
+        await mongoose.connection.close();
+        console.log('MongoDB connection closed');
+        process.exit(0);
+      });
+    });
+
   })
   .catch((err) => {
     console.error("MongoDB connection error:", err);

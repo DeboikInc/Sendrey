@@ -217,6 +217,11 @@ const runnerSchema = new mongoose.Schema({
     verifiedBy: String
   },
 
+  itemRejectionCount: {
+    type: Number,
+    default: 0,
+  },
+
   // Account Status
   role: {
     type: String,
@@ -236,6 +241,11 @@ const runnerSchema = new mongoose.Schema({
     default: false
   },
 
+  isEmailVerified: {
+    type: Boolean,
+    default: false
+  },
+
   // Verification Tokens (same as user)
   verificationToken: String,
   verificationExpires: Date,
@@ -243,6 +253,8 @@ const runnerSchema = new mongoose.Schema({
   resetPasswordExpires: Date,
   phoneVerificationOTP: String,
   phoneVerificationExpires: Date,
+  emailVerificationOTP: { type: String },
+  emailVerificationExpires: { type: Date },
 
   // Privacy Settings
   isEmailPublic: {
@@ -298,6 +310,21 @@ const runnerSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+
+  rating: {
+    type: Number,
+    default: 0
+  },
+  totalRatings: {
+    type: Number,
+    default: 0
+  },
+  // completedOrders already exists, totalRuns is just an alias — add this:
+  totalRuns: {
+    type: Number,
+    default: 0
+  },
+
   lastActive: {
     type: Date,
     default: Date.now
@@ -359,6 +386,8 @@ const runnerSchema = new mongoose.Schema({
       delete ret.resetPasswordExpires;
       delete ret.phoneVerificationOTP;
       delete ret.phoneVerificationExpires;
+      delete ret.emailVerificationOTP;
+      delete ret.emailVerificationExpires;
       delete ret.failedLoginAttempts;
       delete ret.lockUntil;
       return ret;
@@ -374,6 +403,8 @@ const runnerSchema = new mongoose.Schema({
       delete ret.resetPasswordExpires;
       delete ret.phoneVerificationOTP;
       delete ret.phoneVerificationExpires;
+      delete ret.emailVerificationOTP;
+      delete ret.emailVerificationExpires;
       delete ret.failedLoginAttempts;
       delete ret.lockUntil;
       return ret;
@@ -507,7 +538,9 @@ runnerSchema.statics.cleanupExpiredTokens = function () {
       resetPasswordToken: 1,
       resetPasswordExpires: 1,
       phoneVerificationOTP: 1,
-      phoneVerificationExpires: 1
+      phoneVerificationExpires: 1,
+      emailVerificationOTP: 1,
+      emailVerificationExpires: 1,
     }
   });
 };
@@ -561,11 +594,38 @@ runnerSchema.statics.findNearbyRunners = async function ({
     fleetType: fleetType,
   };
 
+  const allOnline = await this.find({ role: 'runner', isOnline: true }).select('serviceType fleetType firstName lastName').lean();
+  console.log('[findNearbyRunners] All online runners:', allOnline.map(r => ({
+    name: `${r.firstName} ${r.lastName}`,
+    serviceType: r.serviceType,
+    fleetType: r.fleetType,
+
+  })));
+
+  console.log('[findNearbyRunners] query:', JSON.stringify(query));
+  const total = await this.countDocuments({ role: 'runner', isOnline: true });
+  console.log('[findNearbyRunners] total online runners:', total);
+  const withService = await this.countDocuments({ role: 'runner', serviceType });
+  console.log('[findNearbyRunners] runners with serviceType', serviceType, ':', withService);
+  const withFleet = await this.countDocuments({ role: 'runner', fleetType });
+  console.log('[findNearbyRunners] runners with fleetType', fleetType, ':', withFleet);
+
   const results = await this.find(query)
     .select('firstName lastName phone currentRequest location latitude longitude avatar ' +
       'runnerStatus verificationDocuments biometricVerification isOnline isAvailable ' +
-      'serviceType fleetType isPhoneVerified')
+      'serviceType fleetType isPhoneVerified isEmailVerified rating totalRatings totalRuns')
     .lean();
+
+  console.log('[findNearbyRunners] Results from exact match:', results.length);
+  results.forEach((runner, i) => {
+    console.log(`[findNearbyRunners] Runner ${i + 1}:`, {
+      name: `${runner.firstName} ${runner.lastName}`,
+      latitude: runner.latitude,
+      longitude: runner.longitude,
+      pickupLat,
+      pickupLng
+    });
+  });
 
   return results.filter((runner) => {
     if (!runner.latitude || !runner.longitude) return false;
