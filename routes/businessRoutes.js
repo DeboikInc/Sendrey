@@ -46,7 +46,7 @@ router.delete('/team/:memberId',
 // ── Reports
 router.get('/reports',
   userRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 10 }),
-  requireBusiness(['admin', 'manager']),
+  requireBusiness(),
   auditLog('GET_EXPENSE_REPORTS'),
   controller.getReports);
 
@@ -58,13 +58,13 @@ router.post('/reports/generate',
 // ── Schedules 
 router.post('/schedules',
   userRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 10 }),
-  requireBusiness(['admin']),
+  requireBusiness(['admin, manager']),
   auditLog('CREATE_SCHEDULE'),
   controller.createSchedule);
 
 router.get(
   '/schedules',
-  requireBusiness(['admin']),
+  requireBusiness(),
   auditLog('GET_SCHEDULES'),
   controller.getSchedules);
 

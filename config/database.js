@@ -4,8 +4,8 @@ const { database } = require('./index')
 const User = require('../models/User');
 const Runner = require('../models/Runner')
 
-//  $env:DATABASE_URL = ""
 
+//  $env:DATABASE_URL = ""
 // npm run seed:admin
 
 const connectDb = async () => {
@@ -25,8 +25,20 @@ const connectDb = async () => {
     console.log(`Total runners in DB: ${totalRunners}`);
     
     // await User.deleteMany({ role: { $nin: ['super-admin', 'admin'] } });
-    // await User.deleteMany({});
     // await Runner.deleteMany({});
+    // // await User.deleteOne({ phone: '09028876009' });
+
+    // const collections = await mongoose.connection.db.listCollections().toArray();
+    // const skip = ['users']; // keep users collection intact
+
+    // for (const col of collections) {
+    //   if (!skip.includes(col.name)) {
+    //     await mongoose.connection.db.collection(col.name).deleteMany({});
+    //     console.log(`Cleared: ${col.name}`);
+    //   }
+    // }
+    // console.log('Cascade cleanup done');
+
 
 
   } catch (error) {

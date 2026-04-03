@@ -119,10 +119,11 @@ class PaymentService {
           paymentStatus: 'paid',
         }], { session });
 
-        order.escrowId = escrow._id;
-        order.paymentStatus = 'paid';
-        order.status = 'paid';
-        await order.save({ session });
+        await Order.findOneAndUpdate(
+          { orderId },
+          { $set: { escrowId: escrow._id, paymentStatus: 'paid', status: 'paid' } },
+          { session }
+        );
 
         await LedgerEntry.create([{
           userId: order.userId,
@@ -179,18 +180,14 @@ class PaymentService {
 
     const { orderId } = verification.data.metadata;
 
-    return withTransaction(async (session) => {
+    const result = await withTransaction(async (session) => {
+
       const order = await Order.findOneAndUpdate(
         { orderId, paymentStatus: { $ne: 'paid' } },
         { $set: { paymentStatus: 'processing' } },
         { new: true, session }
       );
       if (!order) return { alreadyPaid: true };
-
-      if (order.paymentStatus === 'paid') {
-        console.warn(`verifyPayment: order ${orderId} already paid — skipping`);
-        return { alreadyPaid: true };
-      }
 
       // Use the delivery fee stored on the order — set at creation using distance calc
       const feeSplit = calculateFeeSplit(order.deliveryFee);
@@ -212,10 +209,11 @@ class PaymentService {
         paystackReference: reference,
       }], { session });
 
-      order.escrowId = escrow._id;
-      order.paymentStatus = 'paid';
-      order.status = 'paid';
-      await order.save({ session });
+      await Order.findOneAndUpdate(
+        { orderId },
+        { $set: { escrowId: escrow._id, paymentStatus: 'paid', status: 'paid' } },
+        { session }
+      );
 
       await LedgerEntry.create([{
         userId: order.userId,
@@ -239,6 +237,21 @@ class PaymentService {
       console.log(`✅ Card payment verified | runner: ₦${feeSplit.runnerPayout} | platform net: ₦${feeSplit.netPlatformFee} | paystack fee: ₦${feeSplit.providerFee}`);
       return { escrow, order, feeSplit };
     });
+
+    // ← emit AFTER transaction commits
+    if (!result.alreadyPaid) {
+      const io = getSocketIO();
+      if (io && result.order?.chatId) {
+        io.to(result.order.chatId).emit('paymentSuccess', {
+          orderId,
+          escrowId: result.escrow._id,
+          paymentStatus: 'paid',
+        });
+        console.log(`✅ paymentSuccess emitted to room ${result.order.chatId}`);
+      }
+    }
+
+    return result;
   }
 
   async fundWallet(userId, amount, userEmail) {
@@ -331,6 +344,9 @@ class PaymentService {
     return withTransaction(async (session) => {
       const escrow = await Escrow.findById(escrowId).session(session);
       if (!escrow) throw new Error('Escrow not found');
+
+      console.log(`[payoutToRunner] escrowId=${escrowId} | runnerId=${escrow.runnerId} | taskId=${escrow.taskId}`);
+
       if (escrow.deliveryFeeReleased) throw new Error('Delivery fee already released');
 
       const runner = await Runner.findById(escrow.runnerId).session(session);
@@ -355,10 +371,21 @@ class PaymentService {
         $or: [{ escrowId: escrow._id }, { orderId: escrow.taskId }]
       }).session(session);
 
-      let usedPayoutSystem = true;
+      console.log(`[payoutToRunner] order found=${!!order} | orderId=${order?.orderId} | serviceType=${order?.serviceType}`);
+
+      let usedPayoutSystem = false;
+
       if (order) {
-        const payout = await RunnerPayout.findOne({ orderId: order.orderId }).session(session);
-        if (payout) usedPayoutSystem = payout.usedPayoutSystem;
+        if (order.serviceType === 'run-errand' || order.serviceType === 'run_errand') {
+          const payout = await RunnerPayout.findOne({ orderId: order.orderId }).session(session);
+          console.log(`[payoutToRunner] RunnerPayout found=${!!payout} | usedPayoutSystem=${payout?.usedPayoutSystem} | status=${payout?.status}`);
+          if (payout) usedPayoutSystem = payout.usedPayoutSystem;
+        } else {
+          usedPayoutSystem = true;
+          console.log(`[payoutToRunner] pick-up order — usedPayoutSystem forced true`);
+        }
+      } else {
+        console.warn(`[payoutToRunner] NO ORDER FOUND for escrow ${escrowId}`);
       }
 
       // Use stored fee split from escrow; recalculate only as fallback
@@ -481,7 +508,7 @@ class PaymentService {
           escrowId: escrow._id,
           itemBudget: escrow.itemBudget,
           status: 'pending',
-          // usedPayoutSystem: true,
+          usedPayoutSystem: false,
         }], { session });
 
         await LedgerEntry.create([{
@@ -537,6 +564,21 @@ class PaymentService {
   }
 
   async transferToVendor({ amount, bankName, accountNumber, accountName, vendorName, orderId, runnerId }) {
+    // ── DEV MOCK ───────────────────────────────────────────
+    if (process.env.NODE_ENV === 'development') {
+      console.log('⚠️  transferToVendor: DEV mock — skipping real Paystack transfer');
+      return {
+        success: true,
+        reference: `mock-ref-${Date.now()}`,
+        transferId: `mock-id-${Date.now()}`,
+        transferCode: `mock-code-${Date.now()}`,
+        recipientCode: `mock-recipient-${Date.now()}`,
+        amount,
+        status: 'success',
+      };
+    }
+    // ── PRODUCTION ─────────────────────────────────────────
+
     try {
       const verified = await this.verifyVendorAccount({ accountNumber, bankName });
 
@@ -594,21 +636,43 @@ class PaymentService {
   }
 
   async getTransactionHistory(userId, page = 1, limit = 20) {
-    const skip = (page - 1) * limit;
 
-    const entries = await LedgerEntry.find({ userId })
+    console.log('getTransactionHistory userId:', userId, typeof userId);
+
+    const skip = (page - 1) * limit;
+    const hiddenTypes = ['platform_earning', 'provider_fee', 'escrow_release'];
+
+    const entries = await LedgerEntry.find({
+      userId: userId.toString(),
+      type: { $nin: hiddenTypes }
+    })
       .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
       .lean();
 
-    const total = await LedgerEntry.countDocuments({ userId });
+    const total = await LedgerEntry.countDocuments({
+      userId,
+      type: { $nin: hiddenTypes },
+    });
+    console.log('Total ledger entries for user:', total);
 
     return {
       transactions: entries.map(e => ({
         ...e,
         amount: e.grossAmount,
-        type: e.type === 'deposit' || e.type === 'escrow_release' ? 'credit' : 'debit',
+        type: e.type === 'deposit' || e.type === 'escrow_release'
+          ? 'credit'
+          : 'debit',
+        label: e.type === 'escrow_lock'
+          ? 'Order Payment'
+          : e.type === 'deposit'
+            ? 'Wallet Funding'
+            : e.type === 'escrow_release'
+              ? 'Delivery Fee'
+              : e.type === 'item_budget'
+                ? 'Item Budget'
+                : e.type,
       })),
       pagination: {
         page,
@@ -634,13 +698,14 @@ class PaymentService {
     }
 
     const receiptUrl = await this.uploadReceipt(receiptBase64);
+
     const transferResult = await this.transferToVendor({
       amount: amountSpent, bankName, accountNumber,
       accountName, vendorName, orderId, runnerId,
     });
     if (!transferResult.success) throw new Error(transferResult.error || 'Transfer to vendor failed');
 
-    return withTransaction(async (session) => {
+    const result = await withTransaction(async (session) => {
       const receiptEntry = {
         receiptUrl,
         vendorName,
@@ -671,11 +736,6 @@ class PaymentService {
 
       console.log(`✅ Payout receipt submitted: order=${orderId} vendor=${vendorName} amount=₦${amountSpent} ref=${transferResult.reference}`);
 
-      await this.notifyUserOfPayoutReceipt({
-        chatId, userId, orderId, vendorName,
-        amountSpent, changeAmount, receiptUrl, runnerId,
-      });
-
       return {
         success: true,
         payout: updatedPayout,
@@ -683,6 +743,13 @@ class PaymentService {
         receiptUrl,
       };
     });
+
+    await this.notifyUserOfPayoutReceipt({
+      chatId, userId, orderId, vendorName,
+      amountSpent, changeAmount, receiptUrl, runnerId,
+    }).catch(err => console.error('notifyUserOfPayoutReceipt failed (non-critical):', err.message));
+
+    return result;
   }
 
   async notifyUserOfPayoutReceipt({ chatId, userId, orderId, vendorName, amountSpent, changeAmount, receiptUrl, runnerId }) {
@@ -729,6 +796,66 @@ class PaymentService {
     } catch (error) {
       console.error('Error notifying user of payout receipt:', error);
     }
+  }
+
+  async withdrawFromWallet(runnerId, amount, bankDetails, options = {}) {
+    return withTransaction(async (session) => {
+      const wallet = await Wallet.findOne({ userId: runnerId, userType: 'runner' }).session(session);
+      if (!wallet) throw new Error('Wallet not found');
+      if (wallet.balance < amount) throw new Error('Insufficient wallet balance');
+
+      // Verify bank account before deducting
+      const verification = await paystack.verifyAccountNumber({
+        account_number: bankDetails.accountNumber,
+        bank_code: bankDetails.bankCode,
+      });
+      if (!verification.status || !verification.data) {
+        throw new Error('Bank account verification failed');
+      }
+
+      // Deduct from wallet
+      wallet.balance -= amount;
+      await wallet.save({ session });
+
+      // Create transfer recipient
+      const recipient = await paystack.createTransferRecipient({
+        name: verification.data.account_name,
+        account_number: bankDetails.accountNumber,
+        bank_code: bankDetails.bankCode,
+      });
+      if (!recipient.status || !recipient.data) throw new Error('Failed to create transfer recipient');
+
+      // Initiate transfer
+      const transfer = await paystack.initiateTransfer({
+        recipient_code: recipient.data.recipient_code,
+        amount,
+        reason: `Sendrey runner withdrawal`,
+      });
+      if (!transfer.status || !transfer.data) throw new Error('Transfer initiation failed');
+
+      // Ledger entry
+      await LedgerEntry.create([{
+        userId: runnerId,
+        userModel: 'Runner',
+        type: 'withdrawal',
+        grossAmount: amount,
+        netAmount: amount,
+        providerFee: 0,
+        provider: 'paystack',
+        providerReference: transfer.data.reference,
+        description: `Withdrawal to ${bankDetails.accountName || verification.data.account_name} - ${bankDetails.bankCode}`,
+        status: 'completed',
+      }], { session });
+
+      console.log(`✅ Runner ${runnerId} withdrawal: ₦${amount} | ref: ${transfer.data.reference}`);
+
+      return {
+        reference: transfer.data.reference,
+        transferCode: transfer.data.transfer_code,
+        amount,
+        status: transfer.data.status,
+      };
+    });
   }
 }
 

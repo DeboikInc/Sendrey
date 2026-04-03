@@ -26,6 +26,7 @@ class RunnerController extends BaseController {
     this.updateRunnerStatus = this.updateRunnerStatus.bind(this);
     this.searchRunners = this.searchRunners.bind(this);
     this.updateAvatar = this.updateAvatar.bind(this);
+    this.resetStrikes = this.resetStrikes.bind(this);
     this.deleteRunner = this.deleteRunner.bind(this);
     this._sanitizeRunner = this._sanitizeRunner.bind(this);
   }
@@ -76,7 +77,7 @@ class RunnerController extends BaseController {
 
       const lat = parseFloat(pickupLat || latitude);
       const lng = parseFloat(pickupLng || longitude);
-      console.log(lat, lng)
+
 
       if (!lat || !lng) {  // guard 
         return this.badRequest(res, 'Location coordinates are required');
@@ -110,13 +111,15 @@ class RunnerController extends BaseController {
         fleetType,
       });
 
+
       const eligibleRunners = runners.filter(runner => {
         console.log('Runner KYC check:', {
           id: runner._id,
           runnerStatus: runner.runnerStatus,
           isOnline: runner.isOnline,
           isAvailable: runner.isAvailable,
-          isPhoneVerified: runner.isPhoneVerified,
+          // isPhoneVerified: runner.isPhoneVerified,
+          isEmailVerified: runner.isEmailVerified,
           selfieStatus: runner.verificationDocuments?.selfie?.status,
           ninStatus: runner.verificationDocuments?.nin?.status,
           licenseStatus: runner.verificationDocuments?.driverLicense?.status,
@@ -151,7 +154,9 @@ class RunnerController extends BaseController {
         if (!validSelfieStatuses.includes(selfieStatus)) return false;
 
         // Check phone verified
-        if (!runner.isPhoneVerified) return false;
+        // if (!runner.isPhoneVerified) return false;
+
+        if (!runner.isEmailVerified) return false;
 
         return runner.isOnline && runner.isAvailable;
       });
@@ -333,12 +338,22 @@ class RunnerController extends BaseController {
       const { status } = req.body;
       const updatedBy = req.user.id;
 
-      const validStatuses = ['active', 'inactive', 'suspended', 'pending'];
+      const validStatuses = ['active', 'inactive', 'suspended', 'pending', 'banned'];
       if (!validStatuses.includes(status)) {
         return this.badRequest(res, `Invalid status. Must be one of: ${validStatuses.join(', ')}`);
       }
 
       const runner = await this.service.updateRunnerStatus(runnerId, status, updatedBy);
+
+      // emit unban event via socket
+      // const io = req.app.get('io');
+      // if (io && status !== 'banned') {
+      //   io.to(`runner-${runnerId}`).emit('verificationStatus', {
+      //     isBanned: false,
+      //     isUnbanned: true,
+      //     reason: null,
+      //   });
+      // }
 
       logger.info(`Runner status updated: ${runnerId} to ${status} by admin ${updatedBy}`);
 
@@ -410,6 +425,22 @@ class RunnerController extends BaseController {
 
     } catch (error) {
       logger.error('Update avatar error:', error);
+      next(error);
+    }
+  }
+
+  async resetStrikes(req, res, next) {
+    try {
+      const { runnerId } = req.params;
+      const runner = await Runner.findByIdAndUpdate(
+        runnerId,
+        { $set: { itemRejectionCount: 0 } },
+        { new: true }
+      );
+      if (!runner) return this.notFound(res, 'Runner not found');
+      logger.info(`Strike count reset for runner: ${runnerId}`);
+      return this.success(res, { runner: this._sanitizeRunner(runner) }, 'Strike count reset');
+    } catch (error) {
       next(error);
     }
   }

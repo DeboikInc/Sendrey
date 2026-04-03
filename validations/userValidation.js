@@ -199,6 +199,24 @@ const userValidation = {
       .messages({
         'any.empty': 'You must provide nearest bustop',
       }),
+    serviceType: Joi.string()
+      .valid('pick-up', 'run-errand')
+      .optional()
+      .messages({
+        'any.only': 'Service type must be either "pick-up" or "run-errand"'
+      }),
+    fleetType: Joi.string()
+      .valid('cycling', 'bike', 'car', 'van', 'pedestrian')
+      .optional()
+      .messages({
+        'any.only': 'Fleet type must be one of: cycling, bike, car, van, pedestrian'
+      }),
+    role: Joi.string()
+      .valid('runner', 'user', 'admin')
+      .optional(),
+
+    latitude: Joi.number().min(-90).max(90).optional(),
+    longitude: Joi.number().min(-180).max(180).optional(),
 
     currentRequest: Joi.object({
       serviceType: Joi.string().valid('pick-up', 'run-errand').required()

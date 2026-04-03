@@ -6,6 +6,7 @@ const User = require('../models/User');
 const Runner = require('../models/Runner');
 const orderStateMachine = require('../services/orderStateMachine');
 const { logSocketAudit } = require('../utils/socketAudit');
+const { handleRejectionStrike } = require('../utils/handleRejectionStrike');
 
 const {
     notifyDeliveryConfirmationRequest,
@@ -36,24 +37,73 @@ const persistMessages = async (chatId, messages) => {
 const handleMarkDeliveryComplete = async (io, socket, data) => {
     const { chatId, orderId, runnerId, deliveryProof } = data;
 
-    
+
     let order;
     try {
+        const terminalStatuses = ['completed', 'cancelled', 'task_completed', 'archived', 'disputed', 'dispute_resolved'];
+
         order = await Order.findOne({ orderId });
-        if (!order) return socket.emit('error', { message: 'Order not found' });
+        console.log('[markDeliveryComplete] initial lookup:', order?.orderId, '| status:', order?.status, '| paymentStatus:', order?.paymentStatus);
+
+        if (!order || terminalStatuses.includes(order?.status)) {
+            console.log('[markDeliveryComplete] initial order is terminal or missing, searching by chatId:', chatId);
+
+            const candidates = await Order.find({ chatId }).sort({ createdAt: -1 }).lean();
+            console.log('[markDeliveryComplete] all orders for chatId:', candidates.map(o => ({
+                orderId: o.orderId,
+                status: o.status,
+                paymentStatus: o.paymentStatus,
+                deliveryConfirmedAt: o.deliveryConfirmedAt,
+            })));
+
+            order = candidates.find(o =>
+                !terminalStatuses.includes(o.status) &&
+                o.paymentStatus === 'paid'
+            ) || null;
+
+            console.log('[markDeliveryComplete] resolved order:', order?.orderId, '| status:', order?.status);
+        }
+
+        if (!order) return socket.emit('error', { message: 'No active order found' });
         if (order.status === 'delivered') return socket.emit('error', { message: 'Delivery already marked as complete' });
     } catch (err) {
         console.error('[markDeliveryComplete] Order lookup failed:', err);
         return socket.emit('error', { message: 'Failed to find order. Please try again.' });
     }
 
+
     // State transition + escrow update 
     try {
-        await orderStateMachine.transition(orderId, 'delivered', {
-            triggeredBy: 'runner',
-            triggeredById: runnerId,
-            note: 'Runner marked as delivered',
-        });
+        const advanceToDelivered = async (currentStatus, resolvedOrderId) => {
+            if (currentStatus === 'delivered') {
+                // Already delivered — just ensure escrow and messages proceed
+                return;
+            }
+
+            const steps = {
+                'pending_payment': ['paid', 'in_progress', 'delivered'],
+                'paid': ['in_progress', 'delivered'],
+                'in_progress': ['delivered'],
+                'items_submitted': ['items_approved', 'delivered'],
+                'items_approved': ['delivered'],
+            };
+
+            const path = steps[currentStatus];
+            if (!path) throw new Error(`Cannot advance to delivered from status: ${currentStatus}`);
+
+            for (const step of path) {
+                await orderStateMachine.transition(resolvedOrderId, step, {
+                    triggeredBy: step === 'delivered' ? 'runner' : 'system',
+                    triggeredById: step === 'delivered' ? runnerId : null,
+                    note: step === 'delivered'
+                        ? 'Runner marked as delivered'
+                        : `Auto-progressed from ${currentStatus} to ${step}`,
+                });
+            }
+        };
+
+        await advanceToDelivered(order.status, order.orderId);
+
 
         if (order.escrowId) {
             const escrow = await Escrow.findById(order.escrowId);
@@ -101,22 +151,40 @@ const handleMarkDeliveryComplete = async (io, socket, data) => {
     // Emit immediately (optimistic)
     io.to(`user-${order.userId.toString()}`).emit('message', confirmationMessage);
     io.to(`runner-${runnerId.toString()}`).emit('message', runnerAckMessage);
+
     io.to(chatId).emit('deliveryMarkedComplete', { orderId: order.orderId, status: 'awaiting_confirmation' });
 
     // Persist to DB — recover on failure
     try {
-        await persistMessages(chatId, [confirmationMessage, runnerAckMessage]);
+        await persistMessages(chatId, [runnerAckMessage]);
     } catch (err) {
         console.error('[markDeliveryComplete] Chat persist failed:', err);
 
         // Revert order state so runner can retry
         try {
+            // If order is still in 'paid' state, transition through required states first
+            if (order.status === 'paid') {
+                await orderStateMachine.transition(orderId, 'in_progress', {
+                    triggeredBy: 'system',
+                    note: 'Auto-progressed from paid to in_progress',
+                });
+            }
+
             await orderStateMachine.transition(orderId, 'in_progress', {
                 triggeredBy: 'system',
                 note: 'Reverted after DB failure on delivery mark',
             });
+
+            if (order.escrowId) {
+                const escrow = await Escrow.findById(order.escrowId);
+                if (escrow) {
+                    escrow.status = 'delivery_pending';
+                    await escrow.save();
+                }
+            }
         } catch (revertErr) {
             console.error('[markDeliveryComplete] State revert failed:', revertErr.message);
+            return socket.emit('error', { message: 'Failed to update order state. Please try again.' });
         }
 
         const errMsg = makeErrorMsg('delivery-mark');
@@ -187,7 +255,7 @@ const handleConfirmDelivery = async (io, socket, data) => {
     const userSystemMsg = {
         id: `delivery-confirmed-user-${Date.now()}`,
         from: 'system', type: 'system', messageType: 'system',
-        text: 'You confirmed delivery. Order completed successfully.',
+        text: 'You confirmed delivery.',
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         status: 'sent', senderId: 'system', senderType: 'system',
     };
@@ -195,15 +263,17 @@ const handleConfirmDelivery = async (io, socket, data) => {
     const runnerSystemMsg = {
         id: `delivery-confirmed-runner-${Date.now() + 1}`,
         from: 'system', type: 'system', messageType: 'system',
-        text: `${userName} confirmed the delivery of their item(s). Order completed.`,
+        text: `${userName} confirmed the delivery of their item(s).`,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         status: 'sent', senderId: 'system', senderType: 'system',
     };
 
     // Emit 
     io.to(chatId).emit('deliveryConfirmed', { orderId: order.orderId, status: 'completed' });
-    io.to(`user-${userId.toString()}`).emit('message', userSystemMsg);
+
+    io.to(`user-${userId}`).emit('message', userSystemMsg);
     io.to(`runner-${order.runnerId.toString()}`).emit('message', runnerSystemMsg);
+
     io.to(`tracking:${orderId}`).emit('runner:delivered', { orderId });
 
     // Prompt rating
@@ -267,7 +337,7 @@ const handleDenyDelivery = async (io, socket, data) => {
         return socket.emit('error', { message: 'Failed to process denial. Please try again.' });
     }
 
-    
+
     let userName = 'User';
     try {
         const user = await User.findById(userId).select('firstName lastName');
@@ -293,7 +363,7 @@ const handleDenyDelivery = async (io, socket, data) => {
     };
 
     io.to(chatId).emit('deliveryDenied', { orderId: order.orderId, status: 'denied' });
-    io.to(`user-${userId.toString()}`).emit('message', userSystemMsg);
+    io.to(`user-${userId}`).emit('message', userSystemMsg);
     io.to(`runner-${order.runnerId.toString()}`).emit('message', runnerSystemMsg);
 
     // Persist
@@ -303,6 +373,9 @@ const handleDenyDelivery = async (io, socket, data) => {
         console.error('[denyDelivery] Chat persist failed:', err);
         // No rollback needed — order already reverted above, messages already emitted
     }
+
+    // ban them
+    await handleRejectionStrike(io, order.runnerId.toString(), chatId);
 
     logSocketAudit('USER_DENIED_ORDER_DELIVERED', { userId, chatId, orderId });
 };

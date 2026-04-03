@@ -50,46 +50,88 @@ const requireBusiness = (allowedRoles = []) => {
         return res.status(401).json({ success: false, message: 'Authentication required' });
       }
 
-      const user = await User.findById(req.user._id).select('accountType businessProfile');
+      const user = await User.findById(req.user._id)
+        .select('accountType businessProfile teamMembership');
+
       if (!user) {
         return res.status(401).json({ success: false, message: 'User not found' });
       }
 
-      if (user.accountType !== 'business') {
-        return res.status(403).json({ success: false, message: 'This feature requires a business account.' });
+      // ── Path A: User is the business owner ──────────────────────────────
+      if (user.accountType === 'business') {
+        // No role restriction = any business user can proceed
+        if (allowedRoles.length === 0) {
+          req.businessOwner = user;
+          req.businessProfile = user.businessProfile;
+          req.businessRole = 'owner';
+          return next();
+        }
+
+        // Owners bypass role restrictions — they can do everything
+        req.businessOwner = user;
+        req.businessProfile = user.businessProfile;
+        req.businessRole = 'owner';
+        return next();
       }
 
+      // ── Path B: User is a team member ───────────────────────────────────
+      const membership = user.teamMembership;
+
+      if (!membership?.businessOwnerId) {
+        return res.status(403).json({
+          success: false,
+          message: 'This feature requires a business account.',
+        });
+      }
+
+      // Only accepted members can access business features
+      if (membership.status !== 'accepted') {
+        return res.status(403).json({
+          success: false,
+          message: 'Your team membership is not yet active.',
+        });
+      }
+
+      // No role restriction = any accepted member can proceed
       if (allowedRoles.length === 0) {
-        req.businessUser = user;
+        const owner = await User.findById(membership.businessOwnerId)
+          .select('businessProfile');
+        req.businessOwner = owner;
+        req.businessProfile = owner?.businessProfile;
+        req.businessRole = membership.role;
         return next();
       }
 
-      const isOwner = user.businessProfile?.members?.[0]?.userId?.toString() === req.user._id.toString();
-      if (isOwner) {
-        req.businessUser = user;
-        return next();
+      // Enforce role restriction
+      if (!allowedRoles.includes(membership.role)) {
+        return res.status(403).json({
+          success: false,
+          message: "You don't have permission to do this.",
+        });
       }
 
-      const member = user.businessProfile?.members?.find(
-        (m) => m.userId.toString() === req.user._id.toString()
-      );
+      const owner = await User.findById(membership.businessOwnerId)
+        .select('businessProfile');
 
-      if (!member || !allowedRoles.includes(member.role)) {
-        return res.status(403).json({ success: false, message: "You don't have permission to do this." });
-      }
-
-      req.businessUser = user;
+      req.businessOwner = owner;
+      req.businessProfile = owner?.businessProfile;
+      req.businessRole = membership.role;
       next();
+
     } catch (error) {
-      return res.status(500).json({ success: false, message: 'Error checking business permissions' });
+      console.error('requireBusiness error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Error checking business permissions',
+      });
     }
   };
 };
 
 module.exports = {
   isRunner,
-  isAdmin, 
-  isSuperAdmin, 
-  isRunnerOrAdmin, 
+  isAdmin,
+  isSuperAdmin,
+  isRunnerOrAdmin,
   requireBusiness
 };
