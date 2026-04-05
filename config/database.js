@@ -23,7 +23,7 @@ const connectDb = async () => {
 
     const totalRunners = await Runner.countDocuments({});
     console.log(`Total runners in DB: ${totalRunners}`);
-
+    
     // await User.deleteMany({ role: { $nin: ['super-admin', 'admin'] } });
     // await Runner.deleteMany({});
     // await Runner.deleteOne({ email: 'timivictor565@gmail.com' });
