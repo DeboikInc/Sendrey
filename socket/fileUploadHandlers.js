@@ -82,14 +82,15 @@ async function handleFileUpload(socket, io, data) {
 
         // Create message object
         const fileMessage = {
-            id: tempId || `file-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            id: `file-${Date.now()}-${Math.random().toString(36).slice(2, 9)}-${performance.now()}`, // always a fresh real ID
+            tempId: tempId || null, // include tempId for client-side correlation
             from: senderId,
             type: messageType,
             messageType,
-            text: text || '',  
-            fileName,          
+            text: text || '',
+            fileName,
             fileUrl: uploadResult.secure_url,
-            mimeType: fileType, 
+            mimeType: fileType,
             fileSize: uploadResult.bytes ? formatFileSize(uploadResult.bytes) : 'Unknown',
             time: new Date().toLocaleTimeString('en-US', {
                 hour: '2-digit', minute: '2-digit', hour12: true
@@ -121,7 +122,8 @@ async function handleFileUpload(socket, io, data) {
         socket.emit('fileUploadSuccess', {
             chatId,
             message: fileMessage,
-            cloudinaryUrl: uploadResult.secure_url
+            cloudinaryUrl: uploadResult.secure_url,
+            tempId: tempId
         });
 
         const latency = Date.now() - startTime;

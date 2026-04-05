@@ -29,6 +29,9 @@ const registerTrackingHandlers = (io, socket) => {
     // Runner location update
     socket.on('runner:locationUpdate', async (data) => {
         const { orderId, lat, lng, heading = 0, speed = 0 } = data;
+
+        console.log('[TRACKING] Location update received:', { orderId, lat, lng, heading, speed });
+
         socketOrderMap.set(socket.id, orderId);
 
         if (!orderId || lat == null || lng == null) {
