@@ -450,7 +450,7 @@ const initializeChatAndProceed = async (io, chatId, state) => {
 
 const handleUserJoinChat = async (socket, io, data) => {
   const { userId, runnerId, chatId } = data;
-
+  let orderAlreadyEmitted = false;
 
   // block concurrent joins for same chatId
   if (joiningChats.has(chatId)) {
@@ -684,6 +684,7 @@ const handleUserJoinChat = async (socket, io, data) => {
 
         io.to(`runner-${runnerId}`).emit('orderCreated', orderPayload);
         runnerAlreadyNotified = true;
+        runnerAlreadyNotified = true;
 
         const freshChatForRunner = await Chat.findOne({ chatId }).lean();
         if (freshChatForRunner?.messages?.length) {
@@ -692,19 +693,12 @@ const handleUserJoinChat = async (socket, io, data) => {
           console.log('[userJoinChat] re-emitted chatHistory to runner after CASE C setup');
         }
 
-        // if (order && order.orderId && !runnerAlreadyNotified) {
-        //   io.to(`runner-${runnerId}`).emit('orderCreated', {
-        //     order: { ...cleanForEmit(order), chatId };
-        //   });
-        // }
-        // io.to(chatId).emit('orderCreated', { ...orderPayload, isNewOrder: true });
-
         await notifyPaymentRequest(userId, { orderId: order.orderId, amount: order.totalAmount });
       }
     }
 
     // Emit order state to this socket
-    if (order) {
+    if (order && !orderAlreadyEmitted) {
       socket.emit('orderCreated', {
         order: {
           chatId: order.chatId,
@@ -726,6 +720,16 @@ const handleUserJoinChat = async (socket, io, data) => {
     const cleanMessages = await deduplicateAndPersist(chatId, finalChat.messages);
 
     cleanMessages.forEach(m => snapshotMessage(socket.id, chatId, m.id));
+
+    let filteredMessages = cleanMessages;
+    if (existingOrder?.paymentStatus === 'paid') {
+      filteredMessages = cleanMessages.filter(m =>
+        m.type !== 'payment_request' && m.messageType !== 'payment_request'
+      );
+    }
+
+    filteredMessages.forEach(m => snapshotMessage(socket.id, chatId, m.id));
+    socket.emit('chatHistory', filteredMessages);
     socket.emit('chatHistory', cleanMessages);
     console.log('[userJoinChat] chatHistory emitted:', cleanMessages.length, 'messages');
 
@@ -776,7 +780,14 @@ const handleRunnerJoinChat = async (socket, io, data) => {
   } else {
     const cleanMessages = await deduplicateAndPersist(chatId, chat.messages);
     cleanMessages.forEach(m => snapshotMessage(socket.id, chatId, m.id));
-    socket.emit("chatHistory", cleanMessages);
+
+    const runnerOrder = await Order.findOne({ chatId }).sort({ createdAt: -1 }).lean();
+    const runnerFilteredMessages = runnerOrder?.paymentStatus === 'paid'
+      ? cleanMessages.filter(m => m.type !== 'payment_request' && m.messageType !== 'payment_request')
+      : cleanMessages;
+
+    runnerFilteredMessages.forEach(m => snapshotMessage(socket.id, chatId, m.id));
+    socket.emit("chatHistory", runnerFilteredMessages);
 
     if (chat.specialInstructions) {
       socket.emit("specialInstructions", {
@@ -901,7 +912,6 @@ const handleRejoinChat = async (socket, io, { chatId, userId, runnerId, userType
   if (userType === 'runner' && runnerId) socket.join(`runner-${runnerId}`);
   else if (userType === 'user' && userId) socket.join(`user-${userId}`);
 
-  // Get what this socket had before disconnect
   const snapshot = socketMessageSnapshot.get(socket.id);
 
   const chat = await Chat.findOne({ chatId }).lean();
@@ -910,22 +920,35 @@ const handleRejoinChat = async (socket, io, { chatId, userId, runnerId, userType
     return;
   }
 
-  const cleanMessages = deduplicateMessages(chat.messages);
+  // Check order payment status — strip payment_request if already paid
+  const latestOrder = await Order.findOne({ chatId })
+    .sort({ createdAt: -1 })
+    .lean();
+
+  const isPaid = latestOrder?.paymentStatus === 'paid';
+  const isTerminal = ['completed', 'cancelled', 'task_completed']
+    .includes(latestOrder?.status);
+
+  let cleanMessages = deduplicateMessages(chat.messages);
+
+  // If order is paid, remove payment_request — client doesn't need to show it again
+  if (isPaid) {
+    cleanMessages = cleanMessages.filter(m =>
+      m.type !== 'payment_request' && m.messageType !== 'payment_request'
+    );
+  }
 
   if (!snapshot || snapshot.chatId !== chatId) {
-    // No snapshot — we don't know what they had, send full history
     console.log('[rejoinChat] no snapshot, sending full chatHistory');
     cleanMessages.forEach(m => snapshotMessage(socket.id, chatId, m.id));
     socket.emit('chatHistory', cleanMessages);
   } else {
-    // Diff: find messages in DB that are NOT in the snapshot
     const missed = cleanMessages.filter(m => m.id && !snapshot.messageIds.has(m.id));
 
     if (missed.length === 0) {
       console.log('[rejoinChat] client is up to date, no missed messages');
     } else {
       console.log('[rejoinChat] sending', missed.length, 'missed messages');
-      // Update snapshot with newly sent messages
       missed.forEach(m => snapshotMessage(socket.id, chatId, m.id));
       socket.emit('missedMessages', missed);
     }

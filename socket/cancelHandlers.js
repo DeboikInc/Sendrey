@@ -104,10 +104,10 @@ const handleTaskCompleted = async (io, data) => {
     const { chatId, orderId, runnerId, userId } = data;
 
     try {
-        logger.info('Task Completed:', { chatId, orderId, runnerId, userId });
-
-        // ── Release escrow and pay runner ─────────────────────────────────────
         const order = await Order.findOne({ orderId });
+        if (!order) return;
+
+        logger.info('Task Completed:', { chatId, orderId, runnerId, userId });
         let escrowId = order?.escrowId;
         if (!escrowId) {
             const escrow = await Escrow.findOne({ taskId: orderId }).lean();
