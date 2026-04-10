@@ -17,6 +17,7 @@ const {
   getSuggestionStatus,
   dismissSuggestion,
   acknowledgeSuggestion,
+  updateMemberRole, 
 
 
   adminGetAllSuggestions,
@@ -124,8 +125,8 @@ class BusinessController extends BaseController {
       const { role } = req.body;
       if (!['staff', 'manager', 'admin'].includes(role))
         return this.badRequest(res, 'Invalid role');
-      const members = await updateMemberRole(req.user._id, memberId, role);
-      return this.success(res, { members }, 'Role updated');
+      await updateMemberRole(req.businessOwner._id, memberId, role);
+      return this.success(res, {memberId, role }, 'Role updated');
     } catch (err) {
       return this.error(res, err.message, err.statusCode || 500);
     }
@@ -169,17 +170,17 @@ class BusinessController extends BaseController {
 
   // ── Schedules ───────────────────────────────────────────────────────────────
   async createSchedule(req, res) {
-  try {
-    const ownerId = req.businessOwner._id;
-    const { label, scheduledAt } = req.body;
-    if (!label?.trim()) return this.badRequest(res, 'Label is required');
-    if (!scheduledAt) return this.badRequest(res, 'scheduledAt is required');
-    const schedule = await createSchedule(ownerId, label.trim(), scheduledAt);
-    return this.success(res, { schedule }, 'Schedule created successfully');
-  } catch (err) {
-    return this.error(res, err.message, err.statusCode || 500);
+    try {
+      const ownerId = req.businessOwner._id;
+      const { label, scheduledAt } = req.body;
+      if (!label?.trim()) return this.badRequest(res, 'Label is required');
+      if (!scheduledAt) return this.badRequest(res, 'scheduledAt is required');
+      const schedule = await createSchedule(ownerId, label.trim(), scheduledAt);
+      return this.success(res, { schedule }, 'Schedule created successfully');
+    } catch (err) {
+      return this.error(res, err.message, err.statusCode || 500);
+    }
   }
-}
 
   async deleteSchedule(req, res) {
     try {
@@ -230,40 +231,93 @@ class BusinessController extends BaseController {
     }
   }
 
-  async exportReportCSV(req, res) {
+  async exportReportPDF(req, res) {
     try {
-      const csv = await exportReportCSV(req.user._id, req.params.reportId);
-      res.setHeader('Content-Type', 'text/csv');
-      res.setHeader('Content-Disposition', `attachment; filename="report-${req.params.reportId}.csv"`);
-      return res.send(csv);
+      const PDFDocument = require('pdfkit');
+      const report = await exportReportPDF(req.user._id, req.params.reportId);
+      const doc = new PDFDocument({ margin: 50 });
+
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="report-${req.params.reportId}.pdf"`);
+      doc.pipe(res);
+
+      // Header
+      doc.fontSize(20).font('Helvetica-Bold').text('Expense Report', { align: 'center' });
+      doc.moveDown(0.5);
+      doc.fontSize(11).font('Helvetica').text(`Business: ${report.businessName || 'N/A'}`, { align: 'center' });
+      doc.moveDown();
+
+      // Summary
+      doc.fontSize(13).font('Helvetica-Bold').text('Summary');
+      doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+      doc.moveDown(0.3);
+      doc.fontSize(11).font('Helvetica');
+      doc.text(`Period: ${report.period}`);
+      doc.text(`Date Range: ${new Date(report.startDate).toLocaleDateString()} — ${new Date(report.endDate).toLocaleDateString()}`);
+      doc.text(`Total Tasks: ${report.totalTasks}`);
+      doc.text(`Total Spend: ₦${report.totalSpend.toLocaleString()}`);
+      doc.moveDown();
+
+      // Breakdown
+      doc.fontSize(13).font('Helvetica-Bold').text('Task Breakdown');
+      doc.moveTo(50, doc.y).lineTo(550, doc.y).stroke();
+      doc.moveDown(0.3);
+
+      report.breakdown.forEach((b, i) => {
+        doc.fontSize(11).font('Helvetica-Bold')
+          .text(`${i + 1}. ${b.serviceType || 'Delivery'} — ₦${(b.amount || 0).toLocaleString()}`);
+        doc.fontSize(10).font('Helvetica').fillColor('#555');
+        if (b.fleet) doc.text(`   Fleet:      ${b.fleet}`);
+        if (b.pickupLocation) doc.text(`   Pickup:     ${b.pickupLocation}`);
+        if (b.deliveryLocation) doc.text(`   Dropoff:    ${b.deliveryLocation}`);
+        if (b.items) doc.text(`   Items:      ${b.items}`);
+        if (b.budget) doc.text(`   Budget:     ₦${b.budget}`);
+        if (b.requestedBy) doc.text(`   Member:     ${b.requestedBy}`);
+        if (b.createdAt) doc.text(`   Created:    ${new Date(b.createdAt).toLocaleString()}`);
+        if (b.completedAt) doc.text(`   Completed:  ${new Date(b.completedAt).toLocaleString()}`);
+        if (b.durationMins != null) doc.text(`   Duration:   ${b.durationMins} min`);
+      });
+
+      doc.end();
     } catch (err) {
       return this.error(res, err.message, err.statusCode || 500);
     }
   }
 
-  async exportReportPDF(req, res) {
+  async exportReportCSV(req, res) {
     try {
-      const report = await exportReportPDF(req.user._id, req.params.reportId);
-      const doc = new PDFDocument();
-      res.setHeader('Content-Type', 'application/pdf');
-      res.setHeader('Content-Disposition', `attachment; filename="report-${req.params.reportId}.pdf"`);
-      doc.pipe(res);
+      const report = await exportReportCSV(req.user._id, req.params.reportId);
+      // If your service already returns a CSV string, send it.
+      // If it returns the report object, build CSV here:
+      if (typeof report === 'string') {
+        res.setHeader('Content-Type', 'text/csv');
+        res.setHeader('Content-Disposition', `attachment; filename="report-${req.params.reportId}.csv"`);
+        return res.send(report);
+      }
 
-      doc.fontSize(20).text('Expense Report', { align: 'center' });
-      doc.moveDown();
-      doc.fontSize(12).text(`Period: ${report.period}`);
-      doc.text(`Date Range: ${new Date(report.startDate).toLocaleDateString()} — ${new Date(report.endDate).toLocaleDateString()}`);
-      doc.text(`Total Tasks: ${report.totalTasks}`);
-      doc.text(`Total Spend: ₦${report.totalSpend.toLocaleString()}`);
-      doc.moveDown();
-      doc.fontSize(10).text('Breakdown:', { underline: true });
-      doc.moveDown(0.5);
-
-      report.breakdown.forEach((b, i) => {
-        doc.text(`${i + 1}. Task ${b.taskId} — ₦${b.amount} — ${b.completedAt ? new Date(b.completedAt).toLocaleDateString() : 'N/A'}`);
+      const headers = [
+        'Task ID', 'Service Type', 'Amount (₦)', 'Pickup Location',
+        'Delivery Location', 'Items', 'Runner', 'Requested By',
+        'Started At', 'Completed At', 'Duration (min)'
+      ];
+      const rows = report.breakdown.map(b => {
+        const mins = b.startedAt && b.completedAt
+          ? Math.round((new Date(b.completedAt) - new Date(b.startedAt)) / 60000)
+          : '';
+        return [
+          b.taskId, b.serviceType || '', b.amount || 0,
+          b.pickupLocation || '', b.deliveryLocation || '',
+          b.pickupItems || '', b.assignedRunner || '', b.requestedBy || '',
+          b.startedAt ? new Date(b.startedAt).toLocaleString() : '',
+          b.completedAt ? new Date(b.completedAt).toLocaleString() : '',
+          mins
+        ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(',');
       });
 
-      doc.end();
+      const csv = [headers.join(','), ...rows].join('\n');
+      res.setHeader('Content-Type', 'text/csv');
+      res.setHeader('Content-Disposition', `attachment; filename="report-${req.params.reportId}.csv"`);
+      return res.send(csv);
     } catch (err) {
       return this.error(res, err.message, err.statusCode || 500);
     }

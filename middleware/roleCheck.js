@@ -53,6 +53,13 @@ const requireBusiness = (allowedRoles = []) => {
       const user = await User.findById(req.user._id)
         .select('accountType businessProfile teamMembership');
 
+      console.log('requireBusiness debug:', {
+        userId: req.user._id,
+        accountType: user?.accountType,
+        teamMembership: user?.teamMembership,
+        allowedRoles,
+      });
+
       if (!user) {
         return res.status(401).json({ success: false, message: 'User not found' });
       }
