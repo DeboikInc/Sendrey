@@ -128,13 +128,23 @@ const respondToInvite = async (inviteeId, response) => {
 
 const updateMemberRole = async (businessOwnerId, memberId, role) => {
   const owner = await User.findById(businessOwnerId);
+  if (!owner) throw Object.assign(new Error('Business owner not found'), { statusCode: 404 });
+
   const member = owner.businessProfile.members.find(
-    (m) => m.userId.toString() === memberId
+    (m) => m.userId.toString() === memberId.toString() 
   );
-  if (!member) throw new Error('Member not found');
-  if (memberId === businessOwnerId.toString()) throw new Error("Can't change your own role");
+  if (!member) throw Object.assign(new Error('Member not found'), { statusCode: 404 });
+  if (memberId.toString() === businessOwnerId.toString())
+    throw Object.assign(new Error("Can't change your own role"), { statusCode: 400 });
+
   member.role = role;
   await owner.save();
+
+
+  await User.findByIdAndUpdate(memberId, {
+    'teamMembership.role': role
+  });
+
   return owner.businessProfile.members;
 };
 
@@ -347,38 +357,86 @@ const exportReportCSV = async (businessOwnerId, reportId) => {
   const report = await ExpenseReport.findOne({
     _id: reportId,
     businessAccount: businessOwnerId
+  }).populate({
+    path: 'breakdown.taskId',
+    select: 'ServiceType pickupLocation deliveryLocation marketLocation pickupItems marketItems budget fleetType createdByMember startedAt completedAt cancelledAt createdAt amount'
   });
+
   if (!report) throw Object.assign(new Error('Report not found'), { statusCode: 404 });
 
-  const rows = [
-    ['Period', 'Start Date', 'End Date', 'Total Tasks', 'Total Spend'],
-    [
-      report.period,
-      new Date(report.startDate).toLocaleDateString(),
-      new Date(report.endDate).toLocaleDateString(),
-      report.totalTasks,
-      report.totalSpend,
-    ],
-    [],
-    ['Task ID', 'Amount', 'Completed At'],
-    ...report.breakdown.map(b => [
-      b.taskId?.toString() || '',
-      b.amount || 0,
-      b.completedAt ? new Date(b.completedAt).toLocaleDateString() : '',
-    ])
+  const headers = [
+    'Task ID', 'Service Type', 'Fleet', 'Amount (₦)',
+    'Pickup / Market Location', 'Delivery Location',
+    'Items / Market Items', 'Budget',
+    'Requested By', 'Created At', 'Completed At', 'Duration (min)'
   ];
 
-  return rows.map(r => r.join(',')).join('\n');
+  const rows = report.breakdown.map(b => {
+    const t = b.taskId || {};
+    const start = t.createdAt;
+    const end = t.completedAt || t.cancelledAt;
+    const mins = start && end
+      ? Math.round((new Date(end) - new Date(start)) / 60000)
+      : '';
+
+    return [
+      t._id?.toString() || '',
+      t.ServiceType || '',
+      t.fleetType || '',
+      b.amount || 0,
+      t.pickupLocation || t.marketLocation || '',
+      t.deliveryLocation || '',
+      t.pickupItems || t.marketItems || '',
+      t.budget || '',
+      t.createdByMember?.toString() || '',
+      t.createdAt ? new Date(t.createdAt).toLocaleString() : '',
+      end ? new Date(end).toLocaleString() : '',
+      mins
+    ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(',');
+  });
+
+  return [headers.join(','), ...rows].join('\n');
 };
 
 const exportReportPDF = async (businessOwnerId, reportId) => {
   const report = await ExpenseReport.findOne({
     _id: reportId,
     businessAccount: businessOwnerId
+  }).populate({
+    path: 'breakdown.taskId',
+    select: 'ServiceType pickupLocation deliveryLocation marketLocation pickupItems marketItems budget fleetType createdByMember completedAt cancelledAt createdAt amount'
   });
+
   if (!report) throw Object.assign(new Error('Report not found'), { statusCode: 404 });
-  return report;
+
+  return {
+    ...report.toObject(),
+    breakdown: report.breakdown.map(b => {
+      const t = b.taskId || {};
+      const start = t.createdAt;
+      const end = t.completedAt || t.cancelledAt;
+      const mins = start && end
+        ? Math.round((new Date(end) - new Date(start)) / 60000)
+        : null;
+
+      return {
+        taskId: t._id?.toString() || b.taskId?.toString(),
+        amount: b.amount,
+        serviceType: t.ServiceType,
+        fleet: t.fleetType,
+        pickupLocation: t.pickupLocation || t.marketLocation,
+        deliveryLocation: t.deliveryLocation,
+        items: t.pickupItems || t.marketItems,
+        budget: t.budget,
+        requestedBy: t.createdByMember?.toString(),
+        createdAt: t.createdAt,
+        completedAt: end,
+        durationMins: mins,
+      };
+    })
+  };
 };
+
 
 // ── Admin: Suggestions ────────────────────────────────────────────────────────
 const adminGetAllSuggestions = async ({ page = 1, limit = 20, filter } = {}) => {
@@ -508,6 +566,8 @@ module.exports = {
   inviteMember,
   removeMember,
   getTeamMembers,
+  updateMemberRole,
+
   // reports
   generateExpenseReport,
   getReports,

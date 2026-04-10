@@ -24,7 +24,7 @@ const taskSchema = new mongoose.Schema({
     default:null,
  },
 
- createdByMemmber:{
+ createdByMember:{
     type:mongoose.Schema.Types.ObjectId,
     ref:"User",
     default:null,

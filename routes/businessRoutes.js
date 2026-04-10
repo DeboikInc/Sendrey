@@ -43,10 +43,15 @@ router.delete('/team/:memberId',
   auditLog('REMOVE_TEAM_MEMBER'),
   controller.removeMember);
 
+router.patch('/team/:memberId/role',
+  requireBusiness(['admin']),
+  auditLog('UPDATE_MEMBER_ROLE'),    
+  controller.updateMemberRole);
+
 // ── Reports
 router.get('/reports',
   userRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 10 }),
-  requireBusiness(),
+  requireBusiness(['admin', 'manager']),
   auditLog('GET_EXPENSE_REPORTS'),
   controller.getReports);
 
@@ -54,30 +59,6 @@ router.post('/reports/generate',
   requireBusiness(['admin', 'manager']),
   auditLog('GENERATE_EXPENSE_REPORT'),
   controller.generateExpenseReport);
-
-// ── Schedules 
-router.post('/schedules',
-  userRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 10 }),
-  requireBusiness(['admin, manager']),
-  auditLog('CREATE_SCHEDULE'),
-  controller.createSchedule);
-
-router.get(
-  '/schedules',
-  requireBusiness(),
-  auditLog('GET_SCHEDULES'),
-  controller.getSchedules);
-
-router.delete('/schedules/:scheduleId',
-  requireBusiness(['admin']),
-  auditLog('DELETE_SCHEDULE'),
-  controller.deleteSchedule);
-
-router.patch('/team/:memberId/role',
-  requireBusiness(['admin']),
-  auditLog('DELETE_SCHEDULE'),
-  controller.updateMemberRole,
-)
 
 router.get('/reports/:reportId/export/csv',
   requireBusiness(['admin', 'manager']),
@@ -89,22 +70,26 @@ router.get('/reports/:reportId/export/pdf',
   auditLog('EXPORT_REPORT_PDF'),
   controller.exportReportPDF);
 
-router.post('/notify/team-member',
+// ── Schedules
+router.post('/schedules',
+  userRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 10 }),
+  requireBusiness(['admin', 'manager']), 
+  auditLog('CREATE_SCHEDULE'),
+  controller.createSchedule);
+
+router.get('/schedules',
   requireBusiness(),
-  auditLog('NOTIFY_TEAM_MEMBER'),
-  controller.notifyTeamMember
-);
+  auditLog('GET_SCHEDULES'),
+  controller.getSchedules);
+
+router.delete('/schedules/:scheduleId',
+  requireBusiness(['admin']),
+  auditLog('DELETE_SCHEDULE'),
+  controller.deleteSchedule);
 
 router.patch('/schedules/:scheduleId/status',
-  requireBusiness(['admin']),
+  requireBusiness(['admin', 'manager']), 
   auditLog('UPDATE_SCHEDULE_STATUS'),
-  controller.updateScheduleStatus
-);
-
-router.post('/invite/respond',
-  authenticate,
-  auditLog('RESPOND_TO_INVITE'),
-  controller.respondToInvite
-);
+  controller.updateScheduleStatus);
 
 module.exports = router;
