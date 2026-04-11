@@ -6,7 +6,7 @@ const { validate } = require('../middleware/validation');
 const { authValidation } = require('../validations/authValidation');
 const {
   authenticate,
-  userRateLimit,
+  userRateLimit, ipRateLimit,
   auditLog
 } = require('../middleware/auth');
 
@@ -14,26 +14,26 @@ const {
 // router.get('/check-runner', authController.checkExistingUserOrRunner);
 
 router.post('/send-returning-user-otp',
-  userRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 3 }),
+  ipRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 3 }),
   authController.sendReturningUserEmailOTP
 );
 
 router.post('/register-runner',
-  userRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 3 }), // 3 registrations per hour
+  ipRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 5 }),
   validate(authValidation.registerRunner),
   auditLog('REGISTER-RUNNER'),
   authController.registerRunner
 );
 
 router.post('/register-user',
-  userRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 3 }), // 3 registrations per hour
+  ipRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 10 }),
   validate(authValidation.registerUser),
   auditLog('REGISTER-USER'),
   authController.register
 );
 
 router.post('/login',
-  userRateLimit({ windowMs: 15 * 60 * 1000, maxRequests: 5 }), // 5 login attempts per 15 minutes
+  ipRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 5 }),
   validate(authValidation.login),
   auditLog('LOGIN'),
   authController.login
@@ -52,6 +52,7 @@ router.post(
 
 router.post(
   '/refresh-token',
+  ipRateLimit({ windowMs: 15 * 60 * 1000, maxRequests: 10 }),
   authController.refreshToken
 );
 
@@ -63,7 +64,7 @@ router.post('/verify-email-otp',
 );
 
 router.post('/forgot-password',
-  userRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 3 }), // 3 requests per hour
+  ipRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 3 }),
   validate(authValidation.forgotPassword),
   authController.forgotPassword
 );

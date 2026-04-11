@@ -11,7 +11,7 @@ const rateLimit = require('express-rate-limit');
 const corsOptions = require('./config/cors');
 
 const config = require('./config');
-
+const cookieParser = require('cookie-parser');
 const routes = require('./routes');
 const adminRoutes = require('./routes/admin')
 
@@ -64,6 +64,7 @@ const startServer = async () => {
     app.use(cors(corsOptions));
     app.options('*', cors(corsOptions));
     app.use(compression());
+    app.use(cookieParser());
     
     // webhooks
     app.use('/payments/webhook', express.raw({ type: 'application/json' }));

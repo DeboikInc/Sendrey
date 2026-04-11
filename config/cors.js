@@ -20,7 +20,8 @@ const corsOptions = {
     'X-Requested-With',
     'Content-Type',
     'Accept',
-    'Authorization'
+    'Authorization',
+    'X-Admin-Role'
   ],
   exposedHeaders: ['Content-Type', 'Content-Length'],
   credentials: true,
