@@ -48,12 +48,12 @@ class AuthService {
         };
 
         console.log('Existing user found during registration:', {
-            isVerified: existingUser.isVerified,
-            isEmailVerified: existingUser.isEmailVerified,
-            ninStatus: existingUser.verificationDocuments?.nin?.status || 'not_submitted',
-            driverLicenseStatus: existingUser.verificationDocuments?.driverLicense?.status || 'not_submitted',
-            selfieVerified: existingUser.biometricVerification?.selfieVerified || false,
-            selfieStatus: existingUser.biometricVerification?.status || 'not_submitted',
+          isVerified: existingUser.isVerified,
+          isEmailVerified: existingUser.isEmailVerified,
+          ninStatus: existingUser.verificationDocuments?.nin?.status || 'not_submitted',
+          driverLicenseStatus: existingUser.verificationDocuments?.driverLicense?.status || 'not_submitted',
+          selfieVerified: existingUser.biometricVerification?.selfieVerified || false,
+          selfieStatus: existingUser.biometricVerification?.status || 'not_submitted',
         });
         throw err;
       }
@@ -276,32 +276,35 @@ class AuthService {
   async verifyEmailOTPCode(otp, userType = 'user') {
     const Model = userType === 'runner' ? Runner : User;
 
-    const all = await Model.find({ emailVerificationExpires: { $gt: Date.now() } })
+    const all = await Model.find({
+      emailVerificationExpires: { $gt: Date.now() }
+    })
+      .select('+emailVerificationOTP +emailVerificationExpires')
       .lean();
+
     console.log('[verifyEmailOTPCode] active OTP docs:', all.map(u => ({
       id: u._id,
       email: u.email,
       otp: u.emailVerificationOTP,
-      expires: u.emailVerificationExpires,
-      incomingOtp: otp,
       match: u.emailVerificationOTP === otp,
     })));
 
     const user = await Model.findOne({
       emailVerificationOTP: otp,
       emailVerificationExpires: { $gt: Date.now() }
-    }).lean();
+    })
+      .select('+emailVerificationOTP +emailVerificationExpires')
+      .lean();
 
-    if (!user) {
-      throw new Error('Invalid or expired OTP');
-    }
+    if (!user) throw new Error('Invalid or expired OTP');
 
+    console.log('[verifyEmailOTP] otp:', otp, 'userType:', userType);
+    
     await Model.findByIdAndUpdate(user._id, {
       $set: { isVerified: true, isEmailVerified: true },
       $unset: { emailVerificationOTP: 1, emailVerificationExpires: 1 }
     });
 
-    // fetch clean doc to return
     return Model.findById(user._id).select('+pin');
   }
 

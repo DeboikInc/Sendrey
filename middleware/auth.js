@@ -9,16 +9,15 @@ const logger = require('../utils/logger');
  */
 const authenticate = async (req, res, next) => {
   try {
+    let token;
+
+    // Mobile (Capacitor) sends Bearer token, web uses HttpOnly cookie
     const authHeader = req.headers.authorization;
-
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({
-        success: false,
-        message: 'Access token required'
-      });
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.split(' ')[1];
+    } else if (req.cookies?.token) {
+      token = req.cookies.token;
     }
-
-    const token = authHeader.split(' ')[1];
 
     if (!token) {
       return res.status(401).json({
@@ -27,7 +26,7 @@ const authenticate = async (req, res, next) => {
       });
     }
 
-    // Verify token
+    // rest stays exactly the same
     const decoded = jwt.verify(token, config.jwt.secret);
 
     if (decoded.type && decoded.type !== 'access') {
@@ -39,11 +38,9 @@ const authenticate = async (req, res, next) => {
 
     const userId = decoded.id || decoded.userId || decoded._id;
 
-    //  User collection first
     let user = await User.findById(userId).select('-password');
     let userType = 'user';
 
-    //  try Runner collection
     if (!user) {
       user = await Runner.findById(userId).select('-password');
       userType = 'runner';
@@ -63,9 +60,7 @@ const authenticate = async (req, res, next) => {
       });
     }
 
-    // ✅ Attach userType to req.user
     user.userType = userType;
-
     req.user = user;
     req.token = token;
 
@@ -76,23 +71,13 @@ const authenticate = async (req, res, next) => {
     logger.error('Authentication error:', error);
 
     if (error.name === 'JsonWebTokenError') {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid token'
-      });
+      return res.status(401).json({ success: false, message: 'Invalid token' });
     }
-
     if (error.name === 'TokenExpiredError') {
-      return res.status(401).json({
-        success: false,
-        message: 'Token expired'
-      });
+      return res.status(401).json({ success: false, message: 'Token expired' });
     }
 
-    return res.status(401).json({
-      success: false,
-      message: 'Authentication failed'
-    });
+    return res.status(401).json({ success: false, message: 'Authentication failed' });
   }
 };
 
@@ -325,6 +310,46 @@ const userRateLimit = (options = {}) => {
 };
 
 /**
+ * Ip Rate Limit
+ */
+const ipRateLimit = (options = {}) => {
+  const {
+    windowMs = 15 * 60 * 1000,
+    maxRequests = 10,
+    message = 'Too many requests, please try again later'
+  } = options;
+
+  const ipRequests = new Map();
+
+  return (req, res, next) => {
+    const ip = req.ip || req.connection.remoteAddress;
+    const now = Date.now();
+    const windowStart = now - windowMs;
+
+    if (ipRequests.has(ip)) {
+      const requests = ipRequests.get(ip).filter(t => t > windowStart);
+      requests.length === 0 ? ipRequests.delete(ip) : ipRequests.set(ip, requests);
+    }
+
+    if (!ipRequests.has(ip)) ipRequests.set(ip, []);
+
+    const timestamps = ipRequests.get(ip);
+
+    if (timestamps.length >= maxRequests) {
+      return res.status(429).json({
+        success: false,
+        message,
+        retryAfter: Math.ceil((timestamps[0] + windowMs - now) / 1000)
+      });
+    }
+
+    timestamps.push(now);
+    next();
+  };
+};
+
+
+/**
  * API key authentication middleware
  */
 const apiKeyAuth = (req, res, next) => {
@@ -518,6 +543,7 @@ module.exports = {
   requirePhoneVerification,
   checkOwnership,
   userRateLimit,
+  ipRateLimit,
   apiKeyAuth,
   corsWithAuth,
   hasPermission,

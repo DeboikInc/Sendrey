@@ -26,6 +26,26 @@ class AuthController extends BaseController {
     this.smsService = smsService;
   }
 
+  setAuthCookies = async (res, accessToken, refreshToken) => {
+    const isProd = process.env.NODE_ENV === 'production';
+
+    res.cookie('token', accessToken, {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: isProd ? 'strict' : 'lax', // lax for local dev (http)
+      maxAge: 15 * 60 * 1000 // 15 mins
+    });
+
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: isProd ? 'strict' : 'lax',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      path: '/api/v1/auth/refresh-token' // only sent to this endpoint
+    });
+  };
+
+
 
   // ─────────────────────────────────────────────
   // REGISTRATION
@@ -106,13 +126,13 @@ class AuthController extends BaseController {
         console.error('Virtual account creation failed:', err.message);
       }
 
+      this.setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
+
       logger.info(`User registered: ${user.phone}`);
 
       this.created(res, {
         user: this._sanitizeUser(user),
         message: 'Registration successful. Please check your email and phone for verification.',
-        token: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
       });
 
     } catch (error) {
@@ -199,13 +219,13 @@ class AuthController extends BaseController {
         }
       }
 
+      this.setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
+
       logger.info(`Runner registered: ${runner.phone}`);
 
       this.created(res, {
         runner: this._sanitizeRunner(runner),
         message: 'Runner registration successful. Please verify your email or phone number.',
-        token: tokens.accessToken,
-        refreshToken: tokens.refreshToken,
       });
 
     } catch (error) {
@@ -230,6 +250,9 @@ class AuthController extends BaseController {
 
       logger.info(`Admin registered: ${user.email}`);
 
+
+      // this.setAuthCookies(res, tokens.accessToken, tokens.refreshToken);
+      // remove tokens later
       return this.created(res, {
         user: this._sanitizeUser(user),
         message: 'Admin registered successfully.',
@@ -282,13 +305,13 @@ class AuthController extends BaseController {
 
       const response = userType === 'user' ? this._sanitizeUser(user) : this._sanitizeRunner(user);
 
+      this.setAuthCookies(res, token, refreshToken);
+
       logger.info(`${userType} logged in: ${user.email || user.phone}`);
 
       this.success(res, {
         [userType]: response,
-        token,
         userType,
-        refreshToken,
         message: 'Login successful'
       });
 
@@ -323,6 +346,7 @@ class AuthController extends BaseController {
 
       logger.info(`Admin logged in: ${email}`);
 
+      // this.setAuthCookies(res, accessToken, refreshToken);
       this.success(res, {
         user: this._sanitizeUser(admin),
         token: accessToken,
@@ -338,11 +362,14 @@ class AuthController extends BaseController {
 
   logout = async (req, res, next) => {
     try {
-      const token = req.headers.authorization?.split(' ')[1];
+      const token = req.cookies?.token || req.headers.authorization?.split(' ')[1];
       const userType = req.user.role === 'runner' ? 'runner' : 'user';
 
       await ActivityLogger.logLogout(req.user, req.ip, req.get('User-Agent'), userType);
       if (token) await authService.blacklistToken(token);
+
+      res.clearCookie('token');
+      res.clearCookie('refreshToken', { path: '/api/v1/auth/refresh-token' });
 
       logger.info(`${userType} logged out: ${req.user.email || req.user.phone}`);
       this.success(res, { message: 'Logged out successfully' });
@@ -360,20 +387,34 @@ class AuthController extends BaseController {
 
   refreshToken = async (req, res, next) => {
     try {
-      const { refreshToken } = req.body;
+      // read from cookie, not req.body
+      const refreshToken = req.cookies.refreshToken;
       if (!refreshToken) return this.error(res, 'Refresh token required', 401);
 
       const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
-      const user = await User.findById(decoded.id).select('+refreshToken');
+
+      // check both User and Runner since either could be refreshing
+      let user = await User.findById(decoded.id).select('+refreshToken');
+      let isRunner = false;
+
+      if (!user) {
+        user = await Runner.findById(decoded.id).select('+refreshToken');
+        isRunner = true;
+      }
 
       if (!user || user.refreshToken !== refreshToken) {
         return this.error(res, 'Invalid refresh token', 401);
       }
 
       const { accessToken, refreshToken: newRefresh } = this.service.generateTokens(user);
-      await User.findByIdAndUpdate(user._id, { refreshToken: newRefresh });
 
-      return this.success(res, { token: accessToken, refreshToken: newRefresh });
+      const Model = isRunner ? Runner : User;
+      await Model.findByIdAndUpdate(user._id, { refreshToken: newRefresh });
+
+      // set new cookies
+      this.setAuthCookies(res, accessToken, newRefresh);
+
+      return this.success(res, { message: 'Token refreshed' }); // no tokens in body
     } catch (err) {
       return this.error(res, 'Invalid or expired refresh token', 401);
     }
@@ -398,12 +439,12 @@ class AuthController extends BaseController {
         const Model = isRunner ? Runner : User;
         await Model.findByIdAndUpdate(entity._id, { refreshToken });
 
+        this.setAuthCookies(res, accessToken, refreshToken);
+
         return this.success(res, {
           [isRunner ? 'runner' : 'user']: isRunner
             ? this._sanitizeRunner(entity)
             : this._sanitizeUser(entity),
-          token: accessToken,
-          refreshToken,
           isVerified: entity.isPhoneVerified,
           isRunner,
           isTeamInvite: true,
@@ -425,8 +466,6 @@ class AuthController extends BaseController {
         [isRunner ? 'runner' : 'user']: isRunner
           ? this._sanitizeRunner(entity)
           : this._sanitizeUser(entity),
-        token: sessionToken,
-        refreshToken,
         isVerified: entity.isPhoneVerified,
         isRunner,
       });
@@ -474,22 +513,26 @@ class AuthController extends BaseController {
     try {
       const { email, userType = 'user' } = req.body;
 
-      const { user, otp, kycStatus } = await authService.sendReturningUserOTP(email, userType);
+      try {
+        const { user, otp, kycStatus } = await authService.sendReturningUserOTP(email, userType);
 
-      await sendEmailEvent({
-        type: 'otp',
-        to: user.email,
-        subject: 'Your Sendrey Verification Code',
-        template: 'returningUserVerification',
-        data: { name: user.firstName, otp, year: new Date().getFullYear() },
-      });
+        await sendEmailEvent({
+          type: 'otp',
+          to: user.email,
+          subject: 'Your Sendrey Verification Code',
+          template: 'returningUserVerification',
+          data: { name: user.firstName, otp, year: new Date().getFullYear() },
+        });
 
-      logger.info(`Returning ${userType} OTP sent: ${email}`);
+        logger.info(`Returning ${userType} OTP sent: ${email}`);
+      } catch (innerErr) {
+        // swallow — don't reveal whether account exists
+        logger.warn(`sendReturningUserOTP silenced: ${innerErr.message}`);
+      }
 
+      // always return the same response regardless of outcome
       this.success(res, {
-        message: 'OTP sent to your email',
-        userName: user.firstName,
-        kycStatus,
+        message: 'If this account exists, an OTP has been sent.',
       });
 
     } catch (error) {
@@ -497,7 +540,6 @@ class AuthController extends BaseController {
       next(error);
     }
   }
-
 
   // ─────────────────────────────────────────────
   // PASSWORD
@@ -642,16 +684,21 @@ class AuthController extends BaseController {
     try {
       const { otp } = req.body;
       const userType = req.body.userType || 'user';
+      console.log('[verifyEmailOTP] received:', { otp, userType, body: req.body });
 
       const user = await authService.verifyEmailOTPCode(otp, userType);
+
 
       logger.info(`${userType} email verified via OTP: ${user.email}`);
 
       const { accessToken, refreshToken } = this.service.generateTokens(user);
+
+      const Model = userType === 'runner' ? Runner : User;
+      await Model.findByIdAndUpdate(user._id, { refreshToken }); // persist token
+      this.setAuthCookies(res, accessToken, refreshToken)
+
       this.success(res, {
         [userType]: userType === 'user' ? this._sanitizeUser(user) : this._sanitizeRunner(user),
-        token: accessToken,
-        refreshToken,
         message: 'Email verified successfully',
       });
 
