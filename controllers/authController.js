@@ -498,6 +498,62 @@ class AuthController extends BaseController {
     }
   }
 
+  runnerMe = async (req, res, next) => {
+    try {
+      const runner = await Runner.findById(req.user.id)
+        .select('-password -refreshToken -verificationToken -resetPasswordToken -phoneVerificationOTP')
+        .lean();
+
+      if (!runner) return this.error(res, 'Runner not found', 404);
+
+      const kycStatus = {
+        overallStatus: runner.runnerStatus,
+        nin: {
+          status: runner.verificationDocuments?.nin?.status ?? 'not_submitted',
+          verified: runner.verificationDocuments?.nin?.verified ?? false,
+          submittedAt: runner.verificationDocuments?.nin?.submittedAt ?? null,
+          verifiedAt: runner.verificationDocuments?.nin?.verifiedAt ?? null,
+          rejectionReason: runner.verificationDocuments?.nin?.rejectionReason ?? null,
+        },
+        driverLicense: {
+          status: runner.verificationDocuments?.driverLicense?.status ?? 'not_submitted',
+          verified: runner.verificationDocuments?.driverLicense?.verified ?? false,
+          submittedAt: runner.verificationDocuments?.driverLicense?.submittedAt ?? null,
+          verifiedAt: runner.verificationDocuments?.driverLicense?.verifiedAt ?? null,
+          expiryDate: runner.verificationDocuments?.driverLicense?.expiryDate ?? null,
+          rejectionReason: runner.verificationDocuments?.driverLicense?.rejectionReason ?? null,
+        },
+        biometric: {
+          status: runner.biometricVerification?.status ?? 'not_submitted',
+          selfieVerified: runner.biometricVerification?.selfieVerified ?? false,
+          livenessPassed: runner.biometricVerification?.livenessPassed ?? false,
+          faceMatchScore: runner.biometricVerification?.faceMatchScore ?? null,
+          submittedAt: runner.biometricVerification?.submittedAt ?? null,
+          verifiedAt: runner.biometricVerification?.selfieVerifiedAt ?? null,
+          rejectionReason: runner.biometricVerification?.rejectionReason ?? null,
+        },
+      };
+
+      return this.success(res, { runner: this._sanitizeRunner(runner), kycStatus });
+    } catch (error) {
+      next(error);
+    }
+  };
+
+  userMe = async (req, res, next) => {
+    try {
+      const user = await User.findById(req.user.id)
+        .select('-password -refreshToken -verificationToken -resetPasswordToken -phoneVerificationOTP')
+        .lean();
+
+      if (!user) return this.error(res, 'User not found', 404);
+
+      return this.success(res, { user: this._sanitizeUser(user) });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   checkExistingUserOrRunner = async (req, res, next) => {
     try {
       const { email, userType = 'runner' } = req.body;

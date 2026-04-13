@@ -58,6 +58,9 @@ router.post(
 
 router.get('/me', authenticate, authController.me);
 
+router.get('/runner/me', authenticate, authController.runnerMe);
+router.get('/user/me', authenticate, authController.userMe);
+
 router.post('/verify-email-otp',
   validate(authValidation.verifyEmailOTP),
   authController.verifyEmailOTP
