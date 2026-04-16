@@ -29,18 +29,17 @@ const handleUserOnline = async (socket, io, { userId, userType, chatId }) => {
 
   if (!partnerId) return;
 
-  // Tell partner's client
+  // Emit FIRST — no await
   io.to(`${partnerType}-${partnerId}`).emit('partnerOnline', {
-    chatId,
-    userId,
-    userType,
-    timestamp: new Date().toISOString(),
+    chatId, userId, userType, timestamp: new Date().toISOString(),
   });
-
-  // Remove any stale offline system message from chat
   io.to(chatId).emit('presenceMessageDismiss', { userId, userType });
-};
 
+  // DB fire-and-forget
+  const Model = isRunner ? Runner : User;
+  Model.findByIdAndUpdate(userId, { isOnline: true, lastSeen: new Date() })
+    .catch(err => console.error('Error updating online status:', err));
+};
 /**
  * Handle user disconnect and send offline alerts
  */
@@ -48,6 +47,18 @@ const handleUserDisconnect = async (socket, io) => {
   if (!socket.userId || !socket.userType) return;
 
   const { userId, userType } = socket;
+
+  if (userType === 'user') {
+    io.to(`runner-${socket.runnerId}`).emit('userOffline', {
+      userId,
+      timestamp: new Date(),
+    });
+  } else {
+    io.to(`user-${socket.userId}`).emit('runnerOffline', {
+      runnerId: userId,
+      timestamp: new Date(),
+    });
+  }
 
   try {
     if (userType === 'user') {

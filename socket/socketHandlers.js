@@ -1,20 +1,17 @@
 // socketHandlers.js
 const { Chat } = require("../models/Chat");
 const ServiceRequest = require("./ServiceRequest");
-const Invoice = require("../models/Invoice");
 const User = require("../models/User");
 const Runner = require("../models/Runner");
-
 const Order = require("../models/Order");
 const Escrow = require('../models/Escrows');
 const { notifyPaymentRequest, notifyPartnerOffline } = require('../services/notificationService');
-
 const { logMetric } = require('../utils/metricsLogger');
 const { computeDeliveryFeeFromDocs } = require('../config/pricing');
 const { canRunnerAcceptErrand, incrementErrandCount } = require('../utils/verificationCheck');
 const { logSocketAudit } = require('../utils/socketAudit');
 
-// ─── Global state 
+// ─── Global state ─────────────────────────────────────────────────────────────
 
 const runnersByService = {
   "pick-up": new Set(),
@@ -23,16 +20,16 @@ const runnersByService = {
 
 const preRoomState = new Map();
 const pendingWrites = new Map();
-const joiningChats = new Set()
+const joiningChats = new Set();
 
 // ─── In-memory snapshot store: socketId → { chatId, messageIds: Set }
 const socketMessageSnapshot = new Map();
 
-// ─── Helpers 
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
 const stripForTransport = (msg) => {
   if (!msg) return msg;
   const stripped = { ...msg };
-  // Never send base64 over socket — only URLs
   if (stripped.file && stripped.file.length > 1000) delete stripped.file;
   if (stripped.receiptBase64) delete stripped.receiptBase64;
   if (stripped.photoBase64) delete stripped.photoBase64;
@@ -50,9 +47,6 @@ const cleanForEmit = (data) => {
   return data;
 };
 
-
-
-// Deduplicate messages by id — used before every chatHistory emit
 const deduplicateMessages = (messages) => {
   const seen = new Set();
   return messages.filter(m => {
@@ -62,7 +56,6 @@ const deduplicateMessages = (messages) => {
   });
 };
 
-// Deduplicate in DB and return clean array
 const deduplicateAndPersist = async (chatId, messages) => {
   const deduped = deduplicateMessages(messages);
   if (deduped.length !== messages.length) {
@@ -79,7 +72,20 @@ const snapshotMessage = (socketId, chatId, messageId) => {
   socketMessageSnapshot.get(socketId).messageIds.add(messageId);
 };
 
-// archive current messages into orderSessions 
+const sanitizeSpecialInstructions = (specialInstructions) => {
+  if (!specialInstructions) return null;
+  return {
+    text: specialInstructions.text || null,
+    media: (specialInstructions.media || []).map(m => ({
+      fileName: m.fileName || m.name || null,
+      fileType: m.fileType || m.type || null,
+      fileSize: m.fileSize || null,
+      fileUrl: m.fileUrl || null,
+    })),
+  };
+};
+
+// ─── Archive current messages into orderSessions ──────────────────────────────
 
 const archiveCurrentSession = async (chatId, orderId, status = 'completed') => {
   console.log(`[archive] Called with orderId: ${orderId}, type: ${typeof orderId}`);
@@ -92,18 +98,15 @@ const archiveCurrentSession = async (chatId, orderId, status = 'completed') => {
   const chat = await Chat.findOne({ chatId });
   if (!chat || !chat.messages.length) return;
 
-  // Don't archive if messages are just the initial runner join messages
   const hasRealContent = chat.messages.some(m =>
     m.type !== 'system' || !m.text?.includes('joined the chat')
   );
   if (!hasRealContent) return;
 
-  // Fetch the full order data
   const order = await Order.findOne({ orderId }).lean();
 
-  // Build the session object first
   const sessionObj = {
-    orderId: orderId,
+    orderId,
     startedAt: chat.createdAt || new Date(),
     completedAt: new Date(),
     status,
@@ -151,11 +154,10 @@ const archiveCurrentSession = async (chatId, orderId, status = 'completed') => {
   console.log(`[archive] Order ${orderId} archived with full data, status: ${status}`);
 };
 
-// Handlers
+// ─── Message builders ─────────────────────────────────────────────────────────
 
 const createInitialRunnerMessages = (runnerData, serviceType, runnerId) => {
   const fullName = `${runnerData?.firstName || ""} ${runnerData?.lastName || ""}`.trim();
-
   logSocketAudit('INITIAL_RUNNER_MESSAGE', { runnerData, runnerId, serviceType });
 
   return [
@@ -215,6 +217,156 @@ const buildPaymentRequestMsg = (order, chatId, userId, runnerId) => ({
   },
 });
 
+// ─── createOrder: single source of truth ─────────────────────────────────────
+//
+// Creates the order document, injects the payment_request message into chat,
+// and broadcasts orderCreated + chatHistory to both parties.
+// Called only once per session, after both parties are confirmed in-room.
+//
+const createOrder = async (io, { chatId, userId, runnerId, serviceType }) => {
+  console.log('[createOrder] Starting for chatId:', chatId);
+
+  // Cancel any lingering unpaid / non-terminal orders for this chat
+  await Order.updateMany(
+    {
+      chatId,
+      status: { $nin: ['completed', 'cancelled', 'task_completed'] },
+    },
+    {
+      $set: {
+        status: 'cancelled',
+        cancelledAt: new Date(),
+        cancelReason: 'new_session_started',
+      },
+      $push: {
+        statusHistory: {
+          status: 'cancelled',
+          timestamp: new Date(),
+          triggeredBy: 'system',
+          note: 'Superseded by new session',
+        },
+      },
+    }
+  );
+
+  // Gather data needed for pricing
+  const [runnerDoc, userDoc] = await Promise.all([
+    Runner.findById(runnerId).lean(),
+    User.findById(userId).lean(),
+  ]);
+
+  const chatDoc = await Chat.findOne({ chatId }).lean();
+  const fleetType = chatDoc?.fleetType || userDoc?.currentRequest?.fleetType;
+  const resolvedServiceType = serviceType || userDoc?.currentRequest?.serviceType || chatDoc?.serviceType;
+
+  const { deliveryFee, distanceInMeters, legs } = computeDeliveryFeeFromDocs(resolvedServiceType, userDoc, fleetType);
+  const isErrand = resolvedServiceType === 'run-errand';
+  const itemBudget = isErrand
+    ? Number(userDoc?.currentRequest?.itemBudget || userDoc?.currentRequest?.budget) || 0
+    : 0;
+  const totalAmount = itemBudget + deliveryFee;
+  const { platformFee, runnerPayout } = Escrow.calculateFees(deliveryFee);
+
+  const request = userDoc?.currentRequest || {};
+  const pickupLocationObj = request.pickupLocation ? { address: request.pickupLocation } : null;
+  const deliveryLocationObj = request.deliveryLocation ? { address: request.deliveryLocation } : null;
+  const marketLocationObj = request.marketLocation ? { address: request.marketLocation } : null;
+
+  // Create the order
+  const order = await Order.create({
+    orderId: Order.generateOrderId(),
+    chatId,
+    userId,
+    runnerId,
+    serviceType: resolvedServiceType,
+    taskType: isErrand ? 'run-errand' : 'pick-up',
+    pickupLocation: pickupLocationObj,
+    deliveryLocation: deliveryLocationObj,
+    marketLocation: marketLocationObj,
+    marketCoordinates: request.marketCoordinates || null,
+    pickupCoordinates: request.pickupCoordinates || null,
+    deliveryCoordinates: request.deliveryCoordinates || null,
+    routeDistanceMeters: Math.round(distanceInMeters || 0),
+    routeLegs: legs || {},
+    itemBudget,
+    deliveryFee,
+    totalAmount,
+    platformFee,
+    runnerPayout,
+    specialInstructions: request.specialInstructions || null,
+    fleetType: request.fleetType || fleetType || null,
+    status: 'pending_payment',
+    paymentStatus: 'unpaid',
+    approvalStatus: isErrand ? 'pending' : 'not_required',
+    statusHistory: [{
+      status: 'pending_payment',
+      timestamp: new Date(),
+      triggeredBy: 'system',
+      note: 'Order created on session start',
+    }],
+  });
+
+  console.log('[createOrder] Order created:', order.orderId);
+
+  // Pin orderId onto the chat document
+  await Chat.findOneAndUpdate(
+    { chatId },
+    { $set: { orderId: order.orderId, taskId: order.orderId, lastActivity: new Date() } }
+  );
+
+  // Mark runner & user as busy with this order
+  await Promise.all([
+    Runner.findByIdAndUpdate(runnerId, { activeOrderId: order.orderId }),
+    User.findByIdAndUpdate(userId, { activeOrderId: order.orderId }),
+  ]);
+
+  // Build and inject the payment_request message
+  const paymentRequestMsg = buildPaymentRequestMsg(order, chatId, userId, runnerId);
+  const finalChat = await Chat.findOneAndUpdate(
+    { chatId },
+    { $push: { messages: paymentRequestMsg } },
+    { new: true }
+  );
+
+  const cleanMessages = deduplicateMessages(finalChat.messages);
+
+  // Build a lean order payload for socket emission
+  const orderPayload = {
+    chatId: order.chatId,
+    orderId: order.orderId,
+    itemBudget: order.itemBudget,
+    deliveryFee: order.deliveryFee,
+    totalAmount: order.totalAmount,
+    runnerPayout: order.runnerPayout,
+    taskType: order.taskType,
+    serviceType: order.serviceType,
+    status: order.status,
+    paymentStatus: order.paymentStatus,
+    approvalStatus: order.approvalStatus,
+    marketLocation: order.marketLocation,
+    deliveryLocation: order.deliveryLocation,
+    pickupLocation: order.pickupLocation,
+    marketCoordinates: order.marketCoordinates,
+    deliveryCoordinates: order.deliveryCoordinates,
+    pickupCoordinates: order.pickupCoordinates,
+  };
+
+  // Broadcast to both parties
+  io.to(`user-${userId}`).emit('orderCreated', { order: orderPayload, isNewOrder: true });
+  io.to(`runner-${runnerId}`).emit('orderCreated', { order: orderPayload, isNewOrder: true });
+
+  io.to(chatId).emit('chatHistory', cleanMessages);
+
+  console.log('[createOrder] Broadcast complete. Messages:', cleanMessages.length);
+
+  // Push payment notification to user
+  await notifyPaymentRequest(userId, { orderId: order.orderId, amount: order.totalAmount });
+
+  logSocketAudit('ORDER_CREATED', { orderId: order.orderId, chatId, userId, runnerId });
+
+  return { order, cleanMessages };
+};
+
 // ─── Room handlers ────────────────────────────────────────────────────────────
 
 const handleJoinRunnerRoom = async (socket, { runnerId, serviceType, fleetType }) => {
@@ -227,7 +379,7 @@ const handleJoinRunnerRoom = async (socket, { runnerId, serviceType, fleetType }
   await Runner.findByIdAndUpdate(runnerId, {
     activeServiceType: serviceType,
     activeFleetType: fleetType,
-    isAvailable: true
+    isAvailable: true,
   });
 
   const verificationCheck = await canRunnerAcceptErrand(runnerId);
@@ -241,79 +393,142 @@ const handleJoinRunnerRoom = async (socket, { runnerId, serviceType, fleetType }
   logSocketAudit('RUNNER_JOINED_ROOM', { runnerId, serviceType });
 };
 
+// ─── Pre-room: runner accepts ─────────────────────────────────────────────────
+//
+// Flow:
+//   1. Runner accepts → joins pre-${chatId}, sets state.runner = true
+//   2. Emits enterPreRoom to the user socket so user knows to join
+//   3. If user is ALREADY in pre-room → proceed immediately via lockAndProceed
+//   4. Otherwise start a 30s global timer; if user never shows → timeout
+//
 const handleAcceptRunnerRequest = async (socket, io, { runnerId, userId, chatId, serviceType }) => {
+  console.log('[SERVER] ========== acceptRunnerRequest RECEIVED ==========');
+  console.log('[SERVER] runnerId:', runnerId, '| userId:', userId, '| chatId:', chatId);
+
   try {
     const verificationCheck = await canRunnerAcceptErrand(runnerId);
-
     if (!verificationCheck.canAccept) {
-      socket.emit('error', { message: verificationCheck.reason, code: 'VERIFICATION_FAILED', details: verificationCheck });
+      socket.emit('error', {
+        message: verificationCheck.reason,
+        code: 'VERIFICATION_FAILED',
+        details: verificationCheck,
+      });
       socket.emit('verificationStatus', { ...verificationCheck, timestamp: new Date().toISOString() });
       return;
     }
 
     if (!preRoomState.has(chatId)) {
-      preRoomState.set(chatId, { user: false, runner: false, runnerId, userId, serviceType, timestamp: Date.now() });
+      preRoomState.set(chatId, {
+        user: false, runner: false,
+        runnerId, userId, serviceType,
+        timestamp: Date.now(),
+      });
     }
 
     const state = preRoomState.get(chatId);
+
+    if (state.runner) {
+      console.warn('[acceptRunnerRequest] runner already in pre-room for chatId:', chatId);
+      return;
+    }
+
     state.runner = true;
     state.runnerId = runnerId;
+
     socket.join(`pre-${chatId}`);
+    console.log(`[acceptRunnerRequest] Runner ${runnerId} joined pre-${chatId}`);
 
     await incrementErrandCount(runnerId);
 
-    io.to(`user-${userId}`).emit("enterPreRoom", {
+    // Tell the user to enter the pre-room
+    io.to(`user-${userId}`).emit('enterPreRoom', {
       chatId, runnerId, userId, serviceType,
-      message: "Runner accepted! Preparing chat...",
+      message: 'Runner accepted! Preparing chat...',
     });
 
-    if (state.user && state.runner) {
+    // If user is already waiting, go immediately
+    if (state.user) {
+      if (state.globalTimer) { clearTimeout(state.globalTimer); state.globalTimer = null; }
       await lockAndProceed(io, chatId, state);
-    } else {
-      setTimeout(() => {
-        const s = preRoomState.get(chatId);
-        if (s && s.runner && !s.user) {
-          preRoomState.delete(chatId);
-          io.to(`pre-${chatId}`).emit("preRoomTimeout", { chatId, message: "User did not respond in time" });
-        }
-      }, 30000);
+      return;
     }
 
-    logSocketAudit('USER_ACCEPTED_RUNNER_REQUEST', { runnerId, serviceType, chatId, userId });
+    // Start global timeout — runner arrived first
+    if (!state.globalTimer) {
+      state.globalTimer = setTimeout(() => {
+        const s = preRoomState.get(chatId);
+        if (s && (!s.user || !s.runner)) {
+          console.warn('[preRoom] timeout — both parties never arrived for chatId:', chatId);
+          preRoomState.delete(chatId);
+          io.to(`pre-${chatId}`).emit('preRoomTimeout', { chatId, message: 'Connection timed out.' });
+        }
+      }, 30_000);
+    }
+
+    logSocketAudit('RUNNER_ACCEPTED_REQUEST', { runnerId, serviceType, chatId, userId });
   } catch (error) {
-    console.error("Error in acceptRunnerRequest:", error);
+    console.error('[acceptRunnerRequest] error:', error);
   }
 };
 
+// ─── Pre-room: user responds to enterPreRoom ──────────────────────────────────
+//
+// Flow:
+//   1. User receives enterPreRoom → client emits requestRunner
+//   2. User joins pre-${chatId}, sets state.user = true
+//   3. If runner is ALREADY in pre-room → proceed immediately via lockAndProceed
+//   4. Otherwise start a 30s global timer; if runner never shows → timeout
+//
 const handleRequestRunner = async (socket, io, data) => {
   const { runnerId, userId, chatId, serviceType, specialInstructions } = data;
 
   socket.join(`user-${userId}`);
 
   if (!preRoomState.has(chatId)) {
-    preRoomState.set(chatId, { user: false, runner: false, runnerId, userId, serviceType, timestamp: Date.now() });
+    preRoomState.set(chatId, {
+      user: false, runner: false,
+      runnerId, userId, serviceType,
+      timestamp: Date.now(),
+    });
   }
 
   const state = preRoomState.get(chatId);
+
+  if (state.user) {
+    console.warn('[requestRunner] user already in pre-room for chatId:', chatId);
+    return;
+  }
+
   state.user = true;
   state.userId = userId;
   state.specialInstructions = specialInstructions || null;
   socket.join(`pre-${chatId}`);
 
-  if (state.user && state.runner) {
+  console.log(`[requestRunner] user ${userId} in pre-room. runner present=${state.runner}`);
+
+  // Runner already waiting → go immediately
+  if (state.runner) {
+    if (state.globalTimer) { clearTimeout(state.globalTimer); state.globalTimer = null; }
     await lockAndProceed(io, chatId, state);
-  } else {
-    setTimeout(() => {
-      const s = preRoomState.get(chatId);
-      if (s && s.user && !s.runner) {
-        preRoomState.delete(chatId);
-        io.to(`pre-${chatId}`).emit("preRoomTimeout", { chatId, message: "Runner did not respond in time" });
-      }
-    }, 30000);
+    return;
   }
 
-  logSocketAudit('RUNNER_REQUESTED', { runnerId, userId, chatId, serviceType });
+  // Start global timeout — user arrived first
+  if (!state.globalTimer) {
+    state.globalTimer = setTimeout(() => {
+      const s = preRoomState.get(chatId);
+      if (s && (!s.user || !s.runner)) {
+        console.warn('[preRoom] timeout — both parties never arrived for chatId:', chatId);
+        preRoomState.delete(chatId);
+        io.to(`pre-${chatId}`).emit('preRoomTimeout', { chatId, message: 'Connection timed out.' });
+      }
+    }, 30_000);
+  }
+
+  logSocketAudit('USER_REQUESTED_RUNNER', { runnerId, userId, chatId, serviceType });
 };
+
+// ─── Lock both parties and proceed ───────────────────────────────────────────
 
 const lockAndProceed = async (io, chatId, state) => {
   const { runnerId, userId } = state;
@@ -325,65 +540,72 @@ const lockAndProceed = async (io, chatId, state) => {
   logSocketAudit('CHAT_LOCKED', { runnerId, userId });
 };
 
-const sanitizeSpecialInstructions = (specialInstructions) => {
-  if (!specialInstructions) return null;
-  return {
-    text: specialInstructions.text || null,
-    media: (specialInstructions.media || []).map(m => ({
-      fileName: m.fileName || m.name || null,
-      fileType: m.fileType || m.type || null,
-      fileSize: m.fileSize || null,
-      fileUrl: m.fileUrl || null,
-    })),
-  };
-};
-
-// ─── Chat initialization (pre-room → chat) 
-
+// ─── Chat initialization (pre-room → chat) ────────────────────────────────────
+//
+// Responsibilities:
+//   1. Archive any previous session for this chatId
+//   2. Reset the chat document with fresh runner profile messages
+//   3. Emit proceedToChat to both parties
+//   4. Reset socket join-state so handleUserJoinChat / handleRunnerJoinChat
+//      will do a full re-join when the clients call joinChat
+//
 const initializeChatAndProceed = async (io, chatId, state) => {
   const { runnerId, userId, serviceType } = state;
   const specialInstructions = sanitizeSpecialInstructions(state.specialInstructions);
 
   try {
-    const [user, runnerData] = await Promise.all([
-      User.findById(userId).lean(),
+    const [runnerData] = await Promise.all([
       Runner.findById(runnerId).lean(),
+      User.findById(userId).lean(),
     ]);
 
+    // Build fresh profile messages (system + profile-card)
     const initialMessages = createInitialRunnerMessages(runnerData, serviceType, runnerId);
 
     let chat;
     const existingChat = await Chat.findOne({ chatId });
 
     if (existingChat) {
-      // Archive the previous session before wiping
+      // Archive the last order session before wiping
       const lastOrder = await Order.findOne({ chatId })
         .sort({ createdAt: -1 })
         .lean();
 
       if (lastOrder?.orderId) {
-        await archiveCurrentSession(chatId, lastOrder.orderId,
-          ['completed', 'task_completed'].includes(lastOrder.status)
-            ? 'completed'
-            : 'cancelled'
+        await archiveCurrentSession(
+          chatId,
+          lastOrder.orderId,
+          ['completed', 'task_completed'].includes(lastOrder.status) ? 'completed' : 'cancelled'
         );
       }
 
-      // Cancel stale unpaid orders
+      // Cancel all non-terminal orders for this chat
       await Order.updateMany(
         { chatId, status: { $nin: ['completed', 'cancelled', 'task_completed'] } },
-        { $set: { status: 'cancelled', cancelledAt: new Date(), cancelReason: 'new_session_started' } }
+        {
+          $set: { status: 'cancelled', cancelledAt: new Date(), cancelReason: 'new_session_started' },
+          $push: {
+            statusHistory: {
+              status: 'cancelled',
+              timestamp: new Date(),
+              triggeredBy: 'system',
+              note: 'New session started',
+            },
+          },
+        }
       );
 
-      // Reset messages to ONLY initial messages for fresh session
+      // Wipe messages and reset the chat document
       existingChat.messages = [...initialMessages];
       existingChat.specialInstructions = specialInstructions || existingChat.specialInstructions;
       existingChat.lastActivity = new Date();
-
+      existingChat.serviceType = serviceType;
+      existingChat.orderId = null;
+      existingChat.taskId = null;
       await existingChat.save();
       chat = existingChat;
 
-      // Verify the write landed before emitting proceedToChat
+      // Confirm the DB write landed
       const verified = await Chat.findOne({ chatId }).lean();
       const hasInitial = verified?.messages?.some(
         m => m.type === 'system' && m.text?.includes('joined the chat')
@@ -393,40 +615,22 @@ const initializeChatAndProceed = async (io, chatId, state) => {
         return;
       }
 
-      const room = io.sockets.adapter.rooms.get(chatId);
-      if (room) {
-        for (const socketId of room) {
-          const s = io.sockets.sockets.get(socketId);
-          if (s && s.currentChatId === chatId) {
-            s.joinedChat = false; // force full re-join on next userJoinChat
-          }
-        }
-      }
-
-      // ALSO reset runner socket so it forces full re-join
-      const runnerRoom = io.sockets.adapter.rooms.get(`runner-${state.runnerId}`);
-      if (runnerRoom) {
-        for (const socketId of runnerRoom) {
-          const s = io.sockets.sockets.get(socketId);
-          if (s) {
-            s.joinedChat = false;
-            s.currentChatId = null; // force full re-join path in handleRunnerJoinChat
-          }
-        }
-      }
-
-      const allAffectedRooms = [chatId, `runner-${state.runnerId}`, `user-${state.userId}`];
-      for (const roomName of allAffectedRooms) {
+      // Reset all sockets currently in the chat room so they force a full re-join
+      for (const roomName of [chatId, `runner-${runnerId}`, `user-${userId}`]) {
         const room = io.sockets.adapter.rooms.get(roomName);
         if (room) {
           for (const socketId of room) {
-            socketMessageSnapshot.delete(socketId); // cleared — rebuilt on next join
+            const s = io.sockets.sockets.get(socketId);
+            if (s) {
+              s.joinedChat = false;
+              s.currentChatId = null;
+            }
+            socketMessageSnapshot.delete(socketId);
           }
         }
       }
 
-
-      console.log('[initializeChat] Existing chat reset with fresh initial messages for new order');
+      console.log('[initializeChat] Existing chat reset — new session ready');
     } else {
       chat = await Chat.create({
         chatId,
@@ -442,7 +646,7 @@ const initializeChatAndProceed = async (io, chatId, state) => {
       console.log('[initializeChat] New chat created');
     }
 
-    // Emit proceed to chat with fresh initial messages
+    // Tell both parties to proceed — they will call joinChat which triggers createOrder
     io.to(`pre-${chatId}`).emit('proceedToChat', {
       chatId, runnerId, userId, serviceType,
       chatReady: true,
@@ -453,398 +657,233 @@ const initializeChatAndProceed = async (io, chatId, state) => {
     preRoomState.delete(chatId);
     logSocketAudit('PROCEED_TO_CHATROOM', { runnerId, userId, serviceType });
   } catch (error) {
-    console.error('Error initializing chat:', error);
+    console.error('[initializeChat] error:', error);
   }
 };
 
-// ─── User joins chat 
-
+// ─── User joins chat ──────────────────────────────────────────────────────────
+//
+// Server is the source of truth. Strategy:
+//   1. Prevent concurrent joins for the same chatId
+//   2. Always read fresh from DB
+//   3. If there is already a paid active order → restore history, filter payment_request out
+//   4. If there is an unpaid active order → ensure payment_request is present, emit
+//   5. If no active order at all → call createOrder (which injects payment_request and broadcasts)
+//
 const handleUserJoinChat = async (socket, io, data) => {
   const { userId, runnerId, chatId } = data;
-  let orderAlreadyEmitted = false;
 
-  // block concurrent joins for same chatId
   if (joiningChats.has(chatId)) {
     console.log('[userJoinChat] concurrent join blocked for:', chatId);
     setTimeout(async () => {
-      const existing = await Chat.findOne({ chatId });
+      const existing = await Chat.findOne({ chatId }).lean();
       if (existing) {
         const clean = await deduplicateAndPersist(chatId, existing.messages);
         socket.emit('chatHistory', clean);
       }
-    }, 500);
+    }, 600);
     return;
   }
 
   joiningChats.add(chatId);
 
   try {
-    // Idempotency guard
-    if (socket.currentChatId === chatId && socket.joinedChat) {
-      // Check if chat was reset for a new session
-      // If chat only has initial messages (no order/payment), force full re-join
-      const existing = await Chat.findOne({ chatId });
-      if (existing) {
-        const hasOrder = existing.messages.some(
-          m => m.type === 'payment_request' || m.messageType === 'payment_request'
-        );
-
-        if (!hasOrder) {
-          // Chat was reset for new session — fall through to full join
-          socket.joinedChat = false;
-          console.log('[userJoinChat] chat reset detected — forcing full re-join');
-        } else {
-          console.log('[userJoinChat] duplicate join — re-emitting chatHistory');
-          const clean = await deduplicateAndPersist(chatId, existing.messages);
-          socket.emit('chatHistory', clean);
-          return;
-        }
-      } else {
-        return;
-      }
-    }
-
+    // Always (re-)join these rooms so messages reach this socket
+    socket.join(chatId);
+    socket.join(`user-${userId}`);
     socket.currentChatId = chatId;
     socket.joinedChat = true;
     socket.userId = userId;
     socket.runnerId = runnerId;
-    socket.join(chatId);
-    socket.join(`user-${userId}`);
 
-    const [chat, existingOrder] = await Promise.all([
+    // ── Fresh read from DB ────────────────────────────────────────────────────
+    const [chat, latestOrder] = await Promise.all([
       Chat.findOne({ chatId }),
       Order.findOne({ chatId }).sort({ createdAt: -1 }).lean(),
     ]);
 
     if (!chat) {
+      console.log('[userJoinChat] no chat document yet — waiting for initializeChatAndProceed');
       socket.emit('chatHistory', []);
-      io.to(`runner-${runnerId}`).emit('userJoinedChat', { userId, runnerId, chatId, userInRoom: true, timestamp: new Date().toISOString() });
+      io.to(`runner-${runnerId}`).emit('userJoinedChat', {
+        userId, runnerId, chatId,
+        userInRoom: true,
+        timestamp: new Date().toISOString(),
+      });
       return;
     }
 
-    console.log('[userJoinChat] existingOrder:', existingOrder?.orderId, '| paymentStatus:', existingOrder?.paymentStatus, '| status:', existingOrder?.status);
+    console.log('[userJoinChat] latestOrder:', latestOrder?.orderId,
+      '| status:', latestOrder?.status,
+      '| paymentStatus:', latestOrder?.paymentStatus);
 
-    let order = null;
-    let finalChat = null;
+    const isTerminal = ['completed', 'cancelled', 'task_completed'].includes(latestOrder?.status);
+    const isPaid = latestOrder?.paymentStatus === 'paid';
+    const isActiveUnpaid = latestOrder && !isPaid && !isTerminal;
+    const isActivePaid = latestOrder && isPaid && !isTerminal;
 
-    const isTerminal = ['completed', 'cancelled', 'task_completed'].includes(existingOrder?.status);
-    const isPaid = existingOrder?.paymentStatus === 'paid';
+    // ── CASE A: paid active order → restore history without payment_request ──
+    if (isActivePaid) {
+      console.log('[userJoinChat] CASE A — paid active order, restoring history');
+      const cleanMessages = await deduplicateAndPersist(chatId, chat.messages);
+      const filtered = cleanMessages.filter(
+        m => m.type !== 'payment_request' && m.messageType !== 'payment_request'
+      );
+      filtered.forEach(m => snapshotMessage(socket.id, chatId, m.id));
+      socket.emit('orderCreated', { order: cleanForEmit(latestOrder) });
+      socket.emit('chatHistory', filtered);
+      io.to(`runner-${runnerId}`).emit('userJoinedChat', {
+        userId, runnerId, chatId, userInRoom: true, timestamp: new Date().toISOString(),
+      });
+      logSocketAudit('USER_JOINED_CHAT', { userId, runnerId, chatId, case: 'A' });
+      return;
+    }
 
-    // case A: unpaid active order (not terminal) → ensure payment_request is present
-    if (existingOrder && !isPaid && !isTerminal) {
-      console.log('[userJoinChat] CASE A — unpaid order');
-      order = existingOrder;
-
+    // ── CASE B: unpaid active order → ensure payment_request present ──────────
+    if (isActiveUnpaid) {
+      console.log('[userJoinChat] CASE B — unpaid active order');
       const alreadyHas = chat.messages.some(
         m => (m.type === 'payment_request' || m.messageType === 'payment_request')
-          && m.paymentData?.orderId === order.orderId
+          && m.paymentData?.orderId === latestOrder.orderId
       );
 
+      let finalChat = chat;
       if (!alreadyHas) {
         finalChat = await Chat.findOneAndUpdate(
           { chatId },
-          { $push: { messages: buildPaymentRequestMsg(order, chatId, userId, runnerId) }, $set: { lastActivity: new Date() } },
-          { new: true }
-        );
-      } else {
-        finalChat = chat;
-      }
-    }
-
-    // case B: paid active order (not terminal) → restore history as-is
-    else if (existingOrder && isPaid && !isTerminal) {
-      console.log('[userJoinChat] CASE B — paid order');
-      order = existingOrder;
-      finalChat = await Chat.findOne({ chatId });
-      socket.emit('orderCreated', { order: cleanForEmit(order) });
-    }
-
-    // case c: no order OR terminal order → create new order
-    else {
-      console.log('[userJoinChat] CASE C — new order (terminal or none)');
-
-      // Check if there's any active order (not terminal)
-      const activeOrder = await Order.findOne({
-        chatId,
-        status: { $nin: ['cancelled', 'completed', 'task_completed'] },
-      }).lean();
-
-      if (activeOrder) {
-        console.log('[userJoinChat] race guard — active order exists:', activeOrder.orderId);
-        order = activeOrder;
-        finalChat = chat;
-      } else {
-        // Cancel any stale pending orders for this chat
-        await Order.updateMany(
-          { chatId, paymentStatus: 'unpaid', status: { $nin: ['completed', 'cancelled', 'task_completed'] } },
-          { $set: { status: 'cancelled', cancelledAt: new Date(), cancelReason: 'new_session_started' } }
-        );
-
-        const [runnerDoc, userDoc] = await Promise.all([
-          Runner.findById(runnerId).lean(),
-          User.findById(userId).lean(),
-        ]);
-
-        const chatDoc = await Chat.findOne({ chatId }).lean();
-        const fleetType = chatDoc?.fleetType
-          || userDoc?.currentRequest?.fleetType
-          || chat.fleetType;
-
-        const serviceType = userDoc?.currentRequest?.serviceType
-          || chatDoc?.serviceType
-          || chat.serviceType;
-
-        await Chat.findOneAndUpdate({ chatId }, { $set: { serviceType } });
-
-        const { deliveryFee, distanceInMeters, legs } = computeDeliveryFeeFromDocs(serviceType, userDoc, fleetType);
-        const isErrand = serviceType === 'run-errand';
-        const itemBudget = isErrand
-          ? Number(userDoc?.currentRequest?.itemBudget || userDoc?.currentRequest?.budget) || 0
-          : 0;
-        const totalAmount = itemBudget + deliveryFee;
-        const { platformFee, runnerPayout } = Escrow.calculateFees(deliveryFee);
-        const request = userDoc?.currentRequest || {};
-
-        // Build location objects with just the address string
-        const pickupLocationObj = request.pickupLocation ? { address: request.pickupLocation } : null;
-        const deliveryLocationObj = request.deliveryLocation ? { address: request.deliveryLocation } : null;
-        const marketLocationObj = request.marketLocation ? { address: request.marketLocation } : null;
-
-        console.log('[userJoinChat] request.marketLocation:', request.marketLocation);
-        console.log('[userJoinChat] request.deliveryLocation:', request.deliveryLocation);
-        console.log('[userJoinChat] request.pickupLocation:', request.pickupLocation);
-
-        order = await Order.create({
-          orderId: Order.generateOrderId(),
-          chatId, userId, runnerId, serviceType,
-          taskType: isErrand ? 'run-errand' : 'pick-up',
-          pickupLocation: pickupLocationObj,
-          deliveryLocation: deliveryLocationObj,
-          marketLocation: marketLocationObj,
-          marketCoordinates: request.marketCoordinates || null,
-          pickupCoordinates: request.pickupCoordinates || null,
-          deliveryCoordinates: request.deliveryCoordinates || null,
-          routeDistanceMeters: Math.round(distanceInMeters || 0),
-          routeLegs: legs || {},
-          itemBudget, deliveryFee, totalAmount, platformFee, runnerPayout,
-          specialInstructions: request.specialInstructions,
-          fleetType: request.fleetType,
-          status: 'pending_payment',
-          paymentStatus: 'unpaid',
-          approvalStatus: isErrand ? 'pending' : 'not_required',
-          statusHistory: [{ status: 'pending_payment', timestamp: new Date(), triggeredBy: 'system', note: 'Order created on user join' }],
-        });
-
-        console.log('[userJoinChat] order created:', order.orderId);
-
-        console.log(`[userJoinChat] Emitting orderCreated to room: runner-${runnerId}`);
-        console.log(`[userJoinChat] Room exists?`, io.sockets.adapter.rooms.has(`runner-${runnerId}`));
-
-        await Promise.all([
-          Runner.findByIdAndUpdate(runnerId, { activeOrderId: order.orderId }),
-          User.findByIdAndUpdate(userId, { activeOrderId: order.orderId }),
-        ]);
-
-        // Get the runner data to create initial messages
-        const runnerData = await Runner.findById(runnerId).lean();
-        const runnerInitialMessages = createInitialRunnerMessages(runnerData, serviceType, runnerId);
-
-        // Set messages to ONLY initial runner messages + payment request
-        await Chat.findOneAndUpdate(
-          { chatId },
           {
-            $set: {
-              messages: runnerInitialMessages,
-              orderId: order.orderId,
-              taskId: order.orderId,
-              lastActivity: new Date()
-            }
-          }
-        );
-
-        // Push payment request after initial messages
-        const paymentRequestMsg = buildPaymentRequestMsg(order, chatId, userId, runnerId);
-
-        finalChat = await Chat.findOneAndUpdate(
-          { chatId },
-          { $push: { messages: paymentRequestMsg } },
+            $push: { messages: buildPaymentRequestMsg(latestOrder, chatId, userId, runnerId) },
+            $set: { lastActivity: new Date() },
+          },
           { new: true }
         );
-
-        console.log('[CASE C] finalChat messages count:', finalChat?.messages?.length);
-        console.log('[CASE C] finalChat message types:', finalChat?.messages?.map(m => ({ type: m.type, text: m.text?.slice(0, 50) })));
-
-        const orderPayload = {
-          order: {
-            chatId: order.chatId,
-            orderId: order.orderId,
-            itemBudget: order.itemBudget,
-            deliveryFee: order.deliveryFee,
-            totalAmount: order.totalAmount,
-            runnerPayout: order.runnerPayout,
-            taskType: order.taskType,
-            serviceType: order.serviceType,
-            status: order.status,
-            paymentStatus: order.paymentStatus,
-            approvalStatus: order.approvalStatus,
-
-            // locations
-            marketLocation: order.marketLocation,
-            deliveryLocation: order.deliveryLocation,
-            pickupLocation: order.pickupLocation,
-            marketCoordinates: order.marketCoordinates,
-            deliveryCoordinates: order.deliveryCoordinates,
-            pickupCoordinates: order.pickupCoordinates,
-          },
-        };
-
-        let runnerAlreadyNotified = false;
-
-        io.to(`runner-${runnerId}`).emit('orderCreated', orderPayload);
-        runnerAlreadyNotified = true;
-        runnerAlreadyNotified = true;
-
-        const freshChatForRunner = await Chat.findOne({ chatId }).lean();
-        if (freshChatForRunner?.messages?.length) {
-          const cleanForRunner = deduplicateMessages(freshChatForRunner.messages);
-          io.to(`runner-${runnerId}`).emit('chatHistory', cleanForRunner);
-          console.log('[userJoinChat] re-emitted chatHistory to runner after CASE C setup');
-        }
-
-        await notifyPaymentRequest(userId, { orderId: order.orderId, amount: order.totalAmount });
       }
-    }
 
-    // Emit order state to this socket
-    if (order && !orderAlreadyEmitted) {
+      const cleanMessages = await deduplicateAndPersist(chatId, finalChat.messages);
+      cleanMessages.forEach(m => snapshotMessage(socket.id, chatId, m.id));
+
       socket.emit('orderCreated', {
         order: {
-          chatId: order.chatId,
-          orderId: order.orderId,
-          itemBudget: order.itemBudget,
-          deliveryFee: order.deliveryFee,
-          totalAmount: order.totalAmount,
-          taskType: order.taskType,
-          serviceType: order.serviceType,
-          status: order.status,
-          paymentStatus: order.paymentStatus,
+          chatId: latestOrder.chatId,
+          orderId: latestOrder.orderId,
+          itemBudget: latestOrder.itemBudget,
+          deliveryFee: latestOrder.deliveryFee,
+          totalAmount: latestOrder.totalAmount,
+          taskType: latestOrder.taskType,
+          serviceType: latestOrder.serviceType,
+          status: latestOrder.status,
+          paymentStatus: latestOrder.paymentStatus,
         },
-        isNewOrder: true,
+        isNewOrder: false,
       });
+      socket.emit('chatHistory', cleanMessages);
+      io.to(`runner-${runnerId}`).emit('userJoinedChat', {
+        userId, runnerId, chatId, userInRoom: true, timestamp: new Date().toISOString(),
+      });
+      logSocketAudit('USER_JOINED_CHAT', { userId, runnerId, chatId, case: 'B' });
+      return;
     }
 
-    // Deduplicate and emit chat history
-    if (!finalChat) finalChat = await Chat.findOne({ chatId });
-    const cleanMessages = await deduplicateAndPersist(chatId, finalChat.messages);
+    // ── CASE C: no active order (terminal or none) → create fresh order ───────
+    console.log('[userJoinChat] CASE C — creating new order');
+
+    // Race guard: another concurrent join may have already created one
+    const raceGuard = await Order.findOne({
+      chatId,
+      status: { $nin: ['cancelled', 'completed', 'task_completed'] },
+    }).lean();
+
+    if (raceGuard) {
+      console.log('[userJoinChat] race guard — active order exists:', raceGuard.orderId);
+      const existingChat = await Chat.findOne({ chatId }).lean();
+      const cleanMessages = await deduplicateAndPersist(chatId, existingChat.messages);
+      cleanMessages.forEach(m => snapshotMessage(socket.id, chatId, m.id));
+      socket.emit('orderCreated', { order: cleanForEmit(raceGuard) });
+      socket.emit('chatHistory', cleanMessages);
+      io.to(`runner-${runnerId}`).emit('userJoinedChat', {
+        userId, runnerId, chatId, userInRoom: true, timestamp: new Date().toISOString(),
+      });
+      return;
+    }
+
+    // Derive serviceType from DB sources
+    const userDoc = await User.findById(userId).lean();
+    const resolvedServiceType = userDoc?.currentRequest?.serviceType || chat.serviceType;
+
+    // Ensure chat.serviceType is current
+    if (resolvedServiceType && resolvedServiceType !== chat.serviceType) {
+      await Chat.findOneAndUpdate({ chatId }, { $set: { serviceType: resolvedServiceType } });
+    }
+
+    // createOrder handles: order creation, payment_request injection, and broadcast
+    const { cleanMessages } = await createOrder(io, {
+      chatId, userId, runnerId, serviceType: resolvedServiceType,
+    });
 
     cleanMessages.forEach(m => snapshotMessage(socket.id, chatId, m.id));
 
-    let filteredMessages = cleanMessages;
-    if (existingOrder?.paymentStatus === 'paid') {
-      filteredMessages = cleanMessages.filter(m =>
-        m.type !== 'payment_request' && m.messageType !== 'payment_request'
-      );
-    }
+    io.to(`runner-${runnerId}`).emit('userJoinedChat', {
+      userId, runnerId, chatId, userInRoom: true, timestamp: new Date().toISOString(),
+    });
 
-    filteredMessages.forEach(m => snapshotMessage(socket.id, chatId, m.id));
-    socket.emit('chatHistory', filteredMessages);
-    socket.emit('chatHistory', cleanMessages);
-    console.log('[userJoinChat] chatHistory emitted:', cleanMessages.length, 'messages');
-
-    io.to(`runner-${runnerId}`).emit('userJoinedChat', { userId, runnerId, chatId, userInRoom: true, timestamp: new Date().toISOString() });
-    logSocketAudit('USER_JOINED_CHAT', { userId, runnerId, chatId });
-
+    logSocketAudit('USER_JOINED_CHAT', { userId, runnerId, chatId, case: 'C' });
+  } catch (err) {
+    console.error('[userJoinChat] error:', err);
   } finally {
     joiningChats.delete(chatId);
   }
 };
 
 // ─── Runner joins chat ────────────────────────────────────────────────────────
+//
+// Server is the source of truth.
+// Always read fresh from DB. Filter payment_request if order is paid.
+//
 const handleRunnerJoinChat = async (socket, io, data) => {
-  const { runnerId, userId, chatId, serviceType } = data;
+  const { runnerId, userId, chatId } = data;
 
-  socket.joinedChat = false;
-  socket.currentChatId = chatId;
-
-  socket.runnerId = runnerId;
-  socket.userId = userId;
+  // Always (re-)join these rooms
   socket.join(chatId);
   socket.join(`runner-${runnerId}`);
+  socket.currentChatId = chatId;
+  socket.joinedChat = true;
+  socket.runnerId = runnerId;
+  socket.userId = userId;
 
-  if (serviceType) {
-    await Chat.findOneAndUpdate(
-      { chatId },
-      { $set: { serviceType } }
-    );
-    console.log(`[runnerJoinChat] updated chat serviceType to: ${serviceType}`);
-  }
-
-  let chat = null;
-
-  // ── Race-safe chat fetch 
-  for (let attempt = 0; attempt < 3; attempt++) {
-    chat = await Chat.findOne({ chatId });
-
-    const hasInitialMessages = chat?.messages?.some(
-      m => m.type === 'system' && m.text?.includes('joined the chat')
-    );
-
-    if (hasInitialMessages) break;
-    await new Promise(res => setTimeout(res, 300));
-  }
+  // ── Fresh read from DB ──────────────────────────────────────────────────────
+  const [chat, order] = await Promise.all([
+    Chat.findOne({ chatId }).lean(),
+    Order.findOne({ chatId }).sort({ createdAt: -1 }).lean(),
+  ]);
 
   if (!chat) {
-    socket.emit("chatHistory", []);
-  } else {
-    const cleanMessages = await deduplicateAndPersist(chatId, chat.messages);
-    cleanMessages.forEach(m => snapshotMessage(socket.id, chatId, m.id));
-
-    const runnerOrder = await Order.findOne({ chatId }).sort({ createdAt: -1 }).lean();
-    const runnerFilteredMessages = runnerOrder?.paymentStatus === 'paid'
-      ? cleanMessages.filter(m => m.type !== 'payment_request' && m.messageType !== 'payment_request')
-      : cleanMessages;
-
-    runnerFilteredMessages.forEach(m => snapshotMessage(socket.id, chatId, m.id));
-    socket.emit("chatHistory", runnerFilteredMessages);
-
-    if (chat.specialInstructions) {
-      socket.emit("specialInstructions", {
-        chatId,
-        specialInstructions: chat.specialInstructions,
-      });
-    }
+    socket.emit('chatHistory', []);
+    return;
   }
 
-  io.to(`user-${userId}`).emit("runnerJoinedChat", {
+  const cleanMessages = await deduplicateAndPersist(chatId, chat.messages);
+  cleanMessages.forEach(m => snapshotMessage(socket.id, chatId, m.id));
+
+  const isPaid = order?.paymentStatus === 'paid';
+  const filteredMessages = isPaid
+    ? cleanMessages.filter(m => m.type !== 'payment_request' && m.messageType !== 'payment_request')
+    : cleanMessages;
+
+  socket.emit('chatHistory', filteredMessages);
+
+  if (chat.specialInstructions) {
+    socket.emit('specialInstructions', { chatId, specialInstructions: chat.specialInstructions });
+  }
+
+  if (order) {
+    socket.emit('orderCreated', { order: { ...cleanForEmit(order), chatId } });
+  }
+
+  io.to(`user-${userId}`).emit('runnerJoinedChat', {
     userId, runnerId, chatId,
     runnerInRoom: true,
     timestamp: new Date().toISOString(),
   });
-
-  // Wait for order to be created - retry up to 10 times
-  let order = null;
-  for (let attempt = 0; attempt < 10; attempt++) {
-    const foundOrder = await Order.findOne({ chatId }).sort({ createdAt: -1 }).lean();
-
-    if (foundOrder && !['cancelled', 'completed', 'task_completed'].includes(foundOrder.status)) {
-      order = foundOrder;
-      break;
-    }
-
-    await new Promise(res => setTimeout(res, 500));
-  }
-
-  if (order) {
-    if (order.serviceType) {
-      await Chat.findOneAndUpdate({ chatId }, { $set: { serviceType: order.serviceType } });
-    }
-    socket.emit('orderCreated', {
-      order: { ...cleanForEmit(order), chatId }
-    });
-    console.log("emit for runner order", order);
-  } else {
-    console.log(`No order found for chat ${chatId} after 10 attempts`);
-  }
 
   logSocketAudit('RUNNER_JOINED_CHAT', { runnerId, chatId, userId });
 };
@@ -854,10 +893,8 @@ const handleRunnerJoinChat = async (socket, io, data) => {
 const handleSendMessage = async (socket, io, { chatId, message }) => {
   const startTime = Date.now();
   try {
-    // emit immediately 
     socket.to(chatId).emit('message', cleanForEmit(message));
 
-    // Batch DB writes — flush every 2 seconds
     if (!pendingWrites.has(chatId)) {
       pendingWrites.set(chatId, { messages: [], timer: null });
     }
@@ -880,7 +917,6 @@ const handleSendMessage = async (socket, io, { chatId, message }) => {
       }
     }, 2000);
 
-    // Snapshot immediately
     const room = io.sockets.adapter.rooms.get(chatId);
     if (room) {
       for (const socketId of room) snapshotMessage(socketId, chatId, message.id);
@@ -916,7 +952,15 @@ const handleDeleteMessage = async (socket, io, { chatId, messageId, userId, dele
     if (deleteForEveryone) {
       const idx = chat.messages.findIndex(m => m.id === messageId);
       if (idx !== -1) {
-        chat.messages[idx] = { ...chat.messages[idx], deleted: true, text: "This message was deleted", type: "deleted", fileUrl: null, fileName: null, createdAt: new Date() };
+        chat.messages[idx] = {
+          ...chat.messages[idx],
+          deleted: true,
+          text: "This message was deleted",
+          type: "deleted",
+          fileUrl: null,
+          fileName: null,
+          createdAt: new Date(),
+        };
         await chat.save();
         io.to(chatId).emit("messageDeleted", { messageId, deletedBy: userId, deleteForEveryone: true });
       }
@@ -949,37 +993,31 @@ const handleRejoinChat = async (socket, io, { chatId, userId, runnerId, userType
 
   const snapshot = socketMessageSnapshot.get(socket.id);
 
-  const chat = await Chat.findOne({ chatId }).select('messages').lean();
+  // Always fresh from DB
+  const [chat, latestOrder] = await Promise.all([
+    Chat.findOne({ chatId }).select('messages specialInstructions').lean(),
+    Order.findOne({ chatId }).sort({ createdAt: -1 }).select('paymentStatus status').lean(),
+  ]);
+
   if (!chat?.messages?.length) {
     console.log('[rejoinChat] no chat found');
     return;
   }
 
-  // Check order payment status — strip payment_request if already paid
-  const latestOrder = await Order.findOne({ chatId })
-    .sort({ createdAt: -1 })
-    .select('paymentStatus status')
-    .lean();
-
   const isPaid = latestOrder?.paymentStatus === 'paid';
-  const isTerminal = ['completed', 'cancelled', 'task_completed']
-    .includes(latestOrder?.status);
 
   let cleanMessages = deduplicateMessages(chat.messages);
-
-  // If order is paid, remove payment_request — client doesn't need to show it again
   if (isPaid) {
-    cleanMessages = cleanMessages.filter(m =>
-      m.type !== 'payment_request' && m.messageType !== 'payment_request'
+    cleanMessages = cleanMessages.filter(
+      m => m.type !== 'payment_request' && m.messageType !== 'payment_request'
     );
   }
 
-  const userDoc = await User.findById(userId).lean();
+  const userDoc = userType === 'user' ? await User.findById(userId).lean() : null;
 
   if (!snapshot || snapshot.chatId !== chatId) {
     console.log('[rejoinChat] no snapshot, sending full chatHistory');
     cleanMessages.forEach(m => snapshotMessage(socket.id, chatId, m.id));
-
     socket.emit('chatHistory', {
       messages: cleanMessages,
       userData: userDoc ? {
@@ -990,7 +1028,6 @@ const handleRejoinChat = async (socket, io, { chatId, userId, runnerId, userType
     });
   } else {
     const missed = cleanMessages.filter(m => m.id && !snapshot.messageIds.has(m.id));
-
     if (missed.length === 0) {
       console.log('[rejoinChat] client is up to date, no missed messages');
     } else {
@@ -1003,7 +1040,8 @@ const handleRejoinChat = async (socket, io, { chatId, userId, runnerId, userType
   console.log('[rejoinChat] room size:', io.sockets.adapter.rooms.get(chatId)?.size);
 };
 
-// ─── Fetch archived order session (for order history view) ───────────────────
+// ─── Fetch archived order session ─────────────────────────────────────────────
+
 const handleGetOrderSession = async (socket, { chatId, orderId }) => {
   try {
     const chat = await Chat.findOne({ chatId }).lean();
@@ -1023,7 +1061,8 @@ const handleGetOrderSession = async (socket, { chatId, orderId }) => {
   }
 };
 
-// ─── Get archived messages for a completed order session ───────────────────
+// ─── Get archived messages for a completed order session ──────────────────────
+
 const handleGetArchivedMessages = async (socket, { chatId, userId, runnerId, orderId }) => {
   try {
     const chat = await Chat.findOne({ chatId }).lean();
@@ -1033,7 +1072,6 @@ const handleGetArchivedMessages = async (socket, { chatId, userId, runnerId, ord
     let status = null;
     let completedAt = null;
 
-    // If orderId is provided, fetch that specific session
     if (orderId) {
       const session = chat.orderSessions?.find(s => s.orderId === orderId);
       if (session) {
@@ -1042,7 +1080,6 @@ const handleGetArchivedMessages = async (socket, { chatId, userId, runnerId, ord
         completedAt = session.completedAt;
       }
     } else {
-      // Otherwise fetch the most recent completed session
       const lastSession = [...(chat.orderSessions || [])]
         .reverse()
         .find(s => s.status === 'completed' || s.status === 'task_completed');
@@ -1053,14 +1090,7 @@ const handleGetArchivedMessages = async (socket, { chatId, userId, runnerId, ord
       }
     }
 
-    socket.emit('archivedMessages', {
-      chatId,
-      messages,
-      status,
-      completedAt,
-      orderId: orderId || null
-    });
-
+    socket.emit('archivedMessages', { chatId, messages, status, completedAt, orderId: orderId || null });
     logSocketAudit('GET_ARCHIVED_MESSAGES', { chatId, userId, runnerId, orderId });
   } catch (err) {
     console.error('handleGetArchivedMessages error:', err);
@@ -1068,11 +1098,12 @@ const handleGetArchivedMessages = async (socket, { chatId, userId, runnerId, ord
   }
 };
 
+// ─── Disconnect ───────────────────────────────────────────────────────────────
+
 const handleDisconnect = async (socket, io) => {
   if (socket.serviceType && runnersByService[socket.serviceType]) {
     runnersByService[socket.serviceType].delete(socket.id);
   }
-  // Clean up snapshot on disconnect — will be rebuilt on next join
   socketMessageSnapshot.delete(socket.id);
 
   const chatId = socket.currentChatId;
@@ -1085,7 +1116,7 @@ const handleDisconnect = async (socket, io) => {
   const offlineType = isRunner ? 'runner' : 'user';
 
   if (!partnerId) return;
-  // tell other partner this partner is offline
+
   io.to(`${partnerType}-${partnerId}`).emit('partnerOffline', {
     chatId,
     userId: offlineId,
@@ -1104,17 +1135,15 @@ const handleDisconnect = async (socket, io) => {
     senderType: 'system',
     status: 'sent',
     createdAt: new Date(),
-    isPresenceMessage: true, // flag so client can style/dismiss it differently
+    isPresenceMessage: true,
   };
 
   io.to(chatId).emit('message', offlineMsg);
 
-
-  // Push notification (only if there's an active unpaid/active order — no point notifying on completed chats)
   try {
     const activeOrder = await Order.findOne({
       chatId,
-      status: { $nin: ['completed', 'cancelled', 'task_completed'] }
+      status: { $nin: ['completed', 'cancelled', 'task_completed'] },
     }).lean();
 
     if (!activeOrder) return;
@@ -1131,7 +1160,6 @@ const handleDisconnect = async (socket, io) => {
   }
 };
 
-
 module.exports = {
   runnersByService,
   handleJoinRunnerRoom,
@@ -1147,5 +1175,6 @@ module.exports = {
   handleRejoinChat,
   archiveCurrentSession,
   handleGetOrderSession,
-  handleGetArchivedMessages
+  handleGetArchivedMessages,
+  createOrder,
 };
