@@ -631,6 +631,7 @@ const initializeChatAndProceed = async (io, chatId, state) => {
       }
 
       console.log('[initializeChat] Existing chat reset — new session ready');
+      io.to(`user-${userId}`).emit('chatReset', { chatId });
     } else {
       chat = await Chat.create({
         chatId,

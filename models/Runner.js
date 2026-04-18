@@ -588,7 +588,6 @@ runnerSchema.statics.findNearbyRunners = async function ({
 
   const query = {
     role: 'runner',
-    isOnline: true,
     isAvailable: true,
     serviceType: serviceType,
     fleetType: fleetType,

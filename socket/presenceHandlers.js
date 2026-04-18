@@ -14,33 +14,34 @@ const parseChat = (chatId) => {
 };
 
 const handleUserOnline = async (socket, io, { userId, userType, chatId }) => {
-  if (!chatId || !userId) return;
+  if (!userId || !userType) return;
 
   socket.userId = userId;
   socket.userType = userType;
-  socket.chatId = chatId;
+  socket.chatId = chatId || null;
   if (userType === 'runner') socket.runnerId = userId;
 
+  const personalRoom = userType === 'runner' ? `runner-${userId}` : `user-${userId}`;
+  socket.join(personalRoom);
+
   try {
-    await getRedis().set(`presence:${userType}:${userId}`, chatId, 'EX', 300);
+    await getRedis().set(`presence:${userType}:${userId}`, chatId || 'online', 'EX', 300);
   } catch (e) {
     console.error('Redis presence set failed:', e);
   }
 
-  const { userId: chatUserId, runnerId: chatRunnerId } = parseChat(chatId);
-  if (!chatUserId || !chatRunnerId) return;
+  if (chatId) {
+    const { userId: chatUserId, runnerId: chatRunnerId } = parseChat(chatId);
+    if (chatUserId && chatRunnerId) {
+      const isRunner = userType === 'runner';
+      const partnerType = isRunner ? 'user' : 'runner';
+      const partnerId = isRunner ? chatUserId : chatRunnerId;
 
-  const isRunner = userType === 'runner';
-  const partnerType = isRunner ? 'user' : 'runner';
-  const partnerId = isRunner ? chatUserId : chatRunnerId;
-
-  io.to(`${partnerType}-${partnerId}`).emit('partnerOnline', {
-    chatId, userId, userType, timestamp: new Date().toISOString(),
-  });
-
-  const Model = isRunner ? Runner : User;
-  Model.findByIdAndUpdate(userId, { isOnline: true, lastSeen: new Date() })
-    .catch(err => console.error('Error updating online status:', err));
+      io.to(`${partnerType}-${partnerId}`).emit('partnerOnline', {
+        chatId, userId, userType, timestamp: new Date().toISOString(),
+      });
+    }
+  }
 };
 
 const handleUserDisconnect = async (socket, io) => {
@@ -53,6 +54,7 @@ const handleUserDisconnect = async (socket, io) => {
     console.error('Redis presence delete failed:', e);
   }
 
+  // Notify partner immediately if in a chat
   if (chatId) {
     const { userId: chatUserId, runnerId: chatRunnerId } = parseChat(chatId);
     if (chatUserId && chatRunnerId) {
@@ -66,38 +68,39 @@ const handleUserDisconnect = async (socket, io) => {
     }
   }
 
+  // Push notifications only — no DB writes
+  if (!chatId) return;
+
   try {
     if (userType === 'user') {
-      const user = await User.findByIdAndUpdate(userId,
-        { isOnline: false, lastSeen: new Date() }, { new: true });
+      const user = await User.findById(userId).select('firstName lastName fcmToken currentRunnerId').lean();
       if (user?.currentRunnerId) {
-        const runner = await Runner.findById(user.currentRunnerId);
-        if (runner?.fcmToken && !runner.isOnline) {
+        const runner = await Runner.findById(user.currentRunnerId).select('fcmToken').lean();
+        if (runner?.fcmToken) {
           await sendPushNotification(runner.fcmToken, {
             title: 'User Offline Alert',
             body: `${user.firstName} ${user.lastName || ''} has gone offline`,
-            data: { type: 'user_offline', userId: user._id.toString(), chatId },
+            data: { type: 'user_offline', userId: userId.toString(), chatId },
             link: `/runner/chat/${chatId}`,
           });
         }
       }
     } else if (userType === 'runner') {
-      const runner = await Runner.findByIdAndUpdate(userId,
-        { isOnline: false, lastSeen: new Date() }, { new: true });
+      const runner = await Runner.findById(userId).select('firstName lastName fcmToken currentUserId').lean();
       if (runner?.currentUserId) {
-        const user = await User.findById(runner.currentUserId);
-        if (user?.fcmToken && !user.isOnline) {
+        const user = await User.findById(runner.currentUserId).select('fcmToken').lean();
+        if (user?.fcmToken) {
           await sendPushNotification(user.fcmToken, {
             title: 'Runner Offline Alert',
             body: `Your runner ${runner.firstName} ${runner.lastName || ''} has gone offline`,
-            data: { type: 'runner_offline', runnerId: runner._id.toString(), chatId },
+            data: { type: 'runner_offline', runnerId: userId.toString(), chatId },
             link: `/chat/${chatId}`,
           });
         }
       }
     }
   } catch (error) {
-    console.error('Error handling disconnect:', error);
+    console.error('Error sending offline push notification:', error);
   }
 };
 
@@ -128,10 +131,10 @@ const handleHeartbeat = async (socket) => {
   } catch (e) { /* silent */ }
 };
 
-const registerPresenceHandlers = (socket, io) => {
-  socket.on('userOnline', (data) => handleUserOnline(socket, io, data));
-  socket.on('queryPresence', (data) => handleQueryPresence(socket, data));
-  socket.on('pong', () => handleHeartbeat(socket));
+const registerPresenceHandlers = (socket, io, safeHandler) => {
+  socket.on('userOnline', (data) => safeHandler(handleUserOnline, socket, io, data));
+  socket.on('queryPresence', (data) => safeHandler(handleQueryPresence, socket, data));
+  socket.on('pong', () => safeHandler(handleHeartbeat, socket));
 };
 
 module.exports = {
