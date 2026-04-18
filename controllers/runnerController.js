@@ -74,7 +74,7 @@ class RunnerController extends BaseController {
    */
   async getNearbyRunners(req, res, next) {
     try {
-      const { pickupLat, pickupLng, latitude, longitude, serviceType, fleetType } = req.query;
+      const { pickupLat, pickupLng, latitude, longitude, serviceType, fleetType, sortBy } = req.query;
 
       const lat = parseFloat(pickupLat || latitude);
       const lng = parseFloat(pickupLng || longitude);
@@ -162,7 +162,9 @@ class RunnerController extends BaseController {
         return runner.isOnline && runner.isAvailable;
       });
 
-
+      if (sortBy === 'rating') {
+        eligibleRunners.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+      }
 
       return this.success(res, {
         count: eligibleRunners.length,

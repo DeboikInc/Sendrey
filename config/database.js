@@ -26,6 +26,8 @@ const connectDb = async () => {
     
     // await User.deleteMany({ role: { $nin: ['super-admin', 'admin'] } });
     // await Runner.deleteMany({});
+    // await Runner.findOneAndUpdate({ email:'timivictor565@gmail.com' }, { $set: { isOnline: true } });
+    // console.log('Updated runner online status');
     // await User.deleteOne({ email: 'timivictor565@gmail.com' });
 
     // const collections = await mongoose.connection.db.listCollections().toArray();
