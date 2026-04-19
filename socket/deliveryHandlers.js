@@ -10,6 +10,7 @@ const { handleRejectionStrike } = require('../utils/handleRejectionStrike');
 
 const {
     notifyDeliveryConfirmationRequest,
+    notifyAutoConfirmWarning, 
     notifyDeliveryConfirmed,
     notifyRatingPrompt
 } = require('../services/notificationService');
@@ -69,7 +70,7 @@ const handleMarkDeliveryComplete = async (io, socket, data) => {
         if (order.paymentStatus !== 'paid') {
             return socket.emit('error', { message: 'Payment required before marking delivery complete' });
         }
-        
+
         if (order.status === 'delivered') return socket.emit('error', { message: 'Delivery already marked as complete' });
     } catch (err) {
         console.error('[markDeliveryComplete] Order lookup failed:', err);
@@ -385,11 +386,49 @@ const handleDenyDelivery = async (io, socket, data) => {
     logSocketAudit('USER_DENIED_ORDER_DELIVERED', { userId, chatId, orderId });
 };
 
-// ─── Auto-confirm after 4 hours 
+// ─── Auto-confirm after 4 hours ─────────────────────────────────────────────
 
 const scheduleAutoConfirm = (io, chatId, orderId, escrowId) => {
-    const AUTO_CONFIRM_DELAY = 4 * 60 * 60 * 1000;
+    const AUTO_CONFIRM_DELAY = 4 * 60 * 60 * 1000;       // 4 hours
+    const WARNING_BEFORE = 10 * 60 * 1000;            // 10 min warning
+    const WARNING_DELAY = AUTO_CONFIRM_DELAY - WARNING_BEFORE;
 
+    // ── 10-minute warning ────────────────────────────────────────────────────
+    setTimeout(async () => {
+        try {
+            const order = await Order.findOne({ orderId });
+            // Only warn if still waiting for confirmation
+            if (!order || order.deliveryConfirmedAt || order.status !== 'delivered') return;
+
+            const warningMessage = {
+                id: `auto-confirm-warning-${Date.now()}`,
+                from: 'system', type: 'system', messageType: 'system',
+                text: 'Your order will be automatically marked as completed in 10 minutes if no action is taken.',
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                status: 'sent', senderId: 'system', senderType: 'system', style: 'warning',
+            };
+
+            // Send warning only to user (runner doesn't need it)
+            io.to(`user-${order.userId.toString()}`).emit('message', warningMessage);
+            io.to(`user-${order.userId.toString()}`).emit('autoConfirmWarning', {
+                orderId,
+                minutesRemaining: 10,
+            });
+
+            persistMessages(chatId, [warningMessage])
+                .catch(err => console.error('[autoConfirm] Warning persist failed:', err));
+
+            // Push notification warning
+            const { notifyAutoConfirmWarning } = require('../services/notificationService');
+            notifyAutoConfirmWarning(order.userId, { orderId, minutesRemaining: 10 })
+                .catch(err => console.warn('[autoConfirm] Warning push notify failed:', err.message));
+
+        } catch (error) {
+            console.error('[autoConfirm] Warning phase failed:', error);
+        }
+    }, WARNING_DELAY);
+
+    // ── Full auto-confirm ────────────────────────────────────────────────────
     setTimeout(async () => {
         try {
             const order = await Order.findOne({ orderId });
@@ -414,19 +453,25 @@ const scheduleAutoConfirm = (io, chatId, orderId, escrowId) => {
             await User.findByIdAndUpdate(order.userId, { activeOrderId: null, currentRunnerId: null });
             await Runner.findByIdAndUpdate(order.runnerId, { activeOrderId: null, currentUserId: null });
 
-            const autoConfirmMessage = {
+            // ── System message shown in chat ──────────────────────────────────
+            const autoCompleteMessage = {
                 id: `auto-confirm-${Date.now()}`,
-                from: 'system', type: 'system', messageType: 'system',
-                text: 'Delivery auto-confirmed (4hr timeout). Order completed.',
+                from: 'system', type: 'task_completed', messageType: 'task_completed',
+                text: 'This order has been marked as completed because the user did not respond in time.',
                 time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                 status: 'sent', senderId: 'system', senderType: 'system',
+                orderId: order.orderId,
             };
 
-            io.to(chatId).emit('message', autoConfirmMessage);
+            // Emit task_completed event so both sides trigger their completion UI
+            io.to(chatId).emit('message', autoCompleteMessage);
+            io.to(chatId).emit('taskCompleted', { orderId, triggeredBy: 'system' });
+
+            // Also keep the existing delivery events so tracking etc. resolves
             io.to(chatId).emit('deliveryAutoConfirmed', { orderId, status: 'completed' });
             io.to(`tracking:${orderId}`).emit('runner:delivered', { orderId });
 
-            persistMessages(chatId, [autoConfirmMessage])
+            persistMessages(chatId, [autoCompleteMessage])
                 .catch(err => console.error('[autoConfirm] Chat persist failed:', err));
 
             logSocketAudit('ORDER_AUTO_CONFIRM_DELIVERED', { chatId, orderId });

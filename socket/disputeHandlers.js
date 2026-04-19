@@ -2,6 +2,9 @@ const disputeService = require('../services/disputeService');
 const { Chat } = require('../models/Chat');
 const { notifyDisputeRaised, notifyDisputeResolved } = require('../services/notificationService');
 const { logSocketAudit } = require('../utils/socketAudit');
+const Order = require('../models/Order');
+const Escrow = require('../models/Escrow');
+const RunnerPayout = require('../models/RunnerPayout');
 
 const cleanForEmit = (data) => {
   if (data && typeof data === 'object') {
@@ -38,6 +41,36 @@ const handleRaiseDispute = async (socket, io, data) => {
       reason,
       description,
       evidenceFiles
+    });
+
+    // Lock escrow for admin review
+    const order = await Order.findOneAndUpdate(
+      { orderId },
+      { hasDispute: true, disputeId: dispute._id || dispute.disputeId },
+      { new: true }
+    ).lean();
+
+    if (order?.escrowId) {
+      await Escrow.findByIdAndUpdate(order.escrowId, {
+        status: 'disputed',
+        disputeId: dispute._id || dispute.disputeId,
+        lockedAt: new Date(),
+      });
+    }
+
+    // Lock payout
+    await RunnerPayout.findOneAndUpdate(
+      { orderId },
+      {
+        status: 'locked',
+        lockedReason: 'dispute_raised',
+        lockedAt: new Date(),
+      }
+    );
+
+    io.to(chatId).emit('payoutLocked', {
+      chatId,
+      reason: 'A dispute has been raised. Payout is locked pending admin review.',
     });
 
     // Send dispute raised message to chat
@@ -122,6 +155,29 @@ const handleResolveDispute = async (socket, io, data) => {
       adminNote,
       resolvedBy
     });
+
+    const orderDoc = await Order.findOne({ orderId: dispute.orderId }).lean();
+
+    if (orderDoc?.escrowId) {
+      await Escrow.findByIdAndUpdate(orderDoc.escrowId, {
+        status: outcome === 'refund_user' ? 'refunded' : 'released',
+        resolvedAt: new Date(),
+      });
+    }
+
+    const payoutStatus = outcome === 'refund_user' ? 'cancelled' : 'unlocked';
+    await RunnerPayout.findOneAndUpdate(
+      { orderId: dispute.orderId },
+      { status: payoutStatus, unlockedAt: new Date() }
+    );
+
+    // Notify parties payout is unlocked (if runner gets something)
+    if (outcome !== 'refund_user') {
+      io.to(dispute.chatId).emit('payoutUnlocked', {
+        chatId: dispute.chatId,
+        reason: 'Dispute resolved. Payout has been released.',
+      });
+    }
 
     // Send resolution message to chat
     const resolutionMessage = {

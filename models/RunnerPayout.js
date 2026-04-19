@@ -51,7 +51,7 @@ const runnerPayoutSchema = new mongoose.Schema({
 
   status: {
     type: String,
-    enum: ['pending', 'submitted', 'approved', 'rejected'],
+    enum: ['pending', 'locked', 'submitted', 'approved', 'rejected'],
     default: 'pending'
   },
 
