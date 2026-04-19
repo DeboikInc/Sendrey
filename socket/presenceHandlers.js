@@ -18,7 +18,7 @@ const presenceTimers = new Map();
 const markOffline = (io, userId, userType, chatId) => {
   presenceTimers.delete(userId);
 
-  getRedis().del(`presence:${userType}:${userId}`).catch(() => {});
+  getRedis().del(`presence:${userType}:${userId}`).catch(() => { });
 
   if (!chatId) return;
   const { userId: chatUserId, runnerId: chatRunnerId } = parseChat(chatId);
@@ -38,7 +38,7 @@ const markOffline = (io, userId, userType, chatId) => {
     from: 'system',
     type: 'system',
     messageType: 'system',
-    text: `${isRunner ? 'Runner' : 'User'} went offline`,
+    text: isRunner ? 'Runner went offline' : 'User went offline',
     time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
     senderId: 'system',
     senderType: 'system',
@@ -46,7 +46,9 @@ const markOffline = (io, userId, userType, chatId) => {
     createdAt: new Date(),
     isPresenceMessage: true,
   };
-  io.to(chatId).emit('message', offlineMsg);
+
+  // emit to partner
+  io.to(`${partnerType}-${partnerId}`).emit('message', offlineMsg);
 };
 
 const handleUserOnline = async (socket, io, { userId, userType, chatId }) => {
@@ -61,7 +63,7 @@ const handleUserOnline = async (socket, io, { userId, userType, chatId }) => {
   socket.join(personalRoom);
 
   try {
-    await getRedis().set(`presence:${userType}:${userId}`, chatId || 'online', 'EX', 30);
+    await getRedis().set(`presence:${userType}:${userId}`, chatId || 'online', 'EX', 15);
   } catch (e) {
     console.error('Redis presence set failed:', e);
   }
@@ -86,7 +88,7 @@ const handlePresenceHeartbeat = (socket, io) => {
   if (!userId || !userType) return;
 
   // Refresh Redis TTL
-  getRedis().set(`presence:${userType}:${userId}`, chatId || 'online', 'EX', 30).catch(() => {});
+  getRedis().set(`presence:${userType}:${userId}`, chatId || 'online', 'EX', 15).catch(() => { });
 
   // Was previously timed out (marked offline) → tell partner they're back
   if (!presenceTimers.has(userId) && chatId) {
@@ -99,6 +101,22 @@ const handlePresenceHeartbeat = (socket, io) => {
       io.to(`${partnerType}-${partnerId}`).emit('partnerOnline', {
         chatId, userId, userType, timestamp: new Date().toISOString(),
       });
+
+      const onlineMsg = {
+        id: `online-${userId}-${Date.now()}`,
+        from: 'system',
+        type: 'system',
+        messageType: 'system',
+        text: isRunner ? 'Runner is back online' : 'User is back online',
+        time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+        senderId: 'system',
+        senderType: 'system',
+        status: 'sent',
+        createdAt: new Date(),
+        isPresenceMessage: true,
+      };
+      io.to(`${partnerType}-${partnerId}`).emit('message', onlineMsg);
+
     }
   }
 
@@ -109,7 +127,7 @@ const handlePresenceHeartbeat = (socket, io) => {
 
   const timer = setTimeout(() => {
     markOffline(io, userId, userType, chatId);
-  }, 10000);
+  }, 6000);
 
   presenceTimers.set(userId, { timer, io, userId, userType, chatId });
 };
@@ -124,7 +142,7 @@ const handleUserDisconnect = async (socket, io) => {
     presenceTimers.delete(userId);
   }
 
-  getRedis().del(`presence:${userType}:${userId}`).catch(() => {});
+  getRedis().del(`presence:${userType}:${userId}`).catch(() => { });
 
   // Emit offline instantly — don't wait for anything
   if (chatId) {
@@ -146,12 +164,13 @@ const handleUserDisconnect = async (socket, io) => {
         senderId: 'system', senderType: 'system', status: 'sent',
         createdAt: new Date(), isPresenceMessage: true,
       };
-      io.to(chatId).emit('message', offlineMsg);
+
+      io.to(`${partnerType}-${partnerId}`).emit('message', offlineMsg);
     }
   }
 
   // Push notifications — fully non-blocking
-  if (chatId) setImmediate(() => _sendOfflinePush(socket).catch(() => {}));
+  if (chatId) setImmediate(() => _sendOfflinePush(socket).catch(() => { }));
 };
 
 const _sendOfflinePush = async (socket) => {

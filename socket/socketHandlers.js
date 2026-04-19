@@ -898,6 +898,8 @@ const handleSendMessage = async (socket, io, { chatId, message }) => {
   try {
     socket.to(chatId).emit('message', cleanForEmit(message));
 
+    if (message?.isPresenceMessage) return;
+    
     if (!pendingWrites.has(chatId)) {
       pendingWrites.set(chatId, { messages: [], timer: null });
     }

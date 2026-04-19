@@ -119,10 +119,20 @@ const notifyDeliveryConfirmationRequest = async (userId, { orderId }) => {
     recipientId: userId,
     recipientType: 'user',
     title: '📦 Delivery Complete!',
-    body: 'Your runner has marked delivery as complete. Please confirm to release payment.',
+    body: 'Your runner has marked delivery as complete. Please confirm delivery.',
     data: { type: 'delivery_confirmation_request', orderId }
   });
 };
+
+const notifyAutoConfirmWarning = async (userId, { orderId }) => {
+  return sendPushNotification({
+    recipientId: userId,
+    recipientType: 'user',
+    title: '📦 Delivery Warning!',
+    body: 'Your delivery will be auto marked in 10 minutes, mark as delivered now.',
+    data: { type: 'delivery_confirmation_request', orderId }
+  })
+}
 
 const notifyDeliveryConfirmed = async (runnerId, { orderId, amount }) => {
   return sendPushNotification({
