@@ -19,7 +19,7 @@ const { errorHandler, notFound } = require('./middleware/errorHandler');
 const { requestLogger, enhancedRequestLogger } = require('./middleware/logger');
 const { startAllConsumers } = require('./kafka/consumers');
 const { startExpenseReportJobs } = require('./jobs/expenseReports');
-const dedupe = require('./middleware/dedupe');
+
 
 const cron = require('node-cron');
 const { archiveOldOrders } = require('./services/orderStateMachine');
@@ -54,6 +54,8 @@ const startServer = async () => {
     // restore any scheduled cron jobs that were active before the server restarted
     await startExpenseReportJobs();
 
+    app.set('trust proxy', 1);
+
     // 2. Middlewares
     app.use(helmet(
       {
@@ -71,14 +73,6 @@ const startServer = async () => {
 
     app.use(express.json({ limit: '10mb' }));
     app.use(express.urlencoded({ extended: true }));
-
-    app.use(dedupe(3000, {
-      skip: [
-        '/kyc/verify',
-        '/business/reports/generate',
-        '/business/reports',        // covers /reports/:id/export/csv and /pdf
-      ]
-    }));
 
     app.use(requestLogger);
     app.use(enhancedRequestLogger);

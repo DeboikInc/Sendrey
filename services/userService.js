@@ -196,7 +196,7 @@ class UserService {
       const updatedUser = await User.findByIdAndUpdate(
         id,
         { $set: updateData },
-        { new: true, runValidators: true }
+        { new: true, runValidators: false }
       );
 
       console.log('✅ UPDATED USER:');

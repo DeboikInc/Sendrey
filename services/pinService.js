@@ -8,6 +8,7 @@ const comparePin = (raw, hashed) => bcrypt.compare(raw, hashed);
 const validatePinFormat = (pin) => /^\d{4}$/.test(pin);
 
 const smsService = require('./smsService');
+const emailService = require('./emailService');
 const crypto = require('crypto');
 
 
@@ -123,4 +124,42 @@ const verifyForgotPinOtp = async ({ userId, otp }) => {
   return { message: 'OTP verified' };
 };
 
-module.exports = { setPin, verifyPin, resetPin, forgotPin, sendForgotPinOtp, verifyForgotPinOtp };
+const sendForgotPinEmail = async ({ userId, role }) => {
+  const user = await getModel(role).findById(userId);
+  if (!user) throw Object.assign(new Error('User not found'), { statusCode: 404 });
+  if (!user.email) throw Object.assign(new Error('No email address on account'), { statusCode: 400 });
+
+  const otp = crypto.randomInt(100000, 999999).toString();
+  const expires = Date.now() + 10 * 60 * 1000;
+
+  otpStore.set(userId.toString(), { otp, expires });
+
+  await emailService.sendEmail(
+    user.email,
+    'Reset your Sendrey PIN',
+    'sendForgotPin',
+    {
+      name: user.firstName || 'there',
+      otp,
+      year: new Date().getFullYear(),
+    }
+  );
+
+  return { message: 'OTP has been sent to your email address' };
+};
+
+const verifyEmailOtp = async ({ userId, otp }) => {
+  const record = otpStore.get(userId.toString());
+  if (!record) throw Object.assign(new Error('OTP not found or expired'), { statusCode: 400 });
+  if (Date.now() > record.expires) {
+    otpStore.delete(userId.toString());
+    throw Object.assign(new Error('OTP expired'), { statusCode: 400 });
+  }
+  if (record.otp !== otp) throw Object.assign(new Error('Invalid OTP'), { statusCode: 400 });
+
+  otpStore.delete(userId.toString());
+  otpStore.set(`verified_${userId}`, { verified: true, expires: Date.now() + 5 * 60 * 1000 });
+  return { message: 'OTP verified' };
+};
+
+module.exports = { setPin, verifyPin, resetPin, forgotPin, sendForgotPinOtp, verifyForgotPinOtp, sendForgotPinEmail, verifyEmailOtp };

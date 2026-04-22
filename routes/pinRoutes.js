@@ -39,11 +39,27 @@ router.post(
 );
 
 router.post(
+    '/forgot-pin/send-email-otp',
+    authenticate,
+    userRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 5 }),
+    auditLog('FORGOT_PIN_EMAIL_OTP'),
+    pinController.sendForgotPinEmail
+);
+
+router.post(
     '/forgot-pin/verify-otp',
     authenticate,
     userRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 5 }),
     auditLog('FORGOT_PIN_VERIFY_OTP'),
     pinController.verifyForgotPinOtp
+);
+
+router.post(
+    '/forgot-pin/verify-email-otp',
+    authenticate,
+    userRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 5 }),
+    auditLog('FORGOT_PIN_VERIFY_EMAIL_OTP'),
+    pinController.verifyEmailOtp
 );
 
 module.exports = router;

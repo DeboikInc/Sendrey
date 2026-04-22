@@ -64,7 +64,7 @@ const taskSchema = new mongoose.Schema({
     // shared fields
     deliveryLocation: { type: String },
     dropoffPhone: { type: String },
-    specialInstructions: { type: String },
+    specialInstructions: { type: mongoose.Schema.Types.Mixed, default: null },
      // what the user actually paid — used for expense reports
     amount: {
       type: Number,
