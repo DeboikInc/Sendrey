@@ -277,7 +277,8 @@ const userSchema = new mongoose.Schema({
     },
 
     dropoffPhone: { type: String },
-    specialInstructions: { type: String },
+    // In your User model
+    specialInstructions: { type: mongoose.Schema.Types.Mixed, default: null },
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     timestamp: { type: Date, default: Date.now },
     status: {

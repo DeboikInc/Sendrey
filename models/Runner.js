@@ -344,7 +344,7 @@ const runnerSchema = new mongoose.Schema({
     // common
     deliveryLocation: { type: String },
     dropoffPhone: { type: String },
-    specialInstructions: { type: String },
+    specialInstructions: { type: mongoose.Schema.Types.Mixed, default: null },
 
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     timestamp: { type: Date, default: Date.now },

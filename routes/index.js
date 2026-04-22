@@ -15,6 +15,7 @@ const payoutRoutes = require('./payoutRoutes');
 const orderRoutes = require('./orderRoutes');
 const waitlistRoutes = require('./waitlistRoutes')
 const pinRoutes = require('./pinRoutes')
+const uploadRoutes = require('./upload');
 
 // Use route modules
 router.use('/auth', authRoutes);
@@ -30,6 +31,7 @@ router.use('/payouts', payoutRoutes);
 router.use('/orders', orderRoutes);
 router.use('/business', businessRoutes);
 router.use('/pin', pinRoutes)
+router.use('/upload', uploadRoutes);
 
 // Export the router
 module.exports = router;

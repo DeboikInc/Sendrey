@@ -99,7 +99,7 @@ const orderSessionSchema = new mongoose.Schema({
     routeDistanceMeters: Number,
     routeLegs: mongoose.Schema.Types.Mixed,
     fleetType: String,
-    specialInstructions: mongoose.Schema.Types.Mixed,
+    specialInstructions: { type: mongoose.Schema.Types.Mixed, default: null },
     createdAt: Date,
     completedAt: Date,
     deliveryConfirmedAt: Date,
@@ -144,7 +144,7 @@ const chatSchema = new mongoose.Schema({
       fileName: String,
       fileUrl: String,
       fileType: String,
-      fileSize: String
+      fileSize: mongoose.Schema.Types.Mixed
     }],
     createdAt: { type: Date, default: null }
   },

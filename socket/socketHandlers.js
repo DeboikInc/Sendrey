@@ -73,15 +73,19 @@ const snapshotMessage = (socketId, chatId, messageId) => {
 };
 
 const sanitizeSpecialInstructions = (specialInstructions) => {
+  console.log('[sanitize] input:', JSON.stringify(specialInstructions, null, 2));
   if (!specialInstructions) return null;
   return {
     text: specialInstructions.text || null,
-    media: (specialInstructions.media || []).map(m => ({
-      fileName: m.fileName || m.name || null,
-      fileType: m.fileType || m.type || null,
-      fileSize: m.fileSize || null,
-      fileUrl: m.fileUrl || null,
-    })),
+    media: (specialInstructions.media || []).map(m => {
+      // console.log('[sanitize] media item:', JSON.stringify(m, null, 2));
+      return {
+        fileName: m.fileName || m.name || null,
+        fileType: m.fileType || m.type || null,
+        fileSize: m.fileSize || null,
+        fileUrl: m.fileUrl || null,
+      };
+    }),
   };
 };
 
@@ -231,6 +235,7 @@ const createOrder = async (io, { chatId, userId, runnerId, serviceType }) => {
     {
       chatId,
       status: { $nin: ['completed', 'cancelled', 'task_completed'] },
+      paymentStatus: { $ne: 'paid' }
     },
     {
       $set: {
@@ -533,6 +538,18 @@ const handleRequestRunner = async (socket, io, data) => {
 // ─── Lock both parties and proceed ───────────────────────────────────────────
 
 const lockAndProceed = async (io, chatId, state) => {
+  if (state.locked) {
+    console.warn('[lockAndProceed] already locked for chatId:', chatId);
+    return;
+  }
+
+  state.locked = true;
+
+  if (state.globalTimer) {
+    clearTimeout(state.globalTimer);
+    state.globalTimer = null;
+  }
+
   const { runnerId, userId } = state;
   await Promise.all([
     Runner.findByIdAndUpdate(runnerId, { isAvailable: false }),
@@ -553,13 +570,19 @@ const lockAndProceed = async (io, chatId, state) => {
 //
 const initializeChatAndProceed = async (io, chatId, state) => {
   const { runnerId, userId, serviceType } = state;
-  const specialInstructions = sanitizeSpecialInstructions(state.specialInstructions);
+
+  const userDoc = await User.findById(userId).lean();
+  console.log('[initializeChat] userDoc.currentRequest.specialInstructions:',
+    JSON.stringify(userDoc?.currentRequest?.specialInstructions, null, 2));
 
   try {
     const [runnerData] = await Promise.all([
       Runner.findById(runnerId).lean(),
-      User.findById(userId).lean(),
     ]);
+
+    const specialInstructions = sanitizeSpecialInstructions(
+      userDoc?.currentRequest?.specialInstructions || state.specialInstructions
+    );
 
     // Build fresh profile messages (system + profile-card)
     const initialMessages = createInitialRunnerMessages(runnerData, serviceType, runnerId);
@@ -656,6 +679,8 @@ const initializeChatAndProceed = async (io, chatId, state) => {
       initialMessages: chat.messages,
       specialInstructions: specialInstructions || null,
     });
+
+    console.log('[initializeChat] emitting specialInstructions:', JSON.stringify(specialInstructions, null, 2));
 
     preRoomState.delete(chatId);
     logSocketAudit('PROCEED_TO_CHATROOM', { runnerId, userId, serviceType });
@@ -875,6 +900,7 @@ const handleRunnerJoinChat = async (socket, io, data) => {
   socket.emit('chatHistory', filteredMessages);
 
   if (chat.specialInstructions) {
+    console.log('[runnerJoinChat] emitting specialInstructions:', JSON.stringify(chat.specialInstructions, null, 2));
     socket.emit('specialInstructions', { chatId, specialInstructions: chat.specialInstructions });
   }
 
@@ -899,7 +925,7 @@ const handleSendMessage = async (socket, io, { chatId, message }) => {
     socket.to(chatId).emit('message', cleanForEmit(message));
 
     if (message?.isPresenceMessage) return;
-    
+
     if (!pendingWrites.has(chatId)) {
       pendingWrites.set(chatId, { messages: [], timer: null });
     }
@@ -1111,6 +1137,11 @@ const handleDisconnect = async (socket, io) => {
   }
   socketMessageSnapshot.delete(socket.id);
 
+  const isRunner = !!socket.runnerId && !socket.userId;
+  const offlineId = isRunner ? socket.runnerId : socket.userId;
+
+  if (!offlineId) return;
+
   const Model = isRunner ? Runner : User;
   const offlinePerson = await Model.findById(offlineId).select('firstName lastName').lean();
   const name = offlinePerson
@@ -1120,6 +1151,8 @@ const handleDisconnect = async (socket, io) => {
   const chatId = socket.currentChatId;
   const partnerId = isRunner ? socket.userId : socket.runnerId;
   const partnerType = isRunner ? 'user' : 'runner';
+
+  if (!partnerId || !chatId) return;
 
   await notifyPartnerOffline(partnerId, partnerType, { chatId, name });
 };

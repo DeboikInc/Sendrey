@@ -186,10 +186,7 @@ const orderSchema = new mongoose.Schema({
     },
 
     // Special instructions
-    specialInstructions: {
-        type: String,
-        default: null
-    },
+    specialInstructions: { type: mongoose.Schema.Types.Mixed, default: null },
 
     pickupItems: {
         type: String,

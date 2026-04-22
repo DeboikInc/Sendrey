@@ -322,7 +322,12 @@ const ipRateLimit = (options = {}) => {
   const ipRequests = new Map();
 
   return (req, res, next) => {
-    const ip = req.ip || req.connection.remoteAddress;
+    // Handle proxies — use x-forwarded-for if behind nginx/render/etc
+    const forwarded = req.headers['x-forwarded-for'];
+    const ip = forwarded
+      ? forwarded.split(',')[0].trim()
+      : req.ip || req.connection.remoteAddress;
+
     const now = Date.now();
     const windowStart = now - windowMs;
 
@@ -344,6 +349,13 @@ const ipRateLimit = (options = {}) => {
     }
 
     timestamps.push(now);
+
+    res.set({
+      'X-RateLimit-Limit': maxRequests,
+      'X-RateLimit-Remaining': maxRequests - timestamps.length,
+      'X-RateLimit-Reset': new Date(now + windowMs).toISOString(),
+    });
+
     next();
   };
 };

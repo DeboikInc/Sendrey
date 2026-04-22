@@ -140,12 +140,13 @@ connectWithRetry().then(async () => {
     });
 
     // Wrap all handlers in try-catch to prevent crashes
-    const safeHandler = (handler, ...args) => {
+    const safeHandler = async (handler, ...args) => {
       try {
-        return handler(...args);
+        return await handler(...args);
       } catch (error) {
         console.error(`Error in handler for ${socket.id}:`, error);
-        socket.emit("error", { message: "Internal server error" });
+        socket.emit("error", { message: "Internal server error", detail: error.message });
+        return null; // null = failure signal
       }
     };
 
@@ -172,13 +173,19 @@ connectWithRetry().then(async () => {
     );
 
     socket.on("acceptRunnerRequest", async (data) => {
+      const { chatId } = data;
+      if (socket._acceptingChat === chatId) return; // dedup guard
+      socket._acceptingChat = chatId;
+
       try {
-        console.log('[SERVER] acceptRunnerRequest received:', data);
-        await safeHandler(socketHandlers.handleAcceptRunnerRequest, socket, io, data);
+        const result = await safeHandler(socketHandlers.handleAcceptRunnerRequest, socket, io, data);
+        if (result === null) {
+          socket._acceptingChat = null;
+          return;
+        }
         await handleRunnerAccept(io, socket, data);
-      } catch (error) {
-        console.error('AcceptRunnerRequest error:', error);
-        socket.emit("error", { error: error.message });
+      } finally {
+        setTimeout(() => { socket._acceptingChat = null; }, 5000);
       }
     });
 
@@ -187,12 +194,25 @@ connectWithRetry().then(async () => {
       safeHandler(socketHandlers.handleRequestRunner, socket, io, data)
     );
 
-    socket.on("userJoinChat", (data) =>
-      safeHandler(socketHandlers.handleUserJoinChat, socket, io, data)
-    );
+    socket.on("userJoinChat", async (data) => {
+      const result = await safeHandler(socketHandlers.handleUserJoinChat, socket, io, data);
+      if (result === null) {
+        socket.emit("chatError", {
+          message: "Failed to join chat. Please try again.",
+          code: "JOIN_FAILED"
+        });
+      }
+    });
 
-    socket.on("runnerJoinChat", (data) => {
-      safeHandler(socketHandlers.handleRunnerJoinChat, socket, io, data);
+    socket.on("runnerJoinChat", async (data) => {
+      const result = await safeHandler(socketHandlers.handleRunnerJoinChat, socket, io, data);
+      if (result === null) {
+        socket.emit("chatError", {
+          message: "Failed to join chat. Please try again.",
+          code: "JOIN_FAILED"
+        });
+        return; // don't attempt to join room if handler blew up
+      }
       setTimeout(() => {
         const rooms = Array.from(socket.rooms);
         console.log('Runner socket rooms after join:', rooms);
