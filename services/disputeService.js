@@ -5,6 +5,7 @@ const { Chat } = require('../models/Chat');
 const cloudinary = require('../config/cloudinary');
 const orderStateMachine = require('./orderStateMachine');
 const { sendPushNotification } = require('./notificationService');
+const Wallet = require('../models/Wallet');
 
 // Execute payments based on outcome
 const paymentService = require('./paymentServices');
@@ -120,54 +121,92 @@ const resolveDispute = async ({
 }) => {
     const dispute = await Dispute.findOne({ disputeId });
     if (!dispute) throw new Error('Dispute not found');
-
     if (dispute.isFinal) throw new Error('This dispute is already finalized');
 
-    const escrow = await Escrow.findById(dispute.escrowId);
-    if (!escrow) throw new Error('Escrow not found');
+    let escrow = null;
+
+    if (dispute.escrowId) {
+        escrow = await Escrow.findById(dispute.escrowId);
+    } else {
+        // dispute.orderId is the human-readable string e.g. "ORD-MO8PYH1B-7FQCP"
+        // need the Order's _id to query Escrow
+        const order = await Order.findOne({ orderId: dispute.orderId }).select('_id').lean();
+        if (order) {
+            escrow = await Escrow.findOne({ orderId: order._id });
+        }
+    }
+
+    if (!escrow) {
+        // no payment was ever made — resolve without moving funds
+        dispute.status = 'resolved';
+        dispute.isFinal = true;
+        dispute.resolution = {
+            outcome,
+            amountToUser: 0,
+            amountToRunner: 0,
+            notes: adminNote || 'No escrow found — order was not paid',
+            resolvedBy,
+            resolvedAt: new Date(),
+        };
+        await dispute.save();
+        const populated = await Dispute.findOne({ disputeId })
+            .populate('userId', 'firstName lastName email')
+            .populate('runnerId', 'firstName lastName email');
+        return { dispute: populated, amountToUser: 0, amountToRunner: 0 };
+    }
 
     const totalAmount = escrow.totalAmount;
     let amountToUser = 0;
     let amountToRunner = 0;
 
-    // Calculate amounts based on outcome
+    // ── 1. Calculate first ────────────────────────────────
     switch (outcome) {
         case 'full_release':
-            // Release everything to runner
             amountToRunner = totalAmount;
             amountToUser = 0;
             break;
-
         case 'full_refund':
-            // Refund everything to user
             amountToUser = totalAmount;
             amountToRunner = 0;
             break;
-
-        case 'partial_release':
-            // Split based on percentage
+        case 'partial_release': {
             const runnerPercent = releasePercentage || 50;
             amountToRunner = Math.round(totalAmount * (runnerPercent / 100));
             amountToUser = totalAmount - amountToRunner;
             break;
-
-        case 'partial_refund':
-            // Refund partial to user
+        }
+        case 'partial_refund': {
             const userPercent = releasePercentage || 50;
             amountToUser = Math.round(totalAmount * (userPercent / 100));
             amountToRunner = totalAmount - amountToUser;
             break;
+        }
+        default:
+            throw new Error(`Unknown outcome: ${outcome}`);
+    }
+
+    // ── 2. Credit wallets ─────────────────────────────────
+    if (amountToUser > 0) {
+        const userWallet = await Wallet.findOne({ userId: escrow.userId, userType: 'user' });
+        if (!userWallet) throw new Error('User wallet not found');
+        await userWallet.credit(amountToUser, `DISPUTE-REFUND-${dispute.disputeId}`, {
+            type: 'dispute_refund',
+            disputeId: dispute._id,
+            outcome,
+        });
     }
 
     if (amountToRunner > 0) {
-        await paymentService.payoutToRunner(escrow._id, amountToRunner);
+        const runnerWallet = await Wallet.findOne({ userId: escrow.runnerId, userType: 'runner' });
+        if (!runnerWallet) throw new Error('Runner wallet not found');
+        await runnerWallet.credit(amountToRunner, `DISPUTE-PAYOUT-${dispute.disputeId}`, {
+            type: 'dispute_payout',
+            disputeId: dispute._id,
+            outcome,
+        });
     }
 
-    if (amountToUser > 0) {
-        await paymentService.refundToUser(escrow._id, amountToUser);
-    }
-
-    // Update dispute
+    // ── 3. Update dispute ─────────────────────────────────
     dispute.status = 'resolved';
     dispute.isFinal = true;
     dispute.escrowPaused = false;
@@ -181,14 +220,13 @@ const resolveDispute = async ({
         resolvedAt: new Date(),
         notifiedAt: new Date()
     };
-
     dispute.messages.push({
         from: 'admin',
         message: `Dispute resolved: ${outcome}. ${adminNote || ''}`,
         timestamp: new Date()
     });
-
     await dispute.save();
+
     await Escrow.findByIdAndUpdate(dispute.escrowId, { status: 'released' });
     await orderStateMachine.transition(dispute.orderId, 'dispute_resolved', {
         triggeredBy: 'admin',
@@ -196,6 +234,7 @@ const resolveDispute = async ({
         note: `Resolved: ${outcome}. ${adminNote || ''}`
     });
 
+    // ── 4. Notify both parties ────────────────────────────
     const outcomeMessages = {
         full_release: { user: 'Your dispute was reviewed. No refund was issued.', runner: `₦${amountToRunner.toLocaleString()} has been released to your wallet.` },
         full_refund: { user: `₦${amountToUser.toLocaleString()} has been refunded to your wallet.`, runner: 'Your dispute was reviewed. Funds were returned to the customer.' },
@@ -206,25 +245,18 @@ const resolveDispute = async ({
     const msgs = outcomeMessages[outcome];
     if (msgs) {
         await Promise.allSettled([
-            sendPushNotification({
-                recipientId: dispute.userId,
-                recipientType: 'user',
-                title: 'Dispute Resolved',
-                body: msgs.user,
-                data: { type: 'dispute_resolved', orderId: dispute.orderId, outcome },
-            }),
-            sendPushNotification({
-                recipientId: dispute.runnerId,
-                recipientType: 'runner',
-                title: 'Dispute Resolved',
-                body: msgs.runner,
-                data: { type: 'dispute_resolved', orderId: dispute.orderId, outcome },
-            }),
+            sendPushNotification({ recipientId: dispute.userId, recipientType: 'user', title: 'Dispute Resolved', body: msgs.user, data: { type: 'dispute_resolved', orderId: dispute.orderId, outcome } }),
+            sendPushNotification({ recipientId: dispute.runnerId, recipientType: 'runner', title: 'Dispute Resolved', body: msgs.runner, data: { type: 'dispute_resolved', orderId: dispute.orderId, outcome } }),
         ]);
     }
 
+    // ── 5. Return populated dispute ───────────────────────
+    const populated = await Dispute.findOne({ disputeId })
+        .populate('userId', 'firstName lastName email')
+        .populate('runnerId', 'firstName lastName email');
+
     console.log(`Dispute ${disputeId} resolved: ${outcome}`);
-    return { dispute, amountToUser, amountToRunner };
+    return { dispute: populated, amountToUser, amountToRunner };
 };
 
 /**
