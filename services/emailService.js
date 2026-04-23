@@ -206,7 +206,7 @@ class EmailService {
       'otpEmail',
       {
         name: user.name,
-        email:user.email,
+        email: user.email,
         otp: otp,
         expiryTime: '10 minutes'
       }
@@ -231,21 +231,21 @@ class EmailService {
     );
   }
 
-  async sendRefundNotification(user,order){
+  async sendRefundNotification(user, escrow) {
     return this.sendEmail(
       user.email,
       'Refund Processed — Your funds are back in your wallet',
       'refundNotification',
       {
-       name:        user.firstName || user.name,
-            amount:      escrow.totalAmount?.toLocaleString(),
-            orderId:     escrow.orderId?.orderId || escrow.taskId,
-            reason:      escrow.metadata?.refundReason || 'Order cancelled',
-            walletBalance: escrow.metadata?.walletBalanceAfter?.toLocaleString(),
-            supportEmail: process.env.SUPPORT_EMAIL,
-            year:        new Date().getFullYear(),
+        name: user.firstName || user.name,
+        amount: escrow.totalAmount?.toLocaleString(),
+        orderId: escrow.orderId?.orderId || escrow.taskId,
+        reason: escrow.metadata?.refundReason || 'Order cancelled',
+        walletBalance: escrow.metadata?.walletBalanceAfter?.toLocaleString(),
+        supportEmail: process.env.SUPPORT_EMAIL,
+        year: new Date().getFullYear(),
       }
-    ) 
+    )
   }
 }
 
