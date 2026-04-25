@@ -122,8 +122,8 @@ const commonSchemas = {
     }),
 
   serviceType: Joi.string().
-    valid('pick-up', 'run-errand').
-    required()
+    valid('pick-up', 'run-errand')
+    .optional()
     .messages({
       'any.only': 'Service type must be one of: pick-up, run-errand',
       'any.required': 'Service type is required'
@@ -189,8 +189,8 @@ const authValidation = {
         'any.only': 'Role must be one of: user, admin, moderator'
       }),
     serviceType: Joi.string()
-      .valid('pick-up', 'run-errand').
-      required()
+      .valid('pick-up', 'run-errand')
+      .optional()
       .messages({
         'any.only': 'Service type must be one of: pick-up, run-errand',
         'any.required': 'Service type is required'
