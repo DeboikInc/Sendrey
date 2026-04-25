@@ -1483,3 +1483,6 @@
 {"environment":"development","level":"warn","message":"Client error: GET /user/me - 401","method":"GET","service":"sendrey-server","statusCode":401,"timestamp":"2026-04-24 11:55:43","url":"/user/me","userId":"anonymous"}
 {"environment":"development","level":"warn","message":"Client error: GET /runner/me - 401","method":"GET","service":"sendrey-server","statusCode":401,"timestamp":"2026-04-24 11:55:48","url":"/runner/me","userId":"anonymous"}
 {"environment":"development","level":"warn","message":"Client error: GET /user/me - 401","method":"GET","service":"sendrey-server","statusCode":401,"timestamp":"2026-04-24 11:55:48","url":"/user/me","userId":"anonymous"}
+{"environment":"development","level":"info","logLevel":"info","message":"Logger Service started successfully","nodeVersion":"v22.13.0","service":"Logger Service","timestamp":"2026-04-25 14:07:56","type":"startup"}
+{"environment":"development","level":"info","logLevel":"info","message":"Logger Service started successfully","nodeVersion":"v22.13.0","service":"Logger Service","timestamp":"2026-04-25 14:07:55","type":"startup"}
+{"environment":"development","level":"info","message":"Twilio SMS service initialized successfully","service":"sendrey-server","timestamp":"2026-04-25 14:07:56"}
