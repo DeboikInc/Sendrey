@@ -119,7 +119,11 @@ class UserController extends BaseController {
   // Get nearby users (for runners to find customers)
   async getNearbyUsers(req, res, next) {
     try {
-      const { latitude, longitude, serviceType, fleetType } = req.query;
+      const { 
+        latitude, longitude, 
+        fleetType,
+        // serviceType, 
+       } = req.query;
 
       if (!latitude || !longitude) {
         return this.error(res, 'Latitude and longitude are required', 400);
@@ -139,10 +143,10 @@ class UserController extends BaseController {
         return this.error(res, 'Longitude must be between -180 and 180', 400);
       }
 
-      const validServiceTypes = ['pick-up', 'run-errand'];
-      if (serviceType && !validServiceTypes.includes(serviceType)) {
-        return this.error(res, `Invalid service type. Must be one of: ${validServiceTypes.join(', ')}`, 400);
-      }
+      // const validServiceTypes = ['pick-up', 'run-errand'];
+      // if (serviceType && !validServiceTypes.includes(serviceType)) {
+      //   return this.error(res, `Invalid service type. Must be one of: ${validServiceTypes.join(', ')}`, 400);
+      // }
 
       const validFleetTypes = ['cycling', 'bike', 'car', 'van', 'pedestrian'];
       if (fleetType && !validFleetTypes.includes(fleetType)) {
@@ -153,7 +157,7 @@ class UserController extends BaseController {
       const users = await userService.findNearbyUsers({
         latitude: lat,
         longitude: lng,
-        serviceType,
+        // serviceType,
         fleetType,
       });
 
