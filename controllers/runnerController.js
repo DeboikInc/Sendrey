@@ -72,11 +72,15 @@ class RunnerController extends BaseController {
   }
 
   /**
-   * Get nearby runners (within 2km)
+   * Get nearby runners 
    */
   async getNearbyRunners(req, res, next) {
     try {
-      const { pickupLat, pickupLng, latitude, longitude, serviceType, fleetType, sortBy } = req.query;
+      const {
+        pickupLat, pickupLng, latitude,
+        longitude, fleetType, sortBy,
+        // serviceType,
+      } = req.query;
 
       const lat = parseFloat(pickupLat || latitude);
       const lng = parseFloat(pickupLng || longitude);
@@ -97,10 +101,10 @@ class RunnerController extends BaseController {
         return this.badRequest(res, 'pickupLng must be between -180 and 180');
       }
 
-      const validServiceTypes = ['pick-up', 'run-errand'];
-      if (serviceType && !validServiceTypes.includes(serviceType)) {
-        return this.badRequest(res, `Invalid service type. Must be one of: ${validServiceTypes.join(', ')}`);
-      }
+      // const validServiceTypes = ['pick-up', 'run-errand'];
+      // if (serviceType && !validServiceTypes.includes(serviceType)) {
+      //   return this.badRequest(res, `Invalid service type. Must be one of: ${validServiceTypes.join(', ')}`);
+      // }
 
       const validFleetTypes = ['cycling', 'bike', 'car', 'van', 'pedestrian'];
       if (fleetType && !validFleetTypes.includes(fleetType)) {
@@ -110,7 +114,7 @@ class RunnerController extends BaseController {
       const runners = await this.service.findNearbyRunners({
         pickupLat: lat,
         pickupLng: lng,
-        serviceType,
+        // serviceType,
         fleetType,
       });
 

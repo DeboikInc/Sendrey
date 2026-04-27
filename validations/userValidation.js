@@ -219,7 +219,7 @@ const userValidation = {
     longitude: Joi.number().min(-180).max(180).optional(),
 
     currentRequest: Joi.object({
-      serviceType: Joi.string().valid('pick-up', 'run-errand').required()
+      serviceType: Joi.string().valid('pick-up', 'run-errand').optional()
         .messages({
           'any.only': 'Service type must be either "pick-up" or "run-errand"',
           'any.required': 'Service type is required'

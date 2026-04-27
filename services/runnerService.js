@@ -39,11 +39,15 @@ class RunnerService {
   /**
    * Find nearby runners within specified distance
    */
-  async findNearbyRunners({ pickupLat, pickupLng, serviceType, fleetType }) {
+  async findNearbyRunners({ 
+    pickupLat, pickupLng, 
+    // serviceType, 
+    fleetType
+   }) {
     return await Runner.findNearbyRunners({
       pickupLat,
       pickupLng,
-      serviceType,
+      // serviceType,
       fleetType,
     });
   }
