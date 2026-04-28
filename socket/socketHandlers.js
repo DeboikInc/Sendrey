@@ -690,6 +690,23 @@ const initializeChatAndProceed = async (io, chatId, state) => {
       console.log('[initializeChat] New chat created');
     }
 
+    const preRoom = `pre-${chatId}`;
+    const roomSockets = await io.in(preRoom).allSockets();
+
+    // Check by user room membership instead — more reliable than socket ID
+    const userRoomSockets = await io.in(`user-${userId}`).allSockets();
+    const userStillPresent = userRoomSockets.size > 0;
+
+    if (!userStillPresent) {
+      console.warn('[initializeChat] user no longer present — notifying runner');
+      io.to(`runner-${runnerId}`).emit('userLeftQueue', {
+        chatId,
+        message: 'User stopped waiting. They may retry.'
+      });
+      preRoomState.delete(chatId);
+      return;
+    }
+
     console.log('[initializeChat] emitting proceedToChat to pre-' + chatId);
     console.log(`[initializeChat] pre-room members at emit time:`, [...(io.sockets.adapter.rooms.get(`pre-${chatId}`) || [])]);
     // Tell both parties to proceed — they will call joinChat which triggers createOrder
@@ -788,6 +805,10 @@ const handleUserJoinChat = async (socket, io, data) => {
     const isActiveUnpaid = latestOrder && !isPaid && !isTerminal;
     const isActivePaid = latestOrder && isPaid && !isTerminal;
 
+    const notifyPartnerOfRead = () => {
+      io.to(`runner-${runnerId}`).emit('messagesRead', { chatId, readBy: userId });
+    };
+
     // ── CASE A: paid active order → restore history without payment_request ──
     if (isActivePaid) {
       console.log('[userJoinChat] CASE A — paid active order, restoring history');
@@ -798,6 +819,7 @@ const handleUserJoinChat = async (socket, io, data) => {
       filtered.forEach(m => snapshotMessage(socket.id, chatId, m.id));
       socket.emit('orderCreated', { order: cleanForEmit(latestOrder) });
       socket.emit('chatHistory', filtered);
+      notifyPartnerOfRead();
       io.to(`runner-${runnerId}`).emit('userJoinedChat', {
         userId, runnerId, chatId, userInRoom: true, timestamp: new Date().toISOString(),
       });
@@ -843,6 +865,7 @@ const handleUserJoinChat = async (socket, io, data) => {
         isNewOrder: false,
       });
       socket.emit('chatHistory', cleanMessages);
+      notifyPartnerOfRead();
       io.to(`runner-${runnerId}`).emit('userJoinedChat', {
         userId, runnerId, chatId, userInRoom: true, timestamp: new Date().toISOString(),
       });
@@ -862,6 +885,7 @@ const handleUserJoinChat = async (socket, io, data) => {
       const cleanMessages = await deduplicateAndPersist(chatId, freshChat.messages);
       cleanMessages.forEach(m => snapshotMessage(socket.id, chatId, m.id));
       socket.emit('chatHistory', cleanMessages);
+      notifyPartnerOfRead();
       io.to(`runner-${runnerId}`).emit('userJoinedChat', {
         userId, runnerId, chatId, userInRoom: true, timestamp: new Date().toISOString(),
       });
@@ -955,6 +979,7 @@ const handleRunnerJoinChat = async (socket, io, data) => {
 
   if (order) {
     socket.emit('chatHistory', filteredMessages);
+    io.to(`user-${userId}`).emit('messagesRead', { chatId, readBy: runnerId });
     socket.emit('orderCreated', { order: { ...cleanForEmit(order), chatId } });
   } else {
     // No active order — createOrder will emit chatHistory, just send current profile messages
@@ -986,6 +1011,16 @@ const handleSendMessage = async (socket, io, { chatId, message }) => {
   try {
     socket.to(chatId).emit('message', cleanForEmit(message));
 
+    // Echo back to sender with delivered status if partner is in room
+    const room = io.sockets.adapter.rooms.get(chatId);
+    const partnerPresent = room && room.size > 1;
+
+    socket.emit('messageEcho', {
+      id: message.id,
+      tempId: message.tempId,
+      status: partnerPresent ? 'delivered' : 'sent',
+    });
+
     if (message?.isPresenceMessage) return;
 
     if (!pendingWrites.has(chatId)) {
@@ -1010,7 +1045,6 @@ const handleSendMessage = async (socket, io, { chatId, message }) => {
       }
     }, 2000);
 
-    const room = io.sockets.adapter.rooms.get(chatId);
     if (room) {
       for (const socketId of room) snapshotMessage(socketId, chatId, message.id);
     }
