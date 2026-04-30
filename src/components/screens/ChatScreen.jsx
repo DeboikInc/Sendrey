@@ -165,7 +165,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
     chatId,
     sendMessage,
     onStatusUpdate: handleMessageStatusUpdate,
-    enabled: true, 
+    enabled: true,
   });
 
   const { handleTyping, handleRecordingStart, handleRecordingStop,
@@ -583,6 +583,26 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
       );
       if (hasPaid) setPaidChatIds(prev => new Set(prev).add(chatId));
 
+      const lastStatusMsg = [...msgs].reverse().find(m => {
+        if (m.type !== 'system') return false;
+        const t = m.text?.toLowerCase() || '';
+        return t.includes('item delivered') || t.includes('task completed') ||
+          t.includes('en route') || t.includes('made payment');
+      });
+
+      if (lastStatusMsg) {
+        const t = lastStatusMsg.text?.toLowerCase() || '';
+        const historyStatus = t.includes('task completed') ? 'completed'
+          : t.includes('item delivered') ? 'delivered'
+            : t.includes('en route') || t.includes('purchase') || t.includes('arrived') ? 'in_progress'
+              : t.includes('made payment') ? 'paid'
+                : null;
+
+        if (historyStatus) {
+          setCurrentOrder(prev => prev ? { ...prev, status: historyStatus } : prev);
+        }
+      }
+
       const isCompleted = msgs.some(m =>
         m.type === "task_completed" ||
         m.messageType === "task_completed" ||
@@ -668,6 +688,21 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
                 setTimeout(() => setShowRatingModal(true), 1500);
               }
             }).catch(() => { });
+        }
+      }
+
+      if (isSystem) {
+        const t = msg.text?.toLowerCase() || '';
+        const mappedStatus =
+          t.includes('task completed') ? 'completed'
+            : t.includes('item delivered') ? 'delivered'
+              : t.includes('en route') || t.includes('purchase') ||
+                t.includes('arrived') || t.includes('item collected') ? 'in_progress'
+                : t.includes('made payment') ? 'paid'
+                  : null;
+
+        if (mappedStatus) {
+          setCurrentOrder(prev => prev ? { ...prev, status: mappedStatus } : prev);
         }
       }
 

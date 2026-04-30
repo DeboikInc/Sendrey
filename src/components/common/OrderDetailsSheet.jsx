@@ -1,30 +1,30 @@
 import React, { useState } from 'react';
-import { 
-  X, Package, 
+import {
+  X, Package,
   Truck, CheckCircle, Copy
 } from 'lucide-react';
 import EscrowStatusBadge from './EscrowStatusBadge';
 
 const ORDER_STATUS_LABELS = {
-  pending:          { label: 'Pending',            color: 'text-gray-500' },
-  payment_pending:  { label: 'Payment Pending',     color: 'text-yellow-500' },
-  paid:             { label: 'Paid',                color: 'text-blue-500' },
-  in_progress:      { label: 'In Progress',         color: 'text-primary' },
-  items_submitted:  { label: 'Items Submitted',     color: 'text-orange-500' },
-  items_approved:   { label: 'Items Approved',      color: 'text-teal-500' },
-  delivered:        { label: 'Delivered',           color: 'text-purple-500' },
-  completed:        { label: 'Completed',           color: 'text-green-500' },
-  disputed:         { label: 'Disputed',            color: 'text-red-500' },
-  dispute_resolved: { label: 'Dispute Resolved',    color: 'text-green-500' },
-  archived:         { label: 'Archived',            color: 'text-gray-400' },
-  cancelled:        { label: 'Cancelled',           color: 'text-red-500' },
+  pending: { label: 'Pending', color: 'text-gray-500' },
+  payment_pending: { label: 'Payment Pending', color: 'text-yellow-500' },
+  paid: { label: 'Paid', color: 'text-blue-500' },
+  in_progress: { label: 'In Progress', color: 'text-primary' },
+  items_submitted: { label: 'Items Submitted', color: 'text-orange-500' },
+  items_approved: { label: 'Items Approved', color: 'text-teal-500' },
+  delivered: { label: 'Delivered', color: 'text-purple-500' },
+  completed: { label: 'Completed', color: 'text-green-500' },
+  disputed: { label: 'Disputed', color: 'text-red-500' },
+  dispute_resolved: { label: 'Dispute Resolved', color: 'text-green-500' },
+  archived: { label: 'Archived', color: 'text-gray-400' },
+  cancelled: { label: 'Cancelled', color: 'text-red-500' },
 };
 
 const STATE_TIMELINE = [
   { status: 'payment_pending', label: 'Order Created' },
-  { status: 'paid',            label: 'Payment Received' },
-  { status: 'delivered',       label: 'Delivered' },
-  { status: 'completed',       label: 'Completed' },
+  { status: 'paid', label: 'Payment Received' },
+  { status: 'delivered', label: 'Delivered' },
+  { status: 'completed', label: 'Completed' },
 ];
 
 export default function OrderDetailsSheet({
@@ -59,9 +59,8 @@ export default function OrderDetailsSheet({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm">
-      <div className={`w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-t-3xl ${
-        darkMode ? 'bg-black-100' : 'bg-white'
-      }`}>
+      <div className={`w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-t-3xl ${darkMode ? 'bg-black-100' : 'bg-white'
+        }`}>
 
         {/* Handle */}
         <div className="flex justify-center pt-3 pb-1">
@@ -69,9 +68,8 @@ export default function OrderDetailsSheet({
         </div>
 
         {/* Header */}
-        <div className={`flex items-center justify-between px-6 py-4 border-b ${
-          darkMode ? 'border-black-200' : 'border-gray-1001'
-        }`}>
+        <div className={`flex items-center justify-between px-6 py-4 border-b ${darkMode ? 'border-black-200' : 'border-gray-1001'
+          }`}>
           <div>
             <h2 className={`font-bold text-lg ${darkMode ? 'text-white' : 'text-black-200'}`}>
               Order Details
@@ -91,6 +89,44 @@ export default function OrderDetailsSheet({
             <X className={`w-5 h-5 ${darkMode ? 'text-gray-1002' : 'text-gray-600'}`} />
           </button>
         </div>
+
+        {/* Items */}
+        {(order.itemsList?.length > 0 || order.marketItems || order.pickupItems) && (
+          <div className={`p-4 rounded-2xl ${darkMode ? 'bg-black-200' : 'bg-gray-1001'}`}>
+            <p className={`text-sm font-semibold mb-3 ${darkMode ? 'text-white' : 'text-black-200'}`}>
+              {order.taskType === 'run-errand' || order.taskType === 'run_errand' ? 'Market Items' : 'Pickup Items'}
+            </p>
+
+            {/* Structured itemsList (run-errand with budget breakdown) */}
+            {order.itemsList?.length > 0 ? (
+              <div className="space-y-2">
+                {order.itemsList.map((item, i) => (
+                  <div key={i} className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <div className={`w-1.5 h-1.5 rounded-full bg-primary flex-shrink-0`} />
+                      <span className={`text-sm ${darkMode ? 'text-gray-1002' : 'text-gray-600'}`}>
+                        {item.name}
+                        {item.quantity > 1 && (
+                          <span className="ml-1 text-xs opacity-60">×{item.quantity}</span>
+                        )}
+                      </span>
+                    </div>
+                    {item.estimatedPrice > 0 && (
+                      <span className={`text-xs ${darkMode ? 'text-gray-1002' : 'text-gray-500'}`}>
+                        ₦{item.estimatedPrice.toLocaleString()}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              /* Free-text fallback */
+              <p className={`text-sm leading-relaxed ${darkMode ? 'text-gray-1002' : 'text-gray-600'}`}>
+                {order.marketItems || order.pickupItems}
+              </p>
+            )}
+          </div>
+        )}
 
         <div className="px-6 py-4 space-y-5">
 
@@ -115,32 +151,28 @@ export default function OrderDetailsSheet({
                 return (
                   <React.Fragment key={step.status}>
                     <div className="flex flex-col items-center">
-                      <div className={`w-6 h-6 rounded-full flex items-center justify-center ${
-                        isCompleted
+                      <div className={`w-6 h-6 rounded-full flex items-center justify-center ${isCompleted
                           ? 'bg-primary'
                           : darkMode ? 'bg-black-100' : 'bg-gray-300'
-                      } ${isCurrent ? 'ring-2 ring-primary ring-offset-2' : ''}`}>
+                        } ${isCurrent ? 'ring-2 ring-primary ring-offset-2' : ''}`}>
                         {isCompleted
                           ? <CheckCircle className="w-4 h-4 text-white" />
-                          : <div className={`w-2 h-2 rounded-full ${
-                              darkMode ? 'bg-gray-1002' : 'bg-gray-400'
+                          : <div className={`w-2 h-2 rounded-full ${darkMode ? 'bg-gray-1002' : 'bg-gray-400'
                             }`} />
                         }
                       </div>
-                      <p className={`text-xs mt-1 text-center w-14 leading-tight ${
-                        isCurrent
+                      <p className={`text-xs mt-1 text-center w-14 leading-tight ${isCurrent
                           ? 'text-primary font-medium'
                           : isCompleted
                             ? darkMode ? 'text-gray-1002' : 'text-gray-600'
                             : darkMode ? 'text-gray-1002' : 'text-gray-400'
-                      }`}>
+                        }`}>
                         {step.label}
                       </p>
                     </div>
                     {!isLast && (
-                      <div className={`flex-1 h-0.5 mb-5 ${
-                        index < timelineStep ? 'bg-primary' : darkMode ? 'bg-black-100' : 'bg-gray-300'
-                      }`} />
+                      <div className={`flex-1 h-0.5 mb-5 ${index < timelineStep ? 'bg-primary' : darkMode ? 'bg-black-100' : 'bg-gray-300'
+                        }`} />
                     )}
                   </React.Fragment>
                 );
@@ -167,14 +199,12 @@ export default function OrderDetailsSheet({
             <p className={`text-sm font-semibold mb-3 ${darkMode ? 'text-white' : 'text-black-200'}`}>
               Payment Breakdown
             </p>
-            <div className={`rounded-2xl overflow-hidden border ${
-              darkMode ? 'border-black-200' : 'border-gray-1001'
-            }`}>
+            <div className={`rounded-2xl overflow-hidden border ${darkMode ? 'border-black-200' : 'border-gray-1001'
+              }`}>
 
               {(order.taskType === 'run-errand' || order.taskType === 'run_errand') && itemBudget > 0 && (
-                <div className={`flex justify-between items-center px-4 py-3 border-b ${
-                  darkMode ? 'border-black-200 bg-black-200' : 'border-gray-1001 bg-gray-1001'
-                }`}>
+                <div className={`flex justify-between items-center px-4 py-3 border-b ${darkMode ? 'border-black-200 bg-black-200' : 'border-gray-1001 bg-gray-1001'
+                  }`}>
                   <div className="flex items-center gap-2">
                     <Package className={`w-4 h-4 ${darkMode ? 'text-gray-1002' : 'text-gray-600'}`} />
                     <span className={`text-sm ${darkMode ? 'text-gray-1002' : 'text-gray-600'}`}>
@@ -187,9 +217,8 @@ export default function OrderDetailsSheet({
                 </div>
               )}
 
-              <div className={`flex justify-between items-center px-4 py-3 border-b ${
-                darkMode ? 'border-black-200 bg-black-200' : 'border-gray-1001 bg-gray-1001'
-              }`}>
+              <div className={`flex justify-between items-center px-4 py-3 border-b ${darkMode ? 'border-black-200 bg-black-200' : 'border-gray-1001 bg-gray-1001'
+                }`}>
                 <div className="flex items-center gap-2">
                   <Truck className={`w-4 h-4 ${darkMode ? 'text-gray-1002' : 'text-gray-600'}`} />
                   <span className={`text-sm ${darkMode ? 'text-gray-1002' : 'text-gray-600'}`}>
@@ -201,9 +230,8 @@ export default function OrderDetailsSheet({
                 </span>
               </div>
 
-              <div className={`flex justify-between items-center px-4 py-3 ${
-                darkMode ? 'bg-black-100' : 'bg-white'
-              }`}>
+              <div className={`flex justify-between items-center px-4 py-3 ${darkMode ? 'bg-black-100' : 'bg-white'
+                }`}>
                 <span className={`text-sm font-bold ${darkMode ? 'text-white' : 'text-black-200'}`}>
                   Total
                 </span>
@@ -215,15 +243,13 @@ export default function OrderDetailsSheet({
           </div>
 
           {/* Task Type */}
-          <div className={`flex items-center justify-between p-4 rounded-2xl ${
-            darkMode ? 'bg-black-200' : 'bg-gray-1001'
-          }`}>
+          <div className={`flex items-center justify-between p-4 rounded-2xl ${darkMode ? 'bg-black-200' : 'bg-gray-1001'
+            }`}>
             <span className={`text-sm ${darkMode ? 'text-gray-1002' : 'text-gray-600'}`}>
               Task Type
             </span>
-            <span className={`text-sm font-semibold capitalize ${
-              darkMode ? 'text-white' : 'text-black-200'
-            }`}>
+            <span className={`text-sm font-semibold capitalize ${darkMode ? 'text-white' : 'text-black-200'
+              }`}>
               {taskType}
             </span>
           </div>
