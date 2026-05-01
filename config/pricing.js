@@ -1,9 +1,8 @@
-const DELIVERY_FEE_PERCENTAGE = parseFloat(process.env.DELIVERY_FEE_PERCENTAGE) || 0.20;
 const PLATFORM_FEE_PERCENTAGE = parseFloat(process.env.PLATFORM_FEE_PERCENTAGE) || 0.57;
-const DELIVERY_FEE_PER_KM_BIKE = parseFloat(process.env.DELIVERY_FEE_PER_KM_BIKE) || 500;
-const DELIVERY_FEE_PER_KM_OTHER = parseFloat(process.env.DELIVERY_FEE_PER_KM_OTHER) || 700;
 const RUNNER_SHARE = 1 - PLATFORM_FEE_PERCENTAGE;
 const RUNNER_DEFAULT_METERS = 1000;
+
+const BASE_FEE = 1000;
 
 const PAYSTACK_FEE_PERCENT = 0.01;
 const PAYSTACK_FEE_CAP = 300;
@@ -11,25 +10,31 @@ const PAYSTACK_FEE_CAP = 300;
 const haversineDistance = (a, b) => {
   const toRad = (deg) => (deg * Math.PI) / 180;
   const R = 6_371_000;
-
   const dLat = toRad(b.lat - a.lat);
   const dLng = toRad(b.lng - a.lng);
-
   const h =
     Math.sin(dLat / 2) ** 2 +
     Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
-
   return R * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 };
 
-/**
- * @param {number} distanceInMeters
- * @param {string} fleetType  'bike' | 'tricycle' | 'van' | 'pedestrian' etc.
- * @returns {number} fee in ₦ (rounded)
- */
 const calculateDeliveryFee = (distanceInMeters, fleetType) => {
-  const ratePerKm = fleetType === 'bike' ? DELIVERY_FEE_PER_KM_BIKE : DELIVERY_FEE_PER_KM_OTHER;
-  return Math.round(ratePerKm * (distanceInMeters / 1000));
+  const fleet = fleetType?.toLowerCase();
+
+  if (fleet === 'pedestrian') {
+    return distanceInMeters <= 500 ? 750 : 1500;
+  }
+
+  if (fleet === 'bike' || fleet === 'cycling') {
+    return Math.round(BASE_FEE + 300 * (distanceInMeters / 1000));
+  }
+
+  if (fleet === 'car' || fleet === 'van') {
+    return Math.round(BASE_FEE + 500 * (distanceInMeters / 1000));
+  }
+
+  // fallback
+  return Math.round(BASE_FEE + 500 * (distanceInMeters / 1000));
 };
 
 const calculateFeeSplit = (deliveryFee) => {
@@ -75,11 +80,21 @@ const calculateRouteDistance = (serviceType, user) => {
     return { distanceInMeters: 0, legs: {}, error: 'Delivery (user) location unavailable' };
   }
 
-  const leg1 = RUNNER_DEFAULT_METERS;
+  const fleet = fleetType?.toLowerCase();
+  const leg1 = fleet === 'pedestrian' ? 0 : 1000;
   const leg2 = haversineDistance(midCoords, deliveryCoords);
+  const total = leg1 + leg2;
+
+  if (fleet === 'pedestrian' && total > 1000) {
+    return {
+      distanceInMeters: total,
+      legs: { runnerToMid: Math.round(leg1), midToDelivery: Math.round(leg2) },
+      error: 'PEDESTRIAN_TOO_FAR',
+    };
+  }
 
   return {
-    distanceInMeters: leg1 + leg2,
+    distanceInMeters: total,
     legs: {
       runnerToMid: leg1,
       midToDelivery: Math.round(leg2),
@@ -90,13 +105,8 @@ const calculateRouteDistance = (serviceType, user) => {
   };
 };
 
-/**
- * @param {string} serviceType
- * @param {object} user        User document or lean object
- * @param {string} fleetType   'bike' | 'tricycle' | 'van' | 'pedestrian' etc.
- */
 const computeDeliveryFeeFromDocs = (serviceType, user, fleetType) => {
-  const { distanceInMeters, legs, error } = calculateRouteDistance(serviceType, user);
+  const { distanceInMeters, legs, error } = calculateRouteDistance(serviceType, user, fleetType);
 
   if (error) {
     console.warn(`[pricing] computeDeliveryFeeFromDocs — ${error}. Delivery fee defaulting to 0.`);
@@ -114,13 +124,11 @@ const computeDeliveryFeeFromDocs = (serviceType, user, fleetType) => {
 };
 
 module.exports = {
-  DELIVERY_FEE_PERCENTAGE,
   PLATFORM_FEE_PERCENTAGE,
-  DELIVERY_FEE_PER_KM_BIKE,
-  DELIVERY_FEE_PER_KM_OTHER,
   RUNNER_SHARE,
   PAYSTACK_FEE_PERCENT,
   PAYSTACK_FEE_CAP,
+  BASE_FEE,
 
   haversineDistance,
   calculateDeliveryFee,
