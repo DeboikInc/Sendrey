@@ -376,6 +376,36 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatId]);
 
+  // Restore persisted chat status on mount
+  useEffect(() => {
+    if (!chatId) return;
+    chatStorage.getChatStatus(chatId).then(saved => {
+      if (!saved) return;
+      if (saved.orderCancelled) {
+        setOrderCancelled(true);
+        setCancelledByName(saved.cancelledByName || null);
+      }
+      if (saved.taskCompleted) {
+        setTaskCompleted(true);
+      }
+      if (saved.currentOrder) {
+        setCurrentOrder(prev => prev || saved.currentOrder);
+        currentOrderRef.current = currentOrderRef.current || saved.currentOrder;
+      }
+    });
+  }, [chatId]);
+
+  // Persist chat status whenever it changes
+  useEffect(() => {
+    if (!chatId) return;
+    chatStorage.saveChatStatus(chatId, {
+      orderCancelled,
+      cancelledByName,
+      taskCompleted,
+      currentOrder: currentOrder || null,
+    });
+  }, [chatId, orderCancelled, cancelledByName, taskCompleted, currentOrder]);
+
   useEffect(() => {
     if (!chatId || !messages.length) return;
     // don't snapshot if only uploading messages exist
@@ -444,6 +474,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
 
       chatStorage.clearMessages(chatId);
       chatStorage.clearActiveChat();
+      chatStorage.clearChatStatus(chatId);
       setAwaitingNewOrder(true);
     });
 
@@ -669,6 +700,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
         chatStorage.clearMessages(chatId);
         chatStorage.clearActiveChat();
         chatStorage.clearRunnerData();
+        
         setCancelledByName(msg.text?.split(" ")[0] || "Runner");
       }
 
@@ -959,7 +991,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
       .catch(() => {
         // No order yet — fine, onOrderCreated will set it when runner accepts
       });
-  }, [chatId, dispatch, runner?._id, userData?._id, socket ]);
+  }, [chatId, dispatch, runner?._id, userData?._id, socket]);
 
 
   useEffect(() => {

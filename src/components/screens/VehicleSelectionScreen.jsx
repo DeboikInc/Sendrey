@@ -7,7 +7,7 @@ import { useDispatch, } from "react-redux";
 import { updateOrder } from '../../Redux/orderSlice';
 import { FaWalking, FaMotorcycle } from "react-icons/fa";
 import { useCameraHook } from "../../hooks/useCameraHook";
-
+import { calculateRouteDistance } from '../../utils/pricing';
 
 const initialMessages = [
   {
@@ -326,7 +326,6 @@ export default function VehicleSelectionScreen({
 
     setMessages(prev => [...prev, newMsg]);
 
-    // distance check for pedestrian
     if (type === 'pedestrian') {
       const origin = selectedService === 'run-errand'
         ? service?.marketCoordinates
@@ -334,17 +333,9 @@ export default function VehicleSelectionScreen({
       const dest = service?.deliveryCoordinates;
 
       if (origin && dest) {
-        const toRad = (deg) => deg * (Math.PI / 180);
-        const R = 6371000;
-        const dLat = toRad(dest.lat - origin.lat);
-        const dLon = toRad(dest.lng - origin.lng);
-        const a =
-          Math.sin(dLat / 2) ** 2 +
-          Math.cos(toRad(origin.lat)) * Math.cos(toRad(dest.lat)) *
-          Math.sin(dLon / 2) ** 2;
-        const distance = R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+        const { error } = calculateRouteDistance(selectedService, origin, dest, 'pedestrian');
 
-        if (distance > 1000) {
+        if (error === 'PEDESTRIAN_TOO_FAR') {
           setTimeout(() => {
             setMessages(prev => {
               const filtered = prev.filter(msg => msg.text !== "In progress...");
