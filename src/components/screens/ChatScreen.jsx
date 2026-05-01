@@ -697,11 +697,19 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
 
       if (isSystem && msg.text?.toLowerCase().includes("cancelled this order")) {
         setOrderCancelled(true);
+
+        setCancelledByName(msg.text?.split(" ")[0] || "Runner");
+
+        chatStorage.saveChatStatus(chatId, {
+          orderCancelled: true,
+          cancelledByName: msg.text?.split(' ')[0] || 'Runner',
+          taskCompleted: false,
+          currentOrder: currentOrderRef.current || null,
+        });
+
         chatStorage.clearMessages(chatId);
         chatStorage.clearActiveChat();
         chatStorage.clearRunnerData();
-        
-        setCancelledByName(msg.text?.split(" ")[0] || "Runner");
       }
 
       const isTaskDone =
@@ -709,6 +717,14 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
         (isSystem && msg.text?.toLowerCase().includes("task completed"));
       if (isTaskDone) {
         setTaskCompleted(true);
+        
+        chatStorage.saveChatStatus(chatId, {
+          orderCancelled: false,
+          cancelledByName: null,
+          taskCompleted: true,
+          currentOrder: currentOrderRef.current || null,
+        });
+
         chatStorage.clearMessages(chatId);
         chatStorage.clearActiveChat();
         chatStorage.clearRunnerData();
