@@ -134,6 +134,38 @@ const chatStorage = {
             localStorage.removeItem(key);
         }
     },
+
+    async saveChatStatus(chatId, status) {
+        // status: { cancelled, cancelledByName, taskCompleted, orderCancelled, currentOrder }
+        const key = `chat_status_${chatId}`;
+        const value = JSON.stringify({ ...status, savedAt: Date.now() });
+        if (isCapacitor()) {
+            const { Preferences } = await import('@capacitor/preferences');
+            await Preferences.set({ key, value });
+        } else {
+            try { localStorage.setItem(key, value); } catch (_) { }
+        }
+    },
+
+    async getChatStatus(chatId) {
+        const key = `chat_status_${chatId}`;
+        if (isCapacitor()) {
+            const { Preferences } = await import('@capacitor/preferences');
+            const { value } = await Preferences.get({ key });
+            return value ? JSON.parse(value) : null;
+        }
+        const value = localStorage.getItem(key);
+        return value ? JSON.parse(value) : null;
+    },
+    async clearChatStatus(chatId) {
+        const key = `chat_status_${chatId}`;
+        if (isCapacitor()) {
+            const { Preferences } = await import('@capacitor/preferences');
+            await Preferences.remove({ key });
+        } else {
+            localStorage.removeItem(key);
+        }
+    },
 };
 
 export default chatStorage;
