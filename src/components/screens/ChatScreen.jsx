@@ -39,6 +39,7 @@ import chatStorage from '../../utils/chatStorage';
 
 import { createPaymentIntent } from '../../Redux/paymentSlice';
 import { fetchOrderByChatId } from '../../Redux/orderSlice';
+import { enqueueSocketEvent, flushSocketQueue } from '../../utils/socketQueue';
 
 const HeaderIcon = ({ children, tooltip, onClick }) => (
   <Tooltip content={tooltip} placement="bottom" className="text-xs">
@@ -717,7 +718,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
         (isSystem && msg.text?.toLowerCase().includes("task completed"));
       if (isTaskDone) {
         setTaskCompleted(true);
-        
+
         chatStorage.saveChatStatus(chatId, {
           orderCancelled: false,
           cancelledByName: null,
@@ -808,6 +809,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
     // ── KEY FIX: on reconnect, reset join guard and rejoin ────────────────────
     const handleReconnect = () => {
       console.log("[ChatScreen] socket reconnected — rejoining chat:", chatId);
+      flushSocketQueue(socket);
       hasJoinedRef.current = null; // allow re-join
       doJoin();
 
@@ -1222,38 +1224,77 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
   // ─── Item / delivery
 
   const handleApproveItems = (submissionId, escrowId) => {
-    if (!socket) return;
-
-    // Optimistic: immediately update the submission card so user sees it's approved
     setMessages(prev => prev.map(m =>
       m.submissionId === submissionId || m.id === submissionId
         ? { ...m, status: 'approved', rejectionReason: null }
         : m
     ));
-
-    // Then tell backend (runner gets their message from server)
-    socket.emit('approveItems', { chatId, submissionId, escrowId, userId: userData?._id });
+    const payload = { chatId, submissionId, escrowId, userId: userData?._id };
+    if (socket?.connected) {
+      socket.emit('approveItems', payload);
+    } else {
+      enqueueSocketEvent('approveItems', payload);
+    }
   };
 
   const handleRejectItems = (submissionId, reason) => {
-    if (!socket) return;
-
-    // Optimistic update
     setMessages(prev => prev.map(m =>
       m.submissionId === submissionId || m.id === submissionId
         ? { ...m, status: 'rejected', rejectionReason: reason }
         : m
     ));
+    const payload = { chatId, submissionId, reason, userId: userData?._id };
+    if (socket?.connected) {
+      socket.emit('rejectItems', payload);
+    } else {
+      enqueueSocketEvent('rejectItems', payload);
+    }
+  };
 
-    socket.emit('rejectItems', { chatId, submissionId, reason, userId: userData?._id });
+  const handleApprovePickupItem = (submissionId) => {
+    setMessages(prev => prev.map(m =>
+      m.submissionId === submissionId || m.id === submissionId
+        ? { ...m, status: 'approved', rejectionReason: null }
+        : m
+    ));
+    const payload = { chatId, submissionId, userId: userData?._id };
+    if (socket?.connected) {
+      socket.emit('approvePickupItem', payload);
+    } else {
+      enqueueSocketEvent('approvePickupItem', payload);
+    }
+  };
+
+  const handleRejectPickupItem = (submissionId, reason) => {
+    setMessages(prev => prev.map(m =>
+      m.submissionId === submissionId || m.id === submissionId
+        ? { ...m, status: 'rejected', rejectionReason: reason }
+        : m
+    ));
+    const payload = { chatId, submissionId, reason, userId: userData?._id };
+    if (socket?.connected) {
+      socket.emit('rejectPickupItem', payload);
+    } else {
+      enqueueSocketEvent('rejectPickupItem', payload);
+    }
   };
 
   const handleConfirmDelivery = (orderId) => {
-    if (socket) socket.emit('confirmDelivery', { chatId, orderId, userId: userData?._id });
+    const payload = { chatId, orderId, userId: userData?._id };
+    if (socket?.connected) {
+      socket.emit('confirmDelivery', payload);
+    } else {
+      enqueueSocketEvent('confirmDelivery', payload);
+    }
   };
 
   const handleDenyDelivery = (orderId) => {
-    if (socket) socket.emit('denyDelivery', { chatId, orderId, userId: userData?._id });
+    const payload = { chatId, orderId, userId: userData?._id };
+    if (socket?.connected) {
+      socket.emit('denyDelivery', payload);
+    } else {
+      enqueueSocketEvent('denyDelivery', payload);
+    }
   };
 
   // ─── Messaging 
@@ -1371,10 +1412,16 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
       ? { ...msg, deleted: true, text: "You deleted this message", type: "deleted", fileUrl: null, fileName: null }
       : msg
     ));
-    if (deleteForEveryone && socket && chatId) {
-      socket.emit("deleteMessage", { chatId, messageId, userId: userData?._id, deleteForEveryone: true });
+    if (deleteForEveryone && chatId) {
+      const payload = { chatId, messageId, userId: userData?._id, deleteForEveryone: true };
+      if (socket?.connected) {
+        socket.emit('deleteMessage', payload);
+      } else {
+        enqueueSocketEvent('deleteMessage', payload);
+      }
     }
   };
+
 
   const handleEditMessage = (messageId, newText) => {
     setMessages(prev => prev.map(msg => msg.id === messageId ? { ...msg, text: newText, edited: true } : msg));
@@ -1382,7 +1429,12 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
 
   const handleMessageReact = (messageId, emoji) => {
     setMessages(prev => prev.map(msg => msg.id === messageId ? { ...msg, reaction: emoji } : msg));
-    if (socket && chatId) socket.emit("reactToMessage", { chatId, messageId, emoji, userId: userData?._id });
+    const payload = { chatId, messageId, emoji, userId: userData?._id };
+    if (socket?.connected) {
+      socket.emit('reactToMessage', payload);
+    } else {
+      enqueueSocketEvent('reactToMessage', payload);
+    }
   };
 
   const handleMessageReply = (message) => {
