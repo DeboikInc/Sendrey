@@ -46,7 +46,7 @@ const calculateFeeSplit = (deliveryFee) => {
   return { deliveryFee, platformFee, runnerPayout, providerFee, netPlatformFee };
 };
 
-const calculateRouteDistance = (serviceType, user) => {
+const calculateRouteDistance = (serviceType, user, fleetType) => {
   const deliveryCoords = (() => {
     const dc = user.currentRequest?.deliveryCoordinates;
     if (dc?.lat != null && dc?.lng != null) {

@@ -126,7 +126,7 @@ const handleUpdateStatus = async (socket, io, data) => {
       messagesToPush.push(trackingMessage);
     }
 
-    
+
     const writePromises = [
       // Push messages + update lastActivity in one op
       Chat.findOneAndUpdate(
@@ -209,8 +209,15 @@ const handleUpdateStatus = async (socket, io, data) => {
       }
     }
 
+    if (typeof callback === 'function') {
+      callback({ received: true, statusId: data.id });
+    }
+
   } catch (error) {
     console.error('Error updating status:', error);
+    if (typeof callback === 'function') {
+      callback({ received: false, error: err.message });
+    }
     logMetric({ type: 'status_update', status: 'failed', chatId: data.chatId, userId: data.updatedBy, userType: data.updatedByType || 'runner', error: error.message });
     socket.emit('error', { message: error.message });
   }
