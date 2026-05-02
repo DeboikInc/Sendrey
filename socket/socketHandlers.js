@@ -243,6 +243,8 @@ const createOrder = async (io, { chatId, userId, runnerId, serviceType }) => {
   const fleetType = chatDoc?.fleetType || userDoc?.currentRequest?.fleetType;
   const resolvedServiceType = serviceType || userDoc?.currentRequest?.serviceType || chatDoc?.serviceType;
 
+
+
   const { deliveryFee, distanceInMeters, legs } = computeDeliveryFeeFromDocs(resolvedServiceType, userDoc, fleetType);
   const isErrand = resolvedServiceType === 'run-errand';
   const itemBudget = isErrand
@@ -521,54 +523,62 @@ const handleAcceptRunnerRequest = async (socket, io, { runnerId, userId, chatId,
 //   4. Otherwise start a 30s global timer; if runner never shows → timeout
 //
 const handleRequestRunner = async (socket, io, data) => {
-  const { runnerId, userId, chatId, serviceType, specialInstructions } = data;
+  const { runnerId, userId, chatId, serviceType, specialInstructions, attemptToken } = data;
 
-  socket.join(`user-${userId}`);
+  try {
+    socket.join(`user-${userId}`);
 
-  if (!preRoomState.has(chatId)) {
-    preRoomState.set(chatId, {
-      user: false, runner: false,
-      runnerId, userId, serviceType,
-      timestamp: Date.now(),
+    if (!preRoomState.has(chatId)) {
+      preRoomState.set(chatId, {
+        user: false, runner: false,
+        runnerId, userId, serviceType,
+        timestamp: Date.now(),
+      });
+    }
+
+    const state = preRoomState.get(chatId);
+
+    if (state.user && !data.isReconnect) {
+      console.warn('[requestRunner] user already in pre-room for chatId:', chatId);
+      return;
+    }
+
+    state.user = true;
+    state.userId = userId;
+    state.specialInstructions = specialInstructions || null;
+    state.attemptToken = attemptToken || null;
+    socket.join(`pre-${chatId}`);
+
+    console.log(`[requestRunner] user ${userId} in pre-room. runner present=${state.runner}`);
+
+    if (state.runner) {
+      if (state.globalTimer) { clearTimeout(state.globalTimer); state.globalTimer = null; }
+      await lockAndProceed(io, chatId, state);
+      return;
+    }
+
+    if (!state.globalTimer) {
+      state.globalTimer = setTimeout(() => {
+        const s = preRoomState.get(chatId);
+        if (s && (!s.user || !s.runner)) {
+          console.warn('[preRoom] timeout — both parties never arrived for chatId:', chatId);
+          preRoomState.delete(chatId);
+          io.to(`pre-${chatId}`).emit('preRoomTimeout', { chatId, message: 'Connection timed out.' });
+          // ← emit to user room too in case they're not in pre-room yet
+          io.to(`user-${userId}`).emit('preRoomTimeout', { chatId, message: 'Connection timed out.' });
+        }
+      }, 30_000);
+    }
+
+    logSocketAudit('USER_REQUESTED_RUNNER', { runnerId, userId, chatId, serviceType });
+  } catch (error) {
+    console.error('[requestRunner] error:', error);
+    socket.emit('chatError', {
+      code: 'REQUEST_RUNNER_FAILED',
+      message: 'Failed to connect to runner. Please try again.',
+      chatId,
     });
   }
-
-  const state = preRoomState.get(chatId);
-
-  if (state.user && !data.isReconnect) {
-    console.warn('[requestRunner] user already in pre-room for chatId:', chatId);
-    return;
-  }
-
-  state.user = true;
-  state.userId = userId;
-  state.specialInstructions = specialInstructions || null;
-  socket.join(`pre-${chatId}`);
-
-  console.log(`[requestRunner] user ${userId} in pre-room. runner present=${state.runner}`);
-  console.log(`[requestRunner] user socket ${socket.id} joined pre-${chatId}`);
-  console.log(`[requestRunner] pre-room members:`, [...(io.sockets.adapter.rooms.get(`pre-${chatId}`) || [])]);
-
-  // Runner already waiting → go immediately
-  if (state.runner) {
-    if (state.globalTimer) { clearTimeout(state.globalTimer); state.globalTimer = null; }
-    await lockAndProceed(io, chatId, state);
-    return;
-  }
-
-  // Start global timeout — user arrived first
-  if (!state.globalTimer) {
-    state.globalTimer = setTimeout(() => {
-      const s = preRoomState.get(chatId);
-      if (s && (!s.user || !s.runner)) {
-        console.warn('[preRoom] timeout — both parties never arrived for chatId:', chatId);
-        preRoomState.delete(chatId);
-        io.to(`pre-${chatId}`).emit('preRoomTimeout', { chatId, message: 'Connection timed out.' });
-      }
-    }, 30_000);
-  }
-
-  logSocketAudit('USER_REQUESTED_RUNNER', { runnerId, userId, chatId, serviceType });
 };
 
 // ─── Lock both parties and proceed ───────────────────────────────────────────
@@ -607,14 +617,14 @@ const lockAndProceed = async (io, chatId, state) => {
 const initializeChatAndProceed = async (io, chatId, state) => {
   const { runnerId, userId, serviceType } = state;
 
-  const userDoc = await User.findById(userId).lean();
-  console.log('[initializeChat] userDoc.currentRequest.specialInstructions:',
-    JSON.stringify(userDoc?.currentRequest?.specialInstructions, null, 2));
-
   try {
-    const [runnerData] = await Promise.all([
+    const [runnerData, userDoc] = await Promise.all([
       Runner.findById(runnerId).lean(),
+      User.findById(userId).lean(),
     ]);
+
+    console.log('[initializeChat] userDoc.currentRequest.specialInstructions:',
+      JSON.stringify(userDoc?.currentRequest?.specialInstructions, null, 2));
 
     const specialInstructions = sanitizeSpecialInstructions(
       userDoc?.currentRequest?.specialInstructions || state.specialInstructions
@@ -725,6 +735,7 @@ const initializeChatAndProceed = async (io, chatId, state) => {
       chatReady: true,
       initialMessages: chat.messages,
       specialInstructions: specialInstructions || null,
+      attemptToken: state.attemptToken || null,
     });
 
     // set both parties isAvailable false 
@@ -735,6 +746,20 @@ const initializeChatAndProceed = async (io, chatId, state) => {
     logSocketAudit('PROCEED_TO_CHATROOM', { runnerId, userId, serviceType });
   } catch (error) {
     console.error('[initializeChat] error:', error);
+
+    preRoomState.delete(chatId);
+    // ← notify BOTH parties so neither is left hanging
+    io.to(`user-${userId}`).emit('chatError', {
+      code: 'CHAT_INIT_FAILED',
+      message: 'Failed to prepare chat. Please try again.',
+      chatId,
+    });
+    io.to(`runner-${runnerId}`).emit('chatError', {
+      code: 'CHAT_INIT_FAILED',
+      message: 'Failed to prepare chat session.',
+      chatId,
+    });
+
   }
 };
 
@@ -942,8 +967,21 @@ const handleUserJoinChat = async (socket, io, data) => {
     });
 
     logSocketAudit('USER_JOINED_CHAT', { userId, runnerId, chatId, case: 'C' });
-  } catch (err) {
-    console.error('[userJoinChat] error:', err);
+  } catch (orderErr) {
+    console.error('[userJoinChat] error:', orderErr);
+
+    console.error('[userJoinChat] createOrder failed:', orderErr.message);
+    socket.emit('chatError', {
+      code: 'ORDER_CREATE_FAILED',
+      message: 'Failed to create your order. Please try again.',
+      chatId,
+    });
+    io.to(`runner-${runnerId}`).emit('chatError', {
+      code: 'ORDER_CREATE_FAILED',
+      message: 'Failed to create order for this session.',
+      chatId,
+    });
+
   } finally {
     joiningChats.delete(chatId);
   }
