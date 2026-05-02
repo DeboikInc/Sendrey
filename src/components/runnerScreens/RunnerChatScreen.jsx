@@ -778,7 +778,6 @@ function RunnerChatScreen({
 
     const handleReconnect = () => {
       flushSocketQueue(socket);
-      socket.emit('rejoinChat', { chatId, runnerId, userType: 'runner' });
     };
 
     const handleMissedMessages = (msgs) => {
