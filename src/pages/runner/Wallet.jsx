@@ -145,6 +145,7 @@ export const Wallet = ({ darkMode, onBack, runnerId }) => {
   };
 
   const getTransactionLabel = (txn) => {
+    if (txn.label) return txn.label;
     const labels = {
       'wallet_funding': 'Wallet Top-up',
       'payment': 'Order Payment',

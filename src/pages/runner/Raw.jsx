@@ -116,7 +116,6 @@ function WhatsAppLikeChat() {
   const [newOrderTrigger, setNewOrderTrigger] = useState(0);
   const [botRefreshTrigger, setBotRefreshTrigger] = useState(0);
   const [canResendOtp, setCanResendOtp] = useState(false);
-  const [pendingChatSwitch, setPendingChatSwitch] = useState(null);
 
   // ── Refs ────────────────────────────────────────────────────────────────────
   const pendingChatSwitchRef = useRef(null);
@@ -827,6 +826,7 @@ function WhatsAppLikeChat() {
     };
 
     socket.on('paymentSuccess', onPayment);
+    socket.on('paymentReceived', onPayment);
     socket.on('orderCreated', onOrderCreated);
     socket.on('task_completed', onTaskCompleted);
     socket.on('orderCancelled', onOrderCancelled);
@@ -834,6 +834,7 @@ function WhatsAppLikeChat() {
 
     return () => {
       socket.off('paymentSuccess', onPayment);
+      socket.off('paymentReceived', onPayment);
       socket.off('orderCreated', onOrderCreated);
       socket.off('task_completed', onTaskCompleted);
       socket.off('orderCancelled', onOrderCancelled);
@@ -865,6 +866,8 @@ function WhatsAppLikeChat() {
     if (!selectedUser || !socket || !isConnected || selectedUser.isBot) return;
 
     const chatId = `user-${selectedUser._id}-runner-${runnerId}`;
+    let joined = false;
+    let fallbackTimer;
 
     const handleChatHistory = async (msgs) => {
       if (activeChatIdRef.current !== chatId) return;
@@ -876,15 +879,13 @@ function WhatsAppLikeChat() {
           latestOrder = result?.data ?? result;
           currentOrderRef.current = latestOrder;
           chatManager.set(chatId, { currentOrder: latestOrder });
-
           useOrderStore.getState().mergeCurrentOrder(chatId, latestOrder);
         }
       } catch (_) { }
 
       if (!msgs?.length) return;
 
-      const isTerminalOrder = ['completed', 'cancelled', 'task_completed']
-        .includes(latestOrder?.status);
+      const isTerminalOrder = ['completed', 'cancelled', 'task_completed'].includes(latestOrder?.status);
       const seenPayment = new Set();
 
       const filtered = msgs.filter(msg => {
@@ -955,48 +956,38 @@ function WhatsAppLikeChat() {
       }
     };
 
-    let fallbackTimer;
-
     const doJoin = () => {
-      // Deregister proceedToChat listener before joining
+      if (joined) return;
+      joined = true;
       clearTimeout(fallbackTimer);
-
-      socket.on('chatHistory', handleChatHistory);
+      socket.off('proceedToChat', handleProceedToChat);
       socket.emit('runnerJoinChat', {
         runnerId,
         userId: selectedUser._id,
         chatId,
-        serviceType: selectedUser.serviceType
-          ?? selectedUser.currentRequest?.serviceType
-          ?? null,
+        serviceType: selectedUser.serviceType ?? selectedUser.currentRequest?.serviceType ?? null,
       });
     };
 
-    const currentState = chatManager.get(chatId);
-    const isReconnect = currentState.messages.length > 0;
-
-    if (isReconnect) {
-      doJoin();
-      return () => socket.off('chatHistory', handleChatHistory);
-    }
-
-    // Fresh session — wait for proceedToChat
     const handleProceedToChat = (data) => {
       if (data.chatId !== chatId || !data.chatReady) return;
-      console.log('[raw.jsx] proceedToChat → joining chat immediately');
+      console.log('[raw.jsx] proceedToChat → joining');
       doJoin();
     };
 
-    socket.on('proceedToChat', handleProceedToChat);
+    socket.on('chatHistory', handleChatHistory);
 
-    // ── Fallback: 300ms (not 2s) — proceedToChat likely already fired 
-    fallbackTimer = setTimeout(() => {
-      const stateNow = chatManager.get(chatId);
-      if (stateNow.messages.length === 0) {
-        console.warn('[raw.jsx] proceedToChat not received in 300ms — joining directly');
+    const isReconnect = chatManager.get(chatId).messages.length > 0;
+
+    if (isReconnect) {
+      doJoin();
+    } else {
+      socket.on('proceedToChat', handleProceedToChat);
+      fallbackTimer = setTimeout(() => {
+        console.warn('[raw.jsx] proceedToChat timeout — joining directly');
         doJoin();
-      }
-    }, 300);
+      }, 400);
+    }
 
     return () => {
       clearTimeout(fallbackTimer);
@@ -1005,79 +996,6 @@ function WhatsAppLikeChat() {
     };
   }, [selectedUser?._id, socket, isConnected, runnerId, dispatch]);
 
-
-  useEffect(() => {
-    if (!socket || !pendingChatSwitch) return;
-
-    const { user, chatId, chatEntry } = pendingChatSwitch;
-
-    // Emit runnerJoinChat now — server will respond with chatHistory
-    socket.emit('runnerJoinChat', {
-      runnerId,
-      userId: user._id,
-      chatId,
-      serviceType: user.serviceType ?? user.currentRequest?.serviceType ?? null,
-    });
-
-    const onChatHistory = (msgs) => {
-      // Confirm this is for our pending chat
-      if (pendingChatSwitchRef.current?.chatId !== chatId) return;
-
-      clearTimeout(fallbackTimer);
-      socket.off('chatHistory', onChatHistory);
-
-      const formatted = (Array.isArray(msgs) ? msgs : []).map(msg => {
-        const isSys = msg.from === 'system' || msg.type === 'system'
-          || msg.messageType === 'system' || msg.senderType === 'system'
-          || msg.senderId === 'system';
-        return {
-          ...msg,
-          from: isSys ? 'system' : msg.senderId === runnerId ? 'me' : 'them',
-          type: msg.type || msg.messageType || 'text',
-        };
-      });
-
-      if (formatted.length > 0) {
-        chatManager.set(chatId, { messages: formatted });
-      }
-
-      // NOW switch screens
-      pendingChatSwitchRef.current = null;
-      setAwaitingChatReady(false);
-      setPendingChatSwitch(null);
-      setSelectedUser(user);
-      setActiveChatId(chatId);
-      setActive(chatEntry);
-      setChatHistory(prev => {
-        if (prev.find(c => c.id === user._id)) return prev;
-        return [chatEntry, ...prev];
-      });
-    };
-
-    socket.on('chatHistory', onChatHistory);
-
-    // Fallback: if chatHistory never arrives in 5s, switch anyway
-    const fallbackTimer = setTimeout(() => {
-      socket.off('chatHistory', onChatHistory);
-      if (pendingChatSwitchRef.current?.chatId !== chatId) return;
-      console.warn('[raw.jsx] chatHistory timeout — switching anyway');
-      pendingChatSwitchRef.current = null;
-      setAwaitingChatReady(false);
-      setPendingChatSwitch(null);
-      setSelectedUser(user);
-      setActiveChatId(chatId);
-      setActive(chatEntry);
-      setChatHistory(prev => {
-        if (prev.find(c => c.id === user._id)) return prev;
-        return [chatEntry, ...prev];
-      });
-    }, 5000);
-
-    return () => {
-      clearTimeout(fallbackTimer);
-      socket.off('chatHistory', onChatHistory);
-    };
-  }, [socket, pendingChatSwitch, runnerId]);
 
   // ── Runner room join ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -1266,6 +1184,28 @@ function WhatsAppLikeChat() {
     console.log("connecting to errand service")
     console.log("guard check", { runnerLocation })
     if (!runnerLocation) return;
+
+    let freshLocation = runnerLocation;
+
+
+    try {
+      const pos = await new Promise((resolve, reject) =>
+        navigator.geolocation.getCurrentPosition(resolve, reject, {
+          enableHighAccuracy: true,
+          timeout: 5000,
+          maximumAge: 0,        // ← 0 = never use cached position
+        })
+      );
+      freshLocation = {
+        latitude: pos.coords.latitude,
+        longitude: pos.coords.longitude
+      };
+      setRunnerLocation(freshLocation); // keep state in sync
+    } catch (e) {
+      console.warn('[handleConnectToService] GPS failed, using last known location', e);
+    }
+
+
     dispatch(clearNearbyUsers());
     setHasSearched(false);
 
@@ -1537,7 +1477,15 @@ function WhatsAppLikeChat() {
 
     const pending = { user: fullUser, chatId, chatEntry: newChatEntry };
     pendingChatSwitchRef.current = pending;
-    setPendingChatSwitch(pending);
+
+    setSelectedUser(fullUser);
+    setActiveChatId(chatId);
+    setActive(newChatEntry);
+    setChatHistory(prev => {
+      if (prev.find(c => c.id === user._id)) return prev;
+      return [newChatEntry, ...prev];
+    });
+    setAwaitingChatReady(false);
 
     selectedUserRef.current = fullUser;
 

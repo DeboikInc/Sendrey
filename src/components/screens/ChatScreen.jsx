@@ -102,6 +102,8 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
   const tempIdCounterRef = useRef(0);
   const onReadyCalledRef = useRef(false);
 
+  const paymentInProgressRef = useRef(false);
+
   const seenMessageIdsRef = useRef(new Set());
   const replaceTempIdRef = useRef(new Map()); // tempId → realId
   const replaceTempId = useCallback((tempId, realId) => {
@@ -808,6 +810,11 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
 
     // ── KEY FIX: on reconnect, reset join guard and rejoin ────────────────────
     const handleReconnect = () => {
+      if (paymentInProgressRef.current) {
+        console.log('[handleReconnect] payment in progress — skipping rejoin');
+        return;
+      }
+
       console.log("[ChatScreen] socket reconnected — rejoining chat:", chatId);
       flushSocketQueue(socket);
       hasJoinedRef.current = null; // allow re-join
@@ -1044,27 +1051,6 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
     });
   }, [onDisputeResolved]);
 
-  const handleApprovePickupItem = (submissionId) => {
-    if (!socket) return;
-    setMessages(prev => prev.map(m =>
-      m.submissionId === submissionId || m.id === submissionId
-        ? { ...m, status: 'approved', rejectionReason: null }
-        : m
-    ));
-    socket.emit('approvePickupItem', { chatId, submissionId, userId: userData?._id });
-  };
-
-  const handleRejectPickupItem = (submissionId, reason) => {
-    if (!socket) return;
-    setMessages(prev => prev.map(m =>
-      m.submissionId === submissionId || m.id === submissionId
-        ? { ...m, status: 'rejected', rejectionReason: reason }
-        : m
-    ));
-    socket.emit('rejectPickupItem', { chatId, submissionId, reason, userId: userData?._id });
-  };
-
-
   // ─── Payment 
 
   const handlePayment = async (paymentData, paymentMethod) => {
@@ -1160,6 +1146,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
           chatId,
           email: userData?.email,
         });
+        paymentInProgressRef.current = true
         return false;
       }
 
@@ -1205,7 +1192,9 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
   };
 
   const handlePaystackSuccess = (reference) => {
+    paymentInProgressRef.current = false;
     setPaystackModal(null);
+    paymentInProgressRef.current = true
     markPaidRef.current?.();
     setPaidChatIds(prev => new Set(prev).add(chatId));
 
@@ -1916,6 +1905,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
             executePayment(payment, 'wallet', pin);
           }}
           onCancel={() => {
+            paymentInProgressRef.current = false;
             setPendingWalletPayment(null);
             resetPaymentUIRef.current?.(); // ← reset the card UI
           }}
