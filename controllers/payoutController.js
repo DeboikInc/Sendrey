@@ -144,7 +144,7 @@ class PayoutController extends BaseController {
       }
 
       await payout.save();
-      logger.info(`Receipt submitted: runner=${runnerId} order=${order.orderId} amount=₦${amountSpent}`);
+      logger.info(`Receipt submitted: runner=${runnerId} order=${order.orderId} amount=NGN${amountSpent.toString()}`);
 
       return this.success(res, {
         payoutId: payout._id,
@@ -188,7 +188,7 @@ class PayoutController extends BaseController {
 
       if (spent > claimed.itemBudget) {
         await RunnerPayout.findOneAndUpdate({ orderId }, { $set: { status: 'pending' } });
-        return this.badRequest(res, `Amount ₦${spent} exceeds budget ₦${claimed.itemBudget}`);
+        return this.badRequest(res, `Amount NGN${spent.toString()} exceeds budget NGN${claimed.itemBudget.toString()}`);
       }
 
       // ── 3. Deduct from user's locked wallet balance ───────────────────────────
@@ -290,7 +290,7 @@ class PayoutController extends BaseController {
 
       const newReceipt = payout.receiptHistory[payout.receiptHistory.length - 1];
 
-      logger.info(`transferToVendor | orderId=${orderId} | vendor=${vendorName} | amount=₦${spent} | ref=${transferResult.reference}`);
+      logger.info(`transferToVendor | orderId=${orderId} | vendor=${vendorName} | amount=NGN${spent.toString()} | ref=${transferResult.reference}`);
 
       return this.success(res, {
         orderId: payout.orderId,
