@@ -159,7 +159,7 @@ const handleSubmitPayoutReceipt = async (socket, io, data) => {
       return socket.emit('error', { message: 'Payout record not found' });
     }
 
-    logger.info(`submitPayoutReceipt | orderId=${orderId} | vendor=${vendorName} | amount=₦${amountSpent}`);
+    logger.info(`submitPayoutReceipt | orderId=${orderId} | vendor=${vendorName} | amount=NGN${amountSpent.toString()}`);
 
     socket.emit('payoutReceiptSuccess', {
       submissionId,

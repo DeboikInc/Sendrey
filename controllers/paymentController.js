@@ -402,15 +402,18 @@ class PaymentController extends BaseController {
         try {
             const userId = req.user._id;
             const userType = req.user.userType;
+            console.log('[getTransactionHistory] userId:', userId, 'userType:', userType, 'role:', req.user.role);
+
             const { page = 1, limit = 20 } = req.query;
 
             const result = await paymentService.getTransactionHistory(
                 userId,
-                userType,
                 parseInt(page),
-                parseInt(limit)
+                parseInt(limit),
+                userType,
             );
 
+            
             this.success(res, result);
         } catch (error) {
             console.error('Error fetching transaction history:', error);
@@ -480,7 +483,7 @@ class PaymentController extends BaseController {
                 recipientId: runnerId,
                 recipientType: 'runner',
                 title: 'Withdrawal Requested',
-                body: `₦${amount?.toLocaleString()} will be sent to your ${bankDetails.bankName} account within 24 hours.`,
+                body: `NGN${amount?.toLocaleString()} will be sent to your ${bankDetails.bankName} account within 24 hours.`,
                 data: { type: 'withdrawal_requested', amount, reference: result?.reference },
             });
 
@@ -490,14 +493,14 @@ class PaymentController extends BaseController {
                     recipientId: runnerId,
                     recipientType: 'runner',
                     title: 'Withdrawal Sent',
-                    body: `₦${amount?.toLocaleString()} has been sent to your ${bankDetails.bankName} account.`,
+                    body: `NGN${amount?.toLocaleString()} has been sent to your ${bankDetails.bankName} account.`,
                     data: { type: 'withdrawal_released', amount, reference: result?.reference },
                 });
             }, TWENTY_FOUR_HOURS);
 
             this.success(res, {
                 ...result,
-                message: `Withdrawal of ₦${amount?.toLocaleString()} scheduled. Funds will be released within 24 hours.`,
+                message: `Withdrawal of NGN${amount?.toLocaleString()} scheduled. Funds will be released within 24 hours.`,
             });
         } catch (error) {
             console.error('Error withdrawing from wallet:', error);

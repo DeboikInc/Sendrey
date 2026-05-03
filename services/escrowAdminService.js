@@ -157,7 +157,7 @@ class EscrowAdminService {
         await escrow.save();
 
         logger.info(
-            `Admin ${adminId} refunded ₦${refundAmount} to ${recipientModel} wallet ${wallet._id} ` +
+            `Admin ${adminId} refunded NGN${refundAmount.toString()} to ${recipientModel} wallet ${wallet._id} ` +
             `(${recipientId}) for escrow ${escrowId}`
         );
 

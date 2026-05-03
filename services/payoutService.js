@@ -66,7 +66,7 @@ const submitReceipt = async ({
       { orderId, runnerId },
       { $set: { status: 'pending' } }
     );
-    throw new Error(`Amount spent (₦${amountSpent}) exceeds budget (₦${claimed.itemBudget})`);
+    throw new Error(`Amount spent (NGN${amountSpent.toString()}) exceeds budget (NGN${claimed.itemBudget.toString()})`);
   }
 
   // ── Step 2: External calls ─────────────────────────────────────────────────
@@ -152,7 +152,7 @@ const submitReceipt = async ({
       chatId, userId, orderId, vendorName, amountSpent, receiptUrl,
     }).catch((err) => logger.error('notifyUserOfReceipt failed (non-critical):', err.message));
 
-    logger.info(`✅ Payout receipt submitted: order=${orderId} vendor=${vendorName} amount=₦${amountSpent} ref=${transferResult.reference}`);
+    logger.info(`✅ Payout receipt submitted: order=${orderId} vendor=${vendorName} amount=NGN${amountSpent.toString()} ref=${transferResult.reference}`);
 
     return {
       success: true,

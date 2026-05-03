@@ -242,7 +242,7 @@ class PaymentService {
         status: 'completed',
       }], { session });
 
-      console.log(`✅ Card payment verified | runner: ₦${feeSplit.runnerPayout} | platform net: ₦${feeSplit.netPlatformFee} | paystack fee: ₦${feeSplit.providerFee}`);
+      console.log(`✅ Card payment verified | runner: NGN${feeSplit.runnerPayout} | platform net: NGN${feeSplit.netPlatformFee} | paystack fee: NGN${feeSplit.providerFee}`);
       return { escrow, order, feeSplit };
     });
 
@@ -315,7 +315,7 @@ class PaymentService {
         status: 'completed',
       }], { session });
 
-      console.log(`✅ Wallet funded: ₦${grossAmount} for user ${userId}`);
+      console.log(`✅ Wallet funded: NGN${grossAmount} for user ${userId}`);
       return { balance: wallet.balance, amount: grossAmount };
     });
   }
@@ -331,7 +331,7 @@ class PaymentService {
       wallet.lockedBalance = (wallet.lockedBalance || 0) + amount;
       await wallet.save({ session });
 
-      console.log(`🔒 Locked ₦${amount} for escrow ${escrowId}`);
+      console.log(`🔒 Locked NGN${amount} for escrow ${escrowId}`);
     });
   }
 
@@ -344,7 +344,7 @@ class PaymentService {
       wallet.balance += amount;
       await wallet.save({ session });
 
-      console.log(`Unlocked ₦${amount} for user ${userId}`);
+      console.log(`Unlocked NGN${amount} for user ${userId}`);
     });
   }
 
@@ -418,15 +418,15 @@ class PaymentService {
           provider: 'system',
           orderId: escrow.taskId,
           escrowId: escrow._id,
-          description: `₦${escrow.runnerPayout} earned from completed order - ${resolvedOrderId}`,
+          description: `NGN${escrow.runnerPayout.toString()} earned from completed order - ${resolvedOrderId.toString()}`,
           status: 'completed',
         }], { session });
 
         console.log('[payoutToRunner] ledger entries written');
 
-        console.log(`✅ Runner credited ₦${escrow.runnerPayout}`);
+        console.log(`✅ Runner credited NGN${escrow.runnerPayout}`);
       } else {
-        console.warn(`⚠️ Runner ${escrow.runnerId} forfeiting delivery fee ₦${escrow.runnerPayout}`);
+        console.warn(`⚠️ Runner ${escrow.runnerId} forfeiting delivery fee NGN${escrow.runnerPayout}`);
       }
 
       await PlatformEarnings.create([{
@@ -504,7 +504,7 @@ class PaymentService {
         { session }
       );
 
-      console.log(`payoutToRunner | runner: ₦${usedPayoutSystem ? escrow.runnerPayout : 0} | platform net: ₦${netPlatformFee} | paystack fee: ₦${providerFee}`);
+      console.log(`payoutToRunner | runner: NGN${usedPayoutSystem ? escrow.runnerPayout : 0} | platform net: NGN${netPlatformFee} | paystack fee: NGN${providerFee}`);
 
       return {
         runnerPayout: usedPayoutSystem ? escrow.runnerPayout : 0,
@@ -551,11 +551,11 @@ class PaymentService {
           provider: 'system',
           orderId: order.orderId,
           escrowId: escrow._id,
-          description: `Item budget of ₦${escrow.itemBudget} released for order ${order.orderId}`,
+          description: `Item budget of NGN${escrow.itemBudget.toString()} released for order ${order.orderId}`,
           status: 'completed',
         }], { session });
 
-        console.log(`RunnerPayout created: ₦${escrow.itemBudget} for order ${order.orderId}`);
+        console.log(`RunnerPayout created: NGN${escrow.itemBudget} for order ${order.orderId}`);
       }
 
       escrow.itemBudgetReleased = true;
@@ -629,7 +629,7 @@ class PaymentService {
       });
       if (!transfer.status || !transfer.data) throw new Error('Transfer initiation failed');
 
-      console.log(`Transfer initiated to ${vendorName}: ₦${amount} | ref: ${transfer.data.reference}`);
+      console.log(`Transfer initiated to ${vendorName}: NGN${amount} | ref: ${transfer.data.reference}`);
 
       return {
         success: true,
@@ -686,6 +686,10 @@ class PaymentService {
       type: { $nin: hiddenTypes },
     });
 
+    console.log('[getTransactionHistory] entries found:', entries.length);
+    console.log('[getTransactionHistory] sample:', entries[0]);
+    console.log('[getTransactionHistory] hiddenTypes:', hiddenTypes);
+
     return {
       transactions: entries.map(e => ({
         ...e,
@@ -695,7 +699,7 @@ class PaymentService {
           : 'debit',
         label: e.type === 'escrow_lock' ? 'Order Payment'
           : e.type === 'deposit' ? 'Wallet Funding'
-            : e.type === 'escrow_release' ? 'Delivery Fee'
+            : e.type === 'escrow_release' ? (e.description || 'Earnings From Completed order')
               : e.type === 'item_budget' ? 'Item Budget'
                 : e.type === 'escrow_refund' ? 'Dispute Refund'
                   : e.type === 'withdrawal' ? 'Withdrawal'
@@ -722,7 +726,7 @@ class PaymentService {
       throw new Error('Receipt already submitted for this order');
     }
     if (amountSpent > payout.itemBudget) {
-      throw new Error(`Amount spent (₦${amountSpent}) exceeds budget (₦${payout.itemBudget})`);
+      throw new Error(`Amount spent (NGN${amountSpent.toString()}) exceeds budget (NGN${payout.itemBudget.toString()})`);
     }
 
     const receiptUrl = await this.uploadReceipt(receiptBase64);
@@ -762,7 +766,7 @@ class PaymentService {
         { new: true, session }
       );
 
-      console.log(`✅ Payout receipt submitted: order=${orderId} vendor=${vendorName} amount=₦${amountSpent} ref=${transferResult.reference}`);
+      console.log(`✅ Payout receipt submitted: order=${orderId} vendor=${vendorName} amount=NGN${amountSpent} ref=${transferResult.reference}`);
 
       return {
         success: true,
@@ -795,7 +799,7 @@ class PaymentService {
           name: `Shopping at ${vendorName}`,
           quantity: 1,
           price: amountSpent,
-          note: changeAmount > 0 ? `₦${changeAmount.toLocaleString()} change to be returned` : undefined,
+          note: changeAmount > 0 ? `NGN${changeAmount.toLocaleString()} change to be returned` : undefined,
         }],
         receiptUrl,
         totalAmount: amountSpent,
@@ -837,7 +841,7 @@ class PaymentService {
         const availableBalance = wallet.balance - (wallet.lockedBalance || 0);
         if (amount > availableBalance) {
           const err = new Error(
-            `₦${wallet.lockedBalance.toLocaleString()} of your balance is locked pending a dispute review. Available for withdrawal: ₦${Math.max(0, availableBalance).toLocaleString()}`
+            `NGN${wallet.lockedBalance.toLocaleString()} of your balance is locked pending a dispute review. Available for withdrawal: NGN${Math.max(0, availableBalance).toLocaleString()}`
           );
           err.statusCode = 400;
           throw err;
@@ -887,7 +891,7 @@ class PaymentService {
         status: 'completed',
       }], { session });
 
-      console.log(`✅ Runner ${runnerId} withdrawal: ₦${amount} | ref: ${transfer.data.reference}`);
+      console.log(`✅ Runner ${runnerId} withdrawal: NGN${amount} | ref: ${transfer.data.reference}`);
 
       return {
         reference: transfer.data.reference,
