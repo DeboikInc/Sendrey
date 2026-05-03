@@ -673,6 +673,9 @@ const initializeChatAndProceed = async (io, chatId, state) => {
       existingChat.serviceType = serviceType;
       existingChat.orderId = null;
       existingChat.taskId = null;
+
+      const orderSessionId = `${Date.now()}-${runnerId}`;
+      existingChat.orderSessionId = orderSessionId;
       await existingChat.save();
       chat = existingChat;
 
@@ -733,6 +736,26 @@ const initializeChatAndProceed = async (io, chatId, state) => {
     io.to(`pre-${chatId}`).emit('proceedToChat', {
       chatId, runnerId, userId, serviceType,
       chatReady: true,
+      orderSessionId,
+      initialMessages: chat.messages,
+      specialInstructions: specialInstructions || null,
+      attemptToken: state.attemptToken || null,
+    });
+
+    // emit to individual rooms
+    io.to(`user-${userId}`).emit('proceedToChat', {
+      chatId, runnerId, userId, serviceType,
+      chatReady: true,
+      orderSessionId,
+      initialMessages: chat.messages,
+      specialInstructions: specialInstructions || null,
+      attemptToken: state.attemptToken || null,
+    });
+
+    io.to(`runner-${runnerId}`).emit('proceedToChat', {
+      chatId, runnerId, userId, serviceType,
+      chatReady: true,
+      orderSessionId,
       initialMessages: chat.messages,
       specialInstructions: specialInstructions || null,
       attemptToken: state.attemptToken || null,
@@ -1276,6 +1299,37 @@ const handleGetArchivedMessages = async (socket, { chatId, userId, runnerId, ord
   }
 };
 
+const requestSessionRefresh = async (socket, io, { chatId, orderId, userId, userType }) => {
+  if (!chatId) return;
+
+  const [latestOrder, chat] = await Promise.all([
+    Order.findOne({ chatId }).sort({ createdAt: -1 }).lean(),
+    Chat.findOne({ chatId }).lean(),
+  ]);
+
+  if (!latestOrder) return;
+
+  socket.join(chatId);
+  if (userType === 'user') socket.join(`user-${userId}`);
+  else if (userType === 'runner') socket.join(`runner-${userId}`);
+
+  if (latestOrder.orderId === orderId) {
+    socket.emit('sessionRefreshOk', { chatId, orderId });
+    return;
+  }
+
+  socket.emit('proceedToChat', {
+    chatId,
+    chatReady: true,
+    orderId: latestOrder.orderId,
+    orderSessionId: chat?.orderSessionId,
+    isRefresh: true,
+    runnerId: latestOrder.runnerId,
+    userId: latestOrder.userId,
+    serviceType: latestOrder.serviceType,
+  });
+};
+
 // ─── Disconnect ───────────────────────────────────────────────────────────────
 
 const handleDisconnect = async (socket, io) => {
@@ -1321,4 +1375,5 @@ module.exports = {
   handleGetOrderSession,
   handleGetArchivedMessages,
   createOrder,
+  requestSessionRefresh,
 };

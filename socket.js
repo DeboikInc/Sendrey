@@ -163,6 +163,10 @@ connectWithRetry().then(async () => {
       safeHandler(socketHandlers.handleGetOrderSession, socket, data)
     );
 
+    socket.on('requestSessionRefresh', (data) =>
+      safeHandler(socketHandlers.requestSessionRefresh, socket, data)
+    );
+
     // Runner events
     socket.on("joinRunnerRoom", (data) =>
       safeHandler(socketHandlers.handleJoinRunnerRoom, socket, data)
