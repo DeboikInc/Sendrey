@@ -1,0 +1,18 @@
+{
+  "files": {
+    "main.css": "/static/css/main.96c4fd02.css",
+    "main.js": "/static/js/main.a168a5db.js",
+    "static/js/828.cbe301b1.chunk.js": "/static/js/828.cbe301b1.chunk.js",
+    "static/js/551.ef9c5f80.chunk.js": "/static/js/551.ef9c5f80.chunk.js",
+    "static/media/Sendrey-Logo-Variants-09.png": "/static/media/Sendrey-Logo-Variants-09.e9d2a4c70e8ccd3e4f57.png",
+    "index.html": "/index.html",
+    "main.96c4fd02.css.map": "/static/css/main.96c4fd02.css.map",
+    "main.a168a5db.js.map": "/static/js/main.a168a5db.js.map",
+    "828.cbe301b1.chunk.js.map": "/static/js/828.cbe301b1.chunk.js.map",
+    "551.ef9c5f80.chunk.js.map": "/static/js/551.ef9c5f80.chunk.js.map"
+  },
+  "entrypoints": [
+    "static/css/main.96c4fd02.css",
+    "static/js/main.a168a5db.js"
+  ]
+}
