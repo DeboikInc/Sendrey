@@ -799,11 +799,24 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
     };
 
     // ── KEY FIX: if ChatScreen is already mounted when proceedToChat fires
-    // (e.g. slow render after runner accept), join immediately on receipt ───────
     const handleProceedToChat = (data) => {
       if (data.chatId !== chatId || !data.chatReady) return;
-      console.log("[ChatScreen] proceedToChat received while mounted — joining now");
-      // Reset join guard so doJoin proceeds
+      console.log("[ChatScreen] proceedToChat received, isRefresh:", data.isRefresh);
+
+      if (data.isRefresh) {
+        // Stale order detected — wipe before rejoining
+        setCurrentOrder(null);
+        currentOrderRef.current = null;
+        setMessages([]);
+        seenMessageIdsRef.current = new Set();
+        lastProcessedSystemMsgRef.current = null;
+        setPaidChatIds(prev => { const n = new Set(prev); n.delete(chatId); return n; });
+        setOrderCancelled(false);
+        setTaskCompleted(false);
+        chatStorage.clearMessages(chatId);
+        chatStorage.clearChatStatus(chatId);
+      }
+
       hasJoinedRef.current = null;
       doJoin();
     };
@@ -814,23 +827,25 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
         console.log('[handleReconnect] payment in progress — skipping rejoin');
         return;
       }
-
       console.log("[ChatScreen] socket reconnected — rejoining chat:", chatId);
       flushSocketQueue(socket);
-      hasJoinedRef.current = null; // allow re-join
-      doJoin();
 
       if (userData?._id) {
         socket.emit("userOnline", { userId: userData._id, userType: "user", chatId });
       }
 
-      setMessages(prev => {
-        const hasPaidConfirm = prev.some(m =>
-          m.type === "system" && m.text?.toLowerCase().includes("made payment for this task")
-        );
-        if (hasPaidConfirm) setPaidChatIds(p => new Set(p).add(chatId));
-        return prev;
-      });
+      const orderId = currentOrderRef.current?.orderId;
+      if (chatId && orderId) {
+        socket.emit('requestSessionRefresh', {
+          chatId,
+          orderId,
+          userId: userData?._id,
+          userType: 'user',
+        });
+      } else {
+        hasJoinedRef.current = null;
+        doJoin();
+      }
     };
 
     const handleTrackingStarted = (data) => {
@@ -850,12 +865,24 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
       });
     };
 
+    const handleSessionRefreshOk = ({ chatId: inc }) => {
+      if (inc !== chatId) return;
+      console.log('[ChatScreen] sessionRefreshOk — rejoining quietly');
+      socket.emit('rejoinChat', {
+        chatId,
+        userId: userData?._id,
+        userType: 'user',
+      });
+    };
+
+
     socket.on("chatHistory", handleChatHistory);
     socket.on("message", handleMessage);
     socket.on("missedMessages", handleMissedMessages);
     socket.on("proceedToChat", handleProceedToChat);
     socket.on("connect", handleReconnect);
     socket.on("trackingStarted", handleTrackingStarted);
+    socket.on('sessionRefreshOk', handleSessionRefreshOk);
 
     // ── Always attempt join on mount/chatId change ────────────────────────────
     doJoin();
@@ -867,6 +894,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
       socket.off("proceedToChat", handleProceedToChat);
       socket.off("connect", handleReconnect);
       socket.off("trackingStarted", handleTrackingStarted);
+      socket.off('sessionRefreshOk', handleSessionRefreshOk);
     };
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
