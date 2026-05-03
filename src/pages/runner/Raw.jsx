@@ -971,11 +971,63 @@ function WhatsAppLikeChat() {
 
     const handleProceedToChat = (data) => {
       if (data.chatId !== chatId || !data.chatReady) return;
-      console.log('[raw.jsx] proceedToChat → joining');
+      console.log('[raw.jsx] proceedToChat received, isRefresh:', data.isRefresh);
+
+      if (data.isRefresh) {
+        // Stale order — wipe before rejoining
+        chatManager.set(chatId, {
+          messages: [],
+          currentOrder: null,
+          taskCompleted: false,
+          orderCancelled: false,
+          cancellationReason: null,
+          completedOrderStatuses: [],
+          deliveryMarked: false,
+          userConfirmedDelivery: false,
+        });
+        useOrderStore.getState()._patch(chatId, {
+          currentOrder: null,
+          taskCompleted: false,
+          orderCancelled: false,
+          cancellationReason: null,
+          completedStatuses: [],
+          deliveryMarked: false,
+          userConfirmedDelivery: false,
+        });
+        currentOrderRef.current = null;
+      }
+
+      joined = false; // allow re-join
       doJoin();
     };
 
-    socket.on('chatHistory', handleChatHistory);
+    const handleSessionRefreshOk = ({ chatId: inc }) => {
+      if (inc !== chatId) return;
+      console.log('[raw.jsx] sessionRefreshOk — rejoining quietly');
+      socket.emit('rejoinChat', {
+        chatId,
+        runnerId,
+        userType: 'runner',
+      });
+    };
+
+    const handleReconnect = () => {
+      console.log('[raw.jsx] reconnected — requesting session refresh');
+      const orderId = currentOrderRef.current?.orderId;
+      if (orderId) {
+        socket.emit('requestSessionRefresh', {
+          chatId,
+          orderId,
+          userId: runnerId,
+          userType: 'runner',
+        });
+      } else {
+        joined = false;
+        doJoin();
+      }
+    };
+
+
 
     const isReconnect = chatManager.get(chatId).messages.length > 0;
 
@@ -989,10 +1041,16 @@ function WhatsAppLikeChat() {
       }, 400);
     }
 
+    socket.on('chatHistory', handleChatHistory);
+    socket.on('sessionRefreshOk', handleSessionRefreshOk);
+    socket.on('connect', handleReconnect);
+
     return () => {
       clearTimeout(fallbackTimer);
       socket.off('proceedToChat', handleProceedToChat);
       socket.off('chatHistory', handleChatHistory);
+      socket.off('sessionRefreshOk', handleSessionRefreshOk);
+      socket.off('connect', handleReconnect);
     };
   }, [selectedUser?._id, socket, isConnected, runnerId, dispatch]);
 
