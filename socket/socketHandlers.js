@@ -635,6 +635,7 @@ const initializeChatAndProceed = async (io, chatId, state) => {
 
     let chat;
     const existingChat = await Chat.findOne({ chatId });
+    const orderSessionId = `${Date.now()}-${runnerId}`;
 
     if (existingChat) {
       // Archive the last order session before wiping
@@ -674,7 +675,6 @@ const initializeChatAndProceed = async (io, chatId, state) => {
       existingChat.orderId = null;
       existingChat.taskId = null;
 
-      const orderSessionId = `${Date.now()}-${runnerId}`;
       existingChat.orderSessionId = orderSessionId;
       await existingChat.save();
       chat = existingChat;
@@ -706,6 +706,7 @@ const initializeChatAndProceed = async (io, chatId, state) => {
         userId,
         runnerId,
         serviceType,
+        orderSessionId,
         createdBy: 'system',
         createdAt: new Date(),
         specialInstructions: specialInstructions || null,
