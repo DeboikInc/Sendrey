@@ -355,7 +355,10 @@ class PaymentService {
 
       console.log(`[payoutToRunner] escrowId=${escrowId} | runnerId=${escrow.runnerId} | taskId=${escrow.taskId}`);
 
-      if (escrow.deliveryFeeReleased) throw new Error('Delivery fee already released');
+      if (escrow.deliveryFeeReleased) {
+        console.log(`[payoutToRunner] already released for escrow ${escrowId} — skipping`);
+        return { alreadyReleased: true };
+      }
 
       const runner = await Runner.findById(escrow.runnerId).session(session);
       if (!runner) throw new Error('Runner not found');
