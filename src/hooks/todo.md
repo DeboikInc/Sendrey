@@ -28,3 +28,5 @@ runner:locationUpdate — GPS location is emitted every few seconds. These are i
 
 presenceHeartbeat — same, lossy by design, fine.
 
+socket flush is not working as expected, was having bad internet, sent two messages but recepient nevere receieved
+

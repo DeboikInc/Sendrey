@@ -954,6 +954,10 @@ function WhatsAppLikeChat() {
         chatManager.set(chatId, { orderCancelled: true, cancellationReason: by });
         useOrderStore.getState().setOrderCancelled(chatId, by);
       }
+
+      if (activeChatIdRef.current === chatId) {
+        setAwaitingChatReady(false);
+      }
     };
 
     const doJoin = () => {
@@ -1543,7 +1547,6 @@ function WhatsAppLikeChat() {
       if (prev.find(c => c.id === user._id)) return prev;
       return [newChatEntry, ...prev];
     });
-    setAwaitingChatReady(false);
 
     selectedUserRef.current = fullUser;
 
@@ -1720,7 +1723,7 @@ function WhatsAppLikeChat() {
       <RunnerChatScreen
         key={`chat-${selectedUser?._id}-${chatSessionKey}`}
         sessionKey={chatSessionKey}
-        
+
         // ── Message persistence ──
         initialMessages={chatState.messages}
 
