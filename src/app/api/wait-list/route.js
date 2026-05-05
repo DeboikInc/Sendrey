@@ -17,7 +17,8 @@ export async function POST(request) {
   let client;
   try {
     const body = await request.json();
-    const email = body.email?.trim(); // field is called 'phone' in frontend but holds email
+    const email = body.email?.trim(); 
+    // field is email
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
       return NextResponse.json({ error: 'Enter a valid email address.' }, { status: 400 });
