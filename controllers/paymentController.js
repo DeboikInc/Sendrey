@@ -483,7 +483,7 @@ class PaymentController extends BaseController {
                 recipientId: runnerId,
                 recipientType: 'runner',
                 title: 'Withdrawal Requested',
-                body: `NGN${amount?.toLocaleString()} will be sent to your ${bankDetails.bankName} account within 24 hours.`,
+                body: `NGN ${amount?.toString()} will be sent to your ${bankDetails.bankName} account within 24 hours.`,
                 data: { type: 'withdrawal_requested', amount, reference: result?.reference },
             });
 
@@ -493,14 +493,14 @@ class PaymentController extends BaseController {
                     recipientId: runnerId,
                     recipientType: 'runner',
                     title: 'Withdrawal Sent',
-                    body: `NGN${amount?.toLocaleString()} has been sent to your ${bankDetails.bankName} account.`,
+                    body: `NGN ${amount?.toString()} has been sent to your ${bankDetails.bankName} account.`,
                     data: { type: 'withdrawal_released', amount, reference: result?.reference },
                 });
             }, TWENTY_FOUR_HOURS);
 
             this.success(res, {
                 ...result,
-                message: `Withdrawal of NGN${amount?.toLocaleString()} scheduled. Funds will be released within 24 hours.`,
+                message: `Withdrawal of NGN ${amount?.toString()} scheduled. Funds will be released within 24 hours.`,
             });
         } catch (error) {
             console.error('Error withdrawing from wallet:', error);

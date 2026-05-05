@@ -263,6 +263,34 @@ class PayoutController extends BaseController {
         return this.error(res, transferResult.error || 'Transfer to vendor failed');
       }
 
+      // refund unspent amount
+      const unspentAmount = claimed.itemBudget - spent;
+
+      if (unspentAmount > 0) {
+        await withTransaction(async (session) => {
+          const userWallet = await Wallet.findOne({ userId: order.userId }).session(session);
+          if (userWallet) {
+            userWallet.lockedBalance = Math.max(0, userWallet.lockedBalance - unspentAmount);
+            userWallet.balance += unspentAmount;
+            await userWallet.save({ session });
+
+            await LedgerEntry.create([{
+              userId: order.userId,
+              userModel: 'User',
+              runnerId: order.runnerId,
+              type: 'escrow_refund',
+              grossAmount: unspentAmount,
+              netAmount: unspentAmount,
+              providerFee: 0,
+              provider: 'system',
+              orderId,
+              description: `Unspent item budget refunded for order ${orderId} (budget: NGN ${claimed.itemBudget.toString()}, spent: NGN ${spent.toString()})`,
+              status: 'completed',
+            }], { session });
+          }
+        });
+      }
+
       // Persist to RunnerPayout
       const payout = await RunnerPayout.findOneAndUpdate(
         { orderId },
@@ -290,7 +318,7 @@ class PayoutController extends BaseController {
 
       const newReceipt = payout.receiptHistory[payout.receiptHistory.length - 1];
 
-      logger.info(`transferToVendor | orderId=${orderId} | vendor=${vendorName} | amount=NGN${spent.toString()} | ref=${transferResult.reference}`);
+      logger.info(`transferToVendor | orderId=${orderId} | vendor=${vendorName} | amount=NGN ${spent.toString()} | ref=${transferResult.reference}`);
 
       return this.success(res, {
         orderId: payout.orderId,

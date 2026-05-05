@@ -31,7 +31,7 @@ const formatDuration = (seconds) => {
 };
 
 const buildCallMessage = (text, metadata = {}) => ({
-  id: `call-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+  id: `call-${metadata.callId}-${metadata.callState}`,
   from: 'system',
   type: 'call',
   messageType: 'call',
@@ -127,10 +127,20 @@ const register = (socket, io) => {
 
   // Receiver accepts
   socket.on('acceptCall', async (data) => {
+    console.log('[SERVER acceptCall]', {
+      callerId: data.callerId,
+      callerType: data.callerType,
+      receiverId: data.receiverId,
+      receiverType: data.receiverType,
+      emittingTo: `${data.callerType}-${data.callerId}`,
+    });
+
     const { callId, chatId, callType, channelName, callerId, callerType, receiverId, receiverType } = data;
 
+    const token = generateToken(channelName)
+
     // Tell caller immediately — no await
-    io.to(`${callerType}-${callerId}`).emit('callAccepted', { callId, chatId, callType, channelName });
+    io.to(`${callerType}-${callerId}`).emit('callAccepted', { callId, chatId, callType, channelName, token });
 
     // Name + message after
     cachedName(receiverId, receiverType).then(receiverName => {
