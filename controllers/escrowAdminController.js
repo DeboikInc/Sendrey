@@ -48,7 +48,7 @@ class EscrowAdminController extends BaseController {
             return this.success(
                 res,
                 result,
-                `NGN${result.refundAmount.toLocaleString()} refunded to ${result.user.firstName}'s wallet`
+                `NGN ${result.refundAmount.toString()} refunded to ${result.user.firstName}'s wallet`
             );
         } catch (err) {
             logger.error('refundToWallet error:', err);

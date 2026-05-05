@@ -1300,8 +1300,10 @@ const handleGetArchivedMessages = async (socket, { chatId, userId, runnerId, ord
   }
 };
 
-const requestSessionRefresh = async (socket, io, { chatId, orderId, userId, userType }) => {
-  if (!chatId) return;
+const requestSessionRefresh = async (socket, io, data) => {
+  
+  if (!data || !data.chatId) return;
+  const { chatId, orderId, userId, userType, runnerId } = data;
 
   const [latestOrder, chat] = await Promise.all([
     Order.findOne({ chatId }).sort({ createdAt: -1 }).lean(),
@@ -1312,7 +1314,7 @@ const requestSessionRefresh = async (socket, io, { chatId, orderId, userId, user
 
   socket.join(chatId);
   if (userType === 'user') socket.join(`user-${userId}`);
-  else if (userType === 'runner') socket.join(`runner-${userId}`);
+  else if (userType === 'runner') socket.join(`runner-${runnerId}`);
 
   if (latestOrder.orderId === orderId) {
     socket.emit('sessionRefreshOk', { chatId, orderId });
