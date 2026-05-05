@@ -268,6 +268,9 @@ export const useCallHook = ({ socket, chatId, currentUserId, currentUserType }) 
       setIncomingCall(null);
       setIsConnecting(false);
       setCallError(null);
+
+      sessionStorage.removeItem('pendingCallId');
+      sessionStorage.removeItem('pendingCallRole');
     };
 
     socket.on("callEnded", handleCallEnded);
@@ -290,6 +293,14 @@ export const useCallHook = ({ socket, chatId, currentUserId, currentUserType }) 
     const handleIncomingCall = (data) => {
       console.log("[useCallHook] incomingCall | state:", callStateRef.current);
 
+      console.log('🔴 [incomingCall] RECEIVED on RUNNER side:', {
+        callId: data.callId,
+        hasToken: !!data.token,
+        currentUserId,   // is this null?
+        currentUserType,
+        callState: callStateRef.current,
+      });
+
       if (callStateRef.current !== STATE.IDLE) {
         socket.emit("rejectCall", {
           callId: data.callId, chatId: data.chatId,
@@ -303,6 +314,10 @@ export const useCallHook = ({ socket, chatId, currentUserId, currentUserType }) 
       channelNameRef.current = data.channelName;
       tokenRef.current = data.token;
       roleRef.current = ROLE.RECEIVER;
+
+      // ← store caller so endCall can reference them
+      receiverIdRef.current = data.callerId;
+      receiverTypeRef.current = data.callerType;
 
       setCallType(data.callType);
       setIncomingCall(data);
@@ -328,11 +343,27 @@ export const useCallHook = ({ socket, chatId, currentUserId, currentUserType }) 
         hasToken: !!(tokenRef.current),
       });
 
+      // Recovery: pendingCallId matches even if roleRef was cleared
+      if (!roleRef.current && data.callId === pendingCallIdRef.current) {
+        roleRef.current = ROLE.CALLER;
+        callIdRef.current = data.callId;
+      }
+
+      if (!roleRef.current) {
+        const storedCallId = sessionStorage.getItem('pendingCallId');
+        const storedRole = sessionStorage.getItem('pendingCallRole');
+        if (storedCallId === data.callId && storedRole === ROLE.CALLER) {
+          roleRef.current = ROLE.CALLER;
+          callIdRef.current = data.callId;
+        }
+      }
+
       if (!roleRef.current && (callIdRef.current || pendingCallIdRef.current)) {
         console.warn('[callAccepted] recovering role as CALLER');
         roleRef.current = ROLE.CALLER;
         if (!callIdRef.current) callIdRef.current = pendingCallIdRef.current;
       }
+
 
       if (roleRef.current !== ROLE.CALLER) {
         console.log("[useCallHook] callAccepted — not caller, ignoring");
@@ -345,7 +376,7 @@ export const useCallHook = ({ socket, chatId, currentUserId, currentUserType }) 
 
       const channel = data.channelName || channelNameRef.current;
       const type = data.callType || callTypeRef.current;
-      const token = tokenRef.current;
+      const token = data.token || tokenRef.current;
 
       if (!channel || !token) {
         console.error("[useCallHook] callAccepted — missing channel or token", { channel, token });
@@ -392,6 +423,10 @@ export const useCallHook = ({ socket, chatId, currentUserId, currentUserType }) 
     setCallState(STATE.OUTGOING);
     setCallError(null);
 
+    // ← persist so reset handlers can't fully wipe caller identity
+    sessionStorage.setItem('pendingCallId', callId);
+    sessionStorage.setItem('pendingCallRole', ROLE.CALLER);
+
     socket.emit("initiateCall", {
       callId, chatId, callType: type,
       callerId: currentUserId, callerType: currentUserType,
@@ -404,6 +439,18 @@ export const useCallHook = ({ socket, chatId, currentUserId, currentUserType }) 
 
   const acceptCall = useCallback(async (incomingData) => {
     const call = incomingData || incomingCallRef.current;
+
+    console.log('🟠 [acceptCall] call data:', {
+      callId: call?.callId,
+      callerId: call?.callerId,
+      callerType: call?.callerType,
+      receiverId: call?.receiverId,
+      receiverType: call?.receiverType,
+      currentUserId,
+      currentUserType,
+      source: incomingData ? 'incomingData arg' : 'incomingCallRef',
+    });
+
     if (!call) { console.warn("[useCallHook] acceptCall: no call data"); return; }
     if (isJoiningRef.current || clientRef.current) {
       console.warn("[useCallHook] acceptCall: already joining");
@@ -480,15 +527,16 @@ export const useCallHook = ({ socket, chatId, currentUserId, currentUserType }) 
 
       });
     } else {
+      const isCaller = roleRef.current === ROLE.CALLER;
       socket.emit("endCall", {
         callId: callIdRef.current,
         chatId,
-        callerId: currentUserId,
-        callerType: currentUserType,
+        callerId: isCaller ? currentUserId : receiverIdRef.current,
+        callerType: isCaller ? currentUserType : receiverTypeRef.current,
+        receiverId: isCaller ? receiverIdRef.current : currentUserId,
+        receiverType: isCaller ? receiverTypeRef.current : currentUserType,
         duration,
         callType: callTypeRef.current,
-        receiverId: receiverIdRef.current,
-        receiverType: receiverTypeRef.current
       });
     }
 
