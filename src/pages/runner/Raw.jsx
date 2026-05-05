@@ -1498,10 +1498,9 @@ function WhatsAppLikeChat() {
       specialInstructions: specialInstructions ?? user.currentRequest?.specialInstructions ?? null,
     };
 
-    useOrderStore.getState().clearPersistedChat(chatId);
-    setChatSessionKey(k => k + 1);
+    
     chatManager.set(chatId, {
-      messages: chatManager.get(chatId).messages || [], // preserver any if existing 
+      messages: [], // preserver any if existing 
       completedOrderStatuses: [],
       taskCompleted: false,
       orderCancelled: false,
@@ -1511,13 +1510,13 @@ function WhatsAppLikeChat() {
       userConfirmedDelivery: false,
       specialInstructions: specialInstructions ?? user.currentRequest?.specialInstructions ?? null,
     });
-    currentOrderRef.current = null;
 
+    useOrderStore.getState().clearPersistedChat(chatId);
+    setChatSessionKey(k => k + 1);
+
+    currentOrderRef.current = null;
     setOrderPending(true);
     setCompletedStatusesVersion(v => v + 1);
-
-    // DO NOT emit acceptRunnerRequest here - it was already emitted by RunnerNotifications
-    // The proceedToChat was already received, so just switch screens
 
     console.log('[Raw] Switching to RunnerChatScreen directly');
 
@@ -1597,102 +1596,118 @@ function WhatsAppLikeChat() {
     // console.log('renderMainScreen - activeChatId:', activeChatId);
     // console.log('renderMainScreen - isBotMode:', isBotMode);
 
-    if (isBotMode) {
+    if (isBotMode || awaitingChatReady) {
       const botState = chatManager.get(BOT_CHAT_ID);
       const storedBotMsgs = useOrderStore.getState().getChat(BOT_CHAT_ID).messages;
-      const botMessages = botState.messages.length > 0
-        ? botState.messages
-        : storedBotMsgs;
+      const botMessages = botState.messages.length > 0 ? botState.messages : storedBotMsgs;
 
       return (
-        <OnboardingScreen
-          key="sendrey-bot"
-          // ── Message persistence: pass from chatManager, child owns its own useState
-          // initialized from this, and calls onMessagesChange to sync back ──
-          initialMessages={botMessages}
-          botRefreshTrigger={botRefreshTrigger}
-          onMessagesChange={botMessagesUpdater}
-          onRegisterSetMessages={registerSetMessages}
+        <div className="relative h-full">
+          <OnboardingScreen
+            key="sendrey-bot"
+            // ── Message persistence: pass from chatManager, child owns its own useState
+            // initialized from this, and calls onMessagesChange to sync back ──
+            initialMessages={botMessages}
+            botRefreshTrigger={botRefreshTrigger}
+            onMessagesChange={botMessagesUpdater}
+            onRegisterSetMessages={registerSetMessages}
 
-          onNewOrderFleetAndServiceSelected={handleNewOrderFleetSelected}
-          onStartNewOrder={handleStartNewOrder}
-          newOrderTrigger={newOrderTrigger}
+            onNewOrderFleetAndServiceSelected={handleNewOrderFleetSelected}
+            onStartNewOrder={handleStartNewOrder}
+            newOrderTrigger={newOrderTrigger}
 
-          isVerifyingOtp={isVerifyingOtp}
+            isVerifyingOtp={isVerifyingOtp}
 
-          onReturningUserChoice={(choice) =>
-            handleReturningUserChoice(choice, botMessagesUpdater)
-          }
+            onReturningUserChoice={(choice) =>
+              handleReturningUserChoice(choice, botMessagesUpdater)
+            }
 
-          isSubmitting={isSubmitting}
-          newOrderComplete={botState.newOrderComplete}
-          onSetNewOrderComplete={(val) => {
-            chatManager.set(BOT_CHAT_ID, { newOrderComplete: val });
-          }}
+            isSubmitting={isSubmitting}
+            newOrderComplete={botState.newOrderComplete}
+            onSetNewOrderComplete={(val) => {
+              chatManager.set(BOT_CHAT_ID, { newOrderComplete: val });
+            }}
 
-          isVerified={kycStatus.overallVerified}
-          active={active}
-          text={text}
-          setText={setText}
-          dark={dark}
-          setDark={setDark}
-          isCollectingCredentials={isCollectingCredentials}
-          credentialStep={credentialStep}
-          credentialQuestions={credentialQuestions}
-          needsOtpVerification={needsOtpVerification}
-          registrationComplete={registrationComplete}
-          canResendOtp={canResendOtp}
-          send={sendMessage_fn}
-          handleMessageClick={handleMessageClick}
-          pickUp={pickUp}
-          runErrand={runErrand}
-          setDrawerOpen={setDrawerOpen}
-          setInfoOpen={setInfoOpen}
-          initialMessagesComplete={initialMessagesComplete}
-          runnerId={runnerId}
-          kycStep={kycStep}
-          kycStatus={kycStatus}
-          onIdVerified={onIdVerified}
-          handleIDTypeSelection={handleIDTypeSelection}
-          onSelfieVerified={onSelfieVerified}
-          handleSelfieResponse={handleSelfieResponse}
-          onBannedDetected={() => {
-            setShowBannedModal(true);
-            setVerificationState({ isBanned: true, reason: 'Your account has been suspended. Please contact support.' });
-          }}
-          checkVerificationStatus={
-            (setMessages) => checkVerificationStatus(
-              setMessages,
-              () => {
-                setShowBannedModal(true);
-                setVerificationState({ isBanned: true, reason: 'Your account has been suspended.' });
-              }
-            )
-          }
-          onConnectToService={handleConnectToService}
-          onFindMore={handleFindMore}
-          nearbyUsers={nearbyUsers}
-          onPickService={handlePickService}
-          socket={socket}
-          isConnected={isConnected}
-          reconnect={reconnect}
-          runnerData={runnerData}
-          canShowNotifications={canShowNotifications}
-          hasSearched={hasSearched}
-          replyingTo={botState.replyingTo}
-          setReplyingTo={setBotReplyingTo}
-          currentOrder={botState.currentOrder}
-          verificationState={verificationState}
-          showBannedModal={showBannedModal}
-          setShowBannedModal={setShowBannedModal}
-          isConnectLocked={isConnectLocked}
-          handleCredentialAnswer={handleCredentialAnswer}
-          runnerLocation={runnerLocation}
+            isVerified={kycStatus.overallVerified}
+            active={active}
+            text={text}
+            setText={setText}
+            dark={dark}
+            setDark={setDark}
+            isCollectingCredentials={isCollectingCredentials}
+            credentialStep={credentialStep}
+            credentialQuestions={credentialQuestions}
+            needsOtpVerification={needsOtpVerification}
+            registrationComplete={registrationComplete}
+            canResendOtp={canResendOtp}
+            send={sendMessage_fn}
+            handleMessageClick={handleMessageClick}
+            pickUp={pickUp}
+            runErrand={runErrand}
+            setDrawerOpen={setDrawerOpen}
+            setInfoOpen={setInfoOpen}
+            initialMessagesComplete={initialMessagesComplete}
+            runnerId={runnerId}
+            kycStep={kycStep}
+            kycStatus={kycStatus}
+            onIdVerified={onIdVerified}
+            handleIDTypeSelection={handleIDTypeSelection}
+            onSelfieVerified={onSelfieVerified}
+            handleSelfieResponse={handleSelfieResponse}
+            onBannedDetected={() => {
+              setShowBannedModal(true);
+              setVerificationState({ isBanned: true, reason: 'Your account has been suspended. Please contact support.' });
+            }}
+            checkVerificationStatus={
+              (setMessages) => checkVerificationStatus(
+                setMessages,
+                () => {
+                  setShowBannedModal(true);
+                  setVerificationState({ isBanned: true, reason: 'Your account has been suspended.' });
+                }
+              )
+            }
+            onConnectToService={handleConnectToService}
+            onFindMore={handleFindMore}
+            nearbyUsers={nearbyUsers}
+            onPickService={handlePickService}
+            socket={socket}
+            isConnected={isConnected}
+            reconnect={reconnect}
+            runnerData={runnerData}
+            canShowNotifications={canShowNotifications}
+            hasSearched={hasSearched}
+            replyingTo={botState.replyingTo}
+            setReplyingTo={setBotReplyingTo}
+            currentOrder={botState.currentOrder}
+            verificationState={verificationState}
+            showBannedModal={showBannedModal}
+            setShowBannedModal={setShowBannedModal}
+            isConnectLocked={isConnectLocked}
+            handleCredentialAnswer={handleCredentialAnswer}
+            runnerLocation={runnerLocation}
 
-          // returning users
-          isReturningUser={isReturningUser}
-          returningUserData={returningUserData}
-        />
+            // returning users
+            isReturningUser={isReturningUser}
+            returningUserData={returningUserData}
+          />
+
+          {awaitingChatReady && (
+            <div
+              className="absolute inset-0 z-[9999] flex flex-col items-center justify-center gap-4"
+              style={{ background: 'rgba(0,0,0,0.85)', pointerEvents: 'all' }}
+            >
+              <div className="relative w-10 h-10">
+                {Array.from({ length: 12 }).map((_, i) => (
+                  <span key={i} className="absolute w-2 h-2 bg-primary rounded-full animate-fade-dot"
+                    style={{ left: "50%", top: "50%", transform: `rotate(${i * 30}deg) translate(0, -16px)`, animationDelay: `${i * 0.1}s` }}
+                  />
+                ))}
+              </div>
+              <p className="text-sm font-medium text-gray-300">Preparing chat…</p>
+            </div>
+          )}
+        </div>
       );
     }
 
@@ -1981,24 +1996,6 @@ function WhatsAppLikeChat() {
         reason={verificationState?.reason || verificationState?.message || null}
         darkMode={dark}
       />
-
-      {awaitingChatReady && (
-        <div
-          className="fixed inset-0 z-[9999] flex flex-col items-center justify-center gap-4"
-          style={{ background: 'rgba(0,0,0,0.85)', pointerEvents: 'all' }}
-        >
-          <div className="relative w-10 h-10">
-            {Array.from({ length: 12 }).map((_, i) => (
-              <span key={i} className="absolute w-2 h-2 bg-primary rounded-full animate-fade-dot"
-                style={{ left: "50%", top: "50%", transform: `rotate(${i * 30}deg) translate(0, -16px)`, animationDelay: `${i * 0.1}s` }}
-              />
-            ))}
-          </div>
-          <p className="text-sm font-medium text-gray-300">
-            Preparing chat…
-          </p>
-        </div>
-      )}
     </div>
   );
 }

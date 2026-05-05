@@ -116,11 +116,11 @@ export const createVirtualAccount = createAsyncThunk(
 
 export const getTransactionHistory = createAsyncThunk(
   'payment/getTransactionHistory',
-  async ({ page = 1, limit = 20 } = {}, { rejectWithValue }) => {
+  async ({ page = 1, limit = 20, replace = false } = {}, { rejectWithValue }) => {
     try {
       // paginate
       const response = await api.get(`/payments/wallet/transactions?page=${page}&limit=${limit}`);
-      return response.data;
+      return { ...response.data, replace };
     } catch (error) {
       return rejectWithValue(error.response?.data?.error || 'Failed to fetch transactions');
     }
@@ -328,8 +328,14 @@ const paymentSlice = createSlice({
         state.wallet.status = 'loading';
       })
       .addCase(getTransactionHistory.fulfilled, (state, action) => {
-        state.wallet.transactions = action.payload?.transactions || [];
-        state.wallet.pagination = action.payload?.pagination || null;
+        const transactions = Array.isArray(action.payload?.transactions)
+          ? action.payload.transactions
+          : [];
+        const { replace, pagination } = action.payload;
+        state.wallet.transactions = replace
+          ? transactions
+          : [...(state.wallet.transactions ?? []), ...transactions];
+        state.wallet.pagination = pagination ?? null;
       })
       .addCase(getTransactionHistory.rejected, (state, action) => {
         state.wallet.status = 'failed';

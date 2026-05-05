@@ -3,7 +3,6 @@ import {
   Loader2,
   ArrowDownLeft, ArrowUpRight,
   Wallet as WalletIcon,
-  RefreshCw,
   Building2
 } from "lucide-react";
 import { useEffect, useState, useRef } from "react";
@@ -41,6 +40,7 @@ export const Wallet = ({ darkMode, onBack, runnerId }) => {
   const [withdrawAmount, setWithdrawAmount] = useState('');
   const [withdrawStep, setWithdrawStep] = useState('form'); // form | confirm | success
   const [confirmedPin, setConfirmedPin] = useState(null); // eslint-disable-line no-unused-vars
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     dispatch(getWalletBalance());
@@ -195,15 +195,22 @@ export const Wallet = ({ darkMode, onBack, runnerId }) => {
         <h1 className={`text-lg font-bold ${dark ? 'text-white' : 'text-black-200'}`}>
           My Wallet
         </h1>
+
         <button
-          onClick={() => {
-            dispatch(getWalletBalance());
-            dispatch(getTransactionHistory({ page: 1, limit: 20 }));
+          onClick={async () => {
+            setIsRefreshing(true);
+            try {
+              await Promise.all([
+                dispatch(getWalletBalance()).unwrap(),
+                dispatch(getTransactionHistory({ page: 1, limit: 20 })).unwrap(),
+              ]);
+            } finally {
+              setIsRefreshing(false);
+            }
           }}
-          className="ml-auto p-2 rounded-full"
+          className={`ml-auto p-2 rounded-lg ${isRefreshing ? 'bg-gray-300 cursor-not-allowed' : 'bg-primary'} ${darkMode ? 'text-white' : 'text-black-200'}`}
         >
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''} ${dark ? 'text-gray-1002' : 'text-gray-600'
-            }`} />
+          Refresh
         </button>
       </div>
 

@@ -20,13 +20,9 @@ https://sendrey.netlify.app
 
 - phone delivery to run errand
 
-reactToMessage — in handleMessageReact, reactions are fire-and-forget with no queue. Low priority but worth noting.
-
-deleteMessage — in handleDeleteMessage, same — if offline, delete is optimistic on client but never reaches server.
-
-runner:locationUpdate — GPS location is emitted every few seconds. These are inherently lossy and that's fine, no need to queue.
-
 presenceHeartbeat — same, lossy by design, fine.
 
-socket flush is not working as expected, was having bad internet, sent two messages but recepient nevere receieved
+add runner to know reason for rejection
+
+landing page merge
 

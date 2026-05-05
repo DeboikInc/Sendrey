@@ -136,7 +136,7 @@ export default function CallScreen({
               </div>
               <div className="flex flex-col items-center gap-3">
                 <button
-                  onClick={onAccept}
+                  onClick={() => onAccept()}
                   className="w-16 h-16 rounded-full bg-green-600 flex items-center justify-center active:scale-90 transition-transform"
                 >
                   <IoCall size={24} color="white" />
