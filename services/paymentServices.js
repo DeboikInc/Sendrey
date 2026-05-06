@@ -672,7 +672,7 @@ class PaymentService {
 
     const hiddenTypes = userType === 'runner'
       ? ['platform_earning', 'provider_fee', 'escrow_lock']
-      : ['platform_earning', 'provider_fee', 'escrow_release'];
+      : ['platform_earning', 'provider_fee', 'escrow_release', 'item_budget', 'item_budget_spent'];
 
     const entries = await LedgerEntry.find({
       userId: userId.toString(),
