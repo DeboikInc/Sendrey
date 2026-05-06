@@ -9,6 +9,7 @@ const ledgerEntrySchema = new mongoose.Schema({
         enum: [
             'deposit',          // wallet funded via VA or card
             'escrow_lock',      // funds moved into escrow at payment
+            'escrow_refund',
             'escrow_release',   // delivery fee paid out to runner
             'item_budget',      // item budget released after approval
             'item_budget_spent', // budget deducted when runner pays vendor
