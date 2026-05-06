@@ -1,13 +1,13 @@
 import { useState } from "react";
-import useOrderStore from '../../store/orderStore';
+// import useOrderStore from '../../store/orderStore';
 import { Button } from "@material-tailwind/react";
 
 export const Modal = ({ type, onClose, onConfirm, isConnectLocked, selectedUser, registrationComplete, darkMode, chatId }) => {
     const [cancelReason, setCancelReason] = useState("");
     const [customReason, setCustomReason] = useState("");
 
-    const currentOrder = useOrderStore(s => chatId ? s.getChat(chatId).currentOrder : null);
-    const orderCancelled = useOrderStore(s => chatId ? s.getChat(chatId).orderCancelled : false);
+    // const currentOrder = useOrderStore(s => chatId ? s.getChat(chatId).currentOrder : null);
+    // const orderCancelled = useOrderStore(s => chatId ? s.getChat(chatId).orderCancelled : false);
 
     const canCancel = true
     // = currentOrder != null
