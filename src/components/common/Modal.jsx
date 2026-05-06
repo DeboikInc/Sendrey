@@ -1,18 +1,17 @@
 import { useState } from "react";
-// import useOrderStore from '../../store/orderStore';
+import useOrderStore from '../../store/orderStore';
 import { Button } from "@material-tailwind/react";
 
 export const Modal = ({ type, onClose, onConfirm, isConnectLocked, selectedUser, registrationComplete, darkMode, chatId }) => {
     const [cancelReason, setCancelReason] = useState("");
     const [customReason, setCustomReason] = useState("");
 
-    // const currentOrder = useOrderStore(s => chatId ? s.getChat(chatId).currentOrder : null);
-    // const orderCancelled = useOrderStore(s => chatId ? s.getChat(chatId).orderCancelled : false);
+    const currentOrder = useOrderStore(s => chatId ? s.getChat(chatId).currentOrder : null);
+    const orderCancelled = useOrderStore(s => chatId ? s.getChat(chatId).orderCancelled : false);
 
-    const canCancel = true
-    // = currentOrder != null
-    // && currentOrder.paymentStatus !== 'paid'
-    // && !orderCancelled;
+    const canCancel = currentOrder != null
+        && currentOrder.paymentStatus !== 'paid'
+        && !orderCancelled;
 
     const suggestedReasons = [
         "Items exceed 5kg weight limit",
@@ -44,7 +43,7 @@ export const Modal = ({ type, onClose, onConfirm, isConnectLocked, selectedUser,
                                                 : darkMode
                                                     ? 'border-black-200 text-gray-300 hover:border-gray-500'
                                                     : 'border-gray-200 text-gray-700 hover:border-gray-400'
-                                                }`}
+                                            }`}
                                         >
                                             {reason}
                                         </button>
@@ -58,24 +57,19 @@ export const Modal = ({ type, onClose, onConfirm, isConnectLocked, selectedUser,
                                         className={`w-full border rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-red-300 resize-none mb-4 ${darkMode
                                             ? 'bg-black-200 border-black-200 text-gray-300 placeholder-gray-500'
                                             : 'border-gray-200 text-gray-700'
-                                            }`}
+                                        }`}
                                         rows={3}
                                     />
                                 )}
                             </>
                         ) : (
                             <>
-                                {/* <h1 className={`text-xl font-bold mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Cancel Order</h1>
+                                <h1 className={`text-xl font-bold mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Cancel Order</h1>
                                 <p className={`mb-6 ${darkMode ? 'text-gray-400' : 'text-black'}`}>
                                     {currentOrder?.paymentStatus === 'paid'
                                         ? 'This order has already been funded and cannot be cancelled. Please raise a dispute instead.'
                                         : 'There is no active order to cancel.'
                                     }
-                                </p> */}
-
-                                <h1 className={`text-xl font-bold mb-2 ${darkMode ? 'text-gray-300' : 'text-gray-700'}`}>Cancel Order</h1>
-                                <p className={`mb-6 ${darkMode ? 'text-gray-400' : 'text-black'}`}>
-                                    Are you sure you want to cancel this order?
                                 </p>
                             </>
                         )}
