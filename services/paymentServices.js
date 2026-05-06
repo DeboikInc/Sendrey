@@ -14,6 +14,8 @@ const PlatformEarnings = require('../models/PlatformEarnings');
 const LedgerEntry = require('../models/LedgerEntry');
 const { Chat } = require('../models/Chat');
 
+const mongoose = require('mongoose');
+
 let ioInstance;
 const getSocketIO = () => {
   if (ioInstance) return ioInstance;
@@ -411,7 +413,7 @@ class PaymentService {
 
         console.log('[payoutToRunner] writing ledger entries for orderId:', resolvedOrderId);
         await LedgerEntry.create([{
-          userId: escrow.runnerId,
+          userId: escrow.runnerId.toString(),
           userModel: 'Runner',
           runnerId: escrow.runnerId,
           type: 'escrow_release',
@@ -669,25 +671,29 @@ class PaymentService {
 
   async getTransactionHistory(userId, page = 1, limit = 20, userType) {
     const skip = (page - 1) * limit;
+    const userModel = userType === 'runner' ? 'Runner' : 'User';
 
     const hiddenTypes = userType === 'runner'
       ? ['platform_earning', 'provider_fee', 'escrow_lock']
       : ['platform_earning', 'provider_fee', 'escrow_release', 'item_budget', 'item_budget_spent'];
 
-    const entries = await LedgerEntry.find({
-      userId: userId.toString(),
-      type: { $nin: hiddenTypes }
-    })
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(limit)
-      .lean();
+    const userObjectId = mongoose.Types.ObjectId.isValid(userId)
+      ? new mongoose.Types.ObjectId(userId.toString())
+      : null;
 
-    const total = await LedgerEntry.countDocuments({
-      userId: userId.toString(),
-      userModel: userType === 'runner' ? 'Runner' : 'User',
-      type: { $nin: hiddenTypes },
-    });
+    const query = {
+      userId: userObjectId ? { $in: [userObjectId, userId.toString()] } : userId.toString(),
+      type: { $nin: hiddenTypes }
+    };
+
+    const [entries, total] = await Promise.all([
+      LedgerEntry.find(query)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .lean(),
+      LedgerEntry.countDocuments(query),
+    ]);
 
     console.log('[getTransactionHistory] entries found:', entries.length);
     console.log('[getTransactionHistory] sample:', entries[0]);
@@ -700,13 +706,13 @@ class PaymentService {
         type: ['deposit', 'escrow_release', 'escrow_refund'].includes(e.type)
           ? 'credit'
           : 'debit',
-        label: e.type === 'escrow_lock' ? 'Order Payment'
+        label: e.type === 'escrow_lock' ? `Order Payment for ${e.orderId}`
           : e.type === 'deposit' ? 'Wallet Funding'
-            : e.type === 'escrow_release' ? (e.description || 'Earnings From Completed order')
+            : e.type === 'escrow_release' ? (e.description || `Earnings From Completed order - ${e.orderId}`)
               : e.type === 'item_budget' ? 'Item Budget'
                 : e.type === 'item_budget_spent' ? (e.description || 'Item Purchase')
                   : e.type === 'escrow_refund' ? 'Dispute Refund'
-                    : e.type === 'withdrawal' ? 'Withdrawal'
+                    : e.type === 'withdrawal' ? (e.description || 'Withdrawal initiated')
                       : e.description || e.type,
         description: e.description || null,  // pass through to UI
       })),
@@ -883,7 +889,7 @@ class PaymentService {
 
       // Ledger entry
       await LedgerEntry.create([{
-        userId: runnerId,
+        userId: runnerId.toString(),
         userModel: 'Runner',
         type: 'withdrawal',
         grossAmount: amount,
@@ -891,11 +897,11 @@ class PaymentService {
         providerFee: 0,
         provider: 'paystack',
         providerReference: transfer.data.reference,
-        description: `Withdrawal to ${bankDetails.accountName || verification.data.account_name} - ${bankDetails.bankCode}`,
+        description: `Withdrawal to ${bankDetails.accountName || verification.data.account_name} - NGN ${amount.toString()}`,
         status: 'completed',
       }], { session });
 
-      console.log(`✅ Runner ${runnerId} withdrawal: NGN ${amount.toString()} | ref: ${transfer.data.reference}`);
+      console.log(`✅ Runner ${runnerId} withdrawal: NGN ${amount.toString()} | ref: ${transfer.data.reference} - ${bankDetails.bankCode}`);
 
       return {
         reference: transfer.data.reference,
