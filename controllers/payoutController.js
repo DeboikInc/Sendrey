@@ -231,15 +231,33 @@ class PayoutController extends BaseController {
       }
 
       // transfer to vendor
-      const transferResult = await paymentService.transferToVendor({
-        amount: spent,
-        bankName,
-        accountNumber,
-        accountName,
-        vendorName,
-        orderId,
-        runnerId: order.runnerId,
-      });
+      let transferResult;
+      try {
+        transferResult = await paymentService.transferToVendor({
+          amount: spent,
+          bankName,
+          accountNumber,
+          accountName,
+          vendorName,
+          orderId,
+          runnerId: order.runnerId,
+        });
+      } catch (transferErr) {
+        // Roll back wallet deduction on throw
+        await withTransaction(async (session) => {
+          const userWallet = await Wallet.findOne({ userId: order.userId }).session(session);
+          if (userWallet) {
+            userWallet.lockedBalance += spent;
+            await userWallet.save({ session });
+          }
+          await LedgerEntry.deleteOne({
+            orderId, type: 'item_budget_spent', userId: order.userId,
+          }).session(session);
+        });
+        await RunnerPayout.findOneAndUpdate({ orderId }, { $set: { status: 'pending' } });
+        logger.error('transferToVendor threw:', transferErr.message);
+        return this.error(res, transferErr.message || 'Transfer to vendor failed');
+      }
 
       if (!transferResult.success) {
         // Roll back wallet deduction — refund lockedBalance
@@ -249,18 +267,27 @@ class PayoutController extends BaseController {
             userWallet.lockedBalance += spent;
             await userWallet.save({ session });
           }
-
-          // Also reverse the ledger entry
           await LedgerEntry.deleteOne({
-            orderId,
-            type: 'item_budget_spent',
-            userId: order.userId
+            orderId, type: 'item_budget_spent', userId: order.userId,
           }).session(session);
         });
 
-
         await RunnerPayout.findOneAndUpdate({ orderId }, { $set: { status: 'pending' } });
-        return this.error(res, transferResult.error || 'Transfer to vendor failed');
+
+        const isAccountError =
+          transferResult.error?.toLowerCase().includes('account') ||
+          transferResult.error?.toLowerCase().includes('verification') ||
+          transferResult.error?.toLowerCase().includes('invalid') ||
+          transferResult.error?.toLowerCase().includes('not found') ||
+          transferResult.error?.toLowerCase().includes('bank') ||
+          transferResult.error?.toLowerCase().includes('recipient');
+
+        return res.status(isAccountError ? 422 : 500).json({
+          success: false,
+          message: isAccountError
+            ? 'We could not verify the vendor account. Please check the account number and bank, then try again.'
+            : transferResult.error || 'Transfer to vendor failed',
+        });
       }
 
       // refund unspent amount

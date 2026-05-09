@@ -413,7 +413,7 @@ class PaymentController extends BaseController {
                 userType,
             );
 
-            
+
             this.success(res, result);
         } catch (error) {
             console.error('Error fetching transaction history:', error);
@@ -464,9 +464,28 @@ class PaymentController extends BaseController {
             });
             if (!valid) return res.status(401).json({ status: 'fail', message: 'Incorrect PIN' });
 
-            const result = await paymentService.withdrawFromWallet(
-                runnerId, amount, bankDetails, { releaseAfter: TWENTY_FOUR_HOURS }
-            );
+            let result;
+            try {
+                result = await paymentService.withdrawFromWallet(
+                    runnerId, amount, bankDetails, { releaseAfter: TWENTY_FOUR_HOURS }
+                );
+            } catch (error) {
+                console.error('withdrawFromWallet error:', error.message);
+                const isAccountError =
+                    error.message?.toLowerCase().includes('account') ||
+                    error.message?.toLowerCase().includes('verification') ||
+                    error.message?.toLowerCase().includes('invalid') ||
+                    error.message?.toLowerCase().includes('not found') ||
+                    error.message?.toLowerCase().includes('bank');
+                if (isAccountError) {
+                    return res.status(422).json({
+                        success: false,
+                        message: 'We could not verify this account number. Please check the account number and bank, then try again.',
+                    });
+                }
+                if (error.statusCode === 400) return this.badRequest(res, error.message);
+                return this.error(res, error.message);
+            }
 
             sendPaymentEvent('withdrawal', {
                 runnerId,
@@ -529,6 +548,8 @@ class PaymentController extends BaseController {
             this.success(res, { message: 'Wallet funded successfully', balance: result.balance, amount: result.amount });
         } catch (error) {
             console.error('Error verifying wallet funding:', error);
+            if (error.statusCode === 400) return this.badRequest(res, error.message);
+            this.error(res, error.message);
             this.error(res, error.message);
         }
     }
