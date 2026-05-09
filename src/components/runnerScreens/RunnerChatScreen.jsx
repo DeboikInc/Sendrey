@@ -159,12 +159,6 @@ function RunnerChatScreen({
   const [showPickupItemForm, setShowPickupItemForm] = useState(false);
   const [runnerLocation, setRunnerLocation] = useState(null); // eslint-disable-line no-unused-vars
 
-  const [itemsApproved, setItemsApproved] = useState(() =>
-    messages.some(m =>
-      (m.type === 'item_submission' || m.messageType === 'item_submission') &&
-      m.status === 'approved'
-    )
-  );
 
   const [backHomeDisabled] = useState(() => {
     try { return localStorage.getItem(`backHome_disabled_${chatId}`) === 'true'; } catch { return false; }
@@ -177,6 +171,14 @@ function RunnerChatScreen({
     const storeMessages = useOrderStore.getState().getChat(chatId).messages ?? [];
     return storeMessages;
   });
+
+  const [itemsApproved, setItemsApproved] = useState(() =>
+    messages.some(m =>
+      (m.type === 'item_submission' || m.messageType === 'item_submission' ||
+        m.type === 'pickup_item_submission' || m.messageType === 'pickup_item_submission') && // ← add pickup
+      m.status === 'approved'
+    )
+  );
 
   const onMessagesChangeRef = useRef(onMessagesChange);
   const [attachFlowResetKey, setAttachFlowResetKey] = useState(0);
@@ -445,6 +447,7 @@ function RunnerChatScreen({
   useEffect(() => {
     if (!socket || !chatId || !runnerId || !mountedRef.current) return;
     if (!currentOrder?.orderId) return;
+    if (['completed', 'cancelled', 'task_completed'].includes(currentOrder?.status)) return;
 
     // Always re-fetch when orderId changes
     lastFetchedPayoutOrderIdRef.current = currentOrder.orderId;
@@ -470,6 +473,8 @@ function RunnerChatScreen({
     const pollInterval = setInterval(() => {
       if (!mountedRef.current) return;
       const order = useOrderStore.getState().getChat(chatId).currentOrder;
+      if (!order?.orderId) return;
+      if (order?.paymentStatus !== 'paid') return;
       if (order?.usedPayoutSystem) {
         clearInterval(pollInterval);
         return;
@@ -797,6 +802,7 @@ function RunnerChatScreen({
     if (!socket || !mountedRef.current) return;
     const handler = (data) => {
       if (!mountedRef.current) return;
+      if (data.status === 'approved') setItemsApproved(true);
       setMessagesAndSync(prev => prev.map(m =>
         m.submissionId === data.submissionId || m.id === data.submissionId
           ? { ...m, status: data.status, rejectionReason: data.rejectionReason }
@@ -1311,7 +1317,10 @@ function RunnerChatScreen({
               isOpen={isAttachFlowOpen}
               onClose={() => setIsAttachFlowOpen(false)}
               chatId={chatId}
-              canMarkDelivery={!isRunErrand || itemsApproved}
+              canMarkDelivery={
+                completedOrderStatuses.includes('arrived_at_delivery_location') &&
+                (isRunErrand ? itemsApproved : isPickUp ? itemsApproved : true)
+              }
               onMarkDelivery={() => {
                 if (isRunErrand && !itemsApproved) return;
                 setIsAttachFlowOpen(false);

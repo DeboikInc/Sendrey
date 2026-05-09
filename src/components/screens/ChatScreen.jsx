@@ -384,6 +384,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
     if (!chatId) return;
     chatStorage.getChatStatus(chatId).then(saved => {
       if (!saved) return;
+      if (['completed', 'cancelled', 'task_completed'].includes(saved.currentOrder?.status)) return;
       if (saved.orderCancelled) {
         setOrderCancelled(true);
         setCancelledByName(saved.cancelledByName || null);
@@ -1009,6 +1010,8 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
       .unwrap()
       .then((order) => {
         if (order) {
+          // Don't restore terminal orders — new session is starting
+          if (['completed', 'cancelled', 'task_completed'].includes(order.status)) return;
           setCurrentOrder(order);
           currentOrderRef.current = order; // sync ref immediately
           console.log('Order fetched on mount:', order.orderId);
