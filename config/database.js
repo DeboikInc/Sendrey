@@ -6,7 +6,7 @@ const Runner = require('../models/Runner')
 
 
 //  $env:DATABASE_URL = ""
-// npm run seed:admin   
+// npm run seed:admin
 
 const connectDb = async () => {
   console.log('DATABASE_URL:', process.env.DATABASE_URL);
@@ -30,7 +30,7 @@ const connectDb = async () => {
     // await User.findOneAndUpdate({ email:'timivictor565@gmail.com' }, { $set: { isAvailable: true } });
     // await User.findOneAndUpdate({ email:'tinukekareem17@gmail.com' }, { $set: { isAvailable: true } });
     // await Runner.findOneAndUpdate({ email:'tinukareem17@gmail.com' }, { $set: { isAvailable: true } });
-    // await Runner.findOneAndUpdate({ email:'tinukareem17@gmail.com' }, { $set: { isAvailable: true } });
+    // await Runner.findOneAndUpdate({ email:'timivictor565@gmail.com' }, { $set: { 'fleetType': 'car' } });
     // console.log('Updated runner available status');
     // await Runner.deleteOne({ email: 'timivictor565@gmail.com' });
 

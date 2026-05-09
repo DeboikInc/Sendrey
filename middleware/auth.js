@@ -521,6 +521,8 @@ const auditLog = (operation) => {
     const originalSend = res.send;
 
     res.send = function (data) {
+      originalSend.call(this, data);
+
       // Log after response is sent
       const auditData = {
         timestamp: new Date().toISOString(),
@@ -540,7 +542,6 @@ const auditLog = (operation) => {
 
       logger.audit('AUDIT_LOG', auditData);
 
-      originalSend.call(this, data);
     };
 
     next();

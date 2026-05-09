@@ -151,7 +151,7 @@ class PaymentService {
             provider: 'wallet',
             orderId,
             escrowId: escrow._id,
-            description: `Escrow funded via wallet for order ${orderId}`,
+            description: `Order Payment (Wallet) for ${orderId}`,
             status: 'completed',
           }], { session }),
         ]);
@@ -183,9 +183,26 @@ class PaymentService {
 
   async verifyPayment(reference) {
     const verification = await paystack.verifyTransaction(reference);
+    console.log('[verifyWalletFunding] raw verification:', JSON.stringify(verification, null, 2));
 
-    if (!verification.status || verification.data.status !== 'success') {
+
+    if (!verification.status) {
       throw new Error('Payment verification failed');
+    }
+
+    const { status: txStatus } = verification.data;
+
+    const isProcessable = txStatus === 'success' ||
+      (process.env.NODE_ENV === 'development' && txStatus !== 'failed');
+
+    if (!isProcessable) {
+      const err = new Error(
+        txStatus === 'abandoned'
+          ? 'Payment was not completed. Please try again.'
+          : `Payment unsuccessful (status: ${txStatus}). Please try again.`
+      );
+      err.statusCode = 400;
+      throw err;
     }
 
     const { orderId } = verification.data.metadata;
@@ -240,7 +257,7 @@ class PaymentService {
         providerReference: reference,
         orderId,
         escrowId: escrow._id,
-        description: `Escrow funded via card for order ${orderId}`,
+        description: `Order Payment (Card) for ${orderId}`,
         status: 'completed',
       }], { session });
 
@@ -283,9 +300,25 @@ class PaymentService {
 
   async verifyWalletFunding(reference) {
     const verification = await paystack.verifyTransaction(reference);
+    console.log('[verifyWalletFunding] raw verification:', JSON.stringify(verification, null, 2));
 
-    if (!verification.status || verification.data.status !== 'success') {
+    if (!verification.status) {
       throw new Error('Payment verification failed');
+    }
+
+    const { status: txStatus } = verification.data;
+
+    const isProcessable = txStatus === 'success' ||
+      (process.env.NODE_ENV === 'development' && txStatus !== 'failed');
+
+    if (!isProcessable) {
+      const err = new Error(
+        txStatus === 'abandoned'
+          ? 'Payment was not completed. Please try again.'
+          : `Payment unsuccessful (status: ${txStatus}). Please try again.`
+      );
+      err.statusCode = 400;
+      throw err;
     }
 
     const { userId } = verification.data.metadata;
@@ -351,16 +384,23 @@ class PaymentService {
   }
 
   async payoutToRunner(escrowId) {
+    const claimed = await Escrow.findOneAndUpdate(
+      { _id: escrowId, deliveryFeeReleased: { $ne: true } },
+      { $set: { deliveryFeeReleased: true } },
+      { new: false } // return original doc to confirm we claimed it
+    );
+
+    if (!claimed) {
+      console.log(`[payoutToRunner] already released or not found for escrow ${escrowId} — skipping`);
+      return { alreadyReleased: true };
+    }
+
+
     return withTransaction(async (session) => {
       const escrow = await Escrow.findById(escrowId).session(session);
       if (!escrow) throw new Error('Escrow not found');
 
       console.log(`[payoutToRunner] escrowId=${escrowId} | runnerId=${escrow.runnerId} | taskId=${escrow.taskId}`);
-
-      if (escrow.deliveryFeeReleased) {
-        console.log(`[payoutToRunner] already released for escrow ${escrowId} — skipping`);
-        return { alreadyReleased: true };
-      }
 
       const runner = await Runner.findById(escrow.runnerId).session(session);
       if (!runner) throw new Error('Runner not found');
@@ -492,9 +532,12 @@ class PaymentService {
         },
       ], { session });
 
-      escrow.deliveryFeeReleased = true;
-      escrow.status = escrow.itemBudgetReleased ? 'released' : escrow.status;
-      await escrow.save({ session });
+      // update escrow
+      await Escrow.findByIdAndUpdate(
+        escrowId,
+        { $set: { status: escrow.itemBudgetReleased ? 'released' : escrow.status } },
+        { session }
+      );
 
       await Runner.findByIdAndUpdate(
         escrow.runnerId,
@@ -586,8 +629,10 @@ class PaymentService {
     const bankCode = await this.getBankCode(bankName);
     const verification = await paystack.verifyAccountNumber({ account_number: accountNumber, bank_code: bankCode });
 
-    if (!verification.status || !verification.data) {
-      throw new Error('Account verification failed');
+    if (!verification.status || !verification.data || !verification.data.account_name) {
+      const err = new Error('Vendor account number not found. Please confirm the account number and selected bank are correct.');
+      err.statusCode = 422;
+      throw err;
     }
 
     return {
@@ -706,8 +751,8 @@ class PaymentService {
         type: ['deposit', 'escrow_release', 'escrow_refund'].includes(e.type)
           ? 'credit'
           : 'debit',
-        label: e.type === 'escrow_lock' ? `Order Payment for ${e.orderId}`
-          : e.type === 'deposit' ? 'Wallet Funding'
+        label: e.type === 'escrow_lock' ? (e.description || `Order Payment for ${e.orderId}`)
+          : e.type === 'deposit' ? 'Wallet Funding (card)'
             : e.type === 'escrow_release' ? (e.description || `Earnings From Completed order - ${e.orderId}`)
               : e.type === 'item_budget' ? 'Item Budget'
                 : e.type === 'item_budget_spent' ? (e.description || 'Item Purchase')
@@ -863,8 +908,11 @@ class PaymentService {
         account_number: bankDetails.accountNumber,
         bank_code: bankDetails.bankCode,
       });
-      if (!verification.status || !verification.data) {
-        throw new Error('Bank account verification failed');
+
+      if (!verification.status || !verification.data || !verification.data.account_name) {
+        const err = new Error('Account number not found. Please confirm the account number and selected bank are correct.');
+        err.statusCode = 422;
+        throw err;
       }
 
       // Deduct from wallet
