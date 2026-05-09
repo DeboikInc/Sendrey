@@ -35,6 +35,25 @@ export default function AttachmentOptionsFlow({
         currentOrder?.paymentStatus === 'paid' ||
         currentOrder?.status === 'active';
 
+    const messages = useOrderStore(s => s.getChat(chatId).messages ?? []);
+
+    const itemSubmissionApproved = messages.some(
+        m => (m.type === 'item_submission' || m.messageType === 'item_submission') &&
+            m.status === 'approved'
+    );
+
+    const pickupItemApproved = messages.some(
+        m => (m.type === 'pickup_item_submission' || m.messageType === 'pickup_item_submission') &&
+            m.status === 'approved'
+    );
+
+    const deliveryConfirmedMsg = messages.find(
+        m => m.type === 'system' && m.id?.startsWith('delivery-confirmed-runner-')
+    );
+    const approvedByName = deliveryConfirmedMsg?.text?.split(' confirmed')[0] || null;
+
+    const completedOrderStatuses = useOrderStore(s => s.getChat(chatId).completedStatuses ?? []);
+
     if (!isOpen) return null;
 
     return (
@@ -66,34 +85,42 @@ export default function AttachmentOptionsFlow({
                             <div className="flex flex-col gap-3">
                                 {showSubmitItems && (
                                     <button
-                                        onClick={() => { if (!isPaid) return; onSubmitItems(); }}
-                                        disabled={!isPaid}
+                                        onClick={() => { if (!isPaid || itemSubmissionApproved) return; onSubmitItems(); }}
+                                        disabled={!isPaid || itemSubmissionApproved}
                                         className={`w-full flex items-center justify-center gap-3 p-4 rounded-xl transition-colors
-                                            ${!isPaid
+                                            ${!isPaid || itemSubmissionApproved
                                                 ? 'opacity-40 cursor-not-allowed bg-gray-100 dark:bg-black-200'
                                                 : 'bg-gray-100 dark:bg-black-200 hover:opacity-80'
                                             }`}
                                     >
                                         <Package className="h-6 w-6 text-primary" />
                                         <p className={`text-lg font-medium ${darkMode ? 'text-white' : 'text-black-200'}`}>
-                                            {!isPaid ? 'Submit Items (awaiting payment)' : 'Submit Items'}
+                                            {itemSubmissionApproved
+                                                ? `Item(s) approved${approvedByName ? ` by ${approvedByName}` : ''}`
+                                                : !isPaid
+                                                    ? 'Submit Item(s) (awaiting payment)'
+                                                    : 'Submit Item(s'}
                                         </p>
                                     </button>
                                 )}
 
                                 {showSubmitPickupItem && (
                                     <button
-                                        onClick={() => { if (!isPaid) return; onSubmitPickupItem(); }}
-                                        disabled={!isPaid}
+                                        onClick={() => { if (!isPaid || pickupItemApproved) return; onSubmitPickupItem(); }}
+                                        disabled={!isPaid || pickupItemApproved}
                                         className={`w-full flex items-center justify-center gap-3 p-4 rounded-xl transition-colors
-                                            ${!isPaid
+                                            ${!isPaid || pickupItemApproved
                                                 ? 'opacity-40 cursor-not-allowed bg-gray-100 dark:bg-black-200'
                                                 : 'bg-gray-100 dark:bg-black-200 hover:opacity-80'
                                             }`}
                                     >
                                         <Package className="h-6 w-6 text-primary" />
                                         <p className={`text-lg font-medium ${darkMode ? 'text-white' : 'text-black-200'}`}>
-                                            {!isPaid ? 'Submit Item (awaiting payment)' : 'Submit Pickup Item'}
+                                            {pickupItemApproved
+                                                ? `Item(s) approved${approvedByName ? ` by ${approvedByName}` : ''}`
+                                                : !isPaid
+                                                    ? 'Submit Item(s) (awaiting payment)'
+                                                    : 'Submit Pickup(s) Item'}
                                         </p>
                                     </button>
                                 )}
@@ -111,15 +138,15 @@ export default function AttachmentOptionsFlow({
                                         }`}
                                 >
                                     <Truck className="h-6 w-6 text-green-500" />
-                                    <p className={`text-lg font-medium ${darkMode ? 'text-white' : 'text-black-200'}`}>
-                                        {deliveryMarked
-                                            ? 'Marked as Delivered'
-                                            : !isPaid
-                                                ? 'Mark as Delivered (awaiting payment)'
+                                    {deliveryMarked
+                                        ? 'Marked as Delivered'
+                                        : !isPaid
+                                            ? 'Mark as Delivered (awaiting payment)'
+                                            : !completedOrderStatuses?.includes('arrived_at_delivery_location')
+                                                ? 'Mark as Delivered (get to delivery location first)'
                                                 : !canMarkDelivery
-                                                    ? 'Mark as Delivered (waiting for item submission confirmation)'
+                                                    ? 'Mark as Delivered (waiting for item approval)'
                                                     : 'Mark as Delivered'}
-                                    </p>
                                 </button>
                             </div>
                         </div>

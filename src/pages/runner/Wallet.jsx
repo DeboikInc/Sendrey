@@ -44,7 +44,7 @@ export const Wallet = ({ darkMode, onBack, runnerId }) => {
 
   useEffect(() => {
     dispatch(getWalletBalance());
-    dispatch(getTransactionHistory({ page: 1, limit: 20 }));
+    dispatch(getTransactionHistory({ page: 1, limit: 20, replace: true }));
     dispatch(getBanks());
   }, [dispatch]);
 
@@ -202,7 +202,7 @@ export const Wallet = ({ darkMode, onBack, runnerId }) => {
             try {
               await Promise.all([
                 dispatch(getWalletBalance()).unwrap(),
-                dispatch(getTransactionHistory({ page: 1, limit: 20 })).unwrap(),
+                dispatch(getTransactionHistory({ page: 1, limit: 20, replace: true })).unwrap(),
               ]);
             } finally {
               setIsRefreshing(false);

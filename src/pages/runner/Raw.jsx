@@ -1056,7 +1056,7 @@ function WhatsAppLikeChat() {
       socket.off('sessionRefreshOk', handleSessionRefreshOk);
       socket.off('connect', handleReconnect);
     };
-  }, [selectedUser?._id, socket, isConnected, runnerId, dispatch]);
+  }, [selectedUser?._id, socket, isConnected, runnerId, dispatch, chatSessionKey]);
 
 
   // ── Runner room join ─────────────────────────────────────────────────────────
