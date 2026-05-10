@@ -468,6 +468,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
 
     socket.on('chatReset', () => {
       hasJoinedRef.current = null;
+      onReadyCalledRef.current = false;
       // Clear immediately — don't wait for server
       setCurrentOrder(null);
       currentOrderRef.current = null;
@@ -554,24 +555,21 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
     if (!socket || !chatId) return;
 
     const doJoin = () => {
-      const joinKey = currentOrderRef.current?.orderId || chatId;
-      if (hasJoinedRef.current === joinKey) {
-        console.warn("[doJoin] already joined this order id, skip");
+      // Only block re-joins for the same orderId, not for fresh mounts
+      const joinKey = currentOrderRef.current?.orderId;
+      if (joinKey && hasJoinedRef.current === joinKey) {
+        console.warn("[doJoin] already joined orderId:", joinKey, "— skipping");
         return;
       }
-      hasJoinedRef.current = currentOrderRef.current?.orderId || chatId
-      console.log("[doJoin] emitting userJoinChat for", currentOrderRef.current?.orderId);
 
-      const serviceType =
-        currentOrderRef.current?.serviceType ||
-        userData?.currentRequest?.serviceType ||
-        null;
+      hasJoinedRef.current = joinKey || chatId; // use chatId as fallback marker
+      console.log("[doJoin] emitting userJoinChat");
 
       socket.emit("userJoinChat", {
         chatId,
         userId: userData?._id,
         runnerId: runner?._id,
-        serviceType,
+        serviceType: currentOrderRef.current?.serviceType || userData?.currentRequest?.serviceType || null,
       });
     };
 
@@ -799,29 +797,6 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
       });
     };
 
-    // ── KEY FIX: if ChatScreen is already mounted when proceedToChat fires
-    const handleProceedToChat = (data) => {
-      if (data.chatId !== chatId || !data.chatReady) return;
-      console.log("[ChatScreen] proceedToChat received, isRefresh:", data.isRefresh);
-
-      if (data.isRefresh) {
-        // Stale order detected — wipe before rejoining
-        setCurrentOrder(null);
-        currentOrderRef.current = null;
-        setMessages([]);
-        seenMessageIdsRef.current = new Set();
-        lastProcessedSystemMsgRef.current = null;
-        setPaidChatIds(prev => { const n = new Set(prev); n.delete(chatId); return n; });
-        setOrderCancelled(false);
-        setTaskCompleted(false);
-        chatStorage.clearMessages(chatId);
-        chatStorage.clearChatStatus(chatId);
-      }
-
-      hasJoinedRef.current = null;
-      doJoin();
-    };
-
     // ── KEY FIX: on reconnect, reset join guard and rejoin ────────────────────
     const handleReconnect = () => {
       if (paymentInProgressRef.current) {
@@ -880,7 +855,6 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
     socket.on("chatHistory", handleChatHistory);
     socket.on("message", handleMessage);
     socket.on("missedMessages", handleMissedMessages);
-    socket.on("proceedToChat", handleProceedToChat);
     socket.on("connect", handleReconnect);
     socket.on("trackingStarted", handleTrackingStarted);
     socket.on('sessionRefreshOk', handleSessionRefreshOk);
@@ -892,7 +866,6 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
       socket.off("chatHistory", handleChatHistory);
       socket.off("message", handleMessage);
       socket.off("missedMessages", handleMissedMessages);
-      socket.off("proceedToChat", handleProceedToChat);
       socket.off("connect", handleReconnect);
       socket.off("trackingStarted", handleTrackingStarted);
       socket.off('sessionRefreshOk', handleSessionRefreshOk);

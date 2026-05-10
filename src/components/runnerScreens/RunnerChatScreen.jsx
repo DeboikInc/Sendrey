@@ -183,6 +183,8 @@ function RunnerChatScreen({
   const onMessagesChangeRef = useRef(onMessagesChange);
   const [attachFlowResetKey, setAttachFlowResetKey] = useState(0);
 
+  console.log('[RCS mount] currentOrder from store:', currentOrder?.orderId, 'chatId:', chatId);
+
   useEffect(() => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
@@ -331,6 +333,7 @@ function RunnerChatScreen({
     ?? selectedUser?.serviceType           // ← move user source up
     ?? currentOrder?.serviceType
     ?? currentOrder?.taskType
+    ?? useOrderStore.getState().getChat(chatId).currentOrder?.serviceType
   );
 
   console.log('[RunnerChat] resolvedServiceType:', resolvedServiceType, {
@@ -518,6 +521,17 @@ function RunnerChatScreen({
       if (mountedRef.current) setSpecialInstructions(data.specialInstructions);
     });
   }, [onSpecialInstructions]);
+
+  console.log('[RCS debug]', {
+    chatId,
+    currentOrder,
+    resolvedServiceType,
+    isPaid,
+    taskCompleted,
+    orderCancelled,
+    messagesCount: messages.length,
+    showOrderFlow,
+  });
 
   // Order created handler — merge new order data, preserving serviceType
   useEffect(() => {

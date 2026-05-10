@@ -61,6 +61,7 @@ export const Welcome = () => {
     const [selectCallback, setSelectCallback] = useState(null);
     const [dismissCallback, setDismissCallback] = useState(null);
 
+
     const [showMoreMenu, setShowMoreMenu] = useState(false);
     const [showWallet, setShowWallet] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
@@ -85,12 +86,18 @@ export const Welcome = () => {
     const [runnerResponseData, setRunnerResponseData] = useState(null);
     const [settingsInitialTab, setSettingsInitialTab] = useState(null);
     const [chatSessionCounter, setChatSessionCounter] = useState(0); // eslint-disable-line no-unused-vars
+    const chatSessionIdRef = useRef(0);
 
-    socket.onAny((event) => {
-        if (['proceedToChat', 'enterPreRoom', 'chatHistory', 'orderCreated'].includes(event)) {
-            console.log('[Welcome onAny]', event, 'socket:', socket?.id);
-        }
-    });
+    useEffect(() => {
+        if (!socket) return;
+        const handler = (event, ...args) => {
+            if (['proceedToChat', 'enterPreRoom', 'chatHistory', 'orderCreated'].includes(event)) {
+                console.log('[Welcome onAny]', event, 'socket:', socket?.id);
+            }
+        };
+        socket.onAny(handler);
+        return () => socket.offAny(handler);
+    }, [socket]);
 
     useEffect(() => {
         if (!socket || !currentUser?._id) return;
@@ -105,17 +112,26 @@ export const Welcome = () => {
         }
     }, [socket, currentUser?._id, joinUserRoom]);
 
+    // AFTER
     useEffect(() => {
         if (!activeChatId || !currentUser) return;
 
         const restore = async () => {
             const runner = await chatStorage.getRunnerData();
-            if (runner) {
-                setSelectedRunner(runner);
-                setChatMounted(true);
-                setChatReady(true);
-                setCurrentScreen('chat');
-            }
+            // Also verify there's actually an active (non-terminal) chat saved
+            const activeChatIdStored = await chatStorage.getActiveChat?.();
+            console.log('[Welcome] active chat',activeChatIdStored)
+            // If storage has runner but no active chat marker, don't restore — new session incoming
+            if (!runner) return;
+
+            const status = await chatStorage.getChatStatus(activeChatId);
+            // Don't restore into a completed/cancelled session
+            if (status?.taskCompleted || status?.orderCancelled) return;
+
+            setSelectedRunner(runner);
+            setChatMounted(true);
+            setChatReady(true);
+            setCurrentScreen('chat');
         };
 
         restore();
@@ -455,7 +471,7 @@ export const Welcome = () => {
                     style={{ visibility: chatReady ? 'visible' : 'hidden' }}
                 >
                     <ChatScreen
-                        key={`chat-${selectedRunner?._id}-${currentOrder?.orderId || chatSessionCounter}`}
+                        key={`chat-${selectedRunner?._id}-${chatSessionIdRef.current}`}
                         runner={selectedRunner}
                         userData={{
                             ...currentUser,
@@ -470,10 +486,12 @@ export const Welcome = () => {
                             setCurrentScreen('chat');
                         }}
                         onOrderComplete={() => {
-                            setChatReady(false);
-                            setChatMounted(false);
                             chatStorage.clearActiveChat();
                             chatStorage.clearRunnerData();
+                            chatStorage.clearChatStatus?.(activeChatId);
+
+                            setChatReady(false);
+                            setChatMounted(false);
                             setCurrentScreen("service_selection");
                             setSelectedMarket("");
                             setSelectedFleetType("");
@@ -557,14 +575,16 @@ export const Welcome = () => {
                 onSelectRunner={(runner, orderData) => {
                     setSelectedRunner(runner);
                     chatStorage.saveRunnerData(runner);
+                    chatSessionIdRef.current += 1;
 
                     if (orderData?.orderId) {
                         dispatch(updateOrder(orderData));
                     }
                     setShowRunnerSheet(false);
                     setChatReady(false);
-                    setChatMounted(true);
                     setShowConnecting(true);
+
+                    setChatMounted(true);
                 }}
                 darkMode={dark}
                 isOpen={showRunnerSheet}

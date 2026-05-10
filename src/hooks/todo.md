@@ -30,3 +30,5 @@ sendreyerrand@gmail.com
 
 ledger is not showing for completed run errand in runner wallet
 
+mark as delivered issue
+ledger is not showing for card payment still
