@@ -71,7 +71,7 @@ const snapshotCompletedTask = async (chat, runnerId) => {
 }
 
 
-const handleUpdateStatus = async (socket, io, data) => {
+const handleUpdateStatus = async (socket, io, data, callback) => {
   const startTime = Date.now();
   try {
     const { chatId, status, serviceType: clientServiceType, updatedBy, updatedByType } = data;

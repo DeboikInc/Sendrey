@@ -392,6 +392,10 @@ const createOrder = async (io, { chatId, userId, runnerId, serviceType }) => {
     dropoffPhone: orderDoc.dropoffPhone || null,
   };
 
+  console.log('[createOrder] orderPayload.serviceType:', orderPayload.serviceType);
+  console.log('[createOrder] resolvedServiceType:', resolvedServiceType);
+  console.log('[createOrder] userDoc.currentRequest:', JSON.stringify(userDoc?.currentRequest, null, 2));
+
   // Emit orderCreated first so clients can set up state before history arrives
   io.to(`user-${userId}`).emit('orderCreated', { order: orderPayload, isNewOrder: true });
   io.to(`runner-${runnerId}`).emit('orderCreated', { order: orderPayload, isNewOrder: true });
@@ -974,6 +978,8 @@ const handleUserJoinChat = async (socket, io, data) => {
     const userDoc = await User.findById(userId).lean();
     const resolvedServiceType = userDoc?.currentRequest?.serviceType || chat.serviceType;
 
+    console.log('[createOrder] resolvedServiceType:', resolvedServiceType, 'from userDoc:', userDoc?.currentRequest?.serviceType);
+
     // Ensure chat.serviceType is current
     if (resolvedServiceType && resolvedServiceType !== chat.serviceType) {
       await Chat.findOneAndUpdate({ chatId }, { $set: { serviceType: resolvedServiceType } });
@@ -1301,7 +1307,7 @@ const handleGetArchivedMessages = async (socket, { chatId, userId, runnerId, ord
 };
 
 const requestSessionRefresh = async (socket, io, data) => {
-  
+
   if (!data || !data.chatId) return;
   const { chatId, orderId, userId, userType, runnerId } = data;
 

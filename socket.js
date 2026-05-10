@@ -244,11 +244,11 @@ connectWithRetry().then(async () => {
     });
 
     // Status update event
-    socket.on("updateStatus", async (data) => {
+    socket.on("updateStatus", async (data, callback) => {
       try {
         const room = io.sockets.adapter.rooms.get(data.chatId);
         console.log(`Room ${data.chatId} has ${room?.size || 0} sockets:`, Array.from(room || []));
-        await chatStatusHandlers.handleUpdateStatus(socket, io, data);
+        await chatStatusHandlers.handleUpdateStatus(socket, io, data, callback);
         await notificationHandlers.sendStatusUpdateNotification(
           data.chatId,
           data.status,
