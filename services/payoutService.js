@@ -18,7 +18,7 @@ const uploadReceipt = (base64String) =>
 const transferToVendorBank = async ({ amount, bankName, accountNumber, accountName, vendorName, orderId }) => {
   try {
     const transfer = await paystackService.initiateTransfer({
-      amount: amount * 100, // kobo
+      amount,
       recipient: {
         type: 'nuban',
         name: accountName,
