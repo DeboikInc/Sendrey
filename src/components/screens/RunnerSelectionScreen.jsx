@@ -39,11 +39,13 @@ export default function RunnerSelectionScreen({
   const userIdRef = useRef(userData?._id);
   const lastAttemptedChatIdRef = useRef(null);
   const lastAttemptTokenRef = useRef(null)
+  const currentOrderRef = useRef(null);
 
   const runners = useMemo(() => runnerResponseData?.runners || [], [runnerResponseData]);
   const count = runnerResponseData?.count || runners.length;
   const error = runnerResponseData?.error;
 
+  useEffect(() => { currentOrderRef.current = currentOrder; }, [currentOrder]);
   useEffect(() => { userIdRef.current = userData?._id; }, [userData]);
   useEffect(() => { runnersRef.current = runners; }, [runners]);
 
@@ -106,11 +108,10 @@ export default function RunnerSelectionScreen({
       if (!data.chatReady) return;
 
       const isExpected =
-        // same runner, new attempt — token is the tiebreaker
-        (data.attemptToken && data.attemptToken === lastAttemptTokenRef.current) ||
-        // different runner — chatId is enough since it's unique per user-runner pair
+        data.chatId === lastAttemptedChatIdRef.current ||
         data.chatId === pendingRequestRef.current?.chatId ||
-        data.chatId === lastAttemptedChatIdRef.current;
+        (data.attemptToken && data.attemptToken === lastAttemptTokenRef.current)
+        
 
       if (!isExpected) {
         proceedBufferRef.current = data;
@@ -124,12 +125,13 @@ export default function RunnerSelectionScreen({
       lastAttemptTokenRef.current = null;
       setTimedOutRunnerId(null); // clear timeout UI if showing
 
-      advanceToChat(data.runnerId, currentOrder);
+      advanceToChat(data.runnerId, currentOrderRef.current);
     };
 
     const handleOrderCreated = (data) => {
       const order = data.order || data;
       setCurrentOrder(order);
+      currentOrderRef.current = order;
     };
 
     const handleChatReset = (data) => {
@@ -211,7 +213,7 @@ export default function RunnerSelectionScreen({
 
 
     };
-  }, [socket, isConnected, advanceToChat, currentOrder]);
+  }, [socket, isConnected, advanceToChat]);
 
   // ── On reconnect: re-emit pending request AND rejoin user room ────────────
   // This is the KEY fix — when socket reconnects with a new ID, the pre-room

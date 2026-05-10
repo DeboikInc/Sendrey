@@ -15,8 +15,7 @@ export default function AttachmentOptionsFlow({
     showSubmitPickupItem,
     onSubmitPickupItem,
     forceReset,
-    chatId,  // replaces isPaid + deliveryMarked + currentOrder props
-    canMarkDelivery = true,
+    chatId,
 }) {
     const mountedRef = useRef(true);
 
@@ -42,10 +41,22 @@ export default function AttachmentOptionsFlow({
             m.status === 'approved'
     );
 
+
     const pickupItemApproved = messages.some(
         m => (m.type === 'pickup_item_submission' || m.messageType === 'pickup_item_submission') &&
             m.status === 'approved'
     );
+
+    const itemApprovedLatch = useRef(false);
+    const pickupApprovedLatch = useRef(false);
+
+    useEffect(() => {
+        if (itemSubmissionApproved) itemApprovedLatch.current = true;
+    }, [itemSubmissionApproved]);
+
+    useEffect(() => {
+        if (pickupItemApproved) pickupApprovedLatch.current = true;
+    }, [pickupItemApproved]);
 
     const deliveryConfirmedMsg = messages.find(
         m => m.type === 'system' && m.id?.startsWith('delivery-confirmed-runner-')
@@ -53,6 +64,10 @@ export default function AttachmentOptionsFlow({
     const approvedByName = deliveryConfirmedMsg?.text?.split(' confirmed')[0] || null;
 
     const completedOrderStatuses = useOrderStore(s => s.getChat(chatId).completedStatuses ?? []);
+
+    const canMarkDelivery =
+        completedOrderStatuses.includes('arrived_at_delivery_location') &&
+        (showSubmitItems ? itemApprovedLatch.current : showSubmitPickupItem ? pickupApprovedLatch.current : true);
 
     if (!isOpen) return null;
 
@@ -83,6 +98,7 @@ export default function AttachmentOptionsFlow({
                             </div>
 
                             <div className="flex flex-col gap-3">
+                                {/* run errand */}
                                 {showSubmitItems && (
                                     <button
                                         onClick={() => { if (!isPaid || itemSubmissionApproved) return; onSubmitItems(); }}
@@ -99,7 +115,7 @@ export default function AttachmentOptionsFlow({
                                                 ? `Item(s) approved${approvedByName ? ` by ${approvedByName}` : ''}`
                                                 : !isPaid
                                                     ? 'Submit Item(s) (awaiting payment)'
-                                                    : 'Submit Item(s'}
+                                                    : 'Submit Item(s)'}
                                         </p>
                                     </button>
                                 )}

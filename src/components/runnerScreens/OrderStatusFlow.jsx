@@ -6,6 +6,7 @@ import { LiveTrackingMap } from '../tracking/LiveTrackingMap';
 import useOrderStore from '../../store/orderStore';
 
 import { enqueueSocketEvent } from '../../utils/socketQueue';
+import { emitStatusWithAck } from '../../utils/socketQueue';
 
 const RUN_ERRAND_STATUSES = [
   { id: 1, label: 'Arrived at market', key: 'arrived_at_market' },
@@ -241,17 +242,16 @@ const OrderStatusFlow = ({
       const statusPayload = { chatId, status: statusKey };
       const taskPayload = { chatId, orderId, runnerId, userId };
 
-      if (socket.connected) {
-        socket.emit('updateStatus', statusPayload);
-        if (statusKey === 'task_completed') {
+      // emitStatusWithAck: emits with ACK callback + re-queues on no-ACK
+      // Falls back to enqueueSocketEvent when offline (same queue, same flush path)
+      emitStatusWithAck(socket, statusPayload);
+
+      if (statusKey === 'task_completed') {
+        if (socket.connected) {
           socket.emit('taskCompleted', taskPayload);
-        }
-      } else {
-        enqueueSocketEvent('updateStatus', statusPayload);
-        if (statusKey === 'task_completed') {
+        } else {
           enqueueSocketEvent('taskCompleted', taskPayload);
         }
-        console.log('[socketQueue] status queued — socket offline:', statusKey);
       }
     }
 

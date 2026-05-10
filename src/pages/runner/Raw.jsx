@@ -5,6 +5,7 @@ import { Menu, MoreHorizontal, X, Sun, Moon } from "lucide-react";
 import useDarkMode from "../../hooks/useDarkMode";
 import { Modal } from "../../components/common/Modal";
 import { useDispatch, useSelector, shallowEqual } from "react-redux";
+import { shallow } from 'zustand/shallow';
 import { fetchNearbyUserRequests, clearNearbyUsers } from "../../Redux/userSlice";
 import { updateProfile } from "../../Redux/runnerSlice";
 import { useSocket } from "../../hooks/useSocket";
@@ -44,6 +45,8 @@ const INITIAL_BOT_MESSAGES = [
 ];
 
 const BOT_CHAT_ID = 'sendrey-bot';
+
+const EMPTY_STATUSES = [];
 
 // ─── HeaderIcon ──────────────────────────────────────────────────────────────
 const HeaderIcon = ({ children, onClick }) => (
@@ -131,7 +134,7 @@ function WhatsAppLikeChat() {
   // messages into the currently visible screen from socket handlers.
   const activeSetMessagesRef = useRef(null);
   const isFreshRegistrationRef = useRef(false);
-  const orderStoreRef = useRef(useOrderStore.getState());
+
 
   // ── Hooks ───────────────────────────────────────────────────────────────────
   const {
@@ -160,6 +163,22 @@ function WhatsAppLikeChat() {
     (runner?._id || registrationComplete)
       ? (saved.activeChatId || BOT_CHAT_ID)
       : BOT_CHAT_ID
+  );
+
+  const orderStoreRef = useRef(useOrderStore.getState());
+  const chatIdForStore = activeChatId !== BOT_CHAT_ID ? activeChatId : null;
+
+  const taskCompletedFromStore = useOrderStore(
+    useCallback(
+      s => chatIdForStore ? s.getChat(chatIdForStore).taskCompleted : false,
+      [chatIdForStore]
+    )
+  );
+
+
+  const completedStatusesFromStore = useOrderStore(
+    s => chatIdForStore ? (s.getChat(chatIdForStore).completedStatuses ?? EMPTY_STATUSES) : EMPTY_STATUSES,
+    shallow  // ← array comparison by contents, not reference
   );
 
   const {
@@ -681,6 +700,7 @@ function WhatsAppLikeChat() {
       console.log('[onOrderCreated] orderId:', order.orderId, 'serviceType:', order.serviceType, 'status:', order.status, 'caller:', new Error().stack.split('\n')[2]);
 
       const chatId = order.chatId ?? resolveChatId(data);
+      console.log('[raw onOrderCreated] chatId:', chatId, 'order.serviceType:', order.serviceType, 'activeChatId:', activeChatIdRef.current);
       if (!chatId) {
         console.warn('[orderCreated] could not resolve chatId, discarding:', order.orderId);
         return;
@@ -688,7 +708,17 @@ function WhatsAppLikeChat() {
 
       const prevOrder = getChat(chatId).currentOrder;
       const isNewOrder = !prevOrder || prevOrder.orderId !== order.orderId;
-      const merged = isNewOrder ? order : { ...prevOrder, ...order };
+
+      const resolvedServiceType =
+        order.serviceType ||
+        order.taskType ||
+        selectedUserRef.current?.currentRequest?.serviceType ||
+        selectedUserRef.current?.serviceType ||
+        null;
+
+      const merged = isNewOrder
+        ? { ...order, serviceType: resolvedServiceType }
+        : { ...prevOrder, ...order, serviceType: resolvedServiceType };
 
       setCurrentOrder(chatId, merged);
       currentOrderRef.current = merged;
@@ -922,6 +952,24 @@ function WhatsAppLikeChat() {
 
       chatManager.set(chatId, { messages: formatted });
 
+
+      if (activeChatIdRef.current === chatId) {
+        if (activeSetMessagesRef.current) {
+          activeSetMessagesRef.current(formatted);
+        } else {
+          let attempts = 0;
+          const tryPush = () => {
+            attempts++;
+            if (activeSetMessagesRef.current && activeChatIdRef.current === chatId) {
+              activeSetMessagesRef.current(formatted);
+            } else if (attempts < 10) {
+              setTimeout(tryPush, 100);
+            }
+          };
+          setTimeout(tryPush, 100);
+        }
+      }
+
       const lastRealMsg = [...formatted].reverse().find(
         m => m.from !== 'system' && m.type !== 'system' && m.messageType !== 'system'
       );
@@ -931,10 +979,6 @@ function WhatsAppLikeChat() {
             ? { ...c, lastMessage: lastRealMsg.text?.substring(0, 30) || '', time: lastRealMsg.time || '' }
             : c
         ));
-      }
-
-      if (activeChatIdRef.current === chatId && activeSetMessagesRef.current) {
-        activeSetMessagesRef.current(formatted);
       }
 
       const isCompleted = formatted.some(m =>
@@ -1042,7 +1086,7 @@ function WhatsAppLikeChat() {
       fallbackTimer = setTimeout(() => {
         console.warn('[raw.jsx] proceedToChat timeout — joining directly');
         doJoin();
-      }, 400);
+      }, 1500);
     }
 
     socket.on('chatHistory', handleChatHistory);
@@ -1498,7 +1542,7 @@ function WhatsAppLikeChat() {
       specialInstructions: specialInstructions ?? user.currentRequest?.specialInstructions ?? null,
     };
 
-    
+
     chatManager.set(chatId, {
       messages: [], // preserver any if existing 
       completedOrderStatuses: [],
@@ -1572,20 +1616,32 @@ function WhatsAppLikeChat() {
   const handleAttachClick = () => setIsAttachFlowOpen(true);
 
   // ── Derived ───────────────────────────────────────────────────────────────────
-  const isConnectLockedFromStore = useOrderStore(s => {
-    if (orderPending) return true;
-    const chats = s._chats;
-    for (const chatId in chats) {
-      const chat = chats[chatId];
-      if (!chat.currentOrder) continue;
-      if (chat.taskCompleted || chat.orderCancelled) continue;
-      const status = chat.currentOrder.status;
-      if (!['completed', 'cancelled', 'task_completed'].includes(status)) return true;
-    }
-    return false;
-  });
+  const isConnectLockedFromStore = useOrderStore(
+    useCallback(s => {
+      const chats = s._chats;
+      for (const chatId in chats) {
+        const chat = chats[chatId];
+        if (!chat.currentOrder) continue;
+        if (chat.taskCompleted || chat.orderCancelled) continue;
+        const status = chat.currentOrder.status;
+        if (!['completed', 'cancelled', 'task_completed'].includes(status)) return true;
+      }
+      return false;
+    }, [])
+  );
 
-  const isConnectLocked = isConnectLockedFromStore;
+  const handleSetCompletedStatuses = useCallback((s) => {
+    const chatId = activeChatIdRef.current;
+    const current = useOrderStore.getState().getChat(chatId).completedStatuses;
+    const next = Array.isArray(s) ? s
+      : typeof s === 'function' ? s(current)
+        : [];
+    chatManager.set(chatId, { completedOrderStatuses: next });
+    useOrderStore.getState().setCompletedStatuses(chatId, next);
+    setCompletedStatusesVersion(v => v + 1);
+  }, []);
+
+  const isConnectLocked = orderPending || isConnectLockedFromStore;
 
   // ── Render ────────────────────────────────────────────────────────────────────
   const renderMainScreen = () => {
@@ -1767,15 +1823,7 @@ function WhatsAppLikeChat() {
         setIsAttachFlowOpen={setIsAttachFlowOpen}
         handleLocationClick={handleLocationClick}
         handleAttachClick={handleAttachClick}
-        completedOrderStatuses={useOrderStore.getState().getChat(chatId).completedStatuses}
-        setCompletedOrderStatuses={(s) => {
-          const next = Array.isArray(s) ? s
-            : typeof s === 'function' ? s(useOrderStore.getState().getChat(chatId).completedStatuses)
-              : [];
-          chatManager.set(chatId, { completedOrderStatuses: next });
-          useOrderStore.getState().setCompletedStatuses(chatId, next);
-          setCompletedStatusesVersion(v => v + 1);
-        }}
+        setCompletedOrderStatuses={handleSetCompletedStatuses}
         uploadFileWithProgress={uploadFileWithProgress}
         replyingTo={chatState.replyingTo}
         setReplyingTo={(r) => chatManager.set(chatId, { replyingTo: r })}
@@ -1816,7 +1864,8 @@ function WhatsAppLikeChat() {
         toggleSpeaker={toggleSpeaker}
         runnerFleetType={runnerData?.fleetType}
 
-        taskCompleted={useOrderStore.getState().getChat(chatId).taskCompleted}
+        completedOrderStatuses={completedStatusesFromStore}
+        taskCompleted={taskCompletedFromStore}
 
         setTaskCompleted={(val) => {
           chatManager.set(chatId, { taskCompleted: val });
