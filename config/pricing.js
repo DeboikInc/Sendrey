@@ -4,6 +4,9 @@ const RUNNER_DEFAULT_METERS = 1000;
 
 const BASE_FEE = 1000;
 
+export const PLATFORM_FEE_PERCENTAGE_FOR_PEDESTRIAN = 0.30
+export const RUNNER_SHARE_PEDESTRIAN = 1 - PLATFORM_FEE_PERCENTAGE_FOR_PEDESTRIAN;
+
 const PAYSTACK_FEE_PERCENT = 0.01;
 const PAYSTACK_FEE_CAP = 300;
 
@@ -37,9 +40,19 @@ const calculateDeliveryFee = (distanceInMeters, fleetType) => {
   return Math.round(BASE_FEE + 400 * (distanceInMeters / 1000));
 };
 
-const calculateFeeSplit = (deliveryFee) => {
-  const platformFee = Math.round(deliveryFee * PLATFORM_FEE_PERCENTAGE);
-  const runnerPayout = Math.round(deliveryFee * RUNNER_SHARE);
+const calculateFeeSplit = (deliveryFee, fleetType) => {
+  const fleet = fleetType?.toLowerCase();
+
+  const platformFeePercentage = fleet === 'pedestrian'
+    ? PLATFORM_FEE_PERCENTAGE_FOR_PEDESTRIAN
+    : PLATFORM_FEE_PERCENTAGE;
+
+  const runnerSharePercentage = fleet === 'pedestrian'
+    ? RUNNER_SHARE_PEDESTRIAN
+    : RUNNER_SHARE;
+
+  const platformFee = Math.round(deliveryFee * platformFeePercentage);
+  const runnerPayout = Math.round(deliveryFee * runnerSharePercentage);
   const providerFee = Math.min(Math.round(deliveryFee * PAYSTACK_FEE_PERCENT), PAYSTACK_FEE_CAP);
   const netPlatformFee = platformFee - providerFee;
 
@@ -110,14 +123,15 @@ const computeDeliveryFeeFromDocs = (serviceType, user, fleetType) => {
 
   if (error) {
     console.warn(`[pricing] computeDeliveryFeeFromDocs — ${error}. Delivery fee defaulting to 0.`);
-    return { distanceInMeters: 0, deliveryFee: 0, legs: legs || {}, error };
+    return { distanceInMeters: 0, deliveryFee: 0, platformFee: 0, runnerPayout: 0, legs: legs || {}, error };
   }
 
   const deliveryFee = calculateDeliveryFee(distanceInMeters, fleetType);
+  const split = calculateFeeSplit(deliveryFee, fleetType);
 
   return {
     distanceInMeters: Math.round(distanceInMeters),
-    deliveryFee,
+    ...split,
     legs,
     error: null,
   };
