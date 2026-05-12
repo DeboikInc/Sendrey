@@ -1,4 +1,4 @@
-const PLATFORM_FEE_PERCENTAGE = parseFloat(process.env.PLATFORM_FEE_PERCENTAGE) || 0.57;
+const PLATFORM_FEE_PERCENTAGE = 0.40 || parseFloat(process.env.PLATFORM_FEE_PERCENTAGE);
 const RUNNER_SHARE = 1 - PLATFORM_FEE_PERCENTAGE;
 const RUNNER_DEFAULT_METERS = 1000;
 
@@ -26,15 +26,15 @@ const calculateDeliveryFee = (distanceInMeters, fleetType) => {
   }
 
   if (fleet === 'bike' || fleet === 'cycling') {
-    return Math.round(BASE_FEE + 300 * (distanceInMeters / 1000));
+    return Math.round(BASE_FEE + 200 * (distanceInMeters / 1000));
   }
 
   if (fleet === 'car' || fleet === 'van') {
-    return Math.round(BASE_FEE + 500 * (distanceInMeters / 1000));
+    return Math.round(BASE_FEE + 400 * (distanceInMeters / 1000));
   }
 
   // fallback
-  return Math.round(BASE_FEE + 500 * (distanceInMeters / 1000));
+  return Math.round(BASE_FEE + 400 * (distanceInMeters / 1000));
 };
 
 const calculateFeeSplit = (deliveryFee) => {
