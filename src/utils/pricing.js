@@ -1,6 +1,6 @@
 export const BASE_FEE = 1000;
 
-export const PLATFORM_FEE_PERCENTAGE = 0.57;
+export const PLATFORM_FEE_PERCENTAGE = 0.40; // 45 
 export const RUNNER_SHARE = 1 - PLATFORM_FEE_PERCENTAGE;
 
 export const haversineDistance = (a, b) => {
