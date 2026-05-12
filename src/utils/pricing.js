@@ -3,6 +3,9 @@ export const BASE_FEE = 1000;
 export const PLATFORM_FEE_PERCENTAGE = 0.40; // 45 
 export const RUNNER_SHARE = 1 - PLATFORM_FEE_PERCENTAGE;
 
+export const PLATFORM_FEE_PERCENTAGE_FOR_PEDESTRIAN = 0.30
+export const RUNNER_SHARE_PEDESTRIAN = 1 - PLATFORM_FEE_PERCENTAGE_FOR_PEDESTRIAN;
+
 export const haversineDistance = (a, b) => {
   const toRad = (deg) => (deg * Math.PI) / 180;
   const R = 6_371_000;
@@ -17,26 +20,26 @@ export const haversineDistance = (a, b) => {
 /**
  * car, van  — ₦1,000 base + ₦500/km
  * bike/cycling — ₦1,000 base + ₦300/km
- * pedestrian  — ₦1,500 flat for ≤1 km
- *               ₦750 for ≤500 m
+ * pedestrian  — ₦2000 flat for ≤1 km
+ *               ₦1000 for ≤500 m
  */
 const calculateDeliveryFee = (distanceInMeters, fleetType) => {
   const fleet = fleetType?.toLowerCase();
 
   if (fleet === 'pedestrian') {
-    return distanceInMeters <= 500 ? 750 : 1500;
+    return distanceInMeters <= 500 ? 1000 : 2000;
   }
 
   if (fleet === 'bike' || fleet === 'cycling') {
-    return Math.round(BASE_FEE + 300 * (distanceInMeters / 1000));
+    return Math.round(BASE_FEE + 200 * (distanceInMeters / 1000));
   }
 
   if (fleet === 'car' || fleet === 'van') {
-    return Math.round(BASE_FEE + 500 * (distanceInMeters / 1000));
+    return Math.round(BASE_FEE + 400 * (distanceInMeters / 1000));
   }
 
   // fallback — unknown fleet type defaults to car rate
-  return Math.round(BASE_FEE + 500 * (distanceInMeters / 1000));
+  return Math.round(BASE_FEE + 400 * (distanceInMeters / 1000));
 };
 
 export const calculateRouteDistance = (serviceType, midCoords, deliveryCoords, fleetType) => {
@@ -76,9 +79,25 @@ export const computeDeliveryFee = (serviceType, midCoords, deliveryCoords, fleet
 
   if (error) return { distanceInMeters: 0, deliveryFee: 0, legs, error };
 
+  const fleet = fleetType?.toLowerCase();
+  const fee = calculateDeliveryFee(distanceInMeters, fleet);
+
+  const platformFeePercentage = fleet === 'pedestrian'
+    ? PLATFORM_FEE_PERCENTAGE_FOR_PEDESTRIAN
+    : PLATFORM_FEE_PERCENTAGE;
+
+  const runnerShare = fleet === 'pedestrian'
+    ? RUNNER_SHARE_PEDESTRIAN
+    : RUNNER_SHARE;
+
+  const platformCut = Math.round(fee * platformFeePercentage);
+  const runnerCut = Math.round(fee * runnerShare);
+
   return {
     distanceInMeters: Math.round(distanceInMeters),
-    deliveryFee: calculateDeliveryFee(distanceInMeters, fleetType),
+    deliveryFee: fee,
+    platformFee: platformCut,
+    runnerEarnings: runnerCut,
     legs,
     error: null,
   };
