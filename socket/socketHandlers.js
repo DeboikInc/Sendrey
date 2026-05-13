@@ -1,6 +1,6 @@
 // socketHandlers.js
 const { Chat } = require("../models/Chat");
-const ServiceRequest = require("./ServiceRequest");
+const ServiceRequest = require("../models/ServiceRequest");
 const User = require("../models/User");
 const Runner = require("../models/Runner");
 const Order = require("../models/Order");
@@ -240,9 +240,33 @@ const createOrder = async (io, { chatId, userId, runnerId, serviceType }) => {
     Chat.findOne({ chatId }).lean(),
   ]);
 
+  if (!userDoc?.currentRequest || !userDoc.currentRequest.serviceType) {
+    console.warn('[createOrder] No active currentRequest for user:', userId);
+    io.to(`user-${userId}`).emit('chatError', {
+      code: 'NO_ACTIVE_REQUEST',
+      message: 'Your request has expired or was not found. Please start a new request.',
+      chatId,
+    });
+    io.to(`runner-${runnerId}`).emit('chatError', {
+      code: 'NO_ACTIVE_REQUEST',
+      message: 'User has no active request. The session cannot continue.',
+      chatId,
+    });
+    throw Object.assign(new Error('No active currentRequest'), { statusCode: 400 });
+  }
+
   const fleetType = chatDoc?.fleetType || userDoc?.currentRequest?.fleetType;
   const resolvedServiceType = serviceType || userDoc?.currentRequest?.serviceType || chatDoc?.serviceType;
 
+  if (resolvedServiceType !== userDoc.currentRequest.serviceType) {
+    console.warn('[createOrder] serviceType mismatch — chat:', resolvedServiceType, 'request:', userDoc.currentRequest.serviceType);
+    io.to(`user-${userId}`).emit('chatError', {
+      code: 'REQUEST_MISMATCH',
+      message: 'Your active request does not match this chat session.',
+      chatId,
+    });
+    throw Object.assign(new Error('serviceType mismatch'), { statusCode: 400 });
+  }
 
 
   const { deliveryFee, distanceInMeters, legs } = computeDeliveryFeeFromDocs(resolvedServiceType, userDoc, fleetType);
@@ -998,6 +1022,13 @@ const handleUserJoinChat = async (socket, io, data) => {
 
     logSocketAudit('USER_JOINED_CHAT', { userId, runnerId, chatId, case: 'C' });
   } catch (orderErr) {
+    if (orderErr.statusCode === 400) {
+      // chatError already emitted inside createOrder — just log and bail
+      console.warn('[userJoinChat] createOrder 400:', orderErr.message);
+      return;
+    }
+    throw orderErr;
+
     console.error('[userJoinChat] error:', orderErr);
 
     console.error('[userJoinChat] createOrder failed:', orderErr.message);

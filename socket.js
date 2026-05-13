@@ -34,8 +34,7 @@ const { registerPresenceHandlers, handleUserDisconnect } = require('./socket/pre
 
 // Import models
 const { Chat } = require("./models/Chat");
-const ServiceRequest = require("./socket/ServiceRequest");
-const Invoice = require("./models/Invoice");
+const ServiceRequest = require("./models/ServiceRequest");
 const User = require('./models/User');
 
 const { startScheduler } = require('./services/scheduleService');
