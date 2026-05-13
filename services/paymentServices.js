@@ -105,8 +105,14 @@ class PaymentService {
           throw new Error('Insufficient wallet balance');
         }
 
-        wallet.balance -= order.totalAmount;
-        wallet.lockedBalance = (wallet.lockedBalance || 0) + order.totalAmount;
+        const [, [escrow]] = await Promise.all([
+          Wallet.findOneAndUpdate(
+            { userId },
+            { $inc: { _balance: -order.totalAmount, lockedBalance: order.totalAmount } },
+            { session }
+          ),
+          Escrow.create([escrowDoc], { session }),
+        ]);
 
         const escrowDoc = {
           taskId: orderId,
@@ -123,12 +129,6 @@ class PaymentService {
           status: 'funded',
           paymentStatus: 'paid',
         };
-
-        // Fire wallet save + escrow create in parallel
-        const [, [escrow]] = await Promise.all([
-          wallet.save({ session }),
-          Escrow.create([escrowDoc], { session }),
-        ]);
 
         // Order update + ledger in parallel
         await Promise.all([
@@ -334,8 +334,11 @@ class PaymentService {
       const wallet = await Wallet.findOne({ userId }).session(session);
       if (!wallet) throw new Error('Wallet not found');
 
-      wallet.balance += grossAmount;
-      await wallet.save({ session });
+      await wallet.credit(
+        grossAmount,
+        reference,
+        { type: 'wallet_funding', userId }
+      );
 
       await LedgerEntry.create([{
         userId,
@@ -344,10 +347,16 @@ class PaymentService {
         grossAmount,
         netAmount: grossAmount,
         providerFee: 0,
+        platformFee: 0,
+        netPlatformFee: 0,
+        runnerFee: 0,
+        balanceBefore: wallet._balance - grossAmount,
+        balanceAfter: wallet._balance,
         provider: 'paystack',
         providerReference: reference,
         description: `Wallet funded via Paystack`,
         status: 'completed',
+
       }], { session });
 
       console.log(`✅ Wallet funded: NGN ${grossAmount} for user ${userId}`);
@@ -362,9 +371,11 @@ class PaymentService {
         throw new Error('Insufficient balance for escrow');
       }
 
-      wallet.balance -= amount;
-      wallet.lockedBalance = (wallet.lockedBalance || 0) + amount;
-      await wallet.save({ session });
+      await Wallet.findOneAndUpdate(
+        { userId },
+        { $inc: { _balance: -amount, lockedBalance: amount } },
+        { session }
+      );
 
       console.log(`🔒 Locked NGN ${amount} for escrow ${escrowId}`);
     });
@@ -375,9 +386,13 @@ class PaymentService {
       const wallet = await Wallet.findOne({ userId }).session(session);
       if (!wallet) throw new Error('Wallet not found');
 
-      wallet.lockedBalance = Math.max(0, (wallet.lockedBalance || 0) - amount);
-      wallet.balance += amount;
-      await wallet.save({ session });
+      const safeUnlock = Math.min(amount, wallet.lockedBalance ?? 0);
+      await Wallet.findOneAndUpdate(
+        { userId },
+        { $inc: { lockedBalance: -safeUnlock } },
+        { session }
+      );
+      await wallet.credit(amount, `unlock-${userId}-${Date.now()}`, { reason: 'escrow_unlock' });
 
       console.log(`Unlocked NGN ${amount} for user ${userId}`);
     });
@@ -448,8 +463,11 @@ class PaymentService {
       const netPlatformFee = escrow.netPlatformFee ?? (escrow.platformFee - providerFee);
 
       if (usedPayoutSystem) {
-        runnerWallet.balance += escrow.runnerPayout;
-        await runnerWallet.save({ session });
+        await runnerWallet.credit(
+          escrow.runnerPayout,
+          `payout-${escrowId}-${Date.now()}`,
+          { orderId: resolvedOrderId, escrowId }
+        );
 
         console.log('[payoutToRunner] writing ledger entries for orderId:', resolvedOrderId);
         await LedgerEntry.create([{
@@ -474,18 +492,16 @@ class PaymentService {
         console.warn(`⚠️ Runner ${escrow.runnerId} forfeiting delivery fee NGN ${escrow.runnerPayout}`);
       }
 
-      await PlatformEarnings.create([{
+      await PlatformEarnings.createIdempotent({
         orderId: resolvedOrderId,
         escrowId: escrow._id,
-        amount: usedPayoutSystem
-          ? netPlatformFee
-          : netPlatformFee + escrow.runnerPayout,
+        amount: usedPayoutSystem ? netPlatformFee : netPlatformFee + escrow.runnerPayout,
+        netAmount: usedPayoutSystem ? netPlatformFee : netPlatformFee + escrow.runnerPayout,
         providerFee,
-        type: usedPayoutSystem
-          ? 'platform_fee'
-          : 'platform_fee_plus_forfeited_runner_fee',
+        type: usedPayoutSystem ? 'platform_fee' : 'platform_fee_plus_forfeited_runner_fee',
+        idempotencyKey: `payout-${resolvedOrderId}-${escrowId}`,
         status: 'pending',
-      }], { session });
+      });
 
       await LedgerEntry.create([
         {
@@ -541,16 +557,13 @@ class PaymentService {
 
       await Runner.findByIdAndUpdate(
         escrow.runnerId,
-        {
-          $inc: {
-            totalEarnings: usedPayoutSystem ? escrow.runnerPayout : 0,
-            completedOrders: 1,
-          },
-          activeOrderId: null,
-          currentUserId: null,
-        },
+        { $inc: { completedOrders: 1 }, $set: { activeOrderId: null, currentUserId: null } },
         { session }
       );
+      if (usedPayoutSystem) {
+        const runner = await Runner.findById(escrow.runnerId).session(session);
+        await runner.recordEarning(escrow.runnerPayout);
+      }
 
       console.log(`payoutToRunner | runner: NGN ${usedPayoutSystem ? escrow.runnerPayout : 0} | platform net: NGN ${netPlatformFee} | paystack fee: NGN ${providerFee}`);
 
@@ -606,9 +619,11 @@ class PaymentService {
         console.log(`RunnerPayout created: NGN ${escrow.itemBudget} for order ${order.orderId}`);
       }
 
-      escrow.itemBudgetReleased = true;
-      escrow.status = 'item_approved';
-      await escrow.save({ session });
+      await Escrow.findByIdAndUpdate(
+        escrowId,
+        { $set: { itemBudgetReleased: true, status: 'item_approved' } },
+        { session }
+      );
 
       return {
         payoutCreated: !existingPayout,
@@ -867,8 +882,10 @@ class PaymentService {
 
       const chat = await Chat.findOne({ chatId });
       if (chat) {
-        chat.messages.push(message);
-        await chat.save();
+        await Chat.findOneAndUpdate(
+          { chatId },
+          { $push: { messages: message } }
+        );
       }
 
       const io = getSocketIO();
@@ -915,9 +932,11 @@ class PaymentService {
         throw err;
       }
 
-      // Deduct from wallet
-      wallet.balance -= amount;
-      await wallet.save({ session });
+      await wallet.debit(
+        amount,
+        `withdrawal-${runnerId}-${Date.now()}`,
+        { bankDetails, type: 'withdrawal' }
+      );
 
       // Create transfer recipient
       const recipient = await paystack.createTransferRecipient({
@@ -943,6 +962,11 @@ class PaymentService {
         grossAmount: amount,
         netAmount: amount,
         providerFee: 0,
+        netPlatformFee: 0,
+        platformFee: 0,
+        runnerFee: 0,
+        balanceBefore: wallet._balance + amount,
+        balanceAfter: wallet._balance,
         provider: 'paystack',
         providerReference: transfer.data.reference,
         description: `Withdrawal to ${bankDetails.accountName || verification.data.account_name} - NGN ${amount.toString()}`,

@@ -123,7 +123,7 @@ class PaymentController extends BaseController {
 
             let wallet = await Wallet.findOne({ userId });
             if (!wallet) {
-                wallet = await Wallet.create({ userId, userType: 'user', balance: 0 });
+                wallet = await Wallet.create({ userId, userType: 'user', });
             }
 
             this.success(res, { balance: wallet.balance, status: wallet.status });
@@ -228,10 +228,12 @@ class PaymentController extends BaseController {
 
             await paymentService.lockWalletFunds(userId, escrow.totalAmount, escrow._id);
 
-            order.escrowId = escrow._id;
-            order.paymentStatus = 'paid';
-            order.status = 'paid';
-            await order.save();
+            // no direct mutation
+            await order.updateStatus('paid', 'system', { note: 'Escrow created via createTaskEscrow' });
+            await Order.findOneAndUpdate(
+                { orderId: order.orderId },
+                { $set: { escrowId: escrow._id, paymentStatus: 'paid' } }
+            );
 
             sendPaymentEvent('escrow.created', {
                 orderId: order.orderId,

@@ -57,7 +57,6 @@ async function connectWithRetry(maxAttempts = 5) {
   }
 }
 
-
 // MongoDB connection
 connectWithRetry().then(async () => {
 

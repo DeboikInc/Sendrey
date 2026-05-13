@@ -207,8 +207,11 @@ class PayoutController extends BaseController {
           if (!userWallet) throw new Error('User wallet not found');
           if (userWallet.lockedBalance < spent) throw new Error('Insufficient locked balance');
 
-          userWallet.lockedBalance -= spent;
-          await userWallet.save({ session });
+          await Wallet.findOneAndUpdate(
+            { userId: order.userId },
+            { $inc: { lockedBalance: -spent } },
+            { session }
+          );
 
           await LedgerEntry.create([{
             userId: order.userId,
@@ -222,6 +225,11 @@ class PayoutController extends BaseController {
             orderId,
             description: `Item budget spent at ${vendorName} for order ${orderId}`,
             status: 'completed',
+            balanceBefore: userWallet.lockedBalance,
+            balanceAfter: userWallet.lockedBalance - spent,
+            platformFee: 0,
+            netPlatformFee: 0,
+            runnerFee: 0,
           }], { session });
         });
       } catch (walletErr) {
@@ -247,12 +255,18 @@ class PayoutController extends BaseController {
         await withTransaction(async (session) => {
           const userWallet = await Wallet.findOne({ userId: order.userId }).session(session);
           if (userWallet) {
-            userWallet.lockedBalance += spent;
-            await userWallet.save({ session });
+            await Wallet.findOneAndUpdate(
+              { userId: order.userId },
+              { $inc: { lockedBalance: spent } },
+              { session }
+            );
           }
-          await LedgerEntry.deleteOne({
+
+          const entryToReverse = await LedgerEntry.findOne({
             orderId, type: 'item_budget_spent', userId: order.userId,
           }).session(session);
+          if (entryToReverse) await LedgerEntry.reverse(entryToReverse._id, 'Transfer failed — wallet rollback');
+
         });
         await RunnerPayout.findOneAndUpdate({ orderId }, { $set: { status: 'pending' } });
         logger.error('transferToVendor threw:', transferErr.message);
@@ -264,12 +278,16 @@ class PayoutController extends BaseController {
         await withTransaction(async (session) => {
           const userWallet = await Wallet.findOne({ userId: order.userId }).session(session);
           if (userWallet) {
-            userWallet.lockedBalance += spent;
-            await userWallet.save({ session });
+            await Wallet.findOneAndUpdate(
+              { userId: order.userId },
+              { $inc: { lockedBalance: spent } },
+              { session }
+            );
           }
-          await LedgerEntry.deleteOne({
+          const entryToReverse = await LedgerEntry.findOne({
             orderId, type: 'item_budget_spent', userId: order.userId,
           }).session(session);
+          if (entryToReverse) await LedgerEntry.reverse(entryToReverse._id, 'Transfer failed — wallet rollback');
         });
 
         await RunnerPayout.findOneAndUpdate({ orderId }, { $set: { status: 'pending' } });
@@ -297,9 +315,21 @@ class PayoutController extends BaseController {
         await withTransaction(async (session) => {
           const userWallet = await Wallet.findOne({ userId: order.userId }).session(session);
           if (userWallet) {
-            userWallet.lockedBalance = Math.max(0, userWallet.lockedBalance - unspentAmount);
-            userWallet.balance += unspentAmount;
-            await userWallet.save({ session });
+            const walletDoc = await Wallet.findOne({ userId: order.userId }).session(session);
+            const safeDeduct = Math.min(unspentAmount, walletDoc?.lockedBalance ?? 0);
+
+            await Wallet.findOneAndUpdate(
+              { userId: order.userId },
+              { $inc: { lockedBalance: -safeDeduct } },
+              { session }
+            );
+
+            // credit() handles the _balance atomic increment
+            await walletDoc.credit(
+              unspentAmount,
+              `unspent-refund-${orderId}-${Date.now()}`,
+              { reason: 'unspent_item_budget', orderId }
+            );
 
             await LedgerEntry.create([{
               userId: order.userId,
@@ -309,6 +339,11 @@ class PayoutController extends BaseController {
               grossAmount: unspentAmount,
               netAmount: unspentAmount,
               providerFee: 0,
+              balanceBefore: walletDoc?.lockedBalance ?? 0,
+              balanceAfter: (walletDoc?.lockedBalance ?? 0) - spent,
+              platformFee: 0,
+              netPlatformFee: 0,
+              runnerFee: 0,
               provider: 'system',
               orderId,
               description: `Unspent item budget refunded for order ${orderId} (budget: NGN ${claimed.itemBudget.toString()}, spent: NGN ${spent.toString()})`,
