@@ -271,6 +271,8 @@ const userSchema = new mongoose.Schema({
     savedAt: { type: Date, default: Date.now }
   }],
 
+  activeOrderId: { type: String, default: null, index: true },
+  
   currentRequest: {
     serviceType: { type: String, enum: SERVICE_TYPE },
     fleetType: { type: String, enum: FLEET_TYPE },
@@ -290,13 +292,13 @@ const userSchema = new mongoose.Schema({
     status: {
       type: String,
       enum: ['idle', 'searching', 'active', 'awaiting_runner_connection', 'completed', 'cancelled'],
-      default: 'awaiting_runner_connection'
+      default: 'idle'
     },
 
     // ERAND-SPECIFIC FIELDS
     marketLocation: { type: String },
     marketItems: { type: String },
-    budget: { type: String },
+    budget: { type: Number, min: 0 },
     budgetFlexibility: { type: String, enum: ['stay within budget', 'can adjust slightly'] },
     marketCoordinates: {
       lat: { type: Number },
@@ -388,6 +390,8 @@ userSchema.index({ isVerified: 1 });
 userSchema.index({ createdAt: -1 });
 userSchema.index({ lastLogin: -1 });
 userSchema.index({ location: '2dsphere' });
+userSchema.index({ 'currentRequest.status': 1, 'currentRequest.fleetType': 1 });
+userSchema.index({ 'currentRequest.timestamp': 1 });
 
 // Pre-save middlewares
 userSchema.pre('save', async function (next) {
@@ -464,6 +468,19 @@ userSchema.methods.getPublicProfile = function () {
   }
 
   return publicProfile;
+};
+
+userSchema.methods.clearStaleRequest = async function (maxAgeMs = 30 * 60 * 1000) {
+  if (!this.currentRequest?.timestamp) return this;
+  const age = Date.now() - new Date(this.currentRequest.timestamp).getTime();
+  if (age > maxAgeMs) {
+    await this.constructor.findByIdAndUpdate(this._id, {
+      $unset: { currentRequest: '' },
+      $set: { isAvailable: true },
+    });
+    this.currentRequest = undefined;
+  }
+  return this;
 };
 
 // Static methods

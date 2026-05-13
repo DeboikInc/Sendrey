@@ -86,7 +86,10 @@ const handleUpdateStatus = async (socket, io, data, callback) => {
     // ── 1. Fetch chat + order in parallel ──────────────────────────────────
     const [chat, order] = await Promise.all([
       Chat.findOne({ chatId }),
-      Order.findOne({ chatId, status: { $nin: ['completed', 'cancelled'] } })
+      Order.findOne({
+        chatId,
+        status: { $nin: ['completed', 'cancelled', 'task_completed', 'disputed', 'dispute_resolved', 'archived'] }
+      })
         .sort({ createdAt: -1 }).select('orderId serviceType').lean(),
     ]);
 
@@ -216,7 +219,7 @@ const handleUpdateStatus = async (socket, io, data, callback) => {
   } catch (error) {
     console.error('Error updating status:', error);
     if (typeof callback === 'function') {
-      callback({ received: false, error: err.message });
+      callback({ received: false, error: error.message });
     }
     logMetric({ type: 'status_update', status: 'failed', chatId: data.chatId, userId: data.updatedBy, userType: data.updatedByType || 'runner', error: error.message });
     socket.emit('error', { message: error.message });
@@ -265,9 +268,13 @@ const handleSendMedia = async (socket, io, data) => {
     };
 
     // Save to chat
-    chat.messages.push(message);
-    chat.lastActivity = new Date();
-    await chat.save();
+    await Chat.findOneAndUpdate(
+      { chatId },
+      {
+        $push: { messages: message },
+        $set: { lastActivity: new Date() },
+      }
+    );
 
     // Broadcast to chat room
     socket.to(chatId).emit('message', message);

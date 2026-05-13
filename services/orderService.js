@@ -25,21 +25,30 @@ const cancelOrder = async ({ orderId, chatId, runnerId, userId, reason, cancelle
       // If wallet payment, unlock the locked balance back to available
       const userWallet = await Wallet.findOne({ userId: order.userId, userType: 'user' });
       if (userWallet && userWallet.lockedBalance >= escrow.totalAmount) {
-        userWallet.lockedBalance -= escrow.totalAmount;
-        userWallet.balance += escrow.totalAmount;
-        await userWallet.save();
+        // Deduct from lockedBalance directly (it's not a balance field, it's a lock tracker)
+        await Wallet.findByIdAndUpdate(userWallet._id, {
+          $inc: { lockedBalance: -escrow.totalAmount },
+        });
+
+        // Credit the unlocked amount back to available balance
+        await userWallet.credit(
+          escrow.totalAmount,
+          `unlock-cancel-${order.orderId}-${Date.now()}`,
+          { reason: 'order_cancelled', orderId: order.orderId, cancelledBy }
+        );
       }
 
-      escrow.status = 'disputed';
-      escrow.metadata = {
-        ...escrow.metadata,
-        adminReview: true,
-        cancelledBy,
-        cancellationReason: reason || `Cancelled by ${cancelledBy}`,
-        cancelledAt: new Date(),
-        awaitingAdminRefund: true,
-      };
-      await escrow.save();
+      await Escrow.findByIdAndUpdate(order.escrowId, {
+        status: 'disputed',
+        metadata: {
+          ...escrow.metadata,
+          adminReview: true,
+          cancelledBy,
+          cancellationReason: reason || `Cancelled by ${cancelledBy}`,
+          cancelledAt: new Date(),
+          awaitingAdminRefund: true,
+        }
+      });
 
       await LedgerEntry.create({
         userId: order.userId,
@@ -49,11 +58,16 @@ const cancelOrder = async ({ orderId, chatId, runnerId, userId, reason, cancelle
         grossAmount: escrow.totalAmount,
         netAmount: escrow.totalAmount,
         providerFee: 0,
+        platformFee: 0,
+        netPlatformFee: 0,
+        runnerFee: 0,
         provider: 'system',
         orderId: order.orderId,
         escrowId: escrow._id,
         description: `Order ${order.orderId} cancelled by ${cancelledBy} — held in escrow pending admin review`,
         status: 'pending',
+        balanceBefore: userWallet?._balance ?? 0,
+        balanceAfter: userWallet?._balance ?? 0,
       });
 
       escrowFlagged = true;
@@ -61,17 +75,20 @@ const cancelOrder = async ({ orderId, chatId, runnerId, userId, reason, cancelle
     }
   }
 
-  order.status = 'cancelled';
-  order.cancelledBy = cancelledBy;
-  order.cancelledAt = new Date();
-  order.cancellationReason = reason || `Cancelled by ${cancelledBy}`;
-  order.statusHistory.push({
-    status: 'cancelled',
-    timestamp: new Date(),
-    triggeredBy: cancelledBy,
+  await order.updateStatus('cancelled', cancelledBy, {
     note: reason || `Cancelled by ${cancelledBy}`,
+    triggeredById: cancelledBy === 'runner' ? runnerId?.toString()
+      : cancelledBy === 'user' ? userId?.toString()
+        : 'system',
   });
-  await order.save();
+
+  await Order.findByIdAndUpdate(order._id, {
+    $set: {
+      cancelledBy: cancelledBy,
+      cancellationReason: reason || `Cancelled by ${cancelledBy}`,
+    },
+  });
+
 
   await Runner.findByIdAndUpdate(runnerId, {
     isAvailable: true,

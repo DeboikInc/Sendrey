@@ -10,7 +10,7 @@ const { handleRejectionStrike } = require('../utils/handleRejectionStrike');
 
 const {
     notifyDeliveryConfirmationRequest,
-    notifyAutoConfirmWarning, 
+    notifyAutoConfirmWarning,
     notifyDeliveryConfirmed,
     notifyRatingPrompt
 } = require('../services/notificationService');
@@ -112,12 +112,9 @@ const handleMarkDeliveryComplete = async (io, socket, data) => {
 
 
         if (order.escrowId) {
-            const escrow = await Escrow.findById(order.escrowId);
-            if (escrow) {
-                escrow.status = 'delivery_pending';
-                await escrow.save();
-            }
+            await Escrow.findByIdAndUpdate(order.escrowId, { status: 'delivery_pending' });
         }
+
     } catch (err) {
         console.error('[markDeliveryComplete] State transition failed:', err);
         return socket.emit('error', { message: 'Failed to update order state. Please try again.' });
@@ -166,37 +163,8 @@ const handleMarkDeliveryComplete = async (io, socket, data) => {
     } catch (err) {
         console.error('[markDeliveryComplete] Chat persist failed:', err);
 
-        // Revert order state so runner can retry
-        try {
-            // If order is still in 'paid' state, transition through required states first
-            if (order.status === 'paid') {
-                await orderStateMachine.transition(orderId, 'in_progress', {
-                    triggeredBy: 'system',
-                    note: 'Auto-progressed from paid to in_progress',
-                });
-            }
+        logSocketAudit('DELIVERY_MARK_PERSIST_FAILED', { runnerId, chatId, orderId });
 
-            await orderStateMachine.transition(orderId, 'in_progress', {
-                triggeredBy: 'system',
-                note: 'Reverted after DB failure on delivery mark',
-            });
-
-            if (order.escrowId) {
-                const escrow = await Escrow.findById(order.escrowId);
-                if (escrow) {
-                    escrow.status = 'delivery_pending';
-                    await escrow.save();
-                }
-            }
-        } catch (revertErr) {
-            console.error('[markDeliveryComplete] State revert failed:', revertErr.message);
-            return socket.emit('error', { message: 'Failed to update order state. Please try again.' });
-        }
-
-        const errMsg = makeErrorMsg('delivery-mark');
-        io.to(`user-${order.userId.toString()}`).emit('message', errMsg);
-        io.to(`runner-${runnerId.toString()}`).emit('message', errMsg);
-        return;
     }
 
     // Side effects (non-critical) 
@@ -231,9 +199,12 @@ const handleConfirmDelivery = async (io, socket, data) => {
             note: 'Delivery confirmed by user',
         });
 
-        order.deliveryConfirmedAt = new Date();
-        order.deliveryConfirmedBy = 'user';
-        await order.save();
+        await Order.findByIdAndUpdate(order._id, {
+            $set: {
+                deliveryConfirmedAt: new Date(),
+                deliveryConfirmedBy: 'user',
+            },
+        })
 
         if (order.escrowId) {
             const escrow = await Escrow.findById(order.escrowId);
@@ -332,11 +303,7 @@ const handleDenyDelivery = async (io, socket, data) => {
         }
 
         if (order.escrowId) {
-            const escrow = await Escrow.findById(order.escrowId);
-            if (escrow) {
-                escrow.status = 'funded';
-                await escrow.save();
-            }
+            await Escrow.findByIdAndUpdate(order.escrowId, { status: 'funded' });
         }
     } catch (err) {
         console.error('[denyDelivery] State revert failed:', err);
@@ -439,9 +406,12 @@ const scheduleAutoConfirm = (io, chatId, orderId, escrowId) => {
                 note: 'Auto-confirmed after 4 hours',
             });
 
-            order.deliveryConfirmedAt = new Date();
-            order.deliveryConfirmedBy = 'system';
-            await order.save();
+            await Order.findByIdAndUpdate(order._id, {
+                $set: {
+                    deliveryConfirmedAt: new Date(),
+                    deliveryConfirmedBy: 'system',
+                },
+            })
 
             if (escrowId) {
                 const escrow = await Escrow.findById(escrowId);

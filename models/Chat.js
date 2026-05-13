@@ -201,5 +201,4 @@ module.exports = {
   Chat: mongoose.model("Chat", chatSchema),
   StatusUpdate: mongoose.model("StatusUpdate", statusUpdateSchema),
   CallLog: mongoose.model("CallLog", callLogSchema),
-  Session: mongoose.model("Session", sessionSchema)
 };

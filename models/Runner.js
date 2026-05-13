@@ -126,10 +126,7 @@ const runnerSchema = new mongoose.Schema({
     ref: 'User',  // references the User model
     default: null,
   },
-  totalEarnings: {
-    type: Number,
-    default: 0
-  },
+  _totalEarnings: { type: Number, default: 0, min: 0 },
   completedOrders: {
     type: Number,
     default: 0
@@ -420,6 +417,11 @@ runnerSchema.virtual('accountAge').get(function () {
   return Math.floor((Date.now() - this.createdAt) / (1000 * 60 * 60 * 24));
 });
 
+runnerSchema.virtual('totalEarnings').get(function () { return this._totalEarnings; });
+runnerSchema.virtual('totalEarnings').set(function () {
+  throw new Error('Use runner.recordEarning(amount) to update totalEarnings.');
+});
+
 // Indexes
 runnerSchema.index({ email: 1 });
 runnerSchema.index({ phone: 1 }, { sparse: true });
@@ -471,6 +473,13 @@ runnerSchema.pre('save', function (next) {
   next();
 });
 
+runnerSchema.pre('save', function (next) {
+  if (!this.isNew && this.isModified('_totalEarnings')) {
+    return next(new Error('Direct _totalEarnings mutation blocked. Use runner.recordEarning().'));
+  }
+  next();
+});
+
 // Instance methods
 runnerSchema.methods.correctPassword = async function (candidatePassword, userPassword) {
   return await bcrypt.compare(candidatePassword, userPassword);
@@ -515,6 +524,33 @@ runnerSchema.methods.getPublicProfile = function () {
   }
 
   return publicProfile;
+};
+
+runnerSchema.methods.recordEarning = async function (amount) {
+  if (typeof amount !== 'number' || amount <= 0) throw new Error('Earning amount must be positive');
+  await this.constructor.findByIdAndUpdate(this._id, {
+    $inc: { _totalEarnings: amount, completedOrders: 1, totalRuns: 1 },
+  });
+  this._totalEarnings += amount;
+  return this;
+};
+
+runnerSchema.methods.resetDailyErrandCount = async function () {
+  await this.constructor.findByIdAndUpdate(this._id, {
+    $set: { dailyErrandCount: 0, lastErrandResetDate: new Date() },
+  });
+  this.dailyErrandCount = 0;
+  return this;
+};
+
+runnerSchema.methods.incrementErrandCount = async function () {
+  const updated = await this.constructor.findByIdAndUpdate(
+    this._id,
+    { $inc: { dailyErrandCount: 1 } },
+    { new: true }
+  );
+  this.dailyErrandCount = updated.dailyErrandCount;
+  return this;
 };
 
 // Static methods
