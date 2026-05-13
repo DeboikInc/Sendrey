@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useCallback } from 'react';
 import chatManager from '../utils/chatStateManager';
 import useOrderStore from '../store/orderStore';
 
@@ -15,6 +15,11 @@ export function useRunnerSocketHandlers({
   setOrderPending,
   setCompletedStatusesVersion,
 }) {
+  // Memoize pushToActiveScreen callback
+  const stablePushToActiveScreen = useCallback((prev) => {
+    return pushToActiveScreen(prev);
+  }, [pushToActiveScreen]);
+
   useEffect(() => {
     if (!socket) return;
 
@@ -23,7 +28,6 @@ export function useRunnerSocketHandlers({
       mergeCurrentOrder,
       setTaskCompleted,
       setOrderCancelled,
-      getChat,
     } = useOrderStore.getState();
 
     // ── resolveChatId ─────────────────────────────────────────────────────────
@@ -50,7 +54,7 @@ export function useRunnerSocketHandlers({
 
       currentOrderRef.current = useOrderStore.getState()._chats[chatId]?.currentOrder ?? null;
       chatManager.set(chatId, { currentOrder: currentOrderRef.current });
-      pushToActiveScreen(prev => [...prev]);
+      stablePushToActiveScreen(prev => [...prev]);
     };
 
     // ── orderCreated ──────────────────────────────────────────────────────────
@@ -143,7 +147,7 @@ export function useRunnerSocketHandlers({
         senderId: 'system', senderType: 'system',
       };
 
-      pushToActiveScreen(prev => {
+      stablePushToActiveScreen(prev => {
         const alreadyHas = prev.some(m => m.type === 'system' && m.text?.toLowerCase().includes('task completed'));
         return alreadyHas ? prev : [...prev, systemMsg];
       });
@@ -180,7 +184,7 @@ export function useRunnerSocketHandlers({
         senderId: 'system', senderType: 'system',
       };
 
-      pushToActiveScreen(prev => {
+      stablePushToActiveScreen(prev => {
         const alreadyHas = prev.some(m => m.text?.toLowerCase().includes('cancelled this order'));
         return alreadyHas ? prev : [...prev, cancelMsg];
       });
@@ -191,6 +195,7 @@ export function useRunnerSocketHandlers({
       });
     };
 
+    // Register event listeners
     socket.on('paymentSuccess', onPayment);
     socket.on('paymentReceived', onPayment);
     socket.on('orderCreated', onOrderCreated);
@@ -198,6 +203,7 @@ export function useRunnerSocketHandlers({
     socket.on('orderCancelled', onOrderCancelled);
     socket.on('disputeRaised', onDisputeRaised);
 
+    // Cleanup function
     return () => {
       socket.off('paymentSuccess', onPayment);
       socket.off('paymentReceived', onPayment);
@@ -206,5 +212,16 @@ export function useRunnerSocketHandlers({
       socket.off('orderCancelled', onOrderCancelled);
       socket.off('disputeRaised', onDisputeRaised);
     };
-  }, [socket, runnerId, pushToActiveScreen]);
+  // Include all refs and stable callbacks in dependency array
+  }, [
+    socket,
+    runnerId,
+    runnerIdRef,
+    selectedUserRef,
+    activeChatIdRef,
+    currentOrderRef,
+    stablePushToActiveScreen,
+    setOrderPending,
+    setCompletedStatusesVersion
+  ]);
 }

@@ -233,11 +233,25 @@ function WhatsAppLikeChat() {
 
   const isBotMode = activeChatId === BOT_CHAT_ID;
 
-  // Push messages into the currently visible child screen.
-  // Supports both full arrays and functional updaters.
+  // FIRE-AND-FORGET: Instant UI + async store sync
   const pushToActiveScreen = useCallback((updater) => {
-    if (!activeSetMessagesRef.current) return;
-    activeSetMessagesRef.current(updater);
+    // async
+    if (activeSetMessagesRef.current) {
+      try {
+        activeSetMessagesRef.current(updater);
+      } catch (e) {
+        console.warn('[pushToActiveScreen] UI failed:', e);
+      }
+    }
+
+    //  ASYNC STORE SYNC (non-blocking)
+    queueMicrotask(() => {
+      const chatId = activeChatIdRef.current;
+      if (chatId && chatId !== BOT_CHAT_ID) {
+        chatManager.updateMessages(chatId, updater);
+        useOrderStore.getState().setMessages(chatId, chatManager.get(chatId).messages);
+      }
+    });
   }, []);
 
   const {
