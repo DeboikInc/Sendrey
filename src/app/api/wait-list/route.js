@@ -38,7 +38,7 @@ export async function POST(request) {
       email,
       source: 'notify_me_form',
       createdAt: new Date(),
-      ip: request.headers.get('x-forwarded-for') || 'unknown',
+      ip: request.headers.get('x-forwarded-for') || 'not known',
     });
 
     return NextResponse.json({ message: 'Congrats! youve been added to the waitlist!' }, { status: 201 });
