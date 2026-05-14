@@ -148,7 +148,6 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
       : null;
   }, [userData?._id, runner?._id]);
 
-
   const handleMessageStatusUpdate = useCallback((idOrTempId, status, realId) => {
     setMessages(prev => prev.map(m => {
       // match by id or tempId

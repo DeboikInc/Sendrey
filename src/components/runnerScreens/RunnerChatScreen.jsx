@@ -108,9 +108,13 @@ function RunnerChatScreen({
   initialDeliveryMarked,
   initialUserConfirmedDelivery,
   initialSpecialInstructions,
-  sessionKey
+  sessionKey,
+
+
 }) {
-  const chatId = selectedUser?._id ? `user-${selectedUser._id}-runner-${runnerId}` : null;
+
+  const chatId = useOrderStore(s => s.activeChatId)
+    ?? (selectedUser?._id ? `user-${selectedUser._id}-runner-${runnerId}` : null);
   const [awaitingNewOrder, setAwaitingNewOrder] = useState(false);
 
   const {
@@ -317,7 +321,7 @@ function RunnerChatScreen({
       queueMicrotask(() => { isSyncingFromParent.current = false; });
     };
     onRegisterSetMessages(pushFromParent, chatId);
-  }, [onRegisterSetMessages]);
+  }, [onRegisterSetMessages, chatId]);
 
   const { permission, requestPermission } = usePushNotifications({
     runnerId, userType: 'runner', socket,
@@ -1016,6 +1020,13 @@ function RunnerChatScreen({
 
   // ── Pickup item submission 
   const handleSubmitPickupItem = useCallback(async (itemData) => {
+    console.log('[submitPickupItem] called', {
+      chatId, runnerId,
+      userId: selectedUser?._id,
+      photoSize: itemData.photoBase64?.length,
+      socketConnected: socket?.connected
+    });
+
     try {
       const payload = {
         chatId,
@@ -1054,6 +1065,14 @@ function RunnerChatScreen({
   }, [socket, chatId, runnerId, selectedUser, setMessagesAndSync]);
 
   const openPickupItemForm = useCallback(() => {
+    console.log('[openPickupItemForm]', {
+      currentOrder: !!currentOrder,
+      isPickUp,
+      paymentStatus: currentOrder?.paymentStatus,
+      status: currentOrder?.status,
+      resolvedServiceType,
+    });
+
     if (!currentOrder) return alert('No active order. Wait for user to place an order.');
     console.log("selectedUser.currentRequest:", selectedUser?.currentRequest);
     console.log("selectedUser.serviceType:", selectedUser?.serviceType);

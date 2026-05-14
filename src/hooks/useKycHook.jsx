@@ -60,6 +60,8 @@ export const useKycHook = (runnerId, fleetType) => {
     capturedIdPhotoRef.current = null;
     capturedSelfiePhotoRef.current = null;
     currentDocTypeRef.current = 'nin';
+    setKycStep(null);
+    setKycStatus({ documentVerified: false, selfieVerified: false, overallVerified: false });
   }, [runnerId]);
 
   useEffect(() => {

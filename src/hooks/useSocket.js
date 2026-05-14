@@ -13,6 +13,8 @@ let globalSocket = null;
 let globalSocketInitialized = false; // eslint-disable-line no-unused-vars
 let globalListenersAttached = false;
 
+
+
 export const useSocket = () => {
   const [socket, setSocket] = useState(globalSocket); // eslint-disable-line no-unused-vars
   const [isConnected, setIsConnected] = useState(globalSocket?.connected || false);
