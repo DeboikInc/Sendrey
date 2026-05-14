@@ -119,7 +119,8 @@ const ItemSubmissionForm = ({
       setItems([]);
       onClose();
     } catch (error) {
-      console.error('Error submitting items:', error);
+      console.log('Error submitting items:', error);
+      // setSubmitError('Failed to submit item. Please try again.', 'error: ',error);
       setSubmitError('Failed to submit items. Please try again.');
     } finally {
       setIsSubmitting(false);

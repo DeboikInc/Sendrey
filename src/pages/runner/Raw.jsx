@@ -227,6 +227,12 @@ function WhatsAppLikeChat() {
       activeSetMessagesRef.current(next);
     }
     useOrderStore.getState().setMessages(BOT_CHAT_ID, next);
+
+    if (runnerId) {
+      try {
+        localStorage.setItem(`bot_messages_${runnerId}`, JSON.stringify(next.slice(-60)));
+      } catch (_) { }
+    }
   }, []);
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -337,7 +343,12 @@ function WhatsAppLikeChat() {
     }
   }, [runner?._id]);
 
-  useEffect(() => { runnerIdRef.current = runnerId; }, [runnerId]);
+  useEffect(() => {
+    runnerIdRef.current = runnerId;
+    if (!runnerId) {
+      kycStartedRef.current = false;
+    }
+  }, [runnerId]);
 
   useEffect(() => {
     if (!chatHistory.length) return;
@@ -377,6 +388,16 @@ function WhatsAppLikeChat() {
     if (storedMsgs.length > 0) {
       chatManager.set(saved.activeChatId, { messages: storedMsgs });
     }
+
+    // only switch away from bot if we actually have order state
+    //  let the socket rejoin flow handle it
+    const storedOrder = useOrderStore.getState().getChat(saved.activeChatId).currentOrder;
+    if (storedOrder && !['completed', 'cancelled', 'task_completed'].includes(storedOrder.status)) {
+      setActiveChatId(saved.activeChatId);
+      setAwaitingChatReady(true); // show loading overlay while socket reconnects
+    }
+
+    // If no order state, stay on bot — socket will proceedToChat when ready
   }, [runner?._id, registrationComplete]);
 
 
@@ -544,12 +565,30 @@ function WhatsAppLikeChat() {
 
   // ── Initial bot messages (typed in one by one on first load) ─────────────────
 
+  const loadPersistedBotMessages = (runnerId) => {
+    if (!runnerId) return [];
+    try {
+      const stored = localStorage.getItem(`bot_messages_${runnerId}`);
+      return stored ? JSON.parse(stored) : [];
+    } catch (_) { return []; }
+  };
+
   useEffect(() => {
     // Check store first 
     const storedMsgs = useOrderStore.getState().getChat(BOT_CHAT_ID).messages;
     if (storedMsgs.length > 0) {
       chatManager.set(BOT_CHAT_ID, { messages: storedMsgs });
       return;
+    }
+
+    if (runnerId) {
+      const persisted = loadPersistedBotMessages(runnerId);
+      if (persisted.length > 0) {
+        chatManager.set(BOT_CHAT_ID, { messages: persisted });
+        useOrderStore.getState().setMessages(BOT_CHAT_ID, persisted);
+        setInitialMessagesComplete(true);
+        return;
+      }
     }
 
     const botState = chatManager.get(BOT_CHAT_ID);
@@ -575,17 +614,8 @@ function WhatsAppLikeChat() {
 
     }, 700);
 
-    // const t3 = setTimeout(() => {
-    //   if (activeChatIdRef.current !== BOT_CHAT_ID) return;
-    //   const s = chatManager.get(BOT_CHAT_ID);
-    //   if (s.messages.length === 2) {
-    //     botMessagesUpdater([...s.messages, INITIAL_BOT_MESSAGES[2]]);
-    //   setTimeout(() => setInitialMessagesComplete(true), 600);
-    //   }
-    // }, 990);
-
     return () => { clearTimeout(t1); clearTimeout(t2); /* clearTimeout(t3); */ };
-  }, []); // run once only
+  }, [runnerId]); // run once only
 
   // Ban listener
   useEffect(() => {
@@ -600,6 +630,26 @@ function WhatsAppLikeChat() {
     socket.on('runnerSystemAlert', handleAlert);
     return () => socket.off('runnerSystemAlert', handleAlert);
   }, [socket, runnerId, pushToActiveScreen]);
+
+  // watch for runner becoming null
+  useEffect(() => {
+    if (!runner?._id && !runnerId) return; // not authenticated, nothing to clear
+    if (runner?._id) return; // still authenticated, do nothing
+
+    // runner just became null — auth was wiped
+    chatManager.set(BOT_CHAT_ID, { messages: [] });
+    useOrderStore.getState().setMessages(BOT_CHAT_ID, []);
+    setInitialMessagesComplete(false);
+    // Clear any stale runnerId-keyed localStorage
+    if (runnerId) {
+      localStorage.removeItem(`bot_messages_${runnerId}`);
+      localStorage.removeItem(`kyc_flow_started_${runnerId}`);
+      localStorage.removeItem(`kyc_step_${runnerId}`);
+      localStorage.removeItem(`kyc_doc_type_${runnerId}`);
+      localStorage.removeItem(`terms_accepted_${runnerId}`);
+    }
+    setRunnerId(null);
+  }, [runner?._id]);
 
   // ── canShowNotifications ─────────────────────────────────────────────────────
   useEffect(() => {
@@ -883,6 +933,15 @@ function WhatsAppLikeChat() {
       (order) => { currentOrderRef.current = order; }
     );
     return unsub;
+  }, [activeChatId]);
+
+  // sync  whenever activeChatId changes
+  useEffect(() => {
+    if (activeChatId && activeChatId !== BOT_CHAT_ID) {
+      useOrderStore.getState().setActiveChatId(activeChatId);
+    } else {
+      useOrderStore.getState().setActiveChatId(null);
+    }
   }, [activeChatId]);
 
   // ── Body scroll lock ─────────────────────────────────────────────────────────
@@ -1184,6 +1243,7 @@ function WhatsAppLikeChat() {
     }
 
     const chatId = activeChatId;
+    const activeChatIdForScreen = activeChatId !== BOT_CHAT_ID ? activeChatId : null;
     const chatState = chatManager.get(chatId);
 
     console.log('RAW.JSX - Rendering RunnerChatScreen:', {
@@ -1199,6 +1259,7 @@ function WhatsAppLikeChat() {
       <RunnerChatScreen
         key={`chat-${selectedUser?._id}-${chatSessionKey}`}
         sessionKey={chatSessionKey}
+        chatId={activeChatIdForScreen}
 
         // ── Message persistence ──
         initialMessages={chatState.messages}

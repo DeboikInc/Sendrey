@@ -83,7 +83,8 @@ const buildReturningUserGreeting = (name, kycStatus = {}) => {
 export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
   const dispatch = useDispatch();
   const { runner } = useSelector((s) => s.auth);
-  const [registrationComplete, setRegistrationComplete] = useState(false);
+  const [_localRegistrationComplete, setRegistrationComplete] = useState(false);
+  const registrationComplete = !!runner?._id || _localRegistrationComplete;
 
   const [isCollectingCredentials, setIsCollectingCredentials] = useState(false);
   const [credentialStep, setCredentialStep] = useState(null);
@@ -121,12 +122,22 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
   const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
 
 
-
   useEffect(() => {
-    if (runner?._id && !registrationComplete) {
+    if (runner?._id) {
       setRegistrationComplete(true);
+    } else {
+      // Redux wiped the runner — reset all local credential state
+      setRegistrationComplete(false);
+      setIsCollectingCredentials(false);
+      setCredentialStep(null);
+      setNeedsOtpVerification(false);
+      setIsReturningUser(false);
+      setReturningUserData(null);
+      setTempUserData(null);
+      setIsShowingOtp(false);
+      setIsSubmitting(false);
     }
-  }, [runner?._id, registrationComplete]);
+  }, [runner?._id]);
 
   // ── Finalise location ────────────────────────────────────────────────────
   const finaliseLocation = useCallback(() => {

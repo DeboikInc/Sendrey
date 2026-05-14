@@ -26,6 +26,8 @@ if (!isCapacitor && !isMobileBrowser) {
   localStorage.removeItem('refreshToken');
 }
 
+
+
 const tryFetchWithRetry = async (dispatch) => {
   let lastRunnerResult, lastUserResult;
 
@@ -96,6 +98,21 @@ export const useAuthBootstrap = () => {
         if (useTokenAuth) {
           const { accessToken, refreshToken } = await authStorage.getTokens();
           if (!accessToken && !refreshToken) {
+
+            const runnerId = (() => {
+              try {
+                const persisted = JSON.parse(localStorage.getItem('persist:auth') || '{}');
+                return JSON.parse(persisted.runner || 'null')?._id;
+              } catch { return undefined; }
+            })();
+
+            // Wipe runner-keyed keys synchronously — before any state updates
+            if (runnerId) {
+              wipeRunnerLocalStorage(runnerId);
+              // Also wipe bot messages so OnboardingScreen doesn't show stale verified state
+              localStorage.removeItem(`bot_messages_${runnerId}`);
+            }
+
             dispatch(clearCredentials());
             await persistor.purge();
             setIsReady(true);

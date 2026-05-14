@@ -4,6 +4,7 @@ import { fetchNearbyUserRequests, clearNearbyUsers } from '../Redux/userSlice';
 import { updateProfile } from '../Redux/runnerSlice';
 import chatManager from '../utils/chatStateManager';
 import useOrderStore from '../store/orderStore';
+import { unstable_batchedUpdates } from 'react-dom';
 
 const BOT_CHAT_ID = 'sendrey-bot';
 
@@ -94,7 +95,7 @@ export function useRunnerChatHandlers({
           ...msg,
           from: msg.senderId === runnerId ? 'me'
             : (msg.from === 'system' || msg.type === 'system' || msg.senderType === 'system') ? 'system'
-            : 'them',
+              : 'them',
           type: msg.type || msg.messageType || 'text',
         }));
         chatManager.set(chatId, { ...savedState, messages: formatted });
@@ -171,12 +172,15 @@ export function useRunnerChatHandlers({
     setAwaitingChatReady(true);
     pendingChatSwitchRef.current = { user: fullUser, chatId, chatEntry: newChatEntry };
 
-    setSelectedUser(fullUser);
-    setActiveChatId(chatId);
-    setActive(newChatEntry);
-    setChatHistory(prev => {
-      if (prev.find(c => c.id === user._id)) return prev;
-      return [newChatEntry, ...prev];
+    unstable_batchedUpdates(() => {
+      setSelectedUser(fullUser);
+      setActiveChatId(chatId);
+      setActive(newChatEntry);
+      setChatHistory(prev => {
+        if (prev.find(c => c.id === user._id)) return prev;
+        return [newChatEntry, ...prev];
+      });
+      setAwaitingChatReady(true);
     });
 
     selectedUserRef.current = fullUser;

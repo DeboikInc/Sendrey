@@ -17,9 +17,13 @@ const DEFAULT_CHAT = () => ({
 
 const useOrderStore = create(persist((set, get) => ({
   _chats: {},
+  activeChatId: null,
 
-  // ── Getter ─────────────────────────────────────────────────────────────────
+  // ── chats Getter ─────────────────────────────────────────────────────────────────
   getChat: (chatId) => get()._chats[chatId] ?? DEFAULT_CHAT(),
+
+  // ── chatId setter ───────────────────────────────────────────────────────────────── 
+  setActiveChatId: (chatId) => set({ activeChatId: chatId }),
 
   // ── Internal helper ────────────────────────────────────────────────────────
   _patch: (chatId, partial) => set(state => ({
@@ -125,12 +129,12 @@ const useOrderStore = create(persist((set, get) => ({
     // version: 2,
     storage: createJSONStorage(() => localStorage),
     partialize: (state) => ({
+      activeChatId: state.activeChatId,
       _chats: Object.fromEntries(
         Object.entries(state._chats).map(([chatId, chat]) => [
           chatId,
           {
             ...chat,
-            // messages: [], 
             currentOrder: chat.currentOrder,
           }
         ])
