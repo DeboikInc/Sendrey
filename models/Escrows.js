@@ -27,7 +27,7 @@ const escrowSchema = new mongoose.Schema({
     // Amounts
     itemBudget: {
         type: Number,
-        default: 0, // 0 for pickup/delivery tasks
+        default: 0, 
         min: 0
     },
     deliveryFee: {

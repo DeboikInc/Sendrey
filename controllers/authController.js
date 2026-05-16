@@ -782,11 +782,24 @@ class AuthController extends BaseController {
       await Model.findByIdAndUpdate(user._id, { refreshToken }); // persist token
       this.setAuthCookies(res, accessToken, refreshToken)
 
+      let kycStatus = null;
+      if (userType === 'runner') {
+        kycStatus = {
+          overallVerified: user.isVerified || user.runnerStatus === 'active',
+          selfieVerified: user.biometricVerification?.selfieVerified ?? false,
+          selfieStatus: user.biometricVerification?.status ?? 'not_submitted',
+          ninStatus: user.verificationDocuments?.nin?.status ?? 'not_submitted',
+          driverLicenseStatus: user.verificationDocuments?.driverLicense?.status ?? 'not_submitted',
+          isVerified: user.isVerified ?? false,
+        };
+      }
+
       this.success(res, {
         [userType]: userType === 'user' ? this._sanitizeUser(user) : this._sanitizeRunner(user),
         message: 'Email verified successfully',
         accessToken,
         refreshToken,
+        ...(kycStatus && { kycStatus }),
       });
 
     } catch (error) {
@@ -918,10 +931,31 @@ class AuthController extends BaseController {
 
       const user = await authService.verifyPhoneOTP(userId, otp, userType);
 
+      const { accessToken, refreshToken } = this.service.generateTokens(user);
+
+      const Model = userType === 'runner' ? Runner : User;
+      await Model.findByIdAndUpdate(user._id, { refreshToken }); // persist token
+      this.setAuthCookies(res, accessToken, refreshToken)
+
+      let kycStatus = null;
+      if (userType === 'runner') {
+        kycStatus = {
+          overallVerified: user.isVerified || user.runnerStatus === 'active',
+          selfieVerified: user.biometricVerification?.selfieVerified ?? false,
+          selfieStatus: user.biometricVerification?.status ?? 'not_submitted',
+          ninStatus: user.verificationDocuments?.nin?.status ?? 'not_submitted',
+          driverLicenseStatus: user.verificationDocuments?.driverLicense?.status ?? 'not_submitted',
+          isVerified: user.isVerified ?? false,
+        };
+      }
+
       logger.info(`Phone verified for ${userType}: ${user.email || user.phone}`);
       this.success(res, {
         user: this._sanitizeUser(user),
-        message: 'Phone number verified successfully'
+        message: 'Phone number verified successfully',
+        accessToken,
+        refreshToken,
+        ...(kycStatus && { kycStatus }),
       });
 
     } catch (error) {

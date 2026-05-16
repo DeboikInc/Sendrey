@@ -3,14 +3,14 @@ const { VALID_TRANSITIONS } = require('../models/Order');
 
 // Timestamp map - which field to set for each status
 const STATUS_TIMESTAMPS = {
-  'paid': 'paidAt',
-  'accepted': 'acceptedAt',
-  'items_submitted': 'itemsSubmittedAt',
-  'items_approved': 'itemsApprovedAt',
-  'delivered': 'deliveredAt',
-  'completed': 'completedAt',
-  'disputed': 'disputedAt',
-  'cancelled': 'cancelledAt',
+  paid: 'paidAt',
+  accepted: 'acceptedAt',
+  items_submitted: 'itemsSubmittedAt',
+  items_approved: 'itemsApprovedAt',
+  delivered: 'deliveredAt',
+  completed: 'completedAt',
+  disputed: 'disputedAt',
+  cancelled: 'cancelledAt',
 };
 
 /**
@@ -81,9 +81,6 @@ const archiveOldOrders = async () => {
   console.log(`✅ Archived ${archived} orders`);
   return archived;
 };
-
-module.exports = Order;
-module.exports.VALID_TRANSITIONS = VALID_TRANSITIONS;
 
 module.exports = {
   transition,

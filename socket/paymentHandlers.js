@@ -91,14 +91,14 @@ const handlePaymentSuccess = async (socket, io, data) => {
         {
           $set: {
             paymentStatus: 'paid',
-            status: 'paid',
+            status: 'accepted',
             escrowId: resolvedEscrowId,
             ...(reference && { paystackReference: reference }),
             ...(!order.chatId && chatId && { chatId }),
           },
           $push: {
             statusHistory: {
-              status: 'paid',
+              status: 'accepted',
               timestamp: new Date(),
               triggeredBy: 'user',
               triggeredById: chat.userId,
@@ -223,7 +223,7 @@ const handlePaymentSuccess = async (socket, io, data) => {
         chatId,
         orderId: order.orderId,
         paymentStatus: 'paid',
-        status: 'paid',
+        status: 'accepted',
         escrowId: order.escrowId,
         itemBudget: order.itemBudget,
         deliveryFee: order.deliveryFee,

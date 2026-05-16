@@ -275,7 +275,7 @@ const createOrder = async (io, { chatId, userId, runnerId, serviceType }) => {
     ? Number(userDoc?.currentRequest?.itemBudget || userDoc?.currentRequest?.budget) || 0
     : 0;
   const totalAmount = itemBudget + deliveryFee;
-  const { platformFee, runnerPayout } = Escrow.calculateFees(deliveryFee);
+  const { platformFee, runnerPayout, providerFee, netPlatformFee } = Escrow.calculateFees(deliveryFee);
 
   const request = userDoc?.currentRequest || {};
   const orderId = Order.generateOrderId();
@@ -302,11 +302,15 @@ const createOrder = async (io, { chatId, userId, runnerId, serviceType }) => {
     dropoffPhone: request.dropoffPhone || null,
     routeDistanceMeters: Math.round(distanceInMeters || 0),
     routeLegs: legs || {},
+
     itemBudget,
     deliveryFee,
     totalAmount,
     platformFee,
     runnerPayout,
+    providerFee,
+    netPlatformFee,
+
     specialInstructions: request.specialInstructions || null,
     pickupItems: request.pickupItems || null,
     marketItems: request.marketItems || null,
@@ -389,6 +393,7 @@ const createOrder = async (io, { chatId, userId, runnerId, serviceType }) => {
 
   // ── 4. Build lean payload and broadcast ──────────────────────────────────────
   const orderPayload = {
+    orderId,
     chatId,
     orderId,
     itemBudget,
@@ -646,9 +651,11 @@ const initializeChatAndProceed = async (io, chatId, state) => {
   const { runnerId, userId, serviceType } = state;
 
   try {
-    const [runnerData, userDoc] = await Promise.all([
+    const [runnerData, userDoc, existingChat, lastOrder] = await Promise.all([
       Runner.findById(runnerId).lean(),
       User.findById(userId).lean(),
+      Chat.findOne({ chatId }),
+      Order.findOne({ chatId }).sort({ createdAt: -1 }).lean()
     ]);
 
     console.log('[initializeChat] userDoc.currentRequest.specialInstructions:',
@@ -662,38 +669,37 @@ const initializeChatAndProceed = async (io, chatId, state) => {
     const initialMessages = createInitialRunnerMessages(runnerData, serviceType, runnerId);
 
     let chat;
-    const existingChat = await Chat.findOne({ chatId });
     const orderSessionId = `${Date.now()}-${runnerId}`;
 
     if (existingChat) {
-      // Archive the last order session before wiping
-      const lastOrder = await Order.findOne({ chatId })
-        .sort({ createdAt: -1 })
-        .lean();
+      chat = existingChat;
 
       if (lastOrder?.orderId) {
-        await archiveCurrentSession(
+        archiveCurrentSession(
           chatId,
           lastOrder.orderId,
           ['completed', 'task_completed'].includes(lastOrder.status) ? 'completed' : 'cancelled'
         );
       }
 
-      // Cancel all non-terminal orders for this chat
-      await Order.updateMany(
-        { chatId, status: { $nin: ['completed', 'cancelled', 'task_completed'] } },
-        {
-          $set: { status: 'cancelled', cancelledAt: new Date(), cancelReason: 'new_session_started' },
-          $push: {
-            statusHistory: {
-              status: 'cancelled',
-              timestamp: new Date(),
-              triggeredBy: 'system',
-              note: 'New session started',
+      // Cancel all non-terminal orders in parallel for this chat
+      await Promise.all([
+        existingChat.save(),
+        Order.updateMany(
+          { chatId, status: { $nin: ['completed', 'cancelled', 'task_completed'] } },
+          {
+            $set: { status: 'cancelled', cancelledAt: new Date(), cancelReason: 'new_session_started' },
+            $push: {
+              statusHistory: {
+                status: 'cancelled',
+                timestamp: new Date(),
+                triggeredBy: 'system',
+                note: 'New session started',
+              },
             },
-          },
-        }
-      );
+          }
+        ),
+      ]);
 
       // Wipe messages and reset the chat document
       existingChat.messages = [...initialMessages];

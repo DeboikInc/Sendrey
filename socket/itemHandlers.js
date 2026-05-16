@@ -26,6 +26,8 @@ const cleanForEmit = (data) => {
   return data;
 };
 
+const PICKUP_SUBMITTABLE_STATUSES = ['paid','accepted', 'en_route_to_pickup', 'arrived_at_pickup', 'shopping'];
+
 const uploadToCloudinary = (base64String, folder = 'item-receipts') =>
   new Promise((resolve, reject) => {
     cloudinary.uploader.upload(
@@ -139,6 +141,7 @@ const handleSubmitItems = async (socket, io, data) => {
       error: runnerMessage,
       submissionId,
       retryable: true,
+
     });
   }
 };
@@ -362,12 +365,17 @@ const handleSubmitPickupItem = async (socket, io, data) => {
       return;
     }
 
-    if (order) {
+    if (PICKUP_SUBMITTABLE_STATUSES.includes(order.status)) {
       await orderStateMachine.transition(order.orderId, 'items_submitted', {
         triggeredBy: 'runner',
         triggeredById: runnerId,
         note: `Pickup item submitted: ${itemName}`
       });
+    } else if (order && order.status === 'items_submitted') {
+      // Re-submission after rejection — already in correct state, skip transition
+      console.log(`[submitPickupItem] order already items_submitted, skipping transition`);
+    } else if (order) {
+      console.warn(`[submitPickupItem] unexpected order status for item submission: ${order.status}`);
     }
 
     // Upload photo

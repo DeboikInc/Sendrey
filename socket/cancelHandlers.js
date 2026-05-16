@@ -72,6 +72,17 @@ const handleCancelOrder = async (socket, io, data) => {
 const handleTaskCompleted = async (io, data) => {
     const { chatId, orderId, runnerId, userId } = data;
 
+    const emitTaskCompleted = () => {
+        io.to(chatId).emit('task_completed', { orderId, chatId, runnerId, userId, clearChat: true });
+        io.to(`user-${userId}`).emit('task_completed', { orderId, chatId, runnerId, userId, clearChat: true });
+        io.to(`runner-${runnerId}`).emit('task_completed', { orderId, chatId, runnerId, userId, clearChat: true });
+    };
+
+    emitTaskCompleted();
+
+    const MAX_ATTEMPTS = 3;
+    let attempt = 0;
+
     try {
         const order = await Order.findOne({ orderId }).sort({ createdAt: -1 });
         if (!order) return;
@@ -96,7 +107,8 @@ const handleTaskCompleted = async (io, data) => {
                 logger.info(`✅ Runner paid | orderId=${orderId} | payout=₦${result.runnerPayout} | usedPayoutSystem=${result.usedPayoutSystem}`);
             } catch (err) {
                 // Don't block task completion if payout fails
-                logger.error(`payoutToRunner failed for order ${orderId}:`, err.message);
+                // logger.error(`payoutToRunner failed for order ${orderId}:`, err.message);
+                logger.error(`payoutToRunner failed for order ${orderId}:`, err.message, err.stack);
             }
         } else {
             logger.warn(`handleTaskCompleted: no escrowId on order ${orderId} — payout skipped`);
@@ -142,19 +154,6 @@ const handleTaskCompleted = async (io, data) => {
 
         // Archive session on completion
         await archiveCurrentSession(chatId, orderId, 'completed');
-
-        // Emit task completed with clear flag
-        io.to(chatId).emit('task_completed', {
-            orderId,
-            chatId,
-            runnerId,
-            userId,
-            clearChat: true
-        });
-
-        // Also emit to individual rooms as fallback
-        io.to(`user-${userId}`).emit('task_completed', { orderId, chatId, runnerId, userId, clearChat: true });
-        io.to(`runner-${runnerId}`).emit('task_completed', { orderId, chatId, runnerId, userId, clearChat: true });
 
         const chat = await Chat.findOne({ chatId });
         console.log(`[TaskCompleted] Final messages in chat:`, chat?.messages.map(m => ({ id: m.id, type: m.type, text: m.text?.slice(0, 50) })));

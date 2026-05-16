@@ -87,11 +87,18 @@ const handleMarkDeliveryComplete = async (io, socket, data) => {
             }
 
             const steps = {
-                'pending_payment': ['paid', 'in_progress', 'delivered'],
-                'paid': ['in_progress', 'delivered'],
+                'pending_payment': ['paid', 'accepted', 'en_route_to_pickup', 'arrived_at_pickup', 'picked_up', 'en_route_to_delivery', 'arrived_at_delivery', 'delivered'],
+                'paid': ['accepted', 'en_route_to_pickup', 'arrived_at_pickup', 'picked_up', 'en_route_to_delivery', 'arrived_at_delivery', 'delivered'],
+                'accepted': ['en_route_to_pickup', 'arrived_at_pickup', 'picked_up', 'en_route_to_delivery', 'arrived_at_delivery', 'delivered'],
+                'shopping': ['items_submitted', 'items_approved', 'en_route_to_delivery', 'arrived_at_delivery', 'delivered'],
+                'items_submitted': ['items_approved', 'en_route_to_delivery', 'arrived_at_delivery', 'delivered'],
+                'items_approved': ['en_route_to_pickup', 'arrived_at_pickup', 'picked_up', 'en_route_to_delivery', 'arrived_at_delivery', 'delivered'],
+                'en_route_to_pickup': ['arrived_at_pickup', 'picked_up', 'en_route_to_delivery', 'arrived_at_delivery', 'delivered'],
+                'arrived_at_pickup': ['picked_up', 'en_route_to_delivery', 'arrived_at_delivery', 'delivered'],
+                'picked_up': ['en_route_to_delivery', 'arrived_at_delivery', 'delivered'],
+                'en_route_to_delivery': ['arrived_at_delivery', 'delivered'],
+                'arrived_at_delivery': ['delivered'],
                 'in_progress': ['delivered'],
-                'items_submitted': ['items_approved', 'delivered'],
-                'items_approved': ['delivered'],
             };
 
             const path = steps[currentStatus];
@@ -205,13 +212,6 @@ const handleConfirmDelivery = async (io, socket, data) => {
                 deliveryConfirmedBy: 'user',
             },
         })
-
-        if (order.escrowId) {
-            const escrow = await Escrow.findById(order.escrowId);
-            if (escrow && !escrow.deliveryFeeReleased) {
-                await paymentService.payoutToRunner(escrow._id);
-            }
-        }
 
         await User.findByIdAndUpdate(userId, { activeOrderId: null, currentRunnerId: null });
         await Runner.findByIdAndUpdate(order.runnerId, { activeOrderId: null, currentUserId: null });
