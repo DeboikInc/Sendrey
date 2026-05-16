@@ -3,22 +3,22 @@ const { TASK_TYPES, SERVICE_TYPE } = require('../config/constants');
 
 //  Valid status transitions 
 const VALID_TRANSITIONS = {
-  pending_payment:      ['paid', 'payment_failed', 'cancelled'],
-  payment_failed:       ['pending_payment', 'cancelled'],
-  paid:                 ['accepted', 'cancelled'],
-  accepted:             ['shopping', 'en_route_to_pickup', 'cancelled'],
-  shopping:             ['items_submitted', 'cancelled'],
-  items_submitted:      ['items_approved', 'cancelled'],
-  items_approved:       ['en_route_to_pickup', 'en_route_to_delivery', 'cancelled'],
-  en_route_to_pickup:   ['arrived_at_pickup', 'cancelled'],
-  arrived_at_pickup:    ['picked_up', 'cancelled'],
-  picked_up:            ['en_route_to_delivery', 'cancelled'],
+  pending_payment: ['paid', 'payment_failed', 'cancelled'],
+  payment_failed: ['pending_payment', 'cancelled'],
+  paid: ['accepted', 'items_submitted', 'items_approved','cancelled'],
+  'accepted': ['en_route_to_pickup', 'arrived_at_pickup', 'picked_up', 'en_route_to_delivery', 'arrived_at_delivery', 'delivered'],
+  shopping: ['items_submitted', 'cancelled'],
+  items_submitted: ['items_approved', 'shopping', 'cancelled'],   // 'shopping' allows re-submission after rejection
+  items_approved: ['en_route_to_pickup', 'en_route_to_delivery', 'cancelled'],
+  en_route_to_pickup: ['arrived_at_pickup', 'items_submitted', 'cancelled'],
+  arrived_at_pickup: ['picked_up', 'items_submitted', 'cancelled'],
+  picked_up: ['en_route_to_delivery', 'cancelled'],
   en_route_to_delivery: ['arrived_at_delivery', 'cancelled'],
-  arrived_at_delivery:  ['delivered', 'cancelled'],
-  delivered:            ['completed', 'disputed'],
-  completed:            [],           // terminal
-  cancelled:            [],           // terminal
-  disputed:             ['completed', 'cancelled'],
+  arrived_at_delivery: ['delivered', 'cancelled'],
+  delivered: ['completed', 'disputed'],
+  completed: [],
+  cancelled: [],
+  disputed: ['completed', 'cancelled'],
 };
 
 const TERMINAL_STATUSES = ['completed', 'cancelled'];
@@ -65,13 +65,13 @@ const orderSchema = new mongoose.Schema({
   },
 
   // ── Locations 
-  pickupLocation:  { address: String, contactName: String, contactPhone: String },
-  deliveryLocation:{ address: String, contactName: String, contactPhone: String },
-  marketLocation:  { address: String },
+  pickupLocation: { address: String, contactName: String, contactPhone: String },
+  deliveryLocation: { address: String, contactName: String, contactPhone: String },
+  marketLocation: { address: String },
 
-  marketCoordinates:  { type: coordinatesSchema, default: () => ({}) },
-  pickupCoordinates:  { type: coordinatesSchema, default: () => ({}) },
-  deliveryCoordinates:{ type: coordinatesSchema, default: () => ({}) },
+  marketCoordinates: { type: coordinatesSchema, default: () => ({}) },
+  pickupCoordinates: { type: coordinatesSchema, default: () => ({}) },
+  deliveryCoordinates: { type: coordinatesSchema, default: () => ({}) },
 
   // ── Shopping 
   itemsList: [{
@@ -82,9 +82,9 @@ const orderSchema = new mongoose.Schema({
   itemBudget: { type: Number, default: 0, min: 0 },
 
   // ── Pricing — all required, locked after creation 
-  deliveryFee:  { type: Number, required: true, min: 0 },
-  totalAmount:  { type: Number, required: true, min: 0 },
-  platformFee:  { type: Number, required: true, min: 0 },
+  deliveryFee: { type: Number, required: true, min: 0 },
+  totalAmount: { type: Number, required: true, min: 0 },
+  platformFee: { type: Number, required: true, min: 0 },
   runnerPayout: { type: Number, required: true, min: 0 },
 
   // ── Routes
@@ -133,13 +133,13 @@ const orderSchema = new mongoose.Schema({
   }],
 
   // ── Explicit timestamps (not mongoose timestamps option) ───────────────────
-  paidAt:            { type: Date, default: null },
-  acceptedAt:        { type: Date, default: null },
-  itemsSubmittedAt:  { type: Date, default: null },
-  deliveredAt:       { type: Date, default: null },
-  completedAt:       { type: Date, default: null },
-  disputedAt:        { type: Date, default: null },
-  cancelledAt:       { type: Date, default: null },
+  paidAt: { type: Date, default: null },
+  acceptedAt: { type: Date, default: null },
+  itemsSubmittedAt: { type: Date, default: null },
+  deliveredAt: { type: Date, default: null },
+  completedAt: { type: Date, default: null },
+  disputedAt: { type: Date, default: null },
+  cancelledAt: { type: Date, default: null },
 
   // ── Delivery confirmation
   deliveryConfirmedAt: { type: Date, default: null },
@@ -151,19 +151,19 @@ const orderSchema = new mongoose.Schema({
 
   // ── Misc 
   specialInstructions: { type: mongoose.Schema.Types.Mixed, default: null },
-  pickupItems:  { type: String, default: null },
-  marketItems:  { type: String, default: null },
-  fleetType:    { type: String, default: null },
+  pickupItems: { type: String, default: null },
+  marketItems: { type: String, default: null },
+  fleetType: { type: String, default: null },
 
   usedPayoutSystem: { type: Boolean, default: false },
 
   // ── Dispute 
-  disputeId:  { type: mongoose.Schema.Types.ObjectId, ref: 'Dispute', default: null },
+  disputeId: { type: mongoose.Schema.Types.ObjectId, ref: 'Dispute', default: null },
   hasDispute: { type: Boolean, default: false },
 
   // ── Rating 
   ratingId: { type: mongoose.Schema.Types.ObjectId, ref: 'Rating', default: null },
-  isRated:  { type: Boolean, default: false },
+  isRated: { type: Boolean, default: false },
 
   // ── Runner live location 
   runnerLocation: {
@@ -255,13 +255,13 @@ orderSchema.methods.updateStatus = async function (newStatus, triggeredBy = 'sys
 
   // Auto-set relevant timestamp
   const timestampMap = {
-    paid:                 'paidAt',
-    accepted:             'acceptedAt',
-    items_submitted:      'itemsSubmittedAt',
-    delivered:            'deliveredAt',
-    completed:            'completedAt',
-    disputed:             'disputedAt',
-    cancelled:            'cancelledAt',
+    paid: 'paidAt',
+    accepted: 'acceptedAt',
+    items_submitted: 'itemsSubmittedAt',
+    delivered: 'deliveredAt',
+    completed: 'completedAt',
+    disputed: 'disputedAt',
+    cancelled: 'cancelledAt',
   };
   if (timestampMap[newStatus]) this[timestampMap[newStatus]] = new Date();
 
@@ -291,5 +291,8 @@ orderSchema.statics.generateOrderId = function () {
   return `ORD-${timestamp}-${random}`.toUpperCase();
 };
 
+orderSchema.statics.VALID_TRANSITIONS = VALID_TRANSITIONS;
+
 const Order = mongoose.model('Order', orderSchema);
 module.exports = Order;
+module.exports.VALID_TRANSITIONS = VALID_TRANSITIONS;

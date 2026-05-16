@@ -39,6 +39,8 @@ const User = require('./models/User');
 
 const { startScheduler } = require('./services/scheduleService');
 
+const { enqueue, dequeue, getAll, markAttempt, shouldRetry } = require('./utils/pendingTaskQueue');
+
 require('events').EventEmitter.defaultMaxListeners = 20;
 
 let ioInstance;
@@ -68,6 +70,7 @@ connectWithRetry().then(async () => {
   }
 
   console.log("MongoDB connected");
+  console.log('ALL SOCKET HANDLERS:', Object.keys(socketHandlers));
 
   const app = express();
   const server = http.createServer(app);
@@ -102,10 +105,42 @@ connectWithRetry().then(async () => {
 
   ioInstance = io;
 
+  setInterval(async () => {
+    if (mongoose.connection.readyState !== 1) return;
+    for (const [key, item] of getAll()) {
+      if (!shouldRetry(key)) continue;
+      markAttempt(key);
+      console.log(`[socketQueue] retrying [${key}] attempt ${item.attempts}`);
+      try {
+        await item.handler(...item.args);
+        dequeue(key);
+        console.log(`[socketQueue] success [${key}]`);
+      } catch (err) {
+        console.error(`[socketQueue] retry failed [${key}]:`, err.message);
+        if (item.attempts >= 10) {
+          console.error(`[socketQueue] giving up [${key}]`);
+          dequeue(key);
+        }
+      }
+    }
+  }, 30000);
+
+  mongoose.connection.on('reconnected', () => {
+    console.log('[DB] reconnected — flushing socket queue');
+    for (const [key, item] of getAll()) {
+      markAttempt(key);
+      item.handler(...item.args)
+        .then(() => { dequeue(key); console.log(`[socketQueue] flushed [${key}]`); })
+        .catch(err => console.error(`[socketQueue] flush failed [${key}]:`, err.message));
+    }
+  });
+
   app.use(cors());
   app.use(express.json());
   app.set('io', io);
   startScheduler(io);
+
+
 
   // Add connection middleware for logging
   io.use((socket, next) => {
@@ -142,9 +177,23 @@ connectWithRetry().then(async () => {
       try {
         return await handler(...args);
       } catch (error) {
-        console.error(`Error in handler for ${socket.id}:`, error);
-        socket.emit("error", { message: "Internal server error", detail: error.message });
-        return null; // null = failure signal
+        console.error(`Error in handler [${handler.name}]:`, error.message);
+        socket.emit('error', { message: 'Internal server error', detail: error.message });
+
+        const isDbError =
+          error.name === 'MongoServerSelectionError' ||
+          error.name === 'MongoNetworkError' ||
+          error.message?.includes('ENOTFOUND') ||
+          error.message?.includes('buffering timed out') ||
+          error.message?.includes('topology was destroyed');
+
+        if (isDbError) {
+          const key = `${handler.name}-${Date.now()}`;
+          console.log(`[socketQueue] DB error — queuing ${key} for retry`);
+          enqueue(key, handler, args);
+        }
+
+        return null;
       }
     };
 
@@ -419,8 +468,8 @@ connectWithRetry().then(async () => {
     socket.on("disconnect", (reason) => {
       console.log(`❌ Client disconnected: ${socket.id}, reason: ${reason}`);
       clearInterval(heartbeatInterval);
-      safeHandler(handleUserDisconnect, socket, io);
-      safeHandler(socketHandlers.handleDisconnect, socket, io);
+      if (typeof handleUserDisconnect === 'function') safeHandler(handleUserDisconnect, socket, io);
+      if (typeof socketHandlers.handleDisconnect === 'function') safeHandler(socketHandlers.handleDisconnect, socket, io);
     });
   });
 

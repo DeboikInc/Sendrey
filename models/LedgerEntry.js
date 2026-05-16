@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 
 const ledgerEntrySchema = new mongoose.Schema({
-  userId:   { type: mongoose.Schema.Types.ObjectId, ref: 'User',   default: null },
+  userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   runnerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Runner', default: null },
 
   type: {
@@ -21,24 +21,29 @@ const ledgerEntrySchema = new mongoose.Schema({
     required: true,
   },
 
-  
-  grossAmount:    { type: Number, required: true, min: [0, 'grossAmount cannot be negative'] },
-  netAmount:      { type: Number, required: true, min: [0, 'netAmount cannot be negative'] },
-  providerFee:    { type: Number, required: true, default: 0, min: 0 },
-  platformFee:    { type: Number, required: true, default: 0, min: 0 },
+
+  grossAmount: { type: Number, required: true, min: [0, 'grossAmount cannot be negative'] },
+  netAmount: { type: Number, required: true, min: [0, 'netAmount cannot be negative'] },
+  providerFee: { type: Number, required: true, default: 0, min: 0 },
+  platformFee: { type: Number, required: true, default: 0, min: 0 },
   netPlatformFee: { type: Number, required: true, default: 0 },  // can be 0 if fee < providerFee
-  runnerFee:      { type: Number, required: true, default: 0, min: 0 },
+  runnerFee: { type: Number, required: true, default: 0, min: 0 },
 
   provider: {
     type: String,
     enum: ['paystack', 'wallet', 'system'],
     required: true,
   },
-  providerReference: { type: String, default: null },
 
-  orderId:  { type: String, default: null },
+  providerReference: {
+    type: String,
+    unique: true,
+    sparse: true,
+  },
+
+  orderId: { type: String, default: null },
   escrowId: { type: mongoose.Schema.Types.ObjectId, ref: 'Escrow', default: null },
-  chatId:   { type: String, default: null },
+  chatId: { type: String, default: null },
 
   description: { type: String, required: true },  // force callers to be explicit
 
@@ -85,7 +90,7 @@ const IMMUTABLE_FIELDS = ['grossAmount', 'netAmount', 'providerFee', 'platformFe
 ledgerEntrySchema.pre('save', function (next) {
   if (this.isNew) {
     // ── Integrity check on creation 
-    const feeSum = this.providerFee + this.platformFee + this.runnerFee;
+    const feeSum = this.providerFee + this.netPlatformFee + this.runnerFee;
     if (Math.abs(feeSum - this.grossAmount) > 1 && this.type === 'escrow_release') {
       // escrow_release: grossAmount should equal the sum of all fee splits
       return next(new Error(
@@ -134,26 +139,26 @@ ledgerEntrySchema.statics.reverse = async function (entryId, reason = '') {
   if (original.reversedBy) throw new Error(`LedgerEntry ${entryId} already reversed`);
 
   const reversal = await this.create({
-    userId:           original.userId,
-    runnerId:         original.runnerId,
-    type:             original.type,
-    grossAmount:      original.grossAmount,
-    netAmount:        original.netAmount,
-    providerFee:      original.providerFee,
-    platformFee:      original.platformFee,
-    netPlatformFee:   original.netPlatformFee,
-    runnerFee:        original.runnerFee,
-    provider:         original.provider,
+    userId: original.userId,
+    runnerId: original.runnerId,
+    type: original.type,
+    grossAmount: original.grossAmount,
+    netAmount: original.netAmount,
+    providerFee: original.providerFee,
+    platformFee: original.platformFee,
+    netPlatformFee: original.netPlatformFee,
+    runnerFee: original.runnerFee,
+    provider: original.provider,
     providerReference: original.providerReference
       ? `reversal-${original.providerReference}`
       : null,
-    orderId:     original.orderId,
-    escrowId:    original.escrowId,
-    chatId:      original.chatId,
+    orderId: original.orderId,
+    escrowId: original.escrowId,
+    chatId: original.chatId,
     description: `Reversal of ${original._id}${reason ? ': ' + reason : ''}`,
-    status:      'completed',
-    reversalOf:  original._id,
-    metadata:    { ...original.metadata, reversalReason: reason },
+    status: 'completed',
+    reversalOf: original._id,
+    metadata: { ...original.metadata, reversalReason: reason },
   });
 
   // Link original → reversal (this is the one mutation allowed on a completed entry)

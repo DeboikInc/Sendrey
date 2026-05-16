@@ -1,3 +1,4 @@
+await mongoose.connect(process.env.DATABASE_URL);
 const mongoose = require('mongoose');
 require('dotenv').config();
 
@@ -10,7 +11,6 @@ const { calculateFeeSplit } = require('../config/pricing');
 const orderId = 'ORD-MNE2GVC4-YQ01Y';
 
 (async () => {
-  await mongoose.connect(process.env.DATABASE_URL);
   console.log('Connected');
 
   const order = await Order.findOne({ orderId }).lean();
