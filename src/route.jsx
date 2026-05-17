@@ -46,8 +46,6 @@ export default function ProjectedRoutes() {
       } />
 
       <Route path="/" element={<Home />} />
-
-      {/* <Route path="/reg" element={<BankHome />} /> */}
     </Routes>
   )
 }
