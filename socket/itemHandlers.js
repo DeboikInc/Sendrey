@@ -26,7 +26,7 @@ const cleanForEmit = (data) => {
   return data;
 };
 
-const PICKUP_SUBMITTABLE_STATUSES = ['paid','accepted', 'en_route_to_pickup', 'arrived_at_pickup', 'shopping'];
+const PICKUP_SUBMITTABLE_STATUSES = ['paid', 'accepted', 'en_route_to_pickup', 'arrived_at_pickup', 'shopping'];
 
 const uploadToCloudinary = (base64String, folder = 'item-receipts') =>
   new Promise((resolve, reject) => {
@@ -60,12 +60,19 @@ const handleSubmitItems = async (socket, io, data) => {
       return;
     }
 
-    if (order) {
+    const SUBMITTABLE_STATUSES = ['paid', 'accepted', 'shopping', 'items_approved', 'en_route_to_pickup', 'arrived_at_market'];
+
+    if (order && SUBMITTABLE_STATUSES.includes(order.status)) {
       await orderStateMachine.transition(order.orderId, 'items_submitted', {
         triggeredBy: 'runner',
         triggeredById: runnerId,
         note: `Items submitted, total: ₦${totalAmount}`
       });
+    } else if (order && order.status === 'items_submitted') {
+      console.log('[submitItems] already items_submitted, skipping transition');
+    } else {
+      console.warn('[submitItems] unexpected status for item submission:', order.status);
+      // Still proceed — don't block the runner from submitting
     }
 
     // Upload receipt and all item photos in PARALLEL
