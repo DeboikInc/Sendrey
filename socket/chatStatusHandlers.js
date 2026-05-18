@@ -98,10 +98,31 @@ const handleUpdateStatus = async (socket, io, data, callback) => {
     const resolvedServiceType = order?.serviceType || clientServiceType || chat.serviceType;
     if (!resolvedServiceType) return socket.emit('error', { message: 'Cannot determine service type' });
 
+    if (status === 'purchase_in_progress') {
+      const paidOrder = await Order.findOne({
+        chatId,
+        paymentStatus: 'paid',
+        status: { $nin: ['completed', 'cancelled', 'task_completed'] }
+      }).lean();
+      if (!paidOrder) {
+        return socket.emit('error', { message: 'Payment must be completed before marking purchase as in progress.' });
+      }
+    }
+
     const taskType = resolvedServiceType === 'run-errand' ? TASK_TYPES.RUN_ERRAND : TASK_TYPES.PICK_UP;
     const validStatuses = STATUS_FLOWS[taskType];
     if (!validStatuses.includes(status)) {
       return socket.emit('error', { message: `Invalid status "${status}" for task type "${taskType}"` });
+    }
+
+    if (status === 'purchase_completed') {
+      const activeOrder = await Order.findOne({
+        chatId,
+        status: { $nin: ['completed', 'cancelled', 'task_completed'] }
+      }).lean();
+      if (!activeOrder || activeOrder.status !== 'items_approved') {
+        return socket.emit('error', { message: 'Items must be approved by the user before marking purchase as completed.' });
+      }
     }
 
     const displayText = getStatusLabel(status);

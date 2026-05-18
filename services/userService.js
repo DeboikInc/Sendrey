@@ -1,6 +1,8 @@
 const User = require('../models/User');
 const activityService = require('./activityService');
 const logger = require('../utils/logger');
+const runnerService = require('./runnerService');
+const { sendPushNotification } = require('./notificationService');
 
 class UserService {
   /**
@@ -438,6 +440,40 @@ class UserService {
       throw error;
     }
   }
+
+  /**
+   * Notify users about new nearby runners (for customers to find runners)
+   */
+  async notifyNearbyRunnersOfRequest({ latitude, longitude, fleetType, serviceType, orderId }) {
+    try {
+      const nearbyRunners = await runnerService.findNearbyRunners({
+        pickupLat: latitude,
+        pickupLng: longitude,
+        fleetType,
+      });
+
+      if (!nearbyRunners.length) return;
+
+      const serviceLabel = serviceType === 'run-errand' ? 'Run Errand' : 'Pick Up';
+
+      await Promise.allSettled(
+        nearbyRunners.map(runner =>
+          sendPushNotification({
+            recipientId: runner._id,
+            recipientType: 'runner',
+            title: `New ${serviceLabel} request near you`,
+            body: `Hi ${runner.firstName || 'runner'}, a user near you needs a ${serviceLabel.toLowerCase()}. Tap to connect.`,
+            data: { type: 'new_request_nearby', orderId, serviceType },
+          })
+        )
+      );
+
+      console.log(`[notifyNearbyRunners] Notified ${nearbyRunners.length} runners`);
+    } catch (err) {
+      console.error('[notifyNearbyRunners] failed:', err.message);
+    }
+  }
+
 
   /**
    * Get user activity
