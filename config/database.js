@@ -23,23 +23,22 @@ const connectDb = async () => {
 
     const totalRunners = await Runner.countDocuments({});
     console.log(`Total runners in DB: ${totalRunners}`);
-    
+
     // await User.deleteMany({ role: { $nin: ['super-admin', 'admin'] } });
     // await Runner.deleteMany({});
     // await Runner.findOneAndUpdate({ email:'timivictor565@gmail.com' }, { $set: { isAvailable: true } });
-    // await User.findOneAndUpdate({ email:'timivictor565@gmail.com' }, { $set: { isAvailable: true } });
-    // await User.findOneAndUpdate({ email:'tinukekareem17@gmail.com' }, { $set: { isAvailable: true } });
-    // await Runner.findOneAndUpdate({ email:'tinukareem17@gmail.com' }, { $set: { isAvailable: true } });
-    // await Runner.findOneAndUpdate({ email:'timivictor565@gmail.com' }, { $set: { 'fleetType': 'car' } });
-    // console.log('Updated runner available status');
     // await Runner.deleteOne({ email: 'timivictor565@gmail.com' });
 
     // const collections = await mongoose.connection.db.listCollections().toArray();
-    // const skip = ['users']; // keep users collection intact
+    // const skip = ['users', 'runners']; // keep users collection intact
 
     // for (const col of collections) {
     //   if (!skip.includes(col.name)) {
-    //     await mongoose.connection.db.collection(col.name).deleteOne({Orders: { $exists: true }}); // only delete documents with Orders field
+    //     await mongoose.connection.db.collection(col.name).deleteOne({ Orders: { $exists: true } }); // only delete documents with Orders field
+
+    //     const count = await mongoose.connection.db.collection(col.name).countDocuments();
+    //     console.log(`${col.name}: ${count} documents`);
+
     //     console.log(`Cleared: ${col.name}`);
     //   }
     // }
