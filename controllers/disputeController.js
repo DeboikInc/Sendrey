@@ -1,6 +1,6 @@
 const BaseController = require('./baseController');
 const disputeService = require('../services/disputeService');
-
+const Order = require('../models/Order');
 
 class DisputeController extends BaseController {
   constructor() {
@@ -18,6 +18,37 @@ class DisputeController extends BaseController {
       const { orderId, chatId, reason, description, evidenceFiles } = req.body;
       const userId = req.user._id;
       const userType = req.user.userType || 'user';
+
+      const order = await Order.findOne({ orderId }).sort({ createdAt: -1 });
+      if (!order) return this.error(res, 'Order not found');
+
+      // Block if payout already used — money already moved
+      if (order.usedPayoutSystem) {
+        return this.error(res, 'Dispute cannot be raised after vendor payment has been made.');
+      }
+
+      const isRunErrand =
+        order.serviceType === 'run-errand' || order.serviceType === 'run_errand';
+      const isPickUp =
+        order.serviceType === 'pick-up' || order.serviceType === 'pick_up';
+
+      // Block if order has passed the dispute window
+      const blockedStatuses = isRunErrand
+        ? ['purchase_completed', 'en_route_to_delivery', 'arrived_at_delivery_location',
+          'item_delivered', 'task_completed', 'completed']
+        : isPickUp
+          ? ['item_collected', 'en_route_to_delivery', 'arrived_at_delivery_location',
+            'item_delivered', 'task_completed', 'completed']
+          : [];
+
+      if (blockedStatuses.includes(order.status)) {
+        return this.error(res, 'Dispute window has closed for this order.');
+      }
+
+      // Block terminal/cancelled orders
+      if (['cancelled', 'disputed', 'dispute_resolved', 'archived'].includes(order.status)) {
+        return this.error(res, `Cannot raise a dispute on an order with status: ${order.status}`);
+      }
 
       const dispute = await disputeService.raiseDispute({
         orderId,
@@ -57,14 +88,14 @@ class DisputeController extends BaseController {
   }
 
   async getRunnerDisputes(req, res) {
-  try {
-    const { runnerId } = req.params;
-    const disputes = await disputeService.getDisputesByRunnerId(runnerId);
-    this.success(res, { disputes });
-  } catch (error) {
-    this.error(res, error.message);
+    try {
+      const { runnerId } = req.params;
+      const disputes = await disputeService.getDisputesByRunnerId(runnerId);
+      this.success(res, { disputes });
+    } catch (error) {
+      this.error(res, error.message);
+    }
   }
-}
 
   async getDispute(req, res) {
     try {

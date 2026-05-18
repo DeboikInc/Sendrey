@@ -222,9 +222,12 @@ const handleApproveItems = async (socket, io, data) => {
 
     const runnerSystemMsg = {
       id: `approval-runner-${Date.now() + 1}`,
-      type: 'system', messageType: 'system',
+      type: 'item_submission', 
+      messageType: 'item_submission',
       from: 'system', senderId: 'system', senderType: 'system',
       text: `${userName} approved the items. Proceed with purchase.`,
+      status: 'approved',
+      submissionId: submissionId,
       time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
     };
 

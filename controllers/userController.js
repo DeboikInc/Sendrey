@@ -6,6 +6,8 @@ const smsService = require('../services/smsService');
 const logger = require('../utils/logger');
 const User = require('../models/User');
 const cloudinary = require('../config/cloudinary');
+const runnerService = require('../services/runnerService');
+const { sendPushNotification } = require('../services/notificationService');
 
 class UserController extends BaseController {
   constructor() {
@@ -85,6 +87,24 @@ class UserController extends BaseController {
       const user = await userService.updateUser(userId, updateData);
       if (!user) return this.error(res, 'User not found', 404);
 
+      // non blocking runner notifications
+      if (updateData['currentRequest.status'] === 'awaiting_runner_connection' ||
+        updateData?.currentRequest?.status === 'awaiting_runner_connection') {
+
+        const req_ = user.currentRequest;
+        const isErrand = req_?.serviceType === 'run-errand';
+        const coords = isErrand ? req_?.marketCoordinates : req_?.pickupCoordinates;
+
+        if (coords?.lat && coords?.lng) {
+          userService.notifyNearbyRunnersOfRequest({
+            latitude: coords.lat,
+            longitude: coords.lng,
+            fleetType: req_?.fleetType,
+            serviceType: req_?.serviceType,
+          }).catch(err => console.error('[notifyNearbyRunners] failed:', err.message));
+        }
+      }
+
       return res.status(200).json({
         success: true,
         message: 'Profile updated successfully',
@@ -119,11 +139,11 @@ class UserController extends BaseController {
   // Get nearby users (for runners to find customers)
   async getNearbyUsers(req, res, next) {
     try {
-      const { 
-        latitude, longitude, 
+      const {
+        latitude, longitude,
         fleetType,
         // serviceType, 
-       } = req.query;
+      } = req.query;
 
       if (!latitude || !longitude) {
         return this.error(res, 'Latitude and longitude are required', 400);
