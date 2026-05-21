@@ -105,17 +105,9 @@ class PaymentService {
           throw new Error('Insufficient wallet balance');
         }
 
-        const [, [escrow]] = await Promise.all([
-          Wallet.findOneAndUpdate(
-            { userId },
-            { $inc: { _balance: -order.totalAmount, lockedBalance: order.totalAmount } },
-            { session }
-          ),
-          Escrow.create([escrowDoc], { session }),
-        ]);
-
         const escrowDoc = {
           taskId: orderId,
+          orderId: orderId,
           userId: order.userId,
           runnerId: order.runnerId,
           taskType: order.taskType,
@@ -129,6 +121,15 @@ class PaymentService {
           status: 'funded',
           paymentStatus: 'paid',
         };
+
+        const [, [escrow]] = await Promise.all([
+          Wallet.findOneAndUpdate(
+            { userId },
+            { $inc: { _balance: -order.totalAmount, lockedBalance: order.totalAmount } },
+            { session }
+          ),
+          Escrow.create([escrowDoc], { session }),
+        ]);
 
         // Order update + ledger in parallel
         await Promise.all([
@@ -221,6 +222,7 @@ class PaymentService {
 
       const [escrow] = await Escrow.create([{
         taskId: orderId,
+        orderId: orderId,
         userId: order.userId,
         runnerId: order.runnerId,
         taskType: order.taskType,
@@ -242,30 +244,25 @@ class PaymentService {
         { session }
       );
 
-
-      try {
-        await LedgerEntry.create([{
-          userId: order.userId,
-          userModel: 'User',
-          runnerId: order.runnerId,
-          type: 'escrow_lock',
-          grossAmount: order.totalAmount,
-          netAmount: order.totalAmount - feeSplit.providerFee,
-          providerFee: feeSplit.providerFee,
-          platformFee: feeSplit.platformFee,
-          netPlatformFee: feeSplit.netPlatformFee,
-          runnerFee: feeSplit.runnerPayout,
-          provider: 'paystack',
-          providerReference: reference,
-          orderId,
-          escrowId: escrow._id,
-          description: `Order Payment (Card) for ${orderId}`,
-          status: 'completed',
-        }], { session });
-
-      } catch (err) {
-        console.error('[[orderPayment] LedgerEntry.create] failed:', err.message);
-      }
+      // allow throw
+      await LedgerEntry.create([{
+        userId: order.userId,
+        userModel: 'User',
+        runnerId: order.runnerId,
+        type: 'escrow_lock',
+        grossAmount: order.totalAmount,
+        netAmount: order.totalAmount - feeSplit.providerFee,
+        providerFee: feeSplit.providerFee,
+        platformFee: feeSplit.platformFee,
+        netPlatformFee: feeSplit.netPlatformFee,
+        runnerFee: feeSplit.runnerPayout,
+        provider: 'paystack',
+        providerReference: reference,
+        orderId,
+        escrowId: escrow._id,
+        description: `Order Payment (Card) for ${orderId}`,
+        status: 'completed',
+      }], { session });
 
       console.log(`✅ Card payment verified | runner: NGN ${feeSplit.runnerPayout} | platform net: NGN ${feeSplit.netPlatformFee} | paystack fee: NGN ${feeSplit.providerFee}`);
       return { escrow, order, feeSplit };
@@ -446,7 +443,11 @@ class PaymentService {
       }
 
       const order = await Order.findOne({
-        $or: [{ escrowId: escrow._id }, { orderId: escrow.taskId }]
+        $or: [
+          { escrowId: escrow._id },
+          { orderId: escrow.taskId },
+          { orderId: escrow.orderId },
+        ]
       }).sort({ createdAt: -1 }).session(session);
 
       const resolvedOrderId = order?.orderId ?? escrow.taskId;
@@ -458,6 +459,20 @@ class PaymentService {
       if (order) {
         if (order.serviceType === 'run-errand' || order.serviceType === 'run_errand') {
           const payout = await RunnerPayout.findOne({ orderId: order.orderId }).session(session);
+
+          console.log(`[payoutToRunner] payout:`, {
+            found: !!payout,
+            usedPayoutSystem: payout?.usedPayoutSystem,
+            status: payout?.status,
+            itemBudget: payout?.itemBudget,
+          });
+
+          console.log(`[payoutToRunner] escrow:`, {
+            runnerPayout: escrow?.runnerPayout,
+            deliveryFeeReleased: escrow?.deliveryFeeReleased,
+            itemBudgetReleased: escrow?.itemBudgetReleased,
+          });
+
           console.log(`[payoutToRunner] RunnerPayout found=${!!payout} | usedPayoutSystem=${payout?.usedPayoutSystem} | status=${payout?.status}`);
           if (payout) usedPayoutSystem = payout.usedPayoutSystem;
         } else {
@@ -1059,7 +1074,7 @@ class PaymentService {
 
       console.log(`[refundToUser] NGN ${amount} refunded to user ${userId} for order ${orderId}`);
 
-    
+
     });
   }
 }

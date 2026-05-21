@@ -1,31 +1,41 @@
 require('dotenv').config();
 const mongoose = require('mongoose');
 
-mongoose.connect(process.env.DATABASE_URL).then(async () => {
-  const LedgerEntry = require('../models/LedgerEntry');
-  const User = require('../models/User');
+async function main() {
+  await mongoose.connect(process.env.DATABASE_URL);
+  const db = mongoose.connection.db;
 
-  const user = await User.findOne({ email: 'tinukekareem17@gmail.com' }).lean();
-  console.log('User:', user._id);
+  // Find all wallets where a runner exists but userType is wrong
+  const runners = await db.collection('runners').find({}, { projection: { _id: 1 } }).toArray();
+  const runnerIds = runners.map(r => r._id.toString());
 
-  // Check both orders
-  const orders = ['ORD-MPB556X6-71MYH', 'YOUR-RUN-ERRAND-ORDER-ID'];
-  
-  for (const orderId of orders) {
-    const entries = await LedgerEntry.find({ orderId }).lean();
-    console.log(`\n=== ${orderId} ===`);
-    console.log(`Entries found: ${entries.length}`);
-    entries.forEach(e => {
-      console.log(`  type: ${e.type} | userId: ${e.userId} | gross: ${e.grossAmount} | provider: ${e.provider}`);
-    });
+  const badWallets = await db.collection('wallets').find({
+    $or: [
+      { userId: { $in: runnerIds } },
+      { userId: { $in: runners.map(r => r._id) } },
+    ],
+    userType: { $ne: 'runner' }
+  }).toArray();
+
+  console.log(`Found ${badWallets.length} runner wallets with wrong userType:`);
+  badWallets.forEach(w => console.log(`  walletId=${w._id} userId=${w.userId} userType=${w.userType} balance=${w._balance ?? w.balance}`));
+
+  if (!badWallets.length) {
+    console.log('No bad wallets found.');
+    await mongoose.disconnect();
+    return;
   }
 
-  // All ledger entries for this user
-  const allEntries = await LedgerEntry.find({ userId: user._id }).sort({ createdAt: 1 }).lean();
-  console.log(`\n=== ALL USER LEDGER ENTRIES (${allEntries.length}) ===`);
-  allEntries.forEach(e => {
-    console.log(`${e.createdAt.toISOString().slice(0,16)} | ${e.type.padEnd(20)} | NGN ${e.grossAmount} | order: ${e.orderId} | provider: ${e.provider}`);
-  });
+  for (const w of badWallets) {
+    await db.collection('wallets').updateOne(
+      { _id: w._id },
+      { $set: { userType: 'runner' } }
+    );
+    console.log(`✅ Fixed wallet ${w._id} for runner ${w.userId}`);
+  }
 
-  mongoose.disconnect();
-}).catch(console.error);
+  console.log('\nDone. Re-run diagnose-payout.js to confirm.');
+  await mongoose.disconnect();
+}
+
+main().catch(err => { console.error('Fatal:', err.message); process.exit(1); });

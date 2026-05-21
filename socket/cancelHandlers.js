@@ -103,7 +103,7 @@ const handleTaskCompleted = async (io, data) => {
         if (escrowId) {
             try {
                 const paymentService = require('../services/paymentServices');
-                const result = await paymentService.payoutToRunner(order.escrowId);
+                const result = await paymentService.payoutToRunner(escrowId);
                 logger.info(`✅ Runner paid | orderId=${orderId} | payout=₦${result.runnerPayout} | usedPayoutSystem=${result.usedPayoutSystem}`);
             } catch (err) {
                 // Don't block task completion if payout fails
