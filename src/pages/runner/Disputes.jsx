@@ -2,7 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useDispatch, useSelector, shallowEqual } from "react-redux";
 import { ChevronLeft, Plus, AlertCircle, Clock, CheckCircle, XCircle } from "lucide-react";
 import { raiseDispute, getRunnerDisputes, clearDispute } from "../../Redux/disputeSlice";
-import { getAvailableReasons, getReasonLabel } from "../../utils/disputeReasons";
+import { getAvailableRunnerReasons, getReasonLabel } from "../../utils/disputeReasons";
 
 export function Disputes({ darkMode, onBack, runnerId, currentOrder, chatId }) {
   const disputes  = useSelector(s => s.dispute.disputes, shallowEqual);
@@ -18,7 +18,7 @@ export function Disputes({ darkMode, onBack, runnerId, currentOrder, chatId }) {
   // ── Reason options scoped to this order's service type + current status ─────
   // Mirrors the same logic DisputeForm uses so runner and user see the same window.
   const availableReasons = useMemo(
-    () => getAvailableReasons(
+    () => getAvailableRunnerReasons(
       currentOrder?.serviceType ?? currentOrder?.taskType,
       currentOrder?.status
     ),

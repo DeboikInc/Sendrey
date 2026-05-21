@@ -110,7 +110,8 @@ export default function RunnerSelectionScreen({
       const isExpected =
         data.chatId === lastAttemptedChatIdRef.current ||
         data.chatId === pendingRequestRef.current?.chatId ||
-        (data.attemptToken && data.attemptToken === lastAttemptTokenRef.current)
+        (data.attemptToken && data.attemptToken === lastAttemptTokenRef.current) ||
+        data.runnerId === selectedRunnerIdRef.current;
         
 
       if (!isExpected) {

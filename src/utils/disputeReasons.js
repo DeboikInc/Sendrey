@@ -16,42 +16,15 @@
  *   → item_delivered → task_completed → completed
  *
  * Pick-up status flow (no vendor payment step):
- *   accepted → runner_en_route_to_pickup → arrived_at_pickup_location
+ *   accepted → arrived_at_pickup_location
  *   → item_collected → en_route_to_delivery → arrived_at_delivery_location
  *   → item_delivered → task_completed → completed
  *
  * windowClosesAfter: the statuses AFTER which this reason is no longer
  * actionable — i.e. admin cannot do anything meaningful about it anymore.
  *
- * Reasoning per reason:
- *
- *  proof_fraud            → closes at purchase_completed
- *                           Vendor already paid, nothing to reverse on the item.
- *
- *  item_not_delivered     → closes at item_delivered
- *                           Once runner marks delivered and task completes,
- *                           raising this post-completion is a scam vector.
- *
- *  item_damaged_in_transit → stays open until completed
- *                           User may only notice damage after opening the package.
- *                           Admin can still partial-refund from escrow.
- *
- *  runner_misconduct      → stays open until completed
- *                           Abuse/threatening behaviour is reportable
- *                           even after the order ends.
- *
- *  runner_unresponsive    → closes at task_completed
- *                           If the task completed, the runner wasn't unresponsive
- *                           enough to matter. Nothing actionable post-completion.
- *
- *  other                  → stays open until completed
- *                           Catch-all; admin judges case by case.
- *
- *  item_not_collected     → closes at en_route_to_delivery (pick-up only)
- *                           Once runner is en route they have the item.
- *
- *  wrong_item_collected   → closes at en_route_to_delivery (pick-up only)
- *                           Same logic as above.
+ * windowOpensAt: optional — the status at which this reason first becomes
+ * relevant. getAvailableReasons filters it out before that point.
  */
 
 const RUN_ERRAND_REASONS = [
@@ -72,7 +45,7 @@ const RUN_ERRAND_REASONS = [
     value: 'item_not_delivered',
     label: 'Item not delivered',
     description: 'Runner marked as delivered but item never arrived',
-    // Close at item_delivered — post-completion claims are a scam vector
+    windowOpensAt: 'item_delivered',
     windowClosesAfter: [
       'item_delivered',
       'task_completed',
@@ -83,7 +56,7 @@ const RUN_ERRAND_REASONS = [
     value: 'item_damaged_in_transit',
     label: 'Item damaged in transit',
     description: 'Item arrived visibly damaged after collection',
-    // Keep open past task_completed — user may only notice on unpacking
+    windowOpensAt: 'item_delivered',
     windowClosesAfter: [
       'completed',
     ],
@@ -92,7 +65,6 @@ const RUN_ERRAND_REASONS = [
     value: 'runner_misconduct',
     label: 'Runner misconduct',
     description: 'Unprofessional, threatening, or abusive behaviour',
-    // Reportable even after order ends
     windowClosesAfter: [
       'completed',
     ],
@@ -101,7 +73,6 @@ const RUN_ERRAND_REASONS = [
     value: 'runner_unresponsive',
     label: 'Runner went offline / unresponsive',
     description: 'Runner stopped communicating mid-order',
-    // If task completed, unresponsiveness didn't affect outcome — nothing actionable
     windowClosesAfter: [
       'task_completed',
       'completed',
@@ -111,19 +82,22 @@ const RUN_ERRAND_REASONS = [
     value: 'other',
     label: 'Other',
     description: 'Something else not listed above',
-    // Catch-all — admin judges; keep open until fully archived
     windowClosesAfter: [
       'completed',
     ],
   },
 ];
 
+// ─── USER reasons for pick-up orders ────────────────────────────────────────
+// Payment is not part of the pick-up flow, so item_not_collected and
+// wrong_item_collected are always available from the start.
+
 const PICK_UP_REASONS = [
   {
     value: 'item_not_collected',
     label: 'Item not collected',
     description: 'Runner claimed to collect but item was not picked up',
-    // Once runner is en route they have the item — moot to dispute collection
+    // Once runner is en route they physically have the item — moot to dispute
     windowClosesAfter: [
       'en_route_to_delivery',
       'arrived_at_delivery_location',
@@ -148,6 +122,7 @@ const PICK_UP_REASONS = [
     value: 'item_not_delivered',
     label: 'Item not delivered',
     description: 'Runner marked as delivered but item never arrived',
+    windowOpensAt: 'item_delivered',
     windowClosesAfter: [
       'item_delivered',
       'task_completed',
@@ -158,6 +133,7 @@ const PICK_UP_REASONS = [
     value: 'item_damaged_in_transit',
     label: 'Item damaged in transit',
     description: 'Item arrived visibly damaged after collection',
+    windowOpensAt: 'item_delivered',
     windowClosesAfter: [
       'completed',
     ],
@@ -174,6 +150,7 @@ const PICK_UP_REASONS = [
     value: 'runner_unresponsive',
     label: 'Runner went offline / unresponsive',
     description: 'Runner stopped communicating mid-order',
+    // If task completed the runner wasn't unresponsive enough to matter
     windowClosesAfter: [
       'task_completed',
       'completed',
@@ -189,42 +166,239 @@ const PICK_UP_REASONS = [
   },
 ];
 
+// ─── RUNNER reasons for pick-up orders ───────────────────────────────────────
+// Runners can raise disputes when users obstruct or make the order unsafe.
+// windowOpensAt: the status at which this reason first becomes actionable.
+// Reasons without windowOpensAt are available immediately.
+
+const RUNNER_PICK_UP_REASONS = [
+  {
+    value: 'user_wont_confirm_delivery',
+    label: 'User refusing to confirm delivery',
+    description: 'Item was delivered but user is withholding confirmation to delay escrow release',
+    // Only relevant once runner has marked delivered
+    windowOpensAt: 'item_delivered',
+    windowClosesAfter: [
+      'task_completed',
+      'completed',
+    ],
+  },
+  {
+    value: 'user_claiming_non_delivery',
+    label: 'User falsely claiming non-delivery',
+    description: 'User claims item was not delivered despite runner having proof of delivery',
+    windowOpensAt: 'item_delivered',
+    windowClosesAfter: [
+      'task_completed',
+      'completed',
+    ],
+  },
+  {
+    value: 'wrong_item_given_by_sender',
+    label: 'Wrong item given by sender',
+    description: 'The item at pickup did not match the order description',
+    // Closes once en route — runner accepted and carried it, no longer actionable
+    windowClosesAfter: [
+      'en_route_to_delivery',
+      'arrived_at_delivery_location',
+      'item_delivered',
+      'task_completed',
+      'completed',
+    ],
+  },
+  {
+    value: 'dangerous_pickup_location',
+    label: 'Unsafe or dangerous pickup location',
+    description: 'The pickup location was unsafe, inaccessible, or posed a risk to the runner',
+    windowClosesAfter: [
+      'item_collected',
+      'en_route_to_delivery',
+      'arrived_at_delivery_location',
+      'item_delivered',
+      'task_completed',
+      'completed',
+    ],
+  },
+  {
+    value: 'dangerous_delivery_location',
+    label: 'Unsafe or dangerous delivery location',
+    description: 'The delivery location was unsafe, inaccessible, or posed a risk to the runner',
+    // Only relevant once en route to delivery
+    windowOpensAt: 'en_route_to_delivery',
+    windowClosesAfter: [
+      'item_delivered',
+      'task_completed',
+      'completed',
+    ],
+  },
+  {
+    value: 'user_misconduct',
+    label: 'User misconduct',
+    description: 'User was abusive, threatening, or acted in bad faith during the order',
+    windowClosesAfter: [
+      'completed',
+    ],
+  },
+  {
+    value: 'other',
+    label: 'Other',
+    description: 'Something else not listed above',
+    windowClosesAfter: [
+      'completed',
+    ],
+  },
+];
+
+// ─── RUNNER reasons for run-errand orders ────────────────────────────────────
+
+const RUNNER_RUN_ERRAND_REASONS = [
+  {
+    value: 'user_wont_confirm_delivery',
+    label: 'User refusing to confirm delivery',
+    description: 'Item was delivered but user is withholding confirmation to delay escrow release',
+    windowOpensAt: 'item_delivered',
+    windowClosesAfter: [
+      'task_completed',
+      'completed',
+    ],
+  },
+  {
+    value: 'user_claiming_non_delivery',
+    label: 'User falsely claiming non-delivery',
+    description: 'User claims item was not delivered despite runner having proof',
+    windowOpensAt: 'item_delivered',
+    windowClosesAfter: [
+      'task_completed',
+      'completed',
+    ],
+  },
+  {
+    value: 'user_misconduct',
+    label: 'User misconduct',
+    description: 'User was abusive, threatening, or acted in bad faith during the order',
+    windowClosesAfter: [
+      'completed',
+    ],
+  },
+  {
+    value: 'other',
+    label: 'Other',
+    description: 'Something else not listed above',
+    windowClosesAfter: [
+      'completed',
+    ],
+  },
+];
+
+// ─── Exports ─────────────────────────────────────────────────────────────────
+
 export const DISPUTE_REASONS = {
   'run-errand': RUN_ERRAND_REASONS,
-  'pick-up':    PICK_UP_REASONS,
+  'pick-up': PICK_UP_REASONS,
+};
+
+export const RUNNER_DISPUTE_REASONS = {
+  'run-errand': RUNNER_RUN_ERRAND_REASONS,
+  'pick-up': RUNNER_PICK_UP_REASONS,
 };
 
 /** Normalise the loose serviceType strings your DB/socket may emit */
 export function normaliseServiceType(serviceType = '') {
   const s = serviceType.toLowerCase();
   if (s.includes('errand')) return 'run-errand';
-  if (s.includes('pick'))   return 'pick-up';
+  if (s.includes('pick')) return 'pick-up';
   return null;
 }
 
 /**
- * Returns reasons still actionable at the given order status.
+ * Returns user-side reasons still actionable at the given order status.
  * Used by DisputeForm and Disputes.jsx to filter the visible list.
  */
 export function getAvailableReasons(serviceType, orderStatus) {
   const type = normaliseServiceType(serviceType);
   if (!type) return [];
-  return (DISPUTE_REASONS[type] ?? []).filter(
-    (r) => !r.windowClosesAfter.includes(orderStatus)
-  );
+
+  const allStatuses = [
+    'accepted',
+    'arrived_at_pickup_location',
+    'item_collected',
+    'en_route_to_delivery',
+    'arrived_at_delivery_location',
+    'item_delivered',
+    'task_completed',
+    'completed',
+    'arrived_at_market',
+    'purchase_in_progress',
+    'purchase_completed',
+  ];
+
+  const currentIdx = allStatuses.indexOf(orderStatus);
+
+  return (DISPUTE_REASONS[type] ?? []).filter((r) => {
+    if (r.windowClosesAfter.includes(orderStatus)) return false;
+    if (r.windowOpensAt) {
+      const opensIdx = allStatuses.indexOf(r.windowOpensAt);
+      if (currentIdx < opensIdx) return false;
+    }
+    return true;
+  });
+}
+
+/**
+ * Returns runner-side reasons still actionable at the given order status.
+ * Respects both windowOpensAt and windowClosesAfter.
+ * Used by Disputes.jsx (runner screen).
+ */
+export function getAvailableRunnerReasons(serviceType, orderStatus) {
+  const type = normaliseServiceType(serviceType);
+  if (!type) return [];
+
+  const allStatuses = [
+    // pick-up flow order — used for windowOpensAt comparison
+    'accepted',
+    'arrived_at_pickup_location',
+    'item_collected',
+    'en_route_to_delivery',
+    'arrived_at_delivery_location',
+    'item_delivered',
+    'task_completed',
+    'completed',
+    // run-errand flow
+    'arrived_at_market',
+    'purchase_in_progress',
+    'purchase_completed',
+  ];
+
+  const currentIdx = allStatuses.indexOf(orderStatus);
+
+  return (RUNNER_DISPUTE_REASONS[type] ?? []).filter((r) => {
+    if (r.windowClosesAfter.includes(orderStatus)) return false;
+    if (r.windowOpensAt) {
+      const opensIdx = allStatuses.indexOf(r.windowOpensAt);
+      // hide until the order has reached or passed windowOpensAt
+      if (currentIdx < opensIdx) return false;
+    }
+    return true;
+  });
 }
 
 /**
  * Returns the human-readable label for a saved reason value.
- * Works across both service types — used by DisputeRaisedMessage.
+ * Works across all service types and both user runner reasons.
  */
 export function getReasonLabel(reasonValue) {
-  const all = [...RUN_ERRAND_REASONS, ...PICK_UP_REASONS];
+  const all = [
+    ...RUN_ERRAND_REASONS,
+    ...PICK_UP_REASONS,
+    ...RUNNER_PICK_UP_REASONS,
+    ...RUNNER_RUN_ERRAND_REASONS,
+  ];
+  // dedupe by value — first match wins
   return all.find((r) => r.value === reasonValue)?.label ?? reasonValue;
 }
 
 /**
- * Returns true if a specific reason is still valid for the given status.
+ * Returns true if a specific user-side reason is still valid for the given status.
  * Used by the backend controller for per-reason server-side validation.
  */
 export function isReasonValid(serviceType, orderStatus, reason) {
@@ -233,4 +407,29 @@ export function isReasonValid(serviceType, orderStatus, reason) {
   const match = (DISPUTE_REASONS[type] ?? []).find((r) => r.value === reason);
   if (!match) return false;
   return !match.windowClosesAfter.includes(orderStatus);
+}
+
+/**
+ * Returns true if a specific runner-side reason is still valid.
+ * Used by the backend controller.
+ */
+export function isRunnerReasonValid(serviceType, orderStatus, reason) {
+  const type = normaliseServiceType(serviceType);
+  if (!type) return false;
+  const match = (RUNNER_DISPUTE_REASONS[type] ?? []).find((r) => r.value === reason);
+  if (!match) return false;
+  if (match.windowClosesAfter.includes(orderStatus)) return false;
+  if (match.windowOpensAt) {
+    // reuse the ordered list from getAvailableRunnerReasons
+    const allStatuses = [
+      'accepted', 'arrived_at_pickup_location', 'item_collected',
+      'en_route_to_delivery', 'arrived_at_delivery_location',
+      'item_delivered', 'task_completed', 'completed',
+      'arrived_at_market', 'purchase_in_progress', 'purchase_completed',
+    ];
+    const currentIdx = allStatuses.indexOf(orderStatus);
+    const opensIdx = allStatuses.indexOf(match.windowOpensAt);
+    if (currentIdx < opensIdx) return false;
+  }
+  return true;
 }
