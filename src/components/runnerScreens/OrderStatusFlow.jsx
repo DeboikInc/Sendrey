@@ -197,19 +197,16 @@ const OrderStatusFlow = ({
     }
 
     if (isRunErrand && statusKey === 'purchase_in_progress') {
-      const { chatId } = orderDataRef.current ?? {};
-      const liveOrder = chatId
-        ? useOrderStore.getState()._chats[chatId]?.currentOrder
-        : null;
+      const itemsSubmitted = (messagesRef?.current?.some(
+        m => (m.type === 'item_submission' || m.messageType === 'item_submission') &&
+          (m.status === 'approved' || m.status === 'pending')
+      ) ||
+        useOrderStore.getState()._chats[chatId]?.currentOrder?.status === 'items_submitted' ||
+        useOrderStore.getState()._chats[chatId]?.currentOrder?.status === 'items_approved'
+      );
 
-      const isPaid =
-        liveOrder?.paymentStatus === 'paid' ||
-        liveOrder?.status === 'active' ||
-        liveOrder?.status === 'paid' ||
-        orderDataRef.current?.paymentStatus === 'paid'; // fallback
-
-      if (!isPaid) {
-        alert('Payment must be completed before marking purchase as in progress.');
+      if (!itemsSubmitted) {
+        alert('You must submit item proof first. Tap the attachment icon to submit items.');
         return;
       }
     }

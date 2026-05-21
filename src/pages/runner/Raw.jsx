@@ -16,7 +16,8 @@ import { useRunnerSocketHandlers } from '../../hooks/useRunnerSocketHandlers';
 
 import chatManager from '../../utils/chatStateManager';
 import { enqueueSocketEvent } from '../../utils/socketQueue';
-import { getAvailableReasons } from '../../utils/disputeReasons';
+import { getAvailableRunnerReasons } from '../../utils/disputeReasons';
+
 
 // import PhoneVerificationPrompt from "../../components/common/PhoneVerificationPrompt";
 import { Profile } from './Profile';
@@ -55,6 +56,7 @@ const makeTaskCompleted = (id) => (s) => id ? (s._chats[id]?.taskCompleted ?? fa
 const makeCompletedStat = (id) => (s) => id ? (s._chats[id]?.completedStatuses ?? EMPTY_STATUSES) : EMPTY_STATUSES;
 const makeCurrentOrder = (id) => (s) => id ? (s._chats[id]?.currentOrder ?? null) : null;
 const makeOrderCancelled = (id) => (s) => id ? (s._chats[id]?.orderCancelled ?? false) : false;
+const makeCompletedStats = (id) => (s) => id ? (s._chats[id]?.completedStatuses ?? EMPTY_STATUSES) : EMPTY_STATUSES;
 
 const selectIsConnectLocked = (s) => {
   const chats = s._chats;
@@ -1554,6 +1556,7 @@ function ContactInfo({
   // Reads live from store — re-renders the instant store updates
   const currentOrderSel = useMemo(() => makeCurrentOrder(chatId), [chatId]);
   const orderCancelledSel = useMemo(() => makeOrderCancelled(chatId), [chatId]);
+  const completedStatsSel = useMemo(() => makeCompletedStats(chatId), [chatId])
 
   const currentOrder = useOrderStore(currentOrderSel);
   const orderCancelled = useOrderStore(orderCancelledSel);
@@ -1570,7 +1573,14 @@ function ContactInfo({
     && !['completed', 'cancelled', 'task_completed'].includes(currentOrder.status)
     && !orderCancelled;
 
-  const itemApproved = currentOrder?.status === 'purchase_completed';
+  const completedStatuses = useOrderStore(completedStatsSel);
+
+  const itemApproved =
+    currentOrder?.approvalStatus === 'approved' ||          
+    currentOrder?.status === 'items_approved' ||            
+    completedStatuses?.includes('items_approved') ||        
+    completedStatuses?.includes('purchase_completed') ||    
+    completedStatuses?.includes('arrived_at_delivery_location');
 
   const showPayout = isRunErrand &&
     isChatActive &&
@@ -1582,11 +1592,10 @@ function ContactInfo({
     if (!isChatActive || !currentOrder) return false;
     if (orderCancelled) return false;
     if (['completed', 'cancelled', 'task_completed'].includes(currentOrder.status)) return false;
-    if (currentOrder.usedPayoutSystem) return false; // vendor already paid
     if (currentOrder.hasDispute) return false;        // dispute already active
 
     // If at least one reason is still open, the runner can raise a dispute.
-    return getAvailableReasons(
+    return getAvailableRunnerReasons(
       currentOrder.serviceType ?? currentOrder.taskType,
       currentOrder.status
     ).length > 0;
