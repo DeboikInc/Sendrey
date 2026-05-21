@@ -186,9 +186,27 @@ class PayoutController extends BaseController {
       );
       if (!claimed) return this.error(res, 'Transfer already submitted or currently processing', 409);
 
+      if (order.status !== 'purchase_completed') {
+        await RunnerPayout.findOneAndUpdate({ orderId }, { $set: { status: 'pending' } });
+        return this.error(
+          res,
+          order.status === 'accepted' ||
+            order.status === 'runner_en_route_to_vendor' ||
+            order.status === 'arrived_at_vendor'
+            ? 'Transfer cannot be made before the user has approved the items.'
+            : 'Payout transfer is no longer available at this order stage.',
+          403
+        );
+      }
+
       if (spent > claimed.itemBudget) {
         await RunnerPayout.findOneAndUpdate({ orderId }, { $set: { status: 'pending' } });
         return this.badRequest(res, `Amount NGN${spent.toString()} exceeds budget NGN${claimed.itemBudget.toString()}`);
+      }
+
+      if (!claimed.itemBudget || claimed.itemBudget <= 0) {
+        await RunnerPayout.findOneAndUpdate({ orderId }, { $set: { status: 'pending' } });
+        return this.error(res, 'No approved item budget found for this order.', 400);
       }
 
       // ── 3. Deduct from user's locked wallet balance ───────────────────────────

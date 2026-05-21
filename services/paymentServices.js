@@ -685,6 +685,7 @@ class PaymentService {
     };
   }
 
+  // service
   async transferToVendor({ amount, bankName, accountNumber, accountName, vendorName, orderId, runnerId }) {
     // ── DEV MOCK ───────────────────────────────────────────
     if (process.env.NODE_ENV === 'development') {
@@ -1014,6 +1015,51 @@ class PaymentService {
         amount,
         status: transfer.data.status,
       };
+    });
+  }
+
+  async refundToUser({ escrowId, userId, amount, reason, orderId }) {
+    return withTransaction(async (session) => {
+      const escrow = await Escrow.findById(escrowId).session(session);
+      if (!escrow) throw new Error('Escrow not found');
+
+      // Credit user wallet
+      const userWallet = await Wallet.findOne({ userId, userType: 'user' }).session(session);
+      if (!userWallet) throw new Error('User wallet not found');
+
+      await userWallet.credit(
+        amount,
+        `refund-ban-${orderId}-${Date.now()}`,
+        { type: 'refund', orderId }
+      );
+
+      // Ledger entry
+      await LedgerEntry.create([{
+        userId,
+        userModel: 'User',
+        type: 'escrow_refund',
+        grossAmount: amount,
+        netAmount: amount,
+        providerFee: 0,
+        platformFee: 0,
+        netPlatformFee: 0,
+        runnerFee: 0,
+        provider: 'system',
+        orderId,
+        escrowId,
+        description: reason,
+        status: 'completed',
+      }], { session });
+
+      // Mark escrow released
+      await Escrow.findByIdAndUpdate(escrowId,
+        { $set: { status: 'refunded' } },
+        { session }
+      );
+
+      console.log(`[refundToUser] NGN ${amount} refunded to user ${userId} for order ${orderId}`);
+
+    
     });
   }
 }
