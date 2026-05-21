@@ -5,11 +5,13 @@ const { TASK_TYPES, SERVICE_TYPE } = require('../config/constants');
 const VALID_TRANSITIONS = {
   pending_payment: ['paid', 'payment_failed', 'cancelled'],
   payment_failed: ['pending_payment', 'cancelled'],
-  paid: ['accepted', 'items_submitted', 'items_approved','cancelled'],
-  'accepted': ['en_route_to_pickup', 'arrived_at_pickup', 'picked_up', 'en_route_to_delivery', 'arrived_at_delivery', 'delivered'],
+  paid: ['accepted', 'items_submitted', 'items_approved', 'cancelled'],
+  accepted: ['en_route_to_pickup', 'arrived_at_pickup', 'picked_up', 'en_route_to_delivery', 'arrived_at_delivery', 'delivered', 'items_submitted', 'items_approved', 'shopping'],
   shopping: ['items_submitted', 'cancelled'],
-  items_submitted: ['items_approved', 'shopping', 'cancelled', 'paid'],   // 'shopping' allows re-submission after rejection
+  items_submitted: ['items_approved', 'shopping', 'arrived_at_pickup', 'cancelled'],
   items_approved: ['en_route_to_pickup', 'en_route_to_delivery', 'cancelled'],
+  purchase_in_progress: ['purchase_completed', 'cancelled'],
+  purchase_completed: ['en_route_to_delivery', 'cancelled'],
   en_route_to_pickup: ['arrived_at_pickup', 'items_submitted', 'cancelled'],
   arrived_at_pickup: ['picked_up', 'items_submitted', 'cancelled'],
   picked_up: ['en_route_to_delivery', 'cancelled'],

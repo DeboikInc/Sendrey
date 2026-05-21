@@ -120,10 +120,11 @@ class PaymentController extends BaseController {
     async getWalletBalance(req, res) {
         try {
             const userId = req.user._id;
+            const userType = req.user.role === 'runner' ? 'runner' : 'user';
 
             let wallet = await Wallet.findOne({ userId });
             if (!wallet) {
-                wallet = await Wallet.create({ userId, userType: 'user', });
+                wallet = await Wallet.create({ userId, userType });
             }
 
             this.success(res, { balance: wallet.balance, status: wallet.status });

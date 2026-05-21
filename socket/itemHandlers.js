@@ -26,7 +26,7 @@ const cleanForEmit = (data) => {
   return data;
 };
 
-const PICKUP_SUBMITTABLE_STATUSES = ['paid', 'accepted', 'en_route_to_pickup', 'arrived_at_pickup', 'shopping'];
+const PICKUP_SUBMITTABLE_STATUSES = ['arrived_at_pickup', 'shopping'];
 
 const uploadToCloudinary = (base64String, folder = 'item-receipts') =>
   new Promise((resolve, reject) => {
@@ -300,8 +300,9 @@ const handleRejectItems = async (socket, io, data) => {
       chatId,
       status: { $nin: ['completed', 'cancelled'] }
     }).sort({ createdAt: -1 });
+
     if (order) {
-      await orderStateMachine.transition(order.orderId, 'in_progress', {
+      await orderStateMachine.transition(order.orderId, 'shopping', {
         triggeredBy: 'user',
         triggeredById: userId,
         note: `Items rejected: ${reason}`
@@ -539,7 +540,7 @@ const handleRejectPickupItem = async (socket, io, data) => {
     }).sort({ createdAt: -1 });
 
     if (order) {
-      await orderStateMachine.transition(order.orderId, 'in_progress', {
+      await orderStateMachine.transition(order.orderId, 'arrived_at_pickup', {
         triggeredBy: 'user',
         triggeredById: userId,
         note: `Pickup item rejected: ${reason}`

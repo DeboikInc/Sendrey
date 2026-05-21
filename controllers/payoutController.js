@@ -166,6 +166,10 @@ class PayoutController extends BaseController {
         bankName, accountNumber, accountName, pin,
       } = req.body;
 
+      const order = await Order.findOne({ orderId }).sort({ createdAt: -1 }).lean();
+      console.log('[transferToVendor] order.status:', order?.status);
+
+      if (!order) return this.notFound(res, 'Order not found');
       if (!orderId) return this.badRequest(res, 'orderId is required');
       if (!vendorName || !amountSpent) return this.badRequest(res, 'vendorName and amountSpent are required');
       if (!bankName || !accountNumber || !accountName) return this.badRequest(res, 'Bank details are required');
@@ -186,14 +190,14 @@ class PayoutController extends BaseController {
       );
       if (!claimed) return this.error(res, 'Transfer already submitted or currently processing', 409);
 
-      if (order.status !== 'purchase_completed') {
+      const PAYOUT_ALLOWED_STATUSES = ['items_approved', 'purchase_in_progress', 'purchase_completed'];
+
+      if (!PAYOUT_ALLOWED_STATUSES.includes(order.status)) {
         await RunnerPayout.findOneAndUpdate({ orderId }, { $set: { status: 'pending' } });
         return this.error(
           res,
-          order.status === 'accepted' ||
-            order.status === 'runner_en_route_to_vendor' ||
-            order.status === 'arrived_at_vendor'
-            ? 'Transfer cannot be made before the user has approved the items.'
+          order.status === 'items_approved'
+            ? 'Transfer cannot be made before items are being purchased.'
             : 'Payout transfer is no longer available at this order stage.',
           403
         );
@@ -207,16 +211,6 @@ class PayoutController extends BaseController {
       if (!claimed.itemBudget || claimed.itemBudget <= 0) {
         await RunnerPayout.findOneAndUpdate({ orderId }, { $set: { status: 'pending' } });
         return this.error(res, 'No approved item budget found for this order.', 400);
-      }
-
-      // ── 3. Deduct from user's locked wallet balance ───────────────────────────
-      // The item budget is sitting in the user's lockedBalance since payment.
-      // We deduct it here — money leaves their wallet when the runner spends it.
-
-      const order = await Order.findOne({ orderId }).sort({ createdAt: -1 }).lean();
-      if (!order) {
-        await RunnerPayout.findOneAndUpdate({ orderId }, { $set: { status: 'pending' } });
-        return this.notFound(res, 'Order not found');
       }
 
       try {
@@ -382,6 +376,7 @@ class PayoutController extends BaseController {
             bankDetails: { bankName, accountNumber, accountName },
             transferReference: transferResult.reference,
             transferId: transferResult.transferId,
+
           },
           $push: {
             receiptHistory: {
@@ -394,6 +389,11 @@ class PayoutController extends BaseController {
           },
         },
         { new: true }
+      );
+
+      await Order.findOneAndUpdate(
+        { orderId },
+        { $set: { usedPayoutSystem: true } }
       );
 
       const newReceipt = payout.receiptHistory[payout.receiptHistory.length - 1];
