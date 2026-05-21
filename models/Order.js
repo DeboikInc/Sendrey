@@ -8,7 +8,7 @@ const VALID_TRANSITIONS = {
   paid: ['accepted', 'items_submitted', 'items_approved','cancelled'],
   'accepted': ['en_route_to_pickup', 'arrived_at_pickup', 'picked_up', 'en_route_to_delivery', 'arrived_at_delivery', 'delivered'],
   shopping: ['items_submitted', 'cancelled'],
-  items_submitted: ['items_approved', 'shopping', 'cancelled'],   // 'shopping' allows re-submission after rejection
+  items_submitted: ['items_approved', 'shopping', 'cancelled', 'paid'],   // 'shopping' allows re-submission after rejection
   items_approved: ['en_route_to_pickup', 'en_route_to_delivery', 'cancelled'],
   en_route_to_pickup: ['arrived_at_pickup', 'items_submitted', 'cancelled'],
   arrived_at_pickup: ['picked_up', 'items_submitted', 'cancelled'],

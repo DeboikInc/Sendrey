@@ -37,7 +37,7 @@ const handleRejectionStrike = async (io, runnerId, chatId) => {
       runnerStatus: 'banned',
       isOnline: false,
       isAvailable: false,
-      isActive: false
+      isActive: false,
     });
 
     const activeOrder = await Order.findOne({
@@ -45,17 +45,34 @@ const handleRejectionStrike = async (io, runnerId, chatId) => {
       status: { $nin: ['completed', 'cancelled', 'task_completed'] }
     }).sort({ createdAt: -1 });
 
+    // ── hoist refundAmount so push notification can access it ─────────────
+    let refundAmount = 0;
+
     if (activeOrder) {
-      // cancel the order
       await Order.findByIdAndUpdate(activeOrder._id, { status: 'cancelled' });
 
-      // refund escrow to user if funded
       if (activeOrder.escrowId) {
         try {
           const escrow = await Escrow.findById(activeOrder.escrowId);
-          if (escrow && escrow.status === 'funded') {
-            // await paymentService.refundToUser(escrow._id);
-            // console.log(`[rejectionStrike] Escrow ${activeOrder.escrowId} refunded to user`);
+          if (escrow && escrow.status !== 'released') {
+            const isRunErrand =
+              activeOrder.serviceType === 'run-errand' ||
+              activeOrder.serviceType === 'run_errand';
+
+            // TODO: confirm with PM — should platform fee be refunded too on ban?
+            // Currently: delivery fee only for errand (item budget gone to vendor)
+            // full refund for pickup (nothing spent)
+            refundAmount = isRunErrand ? escrow.deliveryFee : escrow.totalAmount;
+
+            await paymentService.refundToUser({
+              escrowId: escrow._id,
+              userId: activeOrder.userId,
+              amount: refundAmount,
+              reason: `Runner banned after ${count} violations — order ${activeOrder.orderId}`,
+              orderId: activeOrder.orderId,
+            });
+
+            console.log(`[rejectionStrike] Refunded NGN ${refundAmount} to user for order ${activeOrder.orderId}`);
           }
         } catch (err) {
           console.error('[rejectionStrike] Refund failed:', err.message);
@@ -67,7 +84,7 @@ const handleRejectionStrike = async (io, runnerId, chatId) => {
       const userMsg = {
         id: `runner-banned-user-${Date.now()}`,
         from: 'system', type: 'system', messageType: 'system',
-        text: `This runner has been banned after ${count} violations. Your order has been cancelled and is under review by our team. A refund will be processed shortly.`,
+        text: `This runner has been banned after ${count} violations. Your order has been cancelled and a refund of NGN ${refundAmount.toLocaleString()} has been processed to your wallet.`,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         status: 'sent', senderId: 'system', senderType: 'system', style: 'error',
       };
@@ -81,12 +98,9 @@ const handleRejectionStrike = async (io, runnerId, chatId) => {
       };
 
       await persistMessages(chatId, [userMsg, runnerMsg]);
-
-      // emit to chat room
       io.to(chatId).emit('message', userMsg);
       io.to(chatId).emit('message', runnerMsg);
 
-      // trigger order cancelled on user side → back to home
       if (userId) {
         io.to(`user-${userId}`).emit('orderCancelled', {
           orderId: activeOrder.orderId,
@@ -95,16 +109,35 @@ const handleRejectionStrike = async (io, runnerId, chatId) => {
         });
       }
 
-      // trigger on runner side too
       io.to(`runner-${runnerId}`).emit('orderCancelled', {
         orderId: activeOrder.orderId,
         cancelledBy: 'system',
       });
 
+      // push notification
+      await Promise.allSettled([
+        sendPushNotification({
+          recipientId: activeOrder.userId,
+          recipientType: 'user',
+          title: 'Refund Processed 💰',
+          body: refundAmount > 0
+            ? `NGN ${refundAmount.toLocaleString()} has been refunded to your wallet. We apologise for the inconvenience.`
+            : 'Your order has been cancelled. We apologise for the inconvenience.',
+          data: { type: 'refund_processed', orderId: activeOrder.orderId },
+        }),
+        sendPushNotification({
+          recipientId: runnerId,
+          recipientType: 'runner',
+          title: 'Account Banned',
+          body: 'Your account has been banned due to repeated violations.',
+          data: { type: 'account_banned' },
+        }),
+      ]);
+
       console.log(`[rejectionStrike] Order ${activeOrder.orderId} cancelled, user notified`);
     }
 
-    // emit ban event
+    // emit ban event regardless of whether there was an active order
     io.to(`runner-${runnerId.toString()}`).emit('verificationStatus', {
       isBanned: true,
       reason: 'Your account has been banned due to repeated item or delivery rejections.',

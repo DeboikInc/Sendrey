@@ -2,68 +2,181 @@ const BaseController = require('./baseController');
 const disputeService = require('../services/disputeService');
 const Order = require('../models/Order');
 
+// Mirror of the client-side util — single source of truth for reason windows.
+
+const RUN_ERRAND_REASONS = [
+  {
+    value: 'proof_fraud',
+    windowClosesAfter: [
+      'purchase_completed', 'en_route_to_delivery',
+      'arrived_at_delivery_location', 'item_delivered', 'task_completed', 'completed',
+    ],
+  },
+  {
+    value: 'item_not_delivered',
+    windowClosesAfter: ['item_delivered', 'task_completed', 'completed'],
+  },
+  {
+    value: 'item_damaged_in_transit',
+    windowClosesAfter: ['completed'],
+  },
+  {
+    value: 'runner_misconduct',
+    windowClosesAfter: ['completed'],
+  },
+  {
+    value: 'runner_unresponsive',
+    windowClosesAfter: ['task_completed', 'completed'],
+  },
+  {
+    value: 'other',
+    windowClosesAfter: ['completed'],
+  },
+];
+
+const PICK_UP_REASONS = [
+  {
+    value: 'item_not_collected',
+    windowClosesAfter: [
+      'en_route_to_delivery', 'arrived_at_delivery_location',
+      'item_delivered', 'task_completed', 'completed',
+    ],
+  },
+  {
+    value: 'wrong_item_collected',
+    windowClosesAfter: [
+      'en_route_to_delivery', 'arrived_at_delivery_location',
+      'item_delivered', 'task_completed', 'completed',
+    ],
+  },
+  {
+    value: 'item_not_delivered',
+    windowClosesAfter: ['item_delivered', 'task_completed', 'completed'],
+  },
+  {
+    value: 'item_damaged_in_transit',
+    windowClosesAfter: ['completed'],
+  },
+  {
+    value: 'runner_misconduct',
+    windowClosesAfter: ['completed'],
+  },
+  {
+    value: 'runner_unresponsive',
+    windowClosesAfter: ['task_completed', 'completed'],
+  },
+  {
+    value: 'other',
+    windowClosesAfter: ['completed'],
+  },
+];
+
+const DISPUTE_REASONS = {
+  'run-errand': RUN_ERRAND_REASONS,
+  'pick-up':    PICK_UP_REASONS,
+};
+
+function normaliseServiceType(serviceType = '') {
+  const s = serviceType.toLowerCase();
+  if (s.includes('errand')) return 'run-errand';
+  if (s.includes('pick'))   return 'pick-up';
+  return null;
+}
+
+function isReasonValid(serviceType, orderStatus, reason) {
+  const type = normaliseServiceType(serviceType);
+  if (!type) return false;
+  const match = (DISPUTE_REASONS[type] ?? []).find(r => r.value === reason);
+  if (!match) return false;
+  return !match.windowClosesAfter.includes(orderStatus);
+}
+
+// Reasons that are purely about item/vendor — these are the only ones
+// blocked by usedPayoutSystem (vendor already paid, money gone).
+const ITEM_LEVEL_REASONS = new Set([
+  'proof_fraud',
+  'item_not_delivered',
+  'item_damaged_in_transit',
+  'item_not_collected',
+  'wrong_item_collected',
+]);
+
 class DisputeController extends BaseController {
   constructor() {
     super();
-    this.raiseDispute = this.raiseDispute.bind(this);
+    this.raiseDispute    = this.raiseDispute.bind(this);
     this.getRunnerDisputes = this.getRunnerDisputes.bind(this);
-    // admin uses
-    this.getDispute = this.getDispute.bind(this);
-    this.resolveDispute = this.resolveDispute.bind(this);
-    this.getAllDisputes = this.getAllDisputes.bind(this);
+    
+    this.getDispute      = this.getDispute.bind(this);
+    this.resolveDispute  = this.resolveDispute.bind(this);
+    this.getAllDisputes   = this.getAllDisputes.bind(this);
   }
 
   async raiseDispute(req, res) {
     try {
       const { orderId, chatId, reason, description, evidenceFiles } = req.body;
-      const userId = req.user._id;
+      const userId   = req.user._id;
       const userType = req.user.userType || 'user';
 
+      // ── Fetch order ────────────────────────────────────────────────────────
       const order = await Order.findOne({ orderId }).sort({ createdAt: -1 });
-      if (!order) return this.error(res, 'Order not found');
+      if (!order) return this.error(res, 'Order not found.');
 
-      // Block if payout already used — money already moved
-      if (order.usedPayoutSystem) {
-        return this.error(res, 'Dispute cannot be raised after vendor payment has been made.');
-      }
-
-      const isRunErrand =
-        order.serviceType === 'run-errand' || order.serviceType === 'run_errand';
-      const isPickUp =
-        order.serviceType === 'pick-up' || order.serviceType === 'pick_up';
-
-      // Block if order has passed the dispute window
-      const blockedStatuses = isRunErrand
-        ? ['purchase_completed', 'en_route_to_delivery', 'arrived_at_delivery_location',
-          'item_delivered', 'task_completed', 'completed']
-        : isPickUp
-          ? ['item_collected', 'en_route_to_delivery', 'arrived_at_delivery_location',
-            'item_delivered', 'task_completed', 'completed']
-          : [];
-
-      if (blockedStatuses.includes(order.status)) {
-        return this.error(res, 'Dispute window has closed for this order.');
-      }
-
-      // Block terminal/cancelled orders
+      // ── Terminal / already-disputed orders ─────────────────────────────────
       if (['cancelled', 'disputed', 'dispute_resolved', 'archived'].includes(order.status)) {
-        return this.error(res, `Cannot raise a dispute on an order with status: ${order.status}`);
+        return this.error(res, `Cannot raise a dispute on an order with status: ${order.status}.`);
       }
 
+      // ── Normalise service type ─────────────────────────────────────────────
+      const normalisedType = normaliseServiceType(order.serviceType);
+      if (!normalisedType) {
+        return this.error(res, `Unsupported service type for disputes: ${order.serviceType}`);
+      }
+
+      // ── Validate reason exists for this service type ───────────────────────
+      const allowedReasons = (DISPUTE_REASONS[normalisedType] ?? []).map(r => r.value);
+      if (!reason || !allowedReasons.includes(reason)) {
+        return this.error(
+          res,
+          `Invalid dispute reason "${reason}" for service type "${normalisedType}". ` +
+          `Allowed: ${allowedReasons.join(', ')}.`
+        );
+      }
+
+      // ── usedPayoutSystem only blocks item-level reasons ────────────────────
+      // Runner misconduct, unresponsive, and other can still be raised after
+      // vendor payment — those aren't about the item/money flow.
+      if (order.usedPayoutSystem && ITEM_LEVEL_REASONS.has(reason)) {
+        return this.error(
+          res,
+          'Item-related disputes cannot be raised after vendor payment has been processed.'
+        );
+      }
+
+      // ── Per-reason window check ────────────────────────────────────────────
+      // Each reason carries its own windowClosesAfter — this is the core gate.
+      if (!isReasonValid(order.serviceType, order.status, reason)) {
+        return this.error(
+          res,
+          `The dispute window for "${reason}" has closed at order status "${order.status}".`
+        );
+      }
+
+      // ── Raise dispute ──────────────────────────────────────────────────────
       const dispute = await disputeService.raiseDispute({
         orderId,
         chatId,
-        raisedBy: userType,
+        raisedBy:   userType,
         raisedById: userId,
         reason,
         description,
-        evidenceFiles
+        evidenceFiles,
       });
 
-      this.success(res, dispute);
+      return this.success(res, dispute);
     } catch (error) {
-      console.error("dispute error", error.message, error)
-      this.error(res, error.message);
+      console.error('raiseDispute error:', error.message, error);
+      return this.error(res, error.message);
     }
   }
 
@@ -78,12 +191,12 @@ class DisputeController extends BaseController {
         outcome,
         releasePercentage,
         adminNote,
-        resolvedBy
+        resolvedBy,
       });
 
-      this.success(res, result);
+      return this.success(res, result);
     } catch (error) {
-      this.error(res, error.message);
+      return this.error(res, error.message);
     }
   }
 
@@ -91,9 +204,9 @@ class DisputeController extends BaseController {
     try {
       const { runnerId } = req.params;
       const disputes = await disputeService.getDisputesByRunnerId(runnerId);
-      this.success(res, { disputes });
+      return this.success(res, { disputes });
     } catch (error) {
-      this.error(res, error.message);
+      return this.error(res, error.message);
     }
   }
 
@@ -102,9 +215,9 @@ class DisputeController extends BaseController {
       const { orderId } = req.params;
       const dispute = await disputeService.getDisputeByOrderId(orderId);
       if (!dispute) return this.notFound(res, 'Dispute not found');
-      this.success(res, dispute);
+      return this.success(res, dispute);
     } catch (error) {
-      this.error(res, error.message);
+      return this.error(res, error.message);
     }
   }
 
@@ -116,9 +229,9 @@ class DisputeController extends BaseController {
         parseInt(limit),
         status
       );
-      this.success(res, result);
+      return this.success(res, result);
     } catch (error) {
-      this.error(res, error.message);
+      return this.error(res, error.message);
     }
   }
 }
