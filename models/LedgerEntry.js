@@ -4,6 +4,13 @@ const ledgerEntrySchema = new mongoose.Schema({
   userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   runnerId: { type: mongoose.Schema.Types.ObjectId, ref: 'Runner', default: null },
 
+  userModel: {
+    type: String,
+    enum: ['User', 'Runner'],
+    required: true,
+    default: 'User',
+  },
+
   type: {
     type: String,
     enum: [

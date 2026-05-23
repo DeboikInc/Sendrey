@@ -16,9 +16,11 @@ const orderRoutes = require('./orderRoutes');
 const waitlistRoutes = require('./waitlistRoutes')
 const pinRoutes = require('./pinRoutes')
 const uploadRoutes = require('./upload');
+const sessionRoutes = require('./sessionRoutes');
 
 // Use route modules
 router.use('/auth', authRoutes);
+router.use('/sessions', sessionRoutes);
 router.use('/users', userRoutes);
 router.use('/runners', runnerRoutes);
 router.use('/kyc', kycRoutes);
