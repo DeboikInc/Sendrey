@@ -1,41 +1,42 @@
+/**
+ * scripts/diagnoseLedger.js
+ * Run: node scripts/diagnoseLedger.js
+ */
+
 require('dotenv').config();
 const mongoose = require('mongoose');
 
-async function main() {
+async function run() {
   await mongoose.connect(process.env.DATABASE_URL);
-  const db = mongoose.connection.db;
+  console.log('Connected\n');
 
-  // Find all wallets where a runner exists but userType is wrong
-  const runners = await db.collection('runners').find({}, { projection: { _id: 1 } }).toArray();
-  const runnerIds = runners.map(r => r._id.toString());
+  const ledger = mongoose.connection.db.collection('ledgerentries');
 
-  const badWallets = await db.collection('wallets').find({
-    $or: [
-      { userId: { $in: runnerIds } },
-      { userId: { $in: runners.map(r => r._id) } },
-    ],
-    userType: { $ne: 'runner' }
-  }).toArray();
+  const total = await ledger.countDocuments();
+  console.log(`Total ledger entries: ${total}`);
 
-  console.log(`Found ${badWallets.length} runner wallets with wrong userType:`);
-  badWallets.forEach(w => console.log(`  walletId=${w._id} userId=${w.userId} userType=${w.userType} balance=${w._balance ?? w.balance}`));
+  // breakdown by type + userModel
+  const byType = await ledger.aggregate([
+    { $group: { _id: { type: '$type', userModel: { $ifNull: ['$userModel', 'MISSING'] } }, count: { $sum: 1 } } },
+    { $sort: { '_id.type': 1 } }
+  ]).toArray();
 
-  if (!badWallets.length) {
-    console.log('No bad wallets found.');
-    await mongoose.disconnect();
-    return;
-  }
+  console.log('\nBreakdown by type + userModel:');
+  byType.forEach(r => console.log(`  type=${r._id.type} | userModel=${r._id.userModel} | count=${r.count}`));
 
-  for (const w of badWallets) {
-    await db.collection('wallets').updateOne(
-      { _id: w._id },
-      { $set: { userType: 'runner' } }
-    );
-    console.log(`✅ Fixed wallet ${w._id} for runner ${w.userId}`);
-  }
+  // how many missing userModel
+  const missingModel = await ledger.countDocuments({ userModel: { $exists: false } });
+  console.log(`\nEntries missing userModel entirely: ${missingModel}`);
 
-  console.log('\nDone. Re-run diagnose-payout.js to confirm.');
+  // escrow_release specifically
+  const releases = await ledger.find({ type: 'escrow_release' }).toArray();
+  console.log(`\nAll escrow_release entries (${releases.length}):`);
+  releases.forEach(e => {
+    console.log(`  userId=${e.userId} | runnerId=${e.runnerId} | userModel=${e.userModel ?? 'MISSING'} | amount=${e.grossAmount}`);
+  });
+
   await mongoose.disconnect();
+  console.log('\nDone.');
 }
 
-main().catch(err => { console.error('Fatal:', err.message); process.exit(1); });
+run().catch(err => { console.error(err); process.exit(1); });

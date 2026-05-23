@@ -1,96 +1,95 @@
-const mongoose = require('mongoose');
+
+
 require('dotenv').config();
+const mongoose = require('mongoose');
 
-const DATABASE_URL = process.env.DATABASE_URL;
-
-const ORDER_ID    = 'ORD-MPFMRIOH-IMWZP';
-const ORDER_OID   = '6a0f210ca5bdb99b544f5c3b';
-const ESCROW_OID  = '6a0f2124a5bdb99b544f5ca0';
-const USER_ID     = '69de878ffce5e7a20b25ab34';
-const RUNNER_ID   = '69fc587312bc0b5b453df47c';
-
-async function main() {
-  await mongoose.connect(DATABASE_URL);
-  console.log('Connected to MongoDB\n');
+async function run() {
+  await mongoose.connect(process.env.DATABASE_URL);
+  console.log('Connected\n');
 
   const db = mongoose.connection.db;
-  const escrows = db.collection('escrows');
   const orders  = db.collection('orders');
+  const escrows = db.collection('escrows');
   const ledger  = db.collection('ledgerentries');
 
-  // ── 1. Fix escrow: set taskId → orderId string, mark paymentStatus paid ──
-  const escrowResult = await escrows.updateOne(
-    { _id: new mongoose.Types.ObjectId(ESCROW_OID) },
-    {
-      $set: {
-        taskId:        ORDER_ID,       // was the mongo _id string — fix to orderId
-        orderId:       ORDER_ID,       // belt-and-suspenders
-        paymentStatus: 'paid',         // was 'unpaid' despite order being paid
-        paidAt:        new Date(),
-      },
-    }
-  );
-  console.log(`Escrow fixed     : ${escrowResult.modifiedCount} doc modified`);
+  // All paid orders
+  const paidOrders = await orders.find({
+    paymentStatus: 'paid',
+    escrowId: { $exists: true, $ne: null },
+  }).toArray();
 
-  // ── 2. Fix order: ensure paidAt and acceptedAt are stamped ───────────────
-  const orderResult = await orders.updateOne(
-    { orderId: ORDER_ID },
-    {
-      $set: {
-        paidAt:     new Date('2026-05-21T15:13:40.868Z'), // from statusHistory
-        acceptedAt: new Date('2026-05-21T15:13:40.868Z'),
-      },
-    }
-  );
-  console.log(`Order fixed      : ${orderResult.modifiedCount} doc modified`);
+  console.log(`Paid orders found: ${paidOrders.length}`);
 
-  // ── 3. Create the missing escrow_lock ledger entry ────────────────────────
-  const alreadyExists = await ledger.findOne({
-    orderId: ORDER_ID,
-    type:    'escrow_lock',
-  });
+  let written = 0;
+  let skipped = 0;
 
-  if (alreadyExists) {
-    console.log('Ledger entry     : already exists, skipping');
-  } else {
-    const ledgerResult = await ledger.insertOne({
-      userId:      new mongoose.Types.ObjectId(USER_ID),
-      runnerId:    new mongoose.Types.ObjectId(RUNNER_ID),
-      userModel:   'User',
-      type:        'escrow_lock',
-      grossAmount: 60330,
-      netAmount:   60330,
-      description: `Order Payment (Card) for ${ORDER_ID}`,
-      orderId:     ORDER_ID,
-      escrowId:    new mongoose.Types.ObjectId(ESCROW_OID),
-      status:      'completed',
-      reference:   null,
-      createdAt:   new Date('2026-05-21T15:13:40.868Z'),
-      updatedAt:   new Date('2026-05-21T15:13:40.868Z'),
+  for (const order of paidOrders) {
+    // Check if escrow_lock already exists for this order + user
+    const existing = await ledger.findOne({
+      type: 'escrow_lock',
+      userModel: 'User',
+      orderId: order.orderId,
+      userId: order.userId,
     });
-    console.log(`Ledger entry     : created — ${ledgerResult.insertedId}`);
+
+    if (existing) {
+      console.log(`  [SKIP] ${order.orderId} — escrow_lock already exists`);
+      skipped++;
+      continue;
+    }
+
+    const escrow = await escrows.findOne({ _id: order.escrowId });
+    if (!escrow) {
+      console.log(`  [SKIP] ${order.orderId} — escrow not found`);
+      skipped++;
+      continue;
+    }
+
+    // Determine provider — if escrow has paystackReference it was card, else wallet
+    const provider = escrow.paystackReference ? 'paystack' : 'wallet';
+
+    const entry = {
+      userId: order.userId,
+      userModel: 'User',
+      runnerId: order.runnerId,
+      type: 'escrow_lock',
+      grossAmount: order.totalAmount ?? escrow.totalAmount,
+      netAmount: (order.totalAmount ?? escrow.totalAmount) - (escrow.providerFee ?? 0),
+      providerFee: escrow.providerFee ?? 0,
+      platformFee: escrow.platformFee ?? 0,
+      netPlatformFee: escrow.netPlatformFee ?? 0,
+      runnerFee: escrow.runnerPayout ?? 0,
+      provider,
+      ...(escrow.paystackReference ? { providerReference: escrow.paystackReference } : {}),
+      orderId: order.orderId,
+      escrowId: escrow._id,
+      description: `Order Payment (${provider === 'paystack' ? 'Card' : 'Wallet'}) for ${order.orderId}`,
+      status: 'completed',
+      reversalOf: null,
+      reversedBy: null,
+      metadata: { backfilled: true },
+      createdAt: escrow.createdAt ?? order.createdAt ?? new Date(),
+      updatedAt: new Date(),
+      __v: 0,
+    };
+
+    await ledger.insertOne(entry);
+    console.log(`  [WRITTEN] ${order.orderId} | user=${order.userId} | amount=NGN ${entry.grossAmount} | provider=${provider}`);
+    written++;
   }
 
-  // ── Verify ────────────────────────────────────────────────────────────────
-  console.log('\n=== VERIFICATION ===');
+  console.log(`\nDone. Written: ${written} | Skipped: ${skipped}`);
 
-  const fixedEscrow = await escrows.findOne(
-    { _id: new mongoose.Types.ObjectId(ESCROW_OID) },
-    { projection: { taskId: 1, orderId: 1, paymentStatus: 1, status: 1, paidAt: 1 } }
-  );
-  console.log('Escrow after fix :', JSON.stringify(fixedEscrow, null, 2));
-
-  const allLedger = await ledger
-    .find({ orderId: ORDER_ID })
-    .sort({ createdAt: 1 })
-    .toArray();
-  console.log(`\nLedger entries for ${ORDER_ID} (${allLedger.length}):`);
-  allLedger.forEach(e =>
-    console.log(`  [${e.type}]  ₦${(e.grossAmount ?? 0).toLocaleString()}  — ${e.description}`)
-  );
+  // Verify
+  console.log('\n--- user-side query after backfill ---');
+  const userHidden = ['platform_earning', 'provider_fee', 'item_budget_spent'];
+  const userEntries = await ledger.find({ userModel: 'User', type: { $nin: userHidden } }).sort({ createdAt: 1 }).toArray();
+  console.log(`User-visible entries (${userEntries.length}):`);
+  userEntries.forEach(e => {
+    console.log(`  userId=${e.userId} | type=${e.type} | orderId=${e.orderId} | amount=${e.grossAmount}`);
+  });
 
   await mongoose.disconnect();
-  console.log('\nDone.');
 }
 
-main().catch(err => { console.error(err); process.exit(1); });
+run().catch(err => { console.error(err); process.exit(1); });

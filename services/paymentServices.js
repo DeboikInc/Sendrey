@@ -343,7 +343,6 @@ class PaymentService {
         { type: 'wallet_funding', userId }
       );
 
-      try {
         await LedgerEntry.create([{
           userId,
           userModel: 'User',
@@ -362,9 +361,6 @@ class PaymentService {
           status: 'completed',
 
         }], { session });
-      } catch (err) {
-        console.error('[verifyWalletFunding] LedgerEntry.create] failed:', err.message);
-      }
 
       console.log(`✅ Wallet funded: NGN ${grossAmount} for user ${userId}`);
       return { balance: wallet.balance, amount: grossAmount };
@@ -406,11 +402,14 @@ class PaymentService {
   }
 
   async payoutToRunner(escrowId) {
+    console.log('[payoutToRunner START] called with escrowId:', escrowId);
     const claimed = await Escrow.findOneAndUpdate(
       { _id: escrowId, deliveryFeeReleased: { $ne: true } },
       { $set: { deliveryFeeReleased: true } },
       { new: false } // return original doc to confirm we claimed it
     );
+
+    console.log('[payoutToRunner] claimed:', claimed?._id, '| already released:', !claimed);
 
     if (!claimed) {
       console.log(`[payoutToRunner] already released or not found for escrow ${escrowId} — skipping`);
@@ -483,6 +482,10 @@ class PaymentService {
         console.warn(`[payoutToRunner] NO ORDER FOUND for escrow ${escrowId}`);
       }
 
+      if (order && (order.serviceType === 'pick-up' || order.serviceType === 'pickup')) {
+        usedPayoutSystem = true;
+      }
+
       // Use stored fee split from escrow; recalculate only as fallback
       const providerFee = escrow.providerFee ?? calculateFeeSplit(escrow.deliveryFee).providerFee;
       const netPlatformFee = escrow.netPlatformFee ?? (escrow.platformFee - providerFee);
@@ -494,29 +497,26 @@ class PaymentService {
           { orderId: resolvedOrderId, escrowId }
         );
 
-        console.log('[payoutToRunner] writing ledger entries for orderId:', resolvedOrderId);
+        console.log('[payoutToRunner Ledger Start] writing ledger entries for orderId:', resolvedOrderId);
 
-        try {
-          await LedgerEntry.create([{
-            userId: escrow.runnerId.toString(),
-            userModel: 'Runner',
-            orderId: resolvedOrderId,
-            escrowId: escrow._id,
-            runnerId: escrow.runnerId,
-            type: 'escrow_release',
-            grossAmount: escrow.runnerPayout,
-            netAmount: escrow.runnerPayout,
-            platformFee: escrow.platformFee,
-            netPlatformFee: escrow.netPlatformFee,
-            providerFee: escrow.providerFee ?? 0,
-            runnerFee: escrow.runnerPayout,
-            provider: 'system',
-            description: `NGN ${escrow.runnerPayout.toString()} earned from completed order - ${resolvedOrderId.toString()}`,
-            status: 'completed',
-          }], { session });
-        } catch (err) {
-          console.error('[PayoutToRunner] LedgerEntry.create] failed:', err.message);
-        }
+        await LedgerEntry.create([{
+          userId: escrow.runnerId.toString(),
+          userModel: 'Runner',
+          orderId: resolvedOrderId,
+          escrowId: escrow._id,
+          runnerId: escrow.runnerId,
+          type: 'escrow_release',
+          grossAmount: escrow.runnerPayout,
+          netAmount: escrow.runnerPayout,
+          platformFee: 0,
+          netPlatformFee: 0,
+          providerFee: 0,
+          runnerFee: escrow.runnerPayout,
+          provider: 'system',
+          description: `NGN ${escrow.runnerPayout.toString()} earned from completed order - ${resolvedOrderId.toString()}`,
+          status: 'completed',
+        }], { session });
+
 
         console.log('[payoutToRunner] ledger entries written');
 
@@ -536,7 +536,6 @@ class PaymentService {
         status: 'pending',
       });
 
-      try {
         await LedgerEntry.create([
           {
             userId: escrow.userId,
@@ -581,11 +580,6 @@ class PaymentService {
             status: 'completed',
           },
         ], { session });
-
-      } catch (err) {
-        console.error('[Other LedgerEntry.create] failed:', err.message);
-
-      }
 
       // update escrow
       await Escrow.findByIdAndUpdate(
@@ -640,7 +634,7 @@ class PaymentService {
           usedPayoutSystem: false,
         }], { session });
 
-        try {
+
           await LedgerEntry.create([{
             userId: escrow.userId,
             userModel: 'User',
@@ -655,9 +649,6 @@ class PaymentService {
             description: `Item budget of NGN ${escrow.itemBudget.toString()} released for order ${order.orderId}`,
             status: 'completed',
           }], { session });
-        } catch (err) {
-          console.error('[Escrow LedgerEntry.create] failed:', err.message);
-        }
 
         console.log(`RunnerPayout created: NGN ${escrow.itemBudget} for order ${order.orderId}`);
       }
@@ -773,22 +764,49 @@ class PaymentService {
     });
   }
 
+  // helper
+  getTransactionLabel(entry) {
+    const labels = {
+      'escrow_lock': `Order Payment for ${entry.orderId}`,
+      'deposit': 'Wallet Funding',
+      'escrow_release': `Earnings from order ${entry.orderId}`,
+      'escrow_refund': 'Dispute Refund',
+      'withdrawal': entry.description || 'Withdrawal',
+      'item_budget': 'Item Budget (Held)',
+    };
+
+    const label = labels[entry.type];
+    if (label) return label;
+
+    // Don't show internal labels to users
+    if (entry.type === 'item_budget_spent') return null;
+
+    return entry.description || entry.type;
+  }
+
   async getTransactionHistory(userId, page = 1, limit = 20, userType) {
     const skip = (page - 1) * limit;
     const userModel = userType === 'runner' ? 'Runner' : 'User';
 
     const hiddenTypes = userType === 'runner'
-      ? ['platform_earning', 'provider_fee', 'escrow_lock']
-      : ['platform_earning', 'provider_fee', 'escrow_release', 'item_budget',];
+      ? ['platform_earning', 'provider_fee', 'item_budget']
+      : ['platform_earning', 'provider_fee', 'item_budget_spent'];
 
     const userObjectId = mongoose.Types.ObjectId.isValid(userId)
       ? new mongoose.Types.ObjectId(userId.toString())
       : null;
 
+
+
     const query = {
       userId: userObjectId ? { $in: [userObjectId, userId.toString()] } : userId.toString(),
+      userModel,
       type: { $nin: hiddenTypes }
     };
+
+    console.log('[txHistory] userId:', userId, 'userType:', userType, 'userModel:', userModel);
+    console.log('[txHistory] query:', JSON.stringify(query));
+
 
     const [entries, total] = await Promise.all([
       LedgerEntry.find(query)
@@ -802,6 +820,7 @@ class PaymentService {
     console.log('[getTransactionHistory] entries found:', entries.length);
     console.log('[getTransactionHistory] sample:', entries[0]);
     console.log('[getTransactionHistory] hiddenTypes:', hiddenTypes);
+    console.log('[txHistory] raw entries:', entries.map(e => ({ type: e.type, userModel: e.userModel, userId: e.userId, amount: e.grossAmount })));
 
     const providerLabel = (provider) =>
       provider === 'paystack' ? 'Card' : provider === 'wallet' ? 'Wallet' : 'System';
@@ -815,14 +834,7 @@ class PaymentService {
         type: ['deposit', 'escrow_release', 'escrow_refund'].includes(e.type)
           ? 'credit'
           : 'debit',
-        label: e.type === 'escrow_lock' ? (e.description || `Order Payment for ${e.orderId}`)
-          : e.type === 'deposit' ? 'Wallet Funding (card)'
-            : e.type === 'escrow_release' ? (e.description || `Earnings From Completed order - ${e.orderId}`)
-              : e.type === 'item_budget' ? 'Item Budget'
-                : e.type === 'item_budget_spent' ? `${e.description || 'Item Purchase'} (${providerLabel(e.provider)})`
-                  : e.type === 'escrow_refund' ? 'Dispute Refund'
-                    : e.type === 'withdrawal' ? (e.description || 'Withdrawal initiated')
-                      : e.description || e.type,
+        label: this.getTransactionLabel(e),
         description: e.description || null,  // pass through to UI
       })),
       pagination: {

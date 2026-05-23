@@ -3,15 +3,42 @@ const User = require('../models/User');
 const Runner = require('../models/Runner');
 const config = require('../config');
 const logger = require('../utils/logger');
+const Order = require('../models/Order');
+
+const TERMINAL_STATUSES = ['completed', 'cancelled', 'task_completed', 'delivered'];
+
+// allow these through mid actions
+const GRACE_ROUTES = [
+  '/api/v1/chat',
+  '/api/v1/orders',
+  '/api/v1/payment',
+  '/api/v1/disputes',
+  '/api/v1/delivery',
+];
+
+const hasActiveNonTerminalOrder = async (userId) => {
+  try {
+    // Check if user has any order that is NOT terminal
+    const activeOrder = await Order.findOne({
+      userId,
+      status: { $nin: TERMINAL_STATUSES }
+    }).sort({ createdAt: -1 }).lean();
+
+    return !!activeOrder;
+  } catch (error) {
+    logger.error('Error checking active order:', error);
+    return false;
+  }
+};
 
 /**
  * Authentication middleware - Verify JWT token
  */
+
 const authenticate = async (req, res, next) => {
   try {
     let token;
 
-    // Mobile (Capacitor) sends Bearer token, web uses HttpOnly cookie
     const authHeader = req.headers.authorization;
     if (authHeader && authHeader.startsWith('Bearer ')) {
       token = authHeader.split(' ')[1];
@@ -26,8 +53,58 @@ const authenticate = async (req, res, next) => {
       });
     }
 
-    // rest stays exactly the same
-    const decoded = jwt.verify(token, config.jwt.secret);
+    let decoded;
+    try {
+      decoded = jwt.verify(token, config.jwt.secret);
+    } catch (error) {
+      if (error.name === 'TokenExpiredError') {
+        const expiredDecoded = jwt.decode(token);
+
+        if (expiredDecoded) {
+          const userId = expiredDecoded.id || expiredDecoded.userId || expiredDecoded._id;
+
+          if (userId) {
+            const hasActiveOrder = await hasActiveNonTerminalOrder(userId);
+
+            if (hasActiveOrder) {
+              logger.info(`Token expired but user ${userId} has active order - granting grace access to ${req.path}`);
+
+              let user = await User.findById(userId);
+              let userType = 'user';
+
+              if (!user) {
+                user = await Runner.findById(userId);
+                userType = 'runner';
+              }
+
+              if (user && user.isActive) {
+                user.userType = userType;
+                req.user = user;
+                req.token = token;
+                req.tokenExpired = true;
+                return next();
+              }
+            }
+          }
+        }
+
+        return res.status(401).json({
+          success: false,
+          message: 'Token expired',
+          code: 'TOKEN_EXPIRED'
+        });
+      }
+
+      if (error.name === 'JsonWebTokenError') {
+        return res.status(401).json({ success: false, message: 'Invalid token' });
+      }
+
+      throw error;
+    }
+
+    if (!decoded) {
+      return res.status(401).json({ success: false, message: 'Invalid token' });
+    }
 
     if (decoded.type && decoded.type !== 'access') {
       return res.status(401).json({
@@ -38,11 +115,11 @@ const authenticate = async (req, res, next) => {
 
     const userId = decoded.id || decoded.userId || decoded._id;
 
-    let user = await User.findById(userId).select('-password');
+    let user = await User.findById(userId);
     let userType = 'user';
 
     if (!user) {
-      user = await Runner.findById(userId).select('-password');
+      user = await Runner.findById(userId);
       userType = 'runner';
     }
 
@@ -69,14 +146,6 @@ const authenticate = async (req, res, next) => {
     next();
   } catch (error) {
     logger.error('Authentication error:', error);
-
-    if (error.name === 'JsonWebTokenError') {
-      return res.status(401).json({ success: false, message: 'Invalid token' });
-    }
-    if (error.name === 'TokenExpiredError') {
-      return res.status(401).json({ success: false, message: 'Token expired' });
-    }
-
     return res.status(401).json({ success: false, message: 'Authentication failed' });
   }
 };
@@ -98,25 +167,39 @@ const authenticateOptional = async (req, res, next) => {
       return next();
     }
 
-    // Verify token
-    const decoded = jwt.verify(token, config.jwt.secret);
+    let decoded;
+    try {
+      decoded = jwt.verify(token, config.jwt.secret);
+    } catch (error) {
+      // Even if token is expired, try to decode it to get user info
+      if (error.name === 'TokenExpiredError') {
+        decoded = jwt.decode(token);
+        if (decoded) {
+          req.tokenExpired = true;
+        }
+      } else {
+        return next();
+      }
+    }
 
-    // Only proceed if it's an access token
-    if (decoded.type && decoded.type !== 'access') {
+    if (!decoded) {
       return next();
     }
 
-    // Get user from database
-    const user = await User.findById(decoded.id).select('-password');
+    const userId = decoded.id || decoded.userId || decoded._id;
+
+    let user = await User.findById(userId);
+    let userType = 'user';
+
+    if (!user) {
+      user = await Runner.findById(userId);
+      userType = 'runner';
+    }
 
     if (user && user.isActive) {
+      user.userType = userType;
       req.user = user;
       req.token = token;
-
-      if (!user.isVerified && config.auth.requireEmailVerification) {
-        // Still attach user but mark as unverified
-        req.user.isVerified = false;
-      }
     }
 
     next();
