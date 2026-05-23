@@ -1,4 +1,6 @@
-import { useEffect, useState, useRef } from 'react';
+// hooks/useAuthBootstrap.js 
+
+import { useEffect, useRef, useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { authStorage } from '../utils/authStorage';
 import { isCapacitor, useTokenAuth, isMobileBrowser } from '../utils/api';
@@ -9,76 +11,41 @@ import { persistor } from '../store/store';
 import useOrderStore from '../store/orderStore';
 
 const RETRY_DELAYS = [4000, 8000, 12000];
-const sleep = (ms) => new Promise(res => setTimeout(res, ms));
-
-const getStatus = (result) => {
-  if (result.status === 'rejected') return 'network_error';
-  const value = result.value;
-  const isRejected = fetchRunnerMe.rejected.match(value) || fetchUserMe.rejected.match(value);
-  if (!isRejected) return 'ok';
-  const code = value?.payload?.status ?? value?.payload?.statusCode;
-  if (code === 401 || code === 403) return 'auth_failed';
-  return 'network_error';
-};
 
 if (!isCapacitor && !isMobileBrowser) {
   localStorage.removeItem('accessToken');
   localStorage.removeItem('refreshToken');
 }
 
-
-
-const tryFetchWithRetry = async (dispatch) => {
-  let lastRunnerResult, lastUserResult;
-
-  for (let i = 0; i <= RETRY_DELAYS.length; i++) {
-    const [runnerResult, userResult] = await Promise.allSettled([
-      dispatch(fetchRunnerMe()),
-      dispatch(fetchUserMe()),
-    ]);
-
-    lastRunnerResult = runnerResult;
-    lastUserResult = userResult;
-
-    const runnerStatus = getStatus(runnerResult);
-    const userStatus = getStatus(userResult);
-
-    // At least one succeeded — done
-    if (runnerStatus === 'ok' || userStatus === 'ok') {
-      return { runnerResult, userResult, runnerStatus, userStatus };
-    }
-
-    // Network error — retry with backoff
-    if (runnerStatus === 'network_error' || userStatus === 'network_error') {
-      if (i < RETRY_DELAYS.length) {
-        console.log(`[Bootstrap] network error, retrying in ${RETRY_DELAYS[i]}ms...`);
-        await sleep(RETRY_DELAYS[i]);
+// Helper function with retry logic
+const fetchWithRetry = async (fetchFn, type, retryDelays = RETRY_DELAYS) => {
+  for (let i = 0; i <= retryDelays.length; i++) {
+    try {
+      const result = await fetchFn();
+      return { status: 'ok', data: result };
+    } catch (error) {
+      const isAuthError = error?.response?.status === 401 || error?.status === 401;
+      const isNetworkError = !error?.response && error?.message?.includes('Network');
+      
+      if (isAuthError) {
+        return { status: 'auth_failed', data: error };
+      }
+      
+      if (isNetworkError && i < retryDelays.length) {
+        console.log(`[Bootstrap] ${type} network error, retrying in ${retryDelays[i]}ms...`);
+        await new Promise(resolve => setTimeout(resolve, retryDelays[i]));
         continue;
       }
-      // All retries exhausted — don't wipe, just proceed
-      return { runnerResult, userResult, runnerStatus: 'network_error', userStatus: 'network_error' };
-    }
-
-    // Both 401 — wait once before declaring dead (catches hot reload)
-    if (runnerStatus === 'auth_failed' && userStatus === 'auth_failed') {
-      if (i < 2) {
-        const delay = i === 0 ? 5000 : 10000;
-        console.log(`[Bootstrap] both 401 — waiting ${delay}ms before retry ${i + 1}...`);
-        await sleep(delay);
-        continue;
+      
+      if (i >= retryDelays.length) {
+        return { status: 'network_error', data: error };
       }
-      // Still 401 after retry — genuinely dead
-      return { runnerResult, userResult, runnerStatus, userStatus };
+      
+      return { status: 'error', data: error };
     }
   }
-
-  // Fallback — should never reach here
-  return {
-    runnerResult: lastRunnerResult,
-    userResult: lastUserResult,
-    runnerStatus: getStatus(lastRunnerResult),
-    userStatus: getStatus(lastUserResult),
-  };
+  
+  return { status: 'network_error' };
 };
 
 export const useAuthBootstrap = () => {
@@ -95,21 +62,34 @@ export const useAuthBootstrap = () => {
       hasBootstrapped.current = true;
 
       try {
+        // Determine user type from stored auth
+        const storedUser = (() => {
+          try {
+            const persisted = JSON.parse(localStorage.getItem('persist:auth') || '{}');
+            return JSON.parse(persisted.user || 'null');
+          } catch {
+            return null;
+          }
+        })();
+
+        const userType = storedUser?.userType === 'runner' ? 'runner' : 'user';
+
+        // Check tokens first
         if (useTokenAuth) {
           const { accessToken, refreshToken } = await authStorage.getTokens();
           if (!accessToken && !refreshToken) {
-
+            // No tokens - clear local storage
             const runnerId = (() => {
               try {
                 const persisted = JSON.parse(localStorage.getItem('persist:auth') || '{}');
                 return JSON.parse(persisted.runner || 'null')?._id;
-              } catch { return undefined; }
+              } catch {
+                return undefined;
+              }
             })();
 
-            // Wipe runner-keyed keys synchronously — before any state updates
             if (runnerId) {
               wipeRunnerLocalStorage(runnerId);
-              // Also wipe bot messages so OnboardingScreen doesn't show stale verified state
               localStorage.removeItem(`bot_messages_${runnerId}`);
             }
 
@@ -120,55 +100,61 @@ export const useAuthBootstrap = () => {
           }
         }
 
+        // Fetch user data based on type - only fetch the correct one
+        let fetchResult;
+        
+        if (userType === 'runner') {
+          fetchResult = await fetchWithRetry(() => dispatch(fetchRunnerMe()).unwrap(), 'runner');
+        } else {
+          fetchResult = await fetchWithRetry(() => dispatch(fetchUserMe()).unwrap(), 'user');
+        }
 
-        const { runnerResult, runnerStatus, userStatus } =
-          await tryFetchWithRetry(dispatch);
-
-        // Server unreachable after all retries — don't wipe, let them proceed
-        if (runnerStatus === 'network_error' && userStatus === 'network_error') {
+        // Handle network errors
+        if (fetchResult.status === 'network_error') {
           console.warn('[Bootstrap] server unreachable after retries — proceeding anyway');
           setIsReady(true);
           return;
         }
 
-        // Genuinely dead tokens
-        if (runnerStatus === 'auth_failed' && userStatus === 'auth_failed') {
-          const runnerId = runnerResult.value?.payload?.runner?._id
-            ?? (() => {
-              try {
-                const persisted = JSON.parse(localStorage.getItem('persist:auth') || '{}');
-                return JSON.parse(persisted.runner || 'null')?._id;
-              } catch { return undefined; }
-            })();
+        // Handle auth failures (dead tokens)
+        if (fetchResult.status === 'auth_failed') {
+          const id = userType === 'runner' 
+            ? fetchResult.data?.payload?.runner?._id
+            : fetchResult.data?.payload?.user?._id;
 
-          wipeRunnerLocalStorage(runnerId);
+          if (userType === 'runner' && id) {
+            wipeRunnerLocalStorage(id);
+            localStorage.removeItem(`bot_messages_${id}`);
+          }
+
           useOrderStore.getState()._reset();
           dispatch(clearCredentials());
           await persistor.purge();
 
+          // Clear cookies
           if (!isCapacitor) {
             document.cookie = 'token=; Max-Age=0; path=/';
             document.cookie = 'refreshToken=; Max-Age=0; path=/';
             document.cookie = 'refreshToken=; Max-Age=0; path=/api/v1/auth/refresh-token';
-            await authStorage.clearTokens();
-          } else {
-            await authStorage.clearTokens();
           }
+          await authStorage.clearTokens();
 
+          // Prevent reload loop
           if (!localStorage.getItem('auth_cleared')) {
             localStorage.setItem('auth_cleared', '1');
             window.location.reload();
             return;
           }
           localStorage.removeItem('auth_cleared');
-
           setIsReady(true);
           return;
         }
 
+        // Cleanup flags
         sessionStorage.removeItem('auth_cleared');
         localStorage.removeItem('auth_cleared');
 
+        // Restore active chat
         const { chatId, orderId } = await chatStorage.getActiveChat();
         if (chatId) dispatch(setActiveChat({ chatId, orderId }));
 
