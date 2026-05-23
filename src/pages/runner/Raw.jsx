@@ -1648,7 +1648,6 @@ function ContactInfo({
                     </span>
                   ) : (
                     <span className="ml-2 text-[10px] font-normal text-gray-400 normal-case tracking-normal">
-                      (waiting for item approval)
                     </span>
                   )
               }

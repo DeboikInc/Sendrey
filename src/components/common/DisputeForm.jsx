@@ -3,6 +3,7 @@ import { X, AlertTriangle, Upload } from 'lucide-react';
 import { useDispatch, useSelector } from 'react-redux';
 import { raiseDispute } from '../../Redux/disputeSlice';
 import { getAvailableReasons } from '../../utils/disputeReasons';
+import api from '../../utils/api';
 
 export default function DisputeForm({
   isOpen,
@@ -24,12 +25,13 @@ export default function DisputeForm({
   const [step, setStep] = useState('form'); // form | success
   const [reason, setReason] = useState('');
   const [description, setDescription] = useState('');
+  const [, setSubmitting] = useState(false);
   const [evidenceFiles, setEvidenceFiles] = useState([]);
   const fileInputRef = useRef(null);
 
   // Only show reasons admin can still act on at this stage of the order
   const availableReasons = getAvailableReasons(serviceType, orderStatus);
-  const selectedReason   = availableReasons.find((r) => r.value === reason);
+  const selectedReason = availableReasons.find((r) => r.value === reason);
 
   const handleFileSelect = (e) => {
     Array.from(e.target.files).forEach((file) => {
@@ -38,10 +40,10 @@ export default function DisputeForm({
         setEvidenceFiles((prev) => [
           ...prev,
           {
-            base64:  ev.target.result,
-            type:    file.type.startsWith('image') ? 'image' : 'document',
+            base64: ev.target.result,
+            type: file.type.startsWith('image') ? 'image' : 'document',
             preview: ev.target.result,
-            name:    file.name,
+            name: file.name,
           },
         ]);
       };
@@ -57,39 +59,61 @@ export default function DisputeForm({
     if (!description.trim()) { alert('Please describe the issue'); return; }
     if (description.trim().length < 20) { alert('Please provide more detail (at least 20 characters)'); return; }
 
+    setSubmitting(true);
+
     try {
+      let evidenceUrls = [];
+
+      // Upload evidence files first if any
+      if (evidenceFiles.length > 0) {
+        const formData = new FormData();
+        // Convert base64 back to blob for upload
+        for (const file of evidenceFiles) {
+          const blob = await fetch(file.base64).then(r => r.blob());
+          formData.append('evidence', blob, file.name);
+        }
+
+        const uploadRes = await api.post('/uploads/dispute-evidence', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        evidenceUrls = uploadRes.data.urls;
+      }
+
       await dispatch(
         raiseDispute({
           orderId, chatId, raisedBy, raisedById,
-          userId, runnerId, reason, description, evidenceFiles,
+          userId, runnerId, reason, description,
+          evidenceFiles: evidenceUrls,  // Send URLs, not base64
         })
       ).unwrap();
 
       socket?.emit('raiseDispute', {
         orderId, chatId, raisedBy, raisedById,
-        userId, runnerId, reason, description, evidenceFiles,
+        userId, runnerId, reason, description,
+        evidenceFiles: evidenceUrls,
       });
 
       setStep('success');
     } catch (error) {
       alert(error || 'Failed to raise dispute. Please try again.');
+    } finally {
+      setSubmitting(false);
     }
   };
 
   if (!isOpen) return null;
 
   // ── Theme shortcuts ──────────────────────────────────────────────────────
-  const cardBg      = darkMode ? 'bg-black-200'     : 'bg-gray-1001';
-  const border      = darkMode ? 'border-black-200'  : 'border-gray-1001';
-  const textPrimary = darkMode ? 'text-white'        : 'text-black-200';
-  const textMuted   = darkMode ? 'text-gray-1002'    : 'text-gray-600';
+  const cardBg = darkMode ? 'bg-black-200' : 'bg-gray-1001';
+  const border = darkMode ? 'border-black-200' : 'border-gray-1001';
+  const textPrimary = darkMode ? 'text-white' : 'text-black-200';
+  const textMuted = darkMode ? 'text-gray-1002' : 'text-gray-600';
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60 backdrop-blur-sm">
       <div
-        className={`w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-t-3xl ${
-          darkMode ? 'bg-black-100' : 'bg-white'
-        }`}
+        className={`w-full max-w-lg max-h-[90vh] overflow-y-auto rounded-t-3xl ${darkMode ? 'bg-black-100' : 'bg-white'
+          }`}
       >
         {/* Handle */}
         <div className="flex justify-center pt-3 pb-1">
@@ -172,13 +196,12 @@ export default function DisputeForm({
                           <button
                             key={r.value}
                             onClick={() => setReason(r.value)}
-                            className={`w-full text-left px-4 py-3 rounded-xl text-sm transition-colors ${
-                              selected
+                            className={`w-full text-left px-4 py-3 rounded-xl text-sm transition-colors ${selected
                                 ? 'bg-primary text-white'
                                 : darkMode
                                   ? 'bg-black-200 text-white hover:bg-primary/10'
                                   : 'bg-gray-1001 text-black-200 hover:bg-primary/10'
-                            }`}
+                              }`}
                           >
                             <p className="font-semibold">{r.label}</p>
                             <p className={`text-xs mt-0.5 ${selected ? 'text-white/70' : textMuted}`}>
@@ -204,11 +227,10 @@ export default function DisputeForm({
                           : 'Select a reason above, then describe what happened…'
                       }
                       rows={4}
-                      className={`w-full p-3 rounded-xl border outline-none resize-none text-sm ${
-                        darkMode
+                      className={`w-full p-3 rounded-xl border outline-none resize-none text-sm ${darkMode
                           ? 'bg-black-200 border-black-200 text-white placeholder-gray-1002'
                           : 'bg-gray-1001 border-gray-1001 text-black-200 placeholder-gray-600'
-                      }`}
+                        }`}
                     />
                     <p className={`text-xs mt-1 ${textMuted}`}>{description.length}/1000</p>
                   </div>
@@ -242,11 +264,10 @@ export default function DisputeForm({
 
                     <button
                       onClick={() => fileInputRef.current?.click()}
-                      className={`w-full h-20 border-2 border-dashed rounded-xl flex items-center justify-center gap-2 transition-colors ${
-                        darkMode
+                      className={`w-full h-20 border-2 border-dashed rounded-xl flex items-center justify-center gap-2 transition-colors ${darkMode
                           ? 'border-black-200 hover:border-primary text-gray-1002 hover:text-primary'
                           : 'border-gray-300 hover:border-primary text-gray-600 hover:text-primary'
-                      }`}
+                        }`}
                     >
                       <Upload className="w-5 h-5" />
                       <span className="text-sm">Upload Photos / Documents</span>
@@ -272,11 +293,10 @@ export default function DisputeForm({
                     <button
                       onClick={handleSubmit}
                       disabled={loading || !reason || description.trim().length < 20}
-                      className={`flex-1 py-3 rounded-xl font-semibold bg-red-500 text-white transition-opacity ${
-                        loading || !reason || description.trim().length < 20
+                      className={`flex-1 py-3 rounded-xl font-semibold bg-red-500 text-white transition-opacity ${loading || !reason || description.trim().length < 20
                           ? 'opacity-50 cursor-not-allowed'
                           : 'hover:opacity-90'
-                      }`}
+                        }`}
                     >
                       {loading ? 'Submitting…' : 'Raise Dispute'}
                     </button>
