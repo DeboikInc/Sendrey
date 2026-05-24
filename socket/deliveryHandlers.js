@@ -231,7 +231,7 @@ const handleConfirmDelivery = async (io, socket, data) => {
 
     const userSystemMsg = {
         id: `delivery-confirmed-user-${Date.now()}`,
-        from: 'system', type: 'system', messageType: 'system',
+        from: 'system', type: 'delivery_confirmation', messageType: 'delivery_confirmation',
         text: 'You confirmed delivery.',
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         status: 'sent', senderId: 'system', senderType: 'system',
@@ -239,7 +239,7 @@ const handleConfirmDelivery = async (io, socket, data) => {
 
     const runnerSystemMsg = {
         id: `delivery-confirmed-runner-${Date.now() + 1}`,
-        from: 'system', type: 'system', messageType: 'system',
+        from: 'system', type: 'delivery_confirmation', messageType: 'delivery_confirmation',
         text: `${userName} confirmed the delivery of their item(s).`,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         status: 'sent', senderId: 'system', senderType: 'system',
@@ -321,7 +321,7 @@ const handleDenyDelivery = async (io, socket, data) => {
 
     const userSystemMsg = {
         id: `delivery-denied-user-${Date.now()}`,
-        from: 'system', type: 'system', messageType: 'system',
+        from: 'system', type: 'delivery_denied', messageType: 'delivery_denied',
         text: 'You reported that your item(s) were not delivered.',
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         status: 'sent', senderId: 'system', senderType: 'system', style: 'error',
@@ -329,7 +329,7 @@ const handleDenyDelivery = async (io, socket, data) => {
 
     const runnerSystemMsg = {
         id: `delivery-denied-runner-${Date.now() + 1}`,
-        from: 'system', type: 'system', messageType: 'system',
+        from: 'system', type: 'delivery_denied', messageType: 'delivery_denied',
         text: `${userName} denied the delivery of their item(s). Please ensure you deliver their order.`,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         status: 'sent', senderId: 'system', senderType: 'system', style: 'error',

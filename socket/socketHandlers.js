@@ -1230,6 +1230,7 @@ const handleRejoinChat = async (socket, io, { chatId, userId, runnerId, userType
 
   console.log('[rejoinChat]', userType, 'rejoining room:', chatId);
   socket.join(chatId);
+
   if (userType === 'runner' && runnerId) socket.join(`runner-${runnerId}`);
   else if (userType === 'user' && userId) socket.join(`user-${userId}`);
 
@@ -1254,9 +1255,6 @@ const handleRejoinChat = async (socket, io, { chatId, userId, runnerId, userType
       m => m.type !== 'payment_request' && m.messageType !== 'payment_request'
     );
   }
-
-  const userDoc = userType === 'user' ? await User.findById(userId).lean() : null;
-
 
   if (!snapshot || snapshot.chatId !== chatId) {
     const isFreshChat = userType === 'user' && cleanMessages.length <= 2 &&
@@ -1344,35 +1342,25 @@ const handleGetArchivedMessages = async (socket, { chatId, userId, runnerId, ord
 };
 
 const requestSessionRefresh = async (socket, io, data) => {
-
-  if (!data || !data.chatId) return;
+  if (!data?.chatId) return;
   const { chatId, orderId, userId, userType, runnerId } = data;
+
+  // Rejoin rooms first — do this regardless of order state
+  socket.join(chatId);
+  if (userType === 'user') socket.join(`user-${userId}`);
+  else if (userType === 'runner') socket.join(`runner-${runnerId}`);
 
   const [latestOrder, chat] = await Promise.all([
     Order.findOne({ chatId }).sort({ createdAt: -1 }).lean(),
     Chat.findOne({ chatId }).lean(),
   ]);
 
-  if (!latestOrder) return;
-
-  socket.join(chatId);
-  if (userType === 'user') socket.join(`user-${userId}`);
-  else if (userType === 'runner') socket.join(`runner-${runnerId}`);
-
-  if (latestOrder.orderId === orderId) {
-    socket.emit('sessionRefreshOk', { chatId, orderId });
-    return;
-  }
-
-  socket.emit('proceedToChat', {
+  // Always emit sessionRefreshOk — client handles the rejoin
+  // If order changed, include the new orderId so client can update
+  socket.emit('sessionRefreshOk', {
     chatId,
-    chatReady: true,
-    orderId: latestOrder.orderId,
-    orderSessionId: chat?.orderSessionId,
-    isRefresh: true,
-    runnerId: latestOrder.runnerId,
-    userId: latestOrder.userId,
-    serviceType: latestOrder.serviceType,
+    orderId: latestOrder?.orderId || orderId,
+    orderChanged: latestOrder?.orderId !== orderId,
   });
 };
 

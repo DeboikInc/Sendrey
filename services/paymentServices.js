@@ -84,14 +84,12 @@ class PaymentService {
     const feeSplit = calculateFeeSplit(order.deliveryFee);
 
     if (paymentMethod === 'wallet') {
-      // ── Pre-fetch wallet OUTSIDE transaction (read-only check) ──────────
       const walletCheck = await Wallet.findOne({ userId }).lean();
-      if (!walletCheck || walletCheck.balance < order.totalAmount) {
+      if (!walletCheck || walletCheck._balance < order.totalAmount) {
         throw new Error('Insufficient wallet balance');
       }
 
       return withTransaction(async (session) => {
-        // ── All writes in parallel where possible ────────────────────────
         const lockedOrder = await Order.findOneAndUpdate(
           { orderId, paymentStatus: { $ne: 'paid' } },
           { $set: { paymentStatus: 'processing' } },
@@ -99,15 +97,14 @@ class PaymentService {
         );
         if (!lockedOrder) throw new Error('Order already paid or not found');
 
-        // Wallet deduct + escrow create + ledger — wallet must go first
         const wallet = await Wallet.findOne({ userId }).session(session);
-        if (!wallet || wallet.balance < order.totalAmount) {
+        if (!wallet || wallet._balance < order.totalAmount) {
           throw new Error('Insufficient wallet balance');
         }
 
         const escrowDoc = {
-          taskId: orderId,
-          orderId: orderId,
+          taskId: order.orderId,
+          orderId: order._id,
           userId: order.userId,
           runnerId: order.runnerId,
           taskType: order.taskType,
@@ -122,40 +119,37 @@ class PaymentService {
           paymentStatus: 'paid',
         };
 
-        const [, [escrow]] = await Promise.all([
-          Wallet.findOneAndUpdate(
-            { userId },
-            { $inc: { _balance: -order.totalAmount, lockedBalance: order.totalAmount } },
-            { session }
-          ),
-          Escrow.create([escrowDoc], { session }),
-        ]);
+        await Wallet.findOneAndUpdate(
+          { userId },
+          { $inc: { _balance: -order.totalAmount, lockedBalance: order.totalAmount } },
+          { session }
+        );
 
-        // Order update + ledger in parallel
-        await Promise.all([
-          Order.findOneAndUpdate(
-            { orderId },
-            { $set: { escrowId: escrow._id, paymentStatus: 'paid', status: 'paid' } },
-            { session }
-          ),
-          LedgerEntry.create([{
-            userId: order.userId,
-            userModel: 'User',
-            runnerId: order.runnerId,
-            type: 'escrow_lock',
-            grossAmount: order.totalAmount,
-            netAmount: order.totalAmount - feeSplit.providerFee,
-            providerFee: feeSplit.providerFee,
-            platformFee: feeSplit.platformFee,
-            netPlatformFee: feeSplit.netPlatformFee,
-            runnerFee: feeSplit.runnerPayout,
-            provider: 'wallet',
-            orderId,
-            escrowId: escrow._id,
-            description: `Order Payment (Wallet) for ${orderId}`,
-            status: 'completed',
-          }], { session }),
-        ]);
+        const [escrow] = await Escrow.create([escrowDoc], { session });
+
+        await Order.findOneAndUpdate(
+          { orderId },
+          { $set: { escrowId: escrow._id, paymentStatus: 'paid', status: 'paid' } },
+          { session }
+        );
+
+        await LedgerEntry.create([{
+          userId: order.userId,
+          userModel: 'User',
+          runnerId: order.runnerId,
+          type: 'escrow_lock',
+          grossAmount: order.totalAmount,
+          netAmount: order.totalAmount - feeSplit.providerFee,
+          providerFee: feeSplit.providerFee,
+          platformFee: feeSplit.platformFee,
+          netPlatformFee: feeSplit.netPlatformFee,
+          runnerFee: feeSplit.runnerPayout,
+          provider: 'wallet',
+          orderId,
+          escrowId: escrow._id,
+          description: `Order Payment (Wallet) for ${orderId}`,
+          status: 'completed',
+        }], { session });
 
         return {
           escrowId: escrow._id,
@@ -186,7 +180,6 @@ class PaymentService {
     const verification = await paystack.verifyTransaction(reference);
     console.log('[verifyWalletFunding] raw verification:', JSON.stringify(verification, null, 2));
 
-
     if (!verification.status) {
       throw new Error('Payment verification failed');
     }
@@ -209,7 +202,6 @@ class PaymentService {
     const { orderId } = verification.data.metadata;
 
     const result = await withTransaction(async (session) => {
-
       const order = await Order.findOneAndUpdate(
         { orderId, paymentStatus: { $ne: 'paid' } },
         { $set: { paymentStatus: 'processing' } },
@@ -217,12 +209,11 @@ class PaymentService {
       );
       if (!order) return { alreadyPaid: true };
 
-      // Use the delivery fee stored on the order — set at creation using distance calc
       const feeSplit = calculateFeeSplit(order.deliveryFee);
 
       const [escrow] = await Escrow.create([{
-        taskId: orderId,
-        orderId: orderId,
+        taskId: order.orderId,
+        orderId: order._id,
         userId: order.userId,
         runnerId: order.runnerId,
         taskType: order.taskType,
@@ -244,7 +235,6 @@ class PaymentService {
         { session }
       );
 
-      // allow throw
       await LedgerEntry.create([{
         userId: order.userId,
         userModel: 'User',
@@ -268,7 +258,6 @@ class PaymentService {
       return { escrow, order, feeSplit };
     });
 
-    // ← emit AFTER transaction commits
     if (!result.alreadyPaid) {
       const io = getSocketIO();
       if (io && result.order?.chatId) {
@@ -343,24 +332,24 @@ class PaymentService {
         { type: 'wallet_funding', userId }
       );
 
-        await LedgerEntry.create([{
-          userId,
-          userModel: 'User',
-          type: 'deposit',
-          grossAmount,
-          netAmount: grossAmount,
-          providerFee: 0,
-          platformFee: 0,
-          netPlatformFee: 0,
-          runnerFee: 0,
-          balanceBefore: wallet._balance - grossAmount,
-          balanceAfter: wallet._balance,
-          provider: 'paystack',
-          providerReference: reference,
-          description: `Wallet funded via Paystack`,
-          status: 'completed',
+      await LedgerEntry.create([{
+        userId,
+        userModel: 'User',
+        type: 'deposit',
+        grossAmount,
+        netAmount: grossAmount,
+        providerFee: 0,
+        platformFee: 0,
+        netPlatformFee: 0,
+        runnerFee: 0,
+        balanceBefore: wallet._balance - grossAmount,
+        balanceAfter: wallet._balance,
+        provider: 'paystack',
+        providerReference: reference,
+        description: `Wallet funded via Paystack`,
+        status: 'completed',
 
-        }], { session });
+      }], { session });
 
       console.log(`✅ Wallet funded: NGN ${grossAmount} for user ${userId}`);
       return { balance: wallet.balance, amount: grossAmount };
@@ -491,10 +480,11 @@ class PaymentService {
       const netPlatformFee = escrow.netPlatformFee ?? (escrow.platformFee - providerFee);
 
       if (usedPayoutSystem) {
-        await runnerWallet.credit(
-          escrow.runnerPayout,
-          `payout-${escrowId}-${Date.now()}`,
-          { orderId: resolvedOrderId, escrowId }
+
+        await Wallet.findOneAndUpdate(
+          { userId: escrow.runnerId },
+          { $inc: { _balance: escrow.runnerPayout } },
+          { session }
         );
 
         console.log('[payoutToRunner Ledger Start] writing ledger entries for orderId:', resolvedOrderId);
@@ -519,7 +509,6 @@ class PaymentService {
 
 
         console.log('[payoutToRunner] ledger entries written');
-
         console.log(`✅ Runner credited NGN ${escrow.runnerPayout}`);
       } else {
         console.warn(`⚠️ Runner ${escrow.runnerId} forfeiting delivery fee NGN ${escrow.runnerPayout}`);
@@ -536,50 +525,50 @@ class PaymentService {
         status: 'pending',
       });
 
-        await LedgerEntry.create([
-          {
-            userId: escrow.userId,
-            userModel: 'User',
-            runnerId: escrow.runnerId,
-            orderId: resolvedOrderId,
-            escrowId: escrow._id,
-            type: 'escrow_release',
-            grossAmount: escrow.runnerPayout,
-            netAmount: escrow.runnerPayout,
-            providerFee: 0,
-            runnerFee: escrow.runnerPayout,
-            provider: 'paystack',
-            description: `Delivery fee released to runner for order ${resolvedOrderId}`,
-            status: 'completed',
-          },
-          {
-            userId: escrow.userId,
-            userModel: 'User',
-            orderId: resolvedOrderId,
-            escrowId: escrow._id,
-            type: 'platform_earning',
-            grossAmount: escrow.platformFee,
-            netAmount: netPlatformFee,
-            providerFee,
-            netPlatformFee,
-            provider: 'paystack',
-            description: `Platform fee for order ${resolvedOrderId}`,
-            status: 'completed',
-          },
-          {
-            userId: escrow.userId,
-            userModel: 'User',
-            orderId: resolvedOrderId,
-            escrowId: escrow._id,
-            type: 'provider_fee',
-            grossAmount: providerFee,
-            netAmount: providerFee,
-            providerFee,
-            provider: 'paystack',
-            description: `Paystack fee for order ${resolvedOrderId}`,
-            status: 'completed',
-          },
-        ], { session });
+      await LedgerEntry.create([
+        {
+          userId: escrow.userId,
+          userModel: 'User',
+          runnerId: escrow.runnerId,
+          orderId: resolvedOrderId,
+          escrowId: escrow._id,
+          type: 'escrow_release',
+          grossAmount: escrow.runnerPayout,
+          netAmount: escrow.runnerPayout,
+          providerFee: 0,
+          runnerFee: escrow.runnerPayout,
+          provider: 'paystack',
+          description: `Delivery fee released to runner for order ${resolvedOrderId}`,
+          status: 'completed',
+        },
+        {
+          userId: escrow.userId,
+          userModel: 'User',
+          orderId: resolvedOrderId,
+          escrowId: escrow._id,
+          type: 'platform_earning',
+          grossAmount: escrow.platformFee,
+          netAmount: netPlatformFee,
+          providerFee,
+          netPlatformFee,
+          provider: 'paystack',
+          description: `Platform fee for order ${resolvedOrderId}`,
+          status: 'completed',
+        },
+        {
+          userId: escrow.userId,
+          userModel: 'User',
+          orderId: resolvedOrderId,
+          escrowId: escrow._id,
+          type: 'provider_fee',
+          grossAmount: providerFee,
+          netAmount: providerFee,
+          providerFee,
+          provider: 'paystack',
+          description: `Paystack fee for order ${resolvedOrderId}`,
+          status: 'completed',
+        },
+      ], { session });
 
       // update escrow
       await Escrow.findByIdAndUpdate(
@@ -593,9 +582,13 @@ class PaymentService {
         { $inc: { completedOrders: 1 }, $set: { activeOrderId: null, currentUserId: null } },
         { session }
       );
+
       if (usedPayoutSystem) {
-        const runner = await Runner.findById(escrow.runnerId).session(session);
-        await runner.recordEarning(escrow.runnerPayout);
+        await Runner.findOneAndUpdate(
+          { _id: escrow.runnerId },
+          { $inc: { totalEarnings: escrow.runnerPayout } },
+          { session }
+        );
       }
 
       console.log(`payoutToRunner | runner: NGN ${usedPayoutSystem ? escrow.runnerPayout : 0} | platform net: NGN ${netPlatformFee} | paystack fee: NGN ${providerFee}`);
@@ -635,20 +628,20 @@ class PaymentService {
         }], { session });
 
 
-          await LedgerEntry.create([{
-            userId: escrow.userId,
-            userModel: 'User',
-            runnerId: escrow.runnerId,
-            type: 'item_budget',
-            grossAmount: escrow.itemBudget,
-            netAmount: escrow.itemBudget,
-            providerFee: 0,
-            provider: 'system',
-            orderId: order.orderId,
-            escrowId: escrow._id,
-            description: `Item budget of NGN ${escrow.itemBudget.toString()} released for order ${order.orderId}`,
-            status: 'completed',
-          }], { session });
+        await LedgerEntry.create([{
+          userId: escrow.userId,
+          userModel: 'User',
+          runnerId: escrow.runnerId,
+          type: 'item_budget',
+          grossAmount: escrow.itemBudget,
+          netAmount: escrow.itemBudget,
+          providerFee: 0,
+          provider: 'system',
+          orderId: order.orderId,
+          escrowId: escrow._id,
+          description: `Item budget of NGN ${escrow.itemBudget.toString()} released for order ${order.orderId}`,
+          status: 'completed',
+        }], { session });
 
         console.log(`RunnerPayout created: NGN ${escrow.itemBudget} for order ${order.orderId}`);
       }
