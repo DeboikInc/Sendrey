@@ -62,11 +62,15 @@ const handlePaymentSuccess = async (socket, io, data) => {
 
     if (!alreadyPaid) {
 
-      let resolvedEscrowId = escrowId || order.escrowId;
+      const freshOrder = await Order.findOne({ orderId: order.orderId })
+        .sort({ createdAt: -1 });
+      const latestEscrowId = freshOrder?.escrowId;
+
+      let resolvedEscrowId = escrowId || latestEscrowId || order.escrowId;
 
       if (!resolvedEscrowId && order.totalAmount > 0) {
         const escrow = await Escrow.create({
-          taskId: order._id,
+          taskId: order.orderId,
           orderId: order._id,
           chatId,
           userId: chat.userId,
@@ -130,7 +134,7 @@ const handlePaymentSuccess = async (socket, io, data) => {
 
       // Re-fetch so order.escrowId is correct for the emit below
       order = await Order.findOne({ orderId: order.orderId }).sort({ createdAt: -1 }).lean();
-      
+
       logSocketAudit('PAYMENT_SUCCESS', {
         orderId: data.orderId,
         chatId: data.chatId,

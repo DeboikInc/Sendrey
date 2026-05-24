@@ -404,7 +404,12 @@ class PaymentController extends BaseController {
     async getTransactionHistory(req, res) {
         try {
             const userId = req.user._id;
-            const userType = req.user.userType;
+            const userType = req.user.userType || req.user.role;
+
+            if (!userType) {
+                return this.badRequest(res, 'userType could not be determined');
+            }
+
             console.log('[getTransactionHistory] userId:', userId, 'userType:', userType, 'role:', req.user.role);
 
             const { page = 1, limit = 20 } = req.query;

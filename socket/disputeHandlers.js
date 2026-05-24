@@ -79,7 +79,7 @@ const handleRaiseDispute = async (socket, io, data) => {
       from: 'system',
       type: 'dispute_raised',
       messageType: 'dispute_raised',
-      text: 'A dispute has been raised for this order.',
+      text: 'A dispute has been raised for this order. Our team will review and reach out to both parties',
       time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       status: 'sent',
       senderId: 'system',

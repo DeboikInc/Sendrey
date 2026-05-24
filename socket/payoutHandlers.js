@@ -51,6 +51,8 @@ const handleGetRunnerPayout = async (socket, io, data) => {
               userId: order.userId,
               escrowId: order.escrowId ?? null,
               itemBudget: order.itemBudget,
+              deliveryFee: order.deliveryFee,
+              runnerPayout: order.runnerPayout,
               status: 'pending',
               usedPayoutSystem: false,
             }

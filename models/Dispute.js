@@ -46,16 +46,22 @@ const disputeSchema = new mongoose.Schema({
     type: String,
     required: true,
     enum: [
-      'item_mismatch',
-      'item_damage',
-      'delivery_delay',
-      'non_delivery',
-      'pricing_dispute',
-      'quality_issue',
-      'runner_behavior',
-      'user_unavailable',
-      'payment_issue',
-      'other'
+      // user reasons
+      'item_not_delivered',
+      'item_damaged_in_transit',
+      'runner_misconduct',
+      'runner_unresponsive',
+      'item_not_collected',
+      'wrong_item_collected',
+      // runner reasons
+      'user_wont_confirm_delivery',
+      'user_claiming_non_delivery',
+      'wrong_item_given_by_sender',
+      'dangerous_pickup_location',
+      'dangerous_delivery_location',
+      'user_misconduct',
+      // shared
+      'other',
     ]
   },
   description: {
@@ -108,7 +114,7 @@ const disputeSchema = new mongoose.Schema({
       resolvedAt: Date,
       notifiedAt: Date
     },
-    
+
     default: undefined  // Don't set resolution at all until resolved
   },
 
