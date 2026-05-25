@@ -5,7 +5,4 @@ npx cap run android
 
 socket.emit = private, socket.to() = broadcast minus me, io.to() = system announcement to the whole room.
 
-
 socket and server order thorogh cleanup
-
-- Your documents are currently under review, we will get back to you soon. in chatcomposer is now persisting on refresh
