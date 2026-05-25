@@ -487,8 +487,6 @@ class PaymentService {
         { session }
       );
 
-      console.log('[payoutToRunner Ledger Start] writing ledger entries for orderId:', resolvedOrderId);
-
       await LedgerEntry.create([{
         userId: escrow.runnerId.toString(),
         userModel: 'Runner',
@@ -532,7 +530,7 @@ class PaymentService {
           runnerId: escrow.runnerId,
           orderId: resolvedOrderId,
           escrowId: escrow._id,
-          type: 'escrow_release',
+          type: 'platform_earning',
           grossAmount: escrow.runnerPayout,
           netAmount: escrow.runnerPayout,
           providerFee: 0,
@@ -626,7 +624,6 @@ class PaymentService {
           status: 'pending',
           usedPayoutSystem: false,
         }], { session });
-
 
         await LedgerEntry.create([{
           userId: escrow.userId,
