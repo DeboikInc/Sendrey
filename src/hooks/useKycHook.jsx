@@ -64,19 +64,40 @@ export const useKycHook = (runnerId, fleetType) => {
     isReturningUserRef.current = false;
     setKycStep(null);
     setKycStatus({ documentVerified: false, selfieVerified: false, overallVerified: false });
+
+    if (runnerId) localStorage.removeItem(`kyc_status_${runnerId}`);
   }, [runnerId]);
 
   useEffect(() => {
     if (!runnerId || kycStep !== null) return;
     try {
-      const saved = JSON.parse(localStorage.getItem(`kyc_step_${runnerId}`));
-      if (saved !== null && saved !== undefined) {
-        setKycStep(saved);
-        if (saved === 6) isAlreadyVerifiedRef.current = true;
-        localStorage.setItem(`kyc_verified_shown_${runnerId}`, '1');
+      const savedStep = JSON.parse(localStorage.getItem(`kyc_step_${runnerId}`));
+      if (savedStep !== null && savedStep !== undefined) {
+        setKycStep(savedStep);
+        if (savedStep === 6) {
+          isAlreadyVerifiedRef.current = true;
+          localStorage.setItem(`kyc_verified_shown_${runnerId}`, '1');
+        }
+      }
+
+      // ── Restore kycStatus so isVerified is truthy immediately on remount ──
+      const savedStatus = localStorage.getItem(`kyc_status_${runnerId}`);
+      if (savedStatus) {
+        setKycStatus(JSON.parse(savedStatus));
       }
     } catch { }
   }, [runnerId, kycStep]);
+
+  useEffect(() => {
+    if (!runnerId) return;
+    // Only persist once we have meaningful state (avoid overwriting with the
+    // default all-false object that fires on first mount before restore)
+    if (kycStatus.overallVerified || kycStatus.selfieVerified || kycStatus.documentVerified) {
+      try {
+        localStorage.setItem(`kyc_status_${runnerId}`, JSON.stringify(kycStatus));
+      } catch (_) { }
+    }
+  }, [kycStatus, runnerId]);
 
   useEffect(() => {
     if (!runnerId) return;

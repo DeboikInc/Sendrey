@@ -678,6 +678,7 @@ function WhatsAppLikeChat() {
       localStorage.removeItem(`kyc_step_${runnerId}`);
       localStorage.removeItem(`kyc_doc_type_${runnerId}`);
       localStorage.removeItem(`terms_accepted_${runnerId}`);
+      localStorage.removeItem(`kyc_status_${runnerId}`);
     }
     setRunnerId(null);
   }, [runner?._id]);
