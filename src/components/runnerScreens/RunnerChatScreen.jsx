@@ -833,7 +833,9 @@ function RunnerChatScreen({
         }
       }
 
-      if (msg.type === 'system' && msg.id?.startsWith('delivery-confirmed-runner-')) {
+      if (msg.id?.startsWith('delivery-confirmed-runner-') ||
+        msg.type === 'delivery_confirmation' ||
+        msg.messageType === 'delivery_confirmation') {
         setUserConfirmedDelivery(true);
       }
 
