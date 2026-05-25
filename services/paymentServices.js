@@ -84,6 +84,13 @@ class PaymentService {
     const feeSplit = calculateFeeSplit(order.deliveryFee);
 
     if (paymentMethod === 'wallet') {
+      console.log('[payForOrder] Starting wallet payment', {
+        orderId,
+        userId,
+        totalAmount: order.totalAmount,
+        timestamp: new Date().toISOString()
+      });
+
       const walletCheck = await Wallet.findOne({ userId }).lean();
       if (!walletCheck || walletCheck._balance < order.totalAmount) {
         throw new Error('Insufficient wallet balance');
@@ -151,6 +158,15 @@ class PaymentService {
           status: 'completed',
         }], { session });
 
+        console.log('[payForOrder] Ledger entry created', {
+          orderId,
+          userId: order.userId,
+          type: 'escrow_lock',
+          amount: order.totalAmount,
+          ledgerEntryId: result?._id,
+          timestamp: new Date().toISOString()
+        });
+
         return {
           escrowId: escrow._id,
           paymentStatus: 'paid',
@@ -211,6 +227,14 @@ class PaymentService {
 
       const feeSplit = calculateFeeSplit(order.deliveryFee);
 
+      console.log('[verifyPayment] Starting ledger creation', {
+        orderId,
+        userId: order.userId,
+        totalAmount: order.totalAmount,
+        reference,
+        timestamp: new Date().toISOString()
+      });
+
       const [escrow] = await Escrow.create([{
         taskId: order.orderId,
         orderId: order._id,
@@ -228,6 +252,16 @@ class PaymentService {
         paymentStatus: 'paid',
         paystackReference: reference,
       }], { session });
+
+      console.log('[verifyPayment] Ledger entry created', {
+        orderId,
+        userId: order.userId,
+        type: 'escrow_lock',
+        amount: order.totalAmount,
+        ledgerEntryId: result?._id,
+        reference,
+        timestamp: new Date().toISOString()
+      });
 
       await Order.findOneAndUpdate(
         { orderId },
