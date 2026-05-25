@@ -477,47 +477,47 @@ class PaymentService {
 
       // Use stored fee split from escrow; recalculate only as fallback
       const providerFee = escrow.providerFee ?? calculateFeeSplit(escrow.deliveryFee).providerFee;
-      const netPlatformFee = escrow.netPlatformFee ?? (escrow.platformFee - providerFee);
-
-      if (usedPayoutSystem) {
-
-        await Wallet.findOneAndUpdate(
-          { userId: escrow.runnerId },
-          { $inc: { _balance: escrow.runnerPayout } },
-          { session }
-        );
-
-        console.log('[payoutToRunner Ledger Start] writing ledger entries for orderId:', resolvedOrderId);
-
-        await LedgerEntry.create([{
-          userId: escrow.runnerId.toString(),
-          userModel: 'Runner',
-          orderId: resolvedOrderId,
-          escrowId: escrow._id,
-          runnerId: escrow.runnerId,
-          type: 'escrow_release',
-          grossAmount: escrow.runnerPayout,
-          netAmount: escrow.runnerPayout,
-          platformFee: 0,
-          netPlatformFee: 0,
-          providerFee: 0,
-          runnerFee: escrow.runnerPayout,
-          provider: 'system',
-          description: `NGN ${escrow.runnerPayout.toString()} earned from completed order - ${resolvedOrderId.toString()}`,
-          status: 'completed',
-        }], { session });
+      const platformFee = escrow.platformFee ?? calculateFeeSplit(escrow.deliveryFee).platformFee;
+      const netPlatformFee = platformFee - providerFee;
 
 
-        console.log('[payoutToRunner] ledger entries written');
-        console.log(`✅ Runner credited NGN ${escrow.runnerPayout}`);
-      } else {
-        console.warn(`⚠️ Runner ${escrow.runnerId} forfeiting delivery fee NGN ${escrow.runnerPayout}`);
+      await Wallet.findOneAndUpdate(
+        { userId: escrow.runnerId },
+        { $inc: { _balance: escrow.runnerPayout } },
+        { session }
+      );
+
+      console.log('[payoutToRunner Ledger Start] writing ledger entries for orderId:', resolvedOrderId);
+
+      await LedgerEntry.create([{
+        userId: escrow.runnerId.toString(),
+        userModel: 'Runner',
+        orderId: resolvedOrderId,
+        escrowId: escrow._id,
+        runnerId: escrow.runnerId,
+        type: 'escrow_release',
+        grossAmount: escrow.runnerPayout,
+        netAmount: escrow.runnerPayout,
+        platformFee: 0,
+        netPlatformFee: 0,
+        providerFee: 0,
+        runnerFee: escrow.runnerPayout,
+        provider: 'system',
+        description: `NGN ${escrow.runnerPayout.toString()} earned from completed order - ${resolvedOrderId.toString()}`,
+        status: 'completed',
+      }], { session });
+
+      console.log('[payoutToRunner] ledger entries written');
+      console.log(`✅ Runner credited NGN ${escrow.runnerPayout}`);
+
+      if (!usedPayoutSystem) {
+        console.warn(`⚠️ Runner ${escrow.runnerId} did not use payout system but was still paid NGN ${escrow.runnerPayout} - pickup`);
       }
 
       await PlatformEarnings.createIdempotent({
         orderId: resolvedOrderId,
         escrowId: escrow._id,
-        amount: usedPayoutSystem ? netPlatformFee : netPlatformFee + escrow.runnerPayout,
+        amount: usedPayoutSystem ? platformFee : platformFee + escrow.runnerPayout,
         netAmount: usedPayoutSystem ? netPlatformFee : netPlatformFee + escrow.runnerPayout,
         providerFee,
         type: usedPayoutSystem ? 'platform_fee' : 'platform_fee_plus_forfeited_runner_fee',

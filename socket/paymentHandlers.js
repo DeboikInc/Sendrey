@@ -125,7 +125,7 @@ const handlePaymentSuccess = async (socket, io, data) => {
               deliveryFee: order.deliveryFee || 0,
               runnerPayout: order.runnerPayout || 0,
               status: 'pending',
-              usedPayoutSystem: false,
+              usedPayoutSystem: order.serviceType === 'pick-up' || order.serviceType === 'pickup'
             }
           },
           { upsert: true, new: true }
