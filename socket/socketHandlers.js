@@ -689,16 +689,15 @@ const initializeChatAndProceed = async (io, chatId, state) => {
     let chat;
 
     if (existingChat) {
-      // ── STEP 1: archive old session first, fully awaited ─────────────────────
-      if (lastOrder?.orderId) {
-        await archiveCurrentSession(
+      // Archive runs in background - doesn't block the reset
+      const archivePromise = lastOrder?.orderId
+        ? archiveCurrentSession(
           chatId,
           lastOrder.orderId,
           ['completed', 'task_completed'].includes(lastOrder.status) ? 'completed' : 'cancelled'
-        );
-      }
+        ).catch(err => console.error('[initializeChat] archive failed (non-blocking):', err.message))
+        : Promise.resolve();
 
-      // ── STEP 2: wipe messages in memory before any save ──────────────────────
       existingChat.messages = [...initialMessages];
       existingChat.specialInstructions = specialInstructions || null;
       existingChat.lastActivity = new Date();
@@ -707,7 +706,6 @@ const initializeChatAndProceed = async (io, chatId, state) => {
       existingChat.taskId = null;
       existingChat.orderSessionId = orderSessionId;
 
-      // ── STEP 3: persist reset chat + cancel stale orders in parallel ─────────
       await Promise.all([
         existingChat.save(),
         Order.updateMany(
@@ -730,7 +728,10 @@ const initializeChatAndProceed = async (io, chatId, state) => {
         ),
       ]);
 
-      // ── STEP 4: reset socket join state so clients do a full re-join ─────────
+      archivePromise.then(() => {
+        console.log('[initializeChat] background archive complete for chatId:', chatId);
+      });
+
       for (const roomName of [chatId, `runner-${runnerId}`, `user-${userId}`]) {
         const room = io.sockets.adapter.rooms.get(roomName);
         if (room) {
@@ -767,7 +768,6 @@ const initializeChatAndProceed = async (io, chatId, state) => {
       console.log('[initializeChat] New chat created');
     }
 
-    // ── STEP 5: verify user is still present before emitting ─────────────────
     const userRoomSockets = await io.in(`user-${userId}`).allSockets();
     const userStillPresent = userRoomSockets.size > 0;
 
@@ -781,7 +781,6 @@ const initializeChatAndProceed = async (io, chatId, state) => {
       return;
     }
 
-    // ── STEP 6: emit proceedToChat — DB is fully settled before this fires ────
     const proceedPayload = {
       chatId, runnerId, userId, serviceType,
       chatReady: true,
