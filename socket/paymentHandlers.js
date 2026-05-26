@@ -10,6 +10,8 @@ const logger = require('../utils/logger');
 const { logSocketAudit } = require('../utils/socketAudit');
 const paymentService = require('../services/paymentServices');
 const Escrow = require('../models/Escrows');
+const LedgerEntry = require('../models/LedgerEntry');
+const { calculateFeeSplit } = require('../config/pricing');
 
 const handlePaymentSuccess = async (socket, io, data) => {
   try {
@@ -130,6 +132,35 @@ const handlePaymentSuccess = async (socket, io, data) => {
           },
           { upsert: true, new: true }
         );
+
+        const existingLock = await LedgerEntry.findOne({
+          orderId: order.orderId,
+          type: 'escrow_lock',
+          userModel: 'User',
+        });
+
+        if (!existingLock) {
+          const feeSplit = calculateFeeSplit(order.deliveryFee);
+          await LedgerEntry.create({
+            userId: chat.userId,
+            userModel: 'User',
+            runnerId: chat.runnerId,
+            type: 'escrow_lock',
+            grossAmount: order.totalAmount,
+            netAmount: order.totalAmount - (feeSplit.providerFee || 0),
+            providerFee: feeSplit.providerFee || 0,
+            platformFee: feeSplit.platformFee || 0,
+            netPlatformFee: feeSplit.netPlatformFee || 0,
+            runnerFee: feeSplit.runnerPayout || 0,
+            provider: reference ? 'paystack' : 'wallet',
+            providerReference: reference || null,
+            orderId: order.orderId,
+            escrowId: resolvedEscrowId,
+            description: `Order Payment (${reference ? 'Card' : 'Wallet'}) for ${order.orderId}`,
+            status: 'completed',
+          });
+          logger.info(`[payment] escrow_lock ledger entry written for ${order.orderId}`);
+        }
       }
 
       // Re-fetch so order.escrowId is correct for the emit below

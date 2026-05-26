@@ -158,6 +158,8 @@ const handleMarkDeliveryComplete = async (io, socket, data) => {
         status: 'sent', senderId: 'system', senderType: 'system',
     };
 
+    
+
     // Emit immediately (optimistic)
     io.to(`user-${order.userId.toString()}`).emit('message', confirmationMessage);
     io.to(`runner-${runnerId.toString()}`).emit('message', runnerAckMessage);
@@ -294,8 +296,8 @@ const handleDenyDelivery = async (io, socket, data) => {
 
     // State revert 
     try {
-        if (order.status !== 'in_progress') {
-            await orderStateMachine.transition(orderId, 'in_progress', {
+        if (order.status !== 'delivered') {
+            await orderStateMachine.transition(orderId, 'delivered', {
                 triggeredBy: 'user',
                 triggeredById: userId,
                 note: 'Delivery denied by user',
