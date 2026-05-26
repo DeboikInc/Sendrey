@@ -516,11 +516,28 @@ const handleAcceptRunnerRequest = async (socket, io, { runnerId, userId, chatId,
 
     await incrementErrandCount(runnerId);
 
+    console.log('[acceptRunnerRequest] emitting enterPreRoom to user socket, user room size:',
+      (await io.in(`user-${userId}`).allSockets()).size
+    );
+
     // Tell the user to enter the pre-room
-    io.to(`user-${userId}`).emit('enterPreRoom', {
-      chatId, runnerId, userId, serviceType,
-      message: 'Runner accepted! Preparing chat...',
-    });
+    const emitEnterPreRoom = async () => {
+      const payload = { chatId, runnerId, userId, serviceType, message: 'Runner accepted! Preparing chat...' };
+
+      for (let attempt = 0; attempt < 5; attempt++) {
+        const roomSize = (await io.in(`user-${userId}`).allSockets()).size;
+        console.log(`[acceptRunnerRequest] enterPreRoom attempt ${attempt + 1}, user room size: ${roomSize}`);
+
+        io.to(`user-${userId}`).emit('enterPreRoom', payload);
+
+        if (roomSize > 0) break;
+
+        // User not in room yet — wait and retry
+        await new Promise(r => setTimeout(r, 1000));
+      }
+    };
+
+    await emitEnterPreRoom();
 
     // If user is already waiting, go immediately
     if (state.user) {
@@ -557,6 +574,7 @@ const handleAcceptRunnerRequest = async (socket, io, { runnerId, userId, chatId,
 //
 const handleRequestRunner = async (socket, io, data) => {
   const { runnerId, userId, chatId, serviceType, specialInstructions, attemptToken } = data;
+  console.log('[requestRunner] RECEIVED from socket:', socket.id, '| data:', JSON.stringify({ runnerId, userId, chatId, isReconnect: data.isReconnect }));
 
   try {
     socket.join(`user-${userId}`);
@@ -665,30 +683,41 @@ const initializeChatAndProceed = async (io, chatId, state) => {
       userDoc?.currentRequest?.specialInstructions || state.specialInstructions
     );
 
-    // Build fresh profile messages (system + profile-card)
     const initialMessages = createInitialRunnerMessages(runnerData, serviceType, runnerId);
-
-    let chat;
     const orderSessionId = `${Date.now()}-${runnerId}`;
 
-    if (existingChat) {
-      chat = existingChat;
+    let chat;
 
+    if (existingChat) {
+      // ── STEP 1: archive old session first, fully awaited ─────────────────────
       if (lastOrder?.orderId) {
-        archiveCurrentSession(
+        await archiveCurrentSession(
           chatId,
           lastOrder.orderId,
           ['completed', 'task_completed'].includes(lastOrder.status) ? 'completed' : 'cancelled'
         );
       }
 
-      // Cancel all non-terminal orders in parallel for this chat
+      // ── STEP 2: wipe messages in memory before any save ──────────────────────
+      existingChat.messages = [...initialMessages];
+      existingChat.specialInstructions = specialInstructions || null;
+      existingChat.lastActivity = new Date();
+      existingChat.serviceType = serviceType;
+      existingChat.orderId = null;
+      existingChat.taskId = null;
+      existingChat.orderSessionId = orderSessionId;
+
+      // ── STEP 3: persist reset chat + cancel stale orders in parallel ─────────
       await Promise.all([
         existingChat.save(),
         Order.updateMany(
           { chatId, status: { $nin: ['completed', 'cancelled', 'task_completed'] } },
           {
-            $set: { status: 'cancelled', cancelledAt: new Date(), cancelReason: 'new_session_started' },
+            $set: {
+              status: 'cancelled',
+              cancelledAt: new Date(),
+              cancelReason: 'new_session_started',
+            },
             $push: {
               statusHistory: {
                 status: 'cancelled',
@@ -701,21 +730,7 @@ const initializeChatAndProceed = async (io, chatId, state) => {
         ),
       ]);
 
-      // Wipe messages and reset the chat document
-      existingChat.messages = [...initialMessages];
-      existingChat.specialInstructions = specialInstructions || null;
-      existingChat.lastActivity = new Date();
-      existingChat.serviceType = serviceType;
-      existingChat.orderId = null;
-      existingChat.taskId = null;
-
-      existingChat.orderSessionId = orderSessionId;
-      await existingChat.save();
-      chat = existingChat;
-
-      console.log('[initializeChat] chat saved with', chat.messages.length, 'messages — proceeding');
-
-      // Reset all sockets currently in the chat room so they force a full re-join
+      // ── STEP 4: reset socket join state so clients do a full re-join ─────────
       for (const roomName of [chatId, `runner-${runnerId}`, `user-${userId}`]) {
         const room = io.sockets.adapter.rooms.get(roomName);
         if (room) {
@@ -730,8 +745,12 @@ const initializeChatAndProceed = async (io, chatId, state) => {
         }
       }
 
+      console.log('[initializeChat] chat saved with', existingChat.messages.length, 'messages — proceeding');
       console.log('[initializeChat] Existing chat reset — new session ready');
+
       io.to(`user-${userId}`).emit('chatReset', { chatId });
+      chat = existingChat;
+
     } else {
       chat = await Chat.create({
         chatId,
@@ -748,10 +767,7 @@ const initializeChatAndProceed = async (io, chatId, state) => {
       console.log('[initializeChat] New chat created');
     }
 
-    const preRoom = `pre-${chatId}`;
-    const roomSockets = await io.in(preRoom).allSockets();
-
-    // Check by user room membership instead — more reliable than socket ID
+    // ── STEP 5: verify user is still present before emitting ─────────────────
     const userRoomSockets = await io.in(`user-${userId}`).allSockets();
     const userStillPresent = userRoomSockets.size > 0;
 
@@ -759,54 +775,38 @@ const initializeChatAndProceed = async (io, chatId, state) => {
       console.warn('[initializeChat] user no longer present — notifying runner');
       io.to(`runner-${runnerId}`).emit('userLeftQueue', {
         chatId,
-        message: 'User stopped waiting. They may retry.'
+        message: 'User stopped waiting. They may retry.',
       });
       preRoomState.delete(chatId);
       return;
     }
 
+    // ── STEP 6: emit proceedToChat — DB is fully settled before this fires ────
+    const proceedPayload = {
+      chatId, runnerId, userId, serviceType,
+      chatReady: true,
+      orderSessionId,
+      initialMessages: chat.messages,
+      specialInstructions: specialInstructions || null,
+      attemptToken: state.attemptToken || null,
+    };
+
     console.log('[initializeChat] emitting proceedToChat to pre-' + chatId);
-    console.log(`[initializeChat] pre-room members at emit time:`, [...(io.sockets.adapter.rooms.get(`pre-${chatId}`) || [])]);
-    // Tell both parties to proceed — they will call joinChat which triggers createOrder
-    io.to(`pre-${chatId}`).emit('proceedToChat', {
-      chatId, runnerId, userId, serviceType,
-      chatReady: true,
-      orderSessionId,
-      initialMessages: chat.messages,
-      specialInstructions: specialInstructions || null,
-      attemptToken: state.attemptToken || null,
-    });
+    console.log('[initializeChat] pre-room members at emit time:',
+      [...(io.sockets.adapter.rooms.get(`pre-${chatId}`) || [])]);
 
-    // emit to individual rooms
-    io.to(`user-${userId}`).emit('proceedToChat', {
-      chatId, runnerId, userId, serviceType,
-      chatReady: true,
-      orderSessionId,
-      initialMessages: chat.messages,
-      specialInstructions: specialInstructions || null,
-      attemptToken: state.attemptToken || null,
-    });
-
-    io.to(`runner-${runnerId}`).emit('proceedToChat', {
-      chatId, runnerId, userId, serviceType,
-      chatReady: true,
-      orderSessionId,
-      initialMessages: chat.messages,
-      specialInstructions: specialInstructions || null,
-      attemptToken: state.attemptToken || null,
-    });
-
-    // set both parties isAvailable false 
+    io.to(`pre-${chatId}`).emit('proceedToChat', proceedPayload);
+    io.to(`user-${userId}`).emit('proceedToChat', proceedPayload);
+    io.to(`runner-${runnerId}`).emit('proceedToChat', proceedPayload);
 
     console.log('[initializeChat] emitting specialInstructions:', JSON.stringify(specialInstructions, null, 2));
 
     preRoomState.delete(chatId);
     logSocketAudit('PROCEED_TO_CHATROOM', { runnerId, userId, serviceType });
+
   } catch (error) {
     console.error('[initializeChat] error:', error);
-
     preRoomState.delete(chatId);
-    // ← notify BOTH parties so neither is left hanging
     io.to(`user-${userId}`).emit('chatError', {
       code: 'CHAT_INIT_FAILED',
       message: 'Failed to prepare chat. Please try again.',
@@ -817,7 +817,6 @@ const initializeChatAndProceed = async (io, chatId, state) => {
       message: 'Failed to prepare chat session.',
       chatId,
     });
-
   }
 };
 

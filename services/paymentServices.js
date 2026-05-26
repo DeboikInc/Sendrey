@@ -814,7 +814,7 @@ class PaymentService {
 
     const hiddenTypes = userType === 'runner'
       ? ['platform_earning', 'provider_fee', 'item_budget']
-      : ['platform_earning', 'provider_fee', 'item_budget_spent'];
+      : ['platform_earning', 'provider_fee', 'item_budget_spent', 'escrow_release'];
 
     const userObjectId = mongoose.Types.ObjectId.isValid(userId)
       ? new mongoose.Types.ObjectId(userId.toString())

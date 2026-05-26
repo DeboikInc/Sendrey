@@ -19,29 +19,55 @@ const handleCancelOrder = async (socket, io, data) => {
             orderId, chatId, runnerId, userId, reason, cancelledBy: 'runner'
         });
 
-        // Emit immediately before any slow DB ops
-        const systemMessage = {
-            id: `cancel-${Date.now()}`,
+        const now = new Date().toISOString();
+        const reasonSuffix = reason ? ` Reason: ${reason}` : '';
+
+        // What the runner sees
+        const runnerMessage = {
+            id: `cancel-runner-${Date.now()}`,
             chatId,
-            text: `You cancelled this order.${reason ? ' ' + reason : ''}`,
+            text: `You cancelled this order.${reasonSuffix}`,
             type: 'system',
             from: 'system',
             senderId: 'system',
             senderType: 'system',
-            createdAt: new Date().toISOString(),
+            createdAt: now,
         };
 
+        // What the user sees — fetch runner name for a personal touch
+        const runner = await Runner.findById(runnerId).select('firstName lastName').lean();
+        const runnerName = runner
+            ? `${runner.firstName}${runner.lastName ? ' ' + runner.lastName : ''}`
+            : 'Your runner';
+
+        const userMessage = {
+            id: `cancel-user-${Date.now()}`,
+            chatId,
+            text: `${runnerName} cancelled this order.${reasonSuffix}`,
+            type: 'system',
+            from: 'system',
+            senderId: 'system',
+            senderType: 'system',
+            createdAt: now,
+        };
+
+        // Emit orderCancelled to the whole room (both need to know to clear state)
+        // but send the personalised system message to each private room
         io.to(chatId).emit('orderCancelled', {
             orderId: order.orderId,
             chatId,
             message: cancelMessage.text,
             cancelledBy: 'runner',
-            systemMessage,
-            clearChat: true
+            clearChat: true,
+            // give each side their own message so their client can display it
+            runnerMessage,
+            userMessage,
         });
-        io.to(chatId).emit('message', systemMessage);
 
-        // Now do slow ops in parallel, fire-and-forget
+        io.to(`runner-${runnerId}`).emit('message', runnerMessage);
+        io.to(`user-${userId}`).emit('message', userMessage);
+
+        // Slow ops fire-and-forget
         Promise.all([
             Runner.findByIdAndUpdate(runnerId, { isAvailable: true, activeOrderId: null, currentUserId: null }),
             User.findByIdAndUpdate(userId, { isAvailable: true, activeOrderId: null, currentRunnerId: null }),
