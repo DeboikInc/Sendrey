@@ -676,9 +676,6 @@ const initializeChatAndProceed = async (io, chatId, state) => {
       Order.findOne({ chatId }).sort({ createdAt: -1 }).lean()
     ]);
 
-    console.log('[initializeChat] userDoc.currentRequest.specialInstructions:',
-      JSON.stringify(userDoc?.currentRequest?.specialInstructions, null, 2));
-
     const specialInstructions = sanitizeSpecialInstructions(
       userDoc?.currentRequest?.specialInstructions || state.specialInstructions
     );
@@ -689,15 +686,16 @@ const initializeChatAndProceed = async (io, chatId, state) => {
     let chat;
 
     if (existingChat) {
-      // Archive runs in background - doesn't block the reset
+      // 1. Archive in background
       const archivePromise = lastOrder?.orderId
         ? archiveCurrentSession(
           chatId,
           lastOrder.orderId,
           ['completed', 'task_completed'].includes(lastOrder.status) ? 'completed' : 'cancelled'
-        ).catch(err => console.error('[initializeChat] archive failed (non-blocking):', err.message))
+        ).catch(err => console.error('[archive] bg failed:', err.message))
         : Promise.resolve();
 
+      // 2. Reset chat document (THIS MUST WAIT - chat needs fresh state)
       existingChat.messages = [...initialMessages];
       existingChat.specialInstructions = specialInstructions || null;
       existingChat.lastActivity = new Date();
@@ -706,6 +704,7 @@ const initializeChatAndProceed = async (io, chatId, state) => {
       existingChat.taskId = null;
       existingChat.orderSessionId = orderSessionId;
 
+      // 3. Save chat + cancel stale orders in parallel (both required before proceeding)
       await Promise.all([
         existingChat.save(),
         Order.updateMany(
@@ -728,26 +727,24 @@ const initializeChatAndProceed = async (io, chatId, state) => {
         ),
       ]);
 
-      archivePromise.then(() => {
-        console.log('[initializeChat] background archive complete for chatId:', chatId);
-      });
-
-      for (const roomName of [chatId, `runner-${runnerId}`, `user-${userId}`]) {
-        const room = io.sockets.adapter.rooms.get(roomName);
-        if (room) {
-          for (const socketId of room) {
-            const s = io.sockets.sockets.get(socketId);
-            if (s) {
-              s.joinedChat = false;
-              s.currentChatId = null;
+      // 4. Reset socket state in background (doesn't need to block proceedToChat)
+      const resetSocketState = async () => {
+        for (const roomName of [chatId, `runner-${runnerId}`, `user-${userId}`]) {
+          const room = io.sockets.adapter.rooms.get(roomName);
+          if (room) {
+            for (const socketId of room) {
+              const s = io.sockets.sockets.get(socketId);
+              if (s) {
+                s.joinedChat = false;
+                s.currentChatId = null;
+              }
+              socketMessageSnapshot.delete(socketId);
             }
-            socketMessageSnapshot.delete(socketId);
           }
         }
-      }
-
-      console.log('[initializeChat] chat saved with', existingChat.messages.length, 'messages — proceeding');
-      console.log('[initializeChat] Existing chat reset — new session ready');
+      };
+      resetSocketState().catch(err => console.error('[socketReset] bg failed:', err.message));
+      archivePromise.then(() => console.log('[archive] bg complete:', chatId));
 
       io.to(`user-${userId}`).emit('chatReset', { chatId });
       chat = existingChat;
@@ -768,6 +765,7 @@ const initializeChatAndProceed = async (io, chatId, state) => {
       console.log('[initializeChat] New chat created');
     }
 
+    // User presence check (must wait - determines if we proceed)
     const userRoomSockets = await io.in(`user-${userId}`).allSockets();
     const userStillPresent = userRoomSockets.size > 0;
 
@@ -790,15 +788,9 @@ const initializeChatAndProceed = async (io, chatId, state) => {
       attemptToken: state.attemptToken || null,
     };
 
-    console.log('[initializeChat] emitting proceedToChat to pre-' + chatId);
-    console.log('[initializeChat] pre-room members at emit time:',
-      [...(io.sockets.adapter.rooms.get(`pre-${chatId}`) || [])]);
-
     io.to(`pre-${chatId}`).emit('proceedToChat', proceedPayload);
     io.to(`user-${userId}`).emit('proceedToChat', proceedPayload);
     io.to(`runner-${runnerId}`).emit('proceedToChat', proceedPayload);
-
-    console.log('[initializeChat] emitting specialInstructions:', JSON.stringify(specialInstructions, null, 2));
 
     preRoomState.delete(chatId);
     logSocketAudit('PROCEED_TO_CHATROOM', { runnerId, userId, serviceType });
