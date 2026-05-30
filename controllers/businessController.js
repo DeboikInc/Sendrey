@@ -1,4 +1,6 @@
 const BaseController = require('./baseController');
+const { sendPushNotification } = require('../services/notificationService');
+
 const {
   convertToBusiness,
   inviteMember,
@@ -225,8 +227,13 @@ class BusinessController extends BaseController {
   async notifyTeamMember(req, res) {
     try {
       const { recipientId, title, body, data } = req.body;
-      const { sendPushNotification } = require('../services/notificationService');
-      await sendPushNotification({ recipientId, recipientType: 'user', title, body, data });
+      await sendPushNotification({
+        recipientId,
+        recipientType: 'user',
+        title,
+        body,
+        data: { ...data, type: data?.type || 'team_notify' },
+      });
       return this.success(res, {}, 'Notified');
     } catch (err) {
       return this.error(res, err.message);

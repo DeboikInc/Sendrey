@@ -17,6 +17,7 @@ class DisputeController extends BaseController {
     super();
     this.raiseDispute = this.raiseDispute.bind(this);
     this.getRunnerDisputes = this.getRunnerDisputes.bind(this);
+    this.getUserDisputes = this.getUserDisputes.bind(this);
     this.getDispute = this.getDispute.bind(this);
     this.resolveDispute = this.resolveDispute.bind(this);
     this.getAllDisputes = this.getAllDisputes.bind(this);
@@ -133,6 +134,16 @@ class DisputeController extends BaseController {
     try {
       const { runnerId } = req.params;
       const disputes = await disputeService.getDisputesByRunnerId(runnerId);
+      return this.success(res, { disputes });
+    } catch (error) {
+      return this.error(res, error.message);
+    }
+  }
+
+  async getUserDisputes(req, res) {
+    try {
+      const { userId } = req.params;
+      const disputes = await disputeService.getDisputesByUserId(userId);
       return this.success(res, { disputes });
     } catch (error) {
       return this.error(res, error.message);

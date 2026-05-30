@@ -55,7 +55,7 @@ const startScheduler = (io) => {
               await sendPushNotification({
                 recipientId: memberId,
                 recipientType: 'user',
-                title: '⏰ Upcoming Scheduled Delivery',
+                title: 'Upcoming Scheduled Delivery',
                 body: `"${schedule.label}" is scheduled in 5 minutes.`,
                 data: {
                   type: 'schedule_warning',
@@ -79,7 +79,7 @@ const startScheduler = (io) => {
               await sendPushNotification({
                 recipientId: memberId,
                 recipientType: 'user',
-                title: '🕐 Scheduled Delivery Now',
+                title: 'Scheduled Delivery Now',
                 body: `It's time for "${schedule.label}". Open Sendrey to proceed.`,
                 data: {
                   type: 'schedule_reminder',
