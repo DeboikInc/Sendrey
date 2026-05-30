@@ -446,6 +446,8 @@ const scheduleAutoConfirm = (io, chatId, orderId, escrowId) => {
             persistMessages(chatId, [autoCompleteMessage])
                 .catch(err => console.error('[autoConfirm] Chat persist failed:', err));
 
+            
+
             logSocketAudit('ORDER_AUTO_CONFIRM_DELIVERED', { chatId, orderId });
 
         } catch (error) {

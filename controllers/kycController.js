@@ -547,7 +547,7 @@ class KYCController extends BaseController {
                 sendPushNotification({
                     recipientId: runnerId,
                     recipientType: 'runner',
-                    title: '🎉 Account Fully Verified!',
+                    title: 'Account Fully Verified!',
                     body: 'Your kyc documents have been approved. Your account is now fully verified — you can start accepting jobs!',
                     data: { type: 'kyc_selfie_approved', runnerStatus: result.runnerStatus }
                 });

@@ -15,6 +15,12 @@ router.get(
     disputeController.getRunnerDisputes
 );
 
+router.get('/user/:userId',
+    authenticate,
+    auditLog('GET_USER_DISPUTES'),
+    disputeController.getUserDisputes
+);
+
 router.get(
     '/order/:orderId',
     auditLog('GET_DISPUTE'),

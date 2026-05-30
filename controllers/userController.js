@@ -7,7 +7,6 @@ const logger = require('../utils/logger');
 const User = require('../models/User');
 const cloudinary = require('../config/cloudinary');
 const runnerService = require('../services/runnerService');
-const { sendPushNotification } = require('../services/notificationService');
 
 class UserController extends BaseController {
   constructor() {

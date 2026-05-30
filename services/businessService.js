@@ -85,6 +85,19 @@ const inviteMember = async (businessOwnerId, identifier, role = 'staff') => {
     console.error('Failed to send team invite email:', err.message);
   });
 
+  await sendPushNotification({
+    recipientId: invitee._id,
+    recipientType: 'user',
+    title: '🏢 Team Invitation',
+    body: `${owner.businessProfile.businessName} invited you to join their team as ${role}.`,
+    data: {
+      type: 'team_invite',
+      businessOwnerId: owner._id.toString(),
+      businessName: owner.businessProfile.businessName,
+      role,
+    },
+  });
+
   return invitee;
 };
 
