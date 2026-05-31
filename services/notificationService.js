@@ -22,7 +22,6 @@ const sendPushNotification = async ({
       return null;
     }
 
-    n
     const message = {
       token: recipient.fcmToken,
       notification: { title, body },
@@ -83,7 +82,7 @@ const notifyPaymentSuccess = async (runnerId, { orderId, amount }) => {
     data: { type: 'payment_success', orderId }
   });
 };
-
+// should be seperate for pickup and errand and they all need logo
 const notifyItemApprovalRequest = async (userId, { orderId, totalAmount }) => {
   return sendPushNotification({
     recipientId: userId,
@@ -253,6 +252,7 @@ module.exports = {
   notifyItemApprovalRequest,
   notifyItemApproved,
   notifyItemRejected,
+  notifyAutoConfirmWarning,
   notifyDeliveryConfirmationRequest,
   notifyDeliveryConfirmed,
   notifyDisputeRaised,

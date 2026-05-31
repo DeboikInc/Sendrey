@@ -270,7 +270,12 @@ connectWithRetry().then(async () => {
       }, 500);
     });
 
-    // Chat events
+    // Push Notification events
+    socket.on('saveFcmToken', (data) => {
+      console.log('[saveFcmToken] event received:', data?.userId, data?.userType, !!data?.fcmToken);
+      notificationHandlers.handleSaveFcmToken(socket, data);
+    });
+
     socket.on("sendMessage", async (data) => {
       try {
         await socketHandlers.handleSendMessage(socket, io, data);
