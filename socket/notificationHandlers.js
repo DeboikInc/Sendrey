@@ -3,6 +3,25 @@ const User = require('../models/User');
 const Runner = require('../models/Runner');
 const { logSocketAudit } = require('../utils/socketAudit');
 
+/**
+ * Save FCM token for new message
+ */
+const handleSaveFcmToken = async (socket, { userId, userType, fcmToken }) => {
+  if (!userId || !fcmToken) {
+    console.warn('[saveFcmToken] missing userId or fcmToken');
+    return;
+  }
+
+  console.log('[saveFcmToken] saving for:', userType, userId);
+
+  try {
+    const Model = userType === 'runner' ? Runner : User;
+    await Model.findByIdAndUpdate(userId, { fcmToken });
+    console.log('[saveFcmToken] ✅ saved');
+  } catch (err) {
+    console.error('[saveFcmToken] ❌ failed:', err.message);
+  }
+};
 
 /**
  * Send push notification for new message
@@ -120,4 +139,5 @@ const sendStatusUpdateNotification = async (chatId, status, updatedBy, updatedBy
 module.exports = {
   sendMessageNotification,
   sendStatusUpdateNotification,
+  handleSaveFcmToken 
 };

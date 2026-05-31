@@ -148,8 +148,8 @@ const handlers = {
     await sendPushNotification({
       recipientId: data.userId,
       recipientType: 'user',
-      title: '💰 Wallet Funded',
-      body: `₦${data.amount?.toLocaleString()} added to your wallet. New balance: ₦${data.newBalance?.toLocaleString()}.`,
+      title: 'Wallet Funded',
+      body: `₦ ${data.amount?.toLocaleString()} added to your wallet. New balance: ₦ ${data.newBalance?.toLocaleString()}.`,
       data: { type: 'wallet_funded' },
     });
 
@@ -172,8 +172,8 @@ const handlers = {
     await sendPushNotification({
       recipientId: data.runnerId,
       recipientType: 'runner',
-      title: '🏦 Withdrawal Initiated',
-      body: `₦${data.amount?.toLocaleString()} withdrawal to ${data.bankName} is being processed.`,
+      title: 'Withdrawal Initiated',
+      body: `₦ ${data.amount?.toLocaleString()} withdrawal to ${data.bankName} is being processed.`,
       data: { type: 'withdrawal_initiated' },
     });
 

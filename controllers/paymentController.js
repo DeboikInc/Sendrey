@@ -5,12 +5,14 @@ const paystack = require('../config/paystack');
 const Escrow = require('../models/Escrows');
 const Order = require('../models/Order');
 const { sendPaymentEvent } = require('../kafka/producers/paymentProducer');
+
 const {
     notifyPaymentSuccess,
     notifyEscrowReleased,
     notifyItemApproved,
     sendPushNotification,
 } = require('../services/notificationService');
+
 const pinService = require('../services/pinService');
 
 const TWENTY_FOUR_HOURS = 24 * 60 * 60 * 1000;
@@ -101,15 +103,6 @@ class PaymentController extends BaseController {
 
             const result = await paymentService.fundWallet(userId, amount, userEmail);
 
-            sendPaymentEvent('wallet.funded', {
-                userId,
-                userEmail,
-                userName: `${req.user.firstName} ${req.user.lastName}`,
-                amount,
-                newBalance: result.newBalance,
-                reference: result.reference,
-            });
-
             this.success(res, result);
         } catch (error) {
             console.error('Error funding wallet:', error);
@@ -169,7 +162,7 @@ class PaymentController extends BaseController {
                         userId: metadata.userId,
                         userEmail: metadata.userEmail,
                         userName: metadata.userName,
-                        amount: event.data.amount / 100,
+                        amount: result?.amount,
                         newBalance: result?.newBalance,
                         reference,
                     });
@@ -553,6 +546,17 @@ class PaymentController extends BaseController {
             if (result.alreadyProcessed) {
                 return this.success(res, { message: 'Already processed' });
             }
+
+            sendPaymentEvent('wallet.funded', {
+                userId: req.user._id,
+                userEmail: req.user.email,
+                userName: `${req.user.firstName} ${req.user.lastName}`,
+                amount: result.amount,
+                newBalance: result.balance,
+                reference,
+            });
+
+
             this.success(res, { message: 'Wallet funded successfully', balance: result.balance, amount: result.amount });
         } catch (error) {
             console.error('Error verifying wallet funding:', error);

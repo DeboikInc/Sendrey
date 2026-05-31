@@ -194,7 +194,7 @@ class PaymentService {
 
   async verifyPayment(reference) {
     const verification = await paystack.verifyTransaction(reference);
-    console.log('[verifyWalletFunding] raw verification:', JSON.stringify(verification, null, 2));
+    // console.log('[verifyWalletFunding] raw verification:', JSON.stringify(verification, null, 2));
 
     if (!verification.status) {
       throw new Error('Payment verification failed');
@@ -326,7 +326,7 @@ class PaymentService {
 
   async verifyWalletFunding(reference) {
     const verification = await paystack.verifyTransaction(reference);
-    console.log('[verifyWalletFunding] raw verification:', JSON.stringify(verification, null, 2));
+    // console.log('[verifyWalletFunding] raw verification:', JSON.stringify(verification, null, 2));
 
     if (!verification.status) {
       throw new Error('Payment verification failed');
@@ -844,7 +844,7 @@ class PaymentService {
     console.log('[getTransactionHistory] entries found:', entries.length);
     console.log('[getTransactionHistory] sample:', entries[0]);
     console.log('[getTransactionHistory] hiddenTypes:', hiddenTypes);
-    console.log('[txHistory] raw entries:', entries.map(e => ({ type: e.type, userModel: e.userModel, userId: e.userId, amount: e.grossAmount })));
+    // console.log('[txHistory] raw entries:', entries.map(e => ({ type: e.type, userModel: e.userModel, userId: e.userId, amount: e.grossAmount })));
 
     const providerLabel = (provider) =>
       provider === 'paystack' ? 'Card' : provider === 'wallet' ? 'Wallet' : 'System';
