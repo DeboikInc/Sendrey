@@ -27,4 +27,4 @@ MongoDB Atlas — make sure it's not on free tier either (512MB storage limit)
 
 "runner misconduct costs us X in Paystack fees per ban, do we absorb or pass to user?
 
-Now issue is dispute reasons showing, some are showing while others arent
+complete push notifications, 

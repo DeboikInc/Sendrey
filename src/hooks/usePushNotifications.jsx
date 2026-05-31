@@ -5,22 +5,31 @@ import { getMessagingIfSupported, getToken, onMessage } from '../config/firebase
 import appIcon from '../assets/Sendrey-Logo-Variants-09.png';
 
 const VAPID_KEY = process.env.REACT_APP_VAPID_KEY;
+console.log('VAPID:', process.env.REACT_APP_VAPID_KEY ? 'exists' : 'missing');
 
 const isNative = Capacitor.isNativePlatform(); // true on iOS/Android, false on web
 
-export const ORDER_TYPES = [
+export const USER_ORDER_TYPES = [
   'payment_request',
-  'payment_success',
   'delivery_confirmation_request',
-  'delivery_confirmed',
   'rating_prompt',
-  'escrow_released',
   'item_approval_request',
-  'item_approved',
-  'item_rejected',
+  'delivery_confirmed',
   'dispute_raised',
   'dispute_resolved',
 ];
+
+export const RUNNER_ORDER_TYPES = [
+  'payment_success',
+  'item_approved',
+  'item_rejected',
+  'escrow_released',
+  'delivery_confirmed',
+  'dispute_raised',
+  'dispute_resolved',
+];
+
+export const ORDER_TYPES = [...new Set([...USER_ORDER_TYPES, ...RUNNER_ORDER_TYPES])];
 
 export const usePushNotifications = ({
   userId, userType, socket, onIncomingCall,
@@ -181,10 +190,22 @@ export const usePushNotifications = ({
       unsubscribe = onMessage(messaging, (payload) => {
         const data = payload.data;
 
-        if (payload.notification) {
-          const { title, body } = payload.notification;
-          new Notification(title, { body, icon: appIcon, badge: appIcon, data });
+        const title = payload.notification?.title || data?.type || 'Sendrey';
+        const body = payload.notification?.body || '';
+
+        if (Notification.permission === 'granted' && title) {
+          navigator.serviceWorker.ready.then(registration => {
+            registration.showNotification(title, {
+              body,
+              icon: appIcon,
+              badge: appIcon,
+              data,
+              tag: data?.chatId || data?.type || 'default',
+            });
+          });
         }
+
+        console.log('[Push] Message received in foreground:', payload);
 
         // common
         // Route incoming call to handler instead of showing dumb notification
@@ -249,21 +270,42 @@ export const usePushNotifications = ({
 
   // Web permission request
   const requestPermission = useCallback(async () => {
-    if (isNative || !notificationSupported) return null;
+    if (isNative) return null;
+
+    const messaging = await getMessagingIfSupported();
+    if (!messaging) return null;
+
+    console.log('[Push] Requesting permission...');
 
     try {
-      const messaging = await getMessagingIfSupported();
-      if (!messaging) return null;
-
       const perm = await Notification.requestPermission();
       setPermission(perm);
 
       if (perm === 'granted') {
+
+        await navigator.serviceWorker.ready;
+        console.log('[Push] SW ready');
+
         const token = await getToken(messaging, { vapidKey: VAPID_KEY });
+        console.log('[Push] Web FCM token:', !!token, token?.substring(0, 20));
         setFcmToken(token);
-        if (socket && userId && userType) {
-          socket.emit('saveFcmToken', { userId, userType, fcmToken: token });
+
+        const emitToken = () => {
+          if (socket?.connected && userId && userType) {
+            console.log('[Push] emitting saveFcmToken');
+            socket.emit('saveFcmToken', { userId, userType, fcmToken: token });
+          }
+        };
+
+        // Try immediately
+        emitToken();
+
+        // If socket not connected yet, wait for connect event
+        if (!socket?.connected && socket) {
+          console.log('[Push] socket not ready, waiting for connect...');
+          socket.once('connect', emitToken);
         }
+
         return token;
       }
       return null;
@@ -271,7 +313,7 @@ export const usePushNotifications = ({
       console.error('[Push] requestPermission error:', err);
       return null;
     }
-  }, [userId, userType, socket, notificationSupported]);
+  }, [userId, userType, socket]);
 
   return {
     fcmToken,
@@ -280,3 +322,4 @@ export const usePushNotifications = ({
     requestPermission,
   };
 };
+

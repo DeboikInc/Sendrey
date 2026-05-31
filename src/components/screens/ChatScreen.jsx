@@ -451,19 +451,25 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
     if (!chatId) return;
     chatStorage.getChatStatus(chatId).then(saved => {
       if (!saved) return;
-      if (['completed', 'cancelled', 'task_completed'].includes(saved.currentOrder?.status)) return;
+
+      // ← Don't restore terminal orders for new sessions
+      if (['completed', 'cancelled', 'task_completed'].includes(saved.currentOrder?.status)) {
+        chatStorage.clearChatStatus(chatId);
+        chatStorage.clearMessages(chatId);
+        return;
+      }
+
       if (saved.orderCancelled) {
         setOrderCancelled(true);
         setCancelledByName(saved.cancelledByName || null);
       }
-      if (saved.taskCompleted) {
-        setTaskCompleted(true);
-      }
+      if (saved.taskCompleted) setTaskCompleted(true);
       if (saved.currentOrder) {
-        if (!currentOrderRef.current) setCurrentOrder(saved.currentOrder);
-        currentOrderRef.current = currentOrderRef.current || saved.currentOrder;
+        setCurrentOrder(saved.currentOrder);
+        currentOrderRef.current = saved.currentOrder;
       }
     });
+    
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatId]);
 
