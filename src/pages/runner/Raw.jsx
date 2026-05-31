@@ -27,7 +27,7 @@ import { Orders } from './Orders';
 import { Payout } from './Payout';
 import { Disputes } from './Disputes';
 
-import { usePushNotifications, ORDER_TYPES } from "../../hooks/usePushNotifications";
+import { usePushNotifications, RUNNER_ORDER_TYPES } from "../../hooks/usePushNotifications";
 import { useCredentialFlow } from "../../hooks/useCredentialFlow";
 import { useKycHook } from '../../hooks/useKycHook';
 import { useCameraHook } from "../../hooks/useCameraHook";
@@ -321,25 +321,10 @@ function WhatsAppLikeChat() {
 
     onNotificationTap: useCallback((data) => {
       if (data?.type === 'new_request_nearby') {
-        // Force onboarding screen to take dominance
         setActiveChatId(BOT_CHAT_ID);
         setSelectedUser(null);
-        setShowNotifications(true); // ← new state flag
-      }
-
-      if (ORDER_TYPES.includes(data?.type) && data?.orderId) {
-        if (!isBotMode) {
-          // chat screen already mounted, nothing to navigate
-          // socket state is live, UI will already reflect the update
-        }
-      }
-
-      if (data?.type === 'dispute_raised' || data?.type === 'dispute_resolved') {
-        setCurrentView('disputes');
-      }
-
-      if (data?.type === 'withdrawal_requested' || data?.type === 'withdrawal_released') {
-        setCurrentView('wallet');
+        setShowNotifications(true);
+        return;
       }
 
       if (data?.type === 'kyc_document_approved' ||
@@ -351,10 +336,29 @@ function WhatsAppLikeChat() {
         setActiveChatId(BOT_CHAT_ID);
         setSelectedUser(null);
         setCurrentView('chat');
+        return;
       }
 
+      // ── Order flow ────────────────────────────────────────────────────────
+      if (RUNNER_ORDER_TYPES.includes(data?.type)) {
+        // Notification arrived late — runner not in active chat, do nothing
+        if (isBotMode) return;
 
-    }, []),
+        // Already on chat screen, socket state is live — just ensure views are correct
+        setCurrentView('chat');
+        return;
+      }
+
+      if (data?.type === 'dispute_raised' || data?.type === 'dispute_resolved') {
+        setCurrentView('disputes');
+        return;
+      }
+
+      if (data?.type === 'withdrawal_requested' || data?.type === 'withdrawal_released') {
+        setCurrentView('wallet');
+        return;
+      }
+    }, [isBotMode]),
   });
 
   const chatMessagesUpdater = useCallback((updater) => {
@@ -426,8 +430,7 @@ function WhatsAppLikeChat() {
 
 
   useEffect(() => {
-    if (runnerId && socket && permission === 'default') requestPermission();
-
+    if (runnerId && socket && permission !== 'denied') requestPermission();
   }, [runnerId, socket, permission, requestPermission]);
 
   useEffect(() => {
@@ -1259,21 +1262,16 @@ function WhatsAppLikeChat() {
     credentialStep, isBotMode, socket, selectedUser, handleOtpVerification, registrationComplete,
     handleCredentialAnswer, sendMessage, botMessagesUpdater, chatMessagesUpdater]);
 
-
   const setBotReplyingTo = useCallback((r) => {
     chatManager.set(BOT_CHAT_ID, { replyingTo: r });
   }, []);
-
 
   const handleLocationClick = () => setShowOrderFlow(true);
   const handleAttachClick = () => setIsAttachFlowOpen(true);
 
   // ── Derived ───────────────────────────────────────────────────────────────────
   const isConnectLockedFromStore = useOrderStore(selectIsConnectLocked);
-
-
   const isConnectLocked = orderPending || isConnectLockedFromStore;
-
 
   // ── Render ────────────────────────────────────────────────────────────────────
   const renderMainScreen = () => {

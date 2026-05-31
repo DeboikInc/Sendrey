@@ -25,7 +25,7 @@ import { startEditing, finishEditing, updateOrder } from "../../Redux/orderSlice
 
 import { useCredentialFlow } from "../../hooks/useCredentialFlow";
 import { useSocket } from "../../hooks/useSocket";
-import { usePushNotifications, ORDER_TYPES } from "../../hooks/usePushNotifications";
+import { usePushNotifications, USER_ORDER_TYPES, } from "../../hooks/usePushNotifications";
 
 import chatStorage from '../../utils/chatStorage';
 import api from '../../utils/api';
@@ -103,6 +103,7 @@ export const Welcome = () => {
             if (data?.type === 'team_invite' || data?.type === 'team_notify') {
                 setShowMoreMenu(false);
                 setShowSettings(true);
+                return;
             }
 
             if (data?.type === 'dispute_raised' ||
@@ -110,6 +111,7 @@ export const Welcome = () => {
                 data?.type === 'dispute_lock') {
                 setShowMoreMenu(false);
                 setShowDisputes(true);
+                return;
             }
 
             if ((data?.type === 'schedule_reminder' || data?.type === 'schedule_warning')) {
@@ -117,27 +119,31 @@ export const Welcome = () => {
                 setSettingsInitialTab('schedule');
                 setSettingsEditScheduleId(data?.scheduleId || null);
                 setShowSettings(true);
+                return;
             }
 
-            if (ORDER_TYPES.includes(data?.type) && data?.orderId) {
+            if (USER_ORDER_TYPES.includes(data?.type)) {
+                // Notification arrived late — no active chat, do nothing
+                if (!chatMounted) return;
+
+                // Close everything else and surface the chat
                 setShowMoreMenu(false);
                 setShowWallet(false);
                 setShowSettings(false);
                 setShowDisputes(false);
-                if (chatMounted) {
-                    // chat already mounted, just make it visible
-                    setChatReady(true);
-                    setShowConnecting(false);
-                    setCurrentScreen('chat');
-                }
-                // if chatMounted is false there's no active order to navigate to — do nothing
+                setChatReady(true);
+                setShowConnecting(false);
+                setCurrentScreen('chat');
+                return;
             }
 
         },
     });
 
     useEffect(() => {
-        if (currentUser?._id && socket && permission === 'default') requestPermission();
+        if (currentUser?._id && socket && permission !== 'denied') {
+            requestPermission();
+        }
     }, [currentUser?._id, socket, permission, requestPermission]);
 
     useEffect(() => {
@@ -608,12 +614,11 @@ export const Welcome = () => {
                             if (activeChatId) {
                                 sessionStorage.removeItem(`session_validated_${activeChatId}`);
                             }
-
-                            clearOrder();
-
+                            
                             chatStorage.clearActiveChat();
                             chatStorage.clearRunnerData();
                             chatStorage.clearChatStatus?.(activeChatId);
+                            clearOrder();
 
                             setChatReady(false);
                             setChatMounted(false);
