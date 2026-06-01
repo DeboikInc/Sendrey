@@ -128,7 +128,8 @@ const handleSubmitItems = async (socket, io, data) => {
     // push notification to user about item approval
     await notifyItemApprovalRequest(userId, {
       orderId: order?.orderId,
-      totalAmount
+      totalAmount,
+      serviceType: order?.serviceType || order?.taskType,
     });
 
     // console.log(`Item submission ${submissionId} sent to chat ${chatId}`);
@@ -222,7 +223,7 @@ const handleApproveItems = async (socket, io, data) => {
 
     const runnerSystemMsg = {
       id: `approval-runner-${Date.now() + 1}`,
-      type: 'item_submission', 
+      type: 'item_submission',
       messageType: 'item_submission',
       from: 'system', senderId: 'system', senderType: 'system',
       text: `${userName} approved the items. Proceed with purchase.`,
@@ -270,7 +271,10 @@ const handleApproveItems = async (socket, io, data) => {
     // console.log('Emitting approval to runner room:', `user-${order.runnerId}`);
     io.to(`runner-${order.runnerId.toString()}`).emit('message', cleanForEmit(runnerSystemMsg))
 
-    await notifyItemApproved(order.runnerId, { orderId: order.orderId });
+    await notifyItemApproved(order.runnerId, {
+      orderId: order.orderId,
+      serviceType: order?.serviceType || order?.taskType,
+    });
     // console.log(`Items approved for submission ${submissionId}`);
 
 
@@ -425,7 +429,8 @@ const handleSubmitPickupItem = async (socket, io, data) => {
     // Push notification to user about pickup item approval
     await notifyItemApprovalRequest(userId, {
       orderId: order?.orderId,
-      itemName: itemName
+      itemName,
+      serviceType: order?.serviceType || order?.taskType,
     });
 
   } catch (error) {
@@ -510,7 +515,10 @@ const handleApprovePickupItem = async (socket, io, data) => {
     io.to(`user-${userId.toString()}`).emit('message', cleanForEmit(userSystemMsg));
     io.to(`runner-${order.runnerId.toString()}`).emit('message', cleanForEmit(runnerSystemMsg));
 
-    await notifyItemApproved(order.runnerId, { orderId: order.orderId });
+    await notifyItemApproved(order.runnerId, {
+      orderId: order.orderId,
+      serviceType: order?.serviceType || order?.taskType,
+    });
 
   } catch (error) {
     console.error("Error approving pickup item:", error);

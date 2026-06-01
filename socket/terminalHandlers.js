@@ -11,6 +11,11 @@ const { archiveCurrentSession } = require('./socketHandlers');
 const { runnersByService } = require('./socketHandlers');
 const { cancelOrder } = require('../services/orderService');
 
+const {
+    notifyRatingPrompt,
+    notifyDeliveryConfirmed,
+    notifyOrderCancelled
+} = require('../services/notificationService');
 
 const handleCancelOrder = async (socket, io, data) => {
     const { chatId, orderId, runnerId, userId, reason } = data;
@@ -63,6 +68,13 @@ const handleCancelOrder = async (socket, io, data) => {
             runnerMessage,
             userMessage,
         });
+
+        notifyOrderCancelled(userId, {
+            orderId: order.orderId,
+            cancelledBy: 'runner',
+            runnerName,
+            reason,
+        }).catch(err => console.warn('[cancelOrder] User notify failed:', err.message));
 
         io.to(`runner-${runnerId}`).emit('message', runnerMessage);
         io.to(`user-${userId}`).emit('message', userMessage);
@@ -200,6 +212,25 @@ const handleTaskCompleted = async (io, data) => {
         }
 
         logger.info(`Task ${orderId} completed. Runner ${runnerId} and user ${userId} freed. Chat cleared for fresh start.`);
+
+        // send push notifiactions
+        Runner.findById(runnerId).select('firstName lastName').then(async (runner) => {
+            const runnerName = [runner?.firstName, runner?.lastName].filter(Boolean).join(' ');
+
+            // Get order for payout amount
+            const completedOrder = await Order.findOne({ orderId }).lean();
+
+            notifyRatingPrompt(userId, {
+                orderId,
+                runnerName,
+            }).catch(err => console.warn('[taskCompleted] Rating notify failed:', err.message));
+
+            notifyDeliveryConfirmed(runnerId, {
+                orderId,
+                amount: completedOrder?.runnerPayout,
+            }).catch(err => console.warn('[taskCompleted] Runner delivery notify failed:', err.message));
+
+        }).catch(err => console.warn('[taskCompleted] Runner fetch for notify failed:', err.message));
 
     } catch (error) {
         logger.info('Order or chatId not found', { chatId, orderId, runnerId, });

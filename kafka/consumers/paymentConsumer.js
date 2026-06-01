@@ -160,9 +160,13 @@ const handlers = {
       subject: 'Wallet funded successfully',
       template: 'wallet-funded',
       data: {
-        userName: data.userName,
-        amount: data.amount,
-        newBalance: data.newBalance,
+        firstName: data.userName?.split(' ')[0] || 'there',
+        amount: Number(data.amount).toLocaleString(),
+        newBalance: Number(data.newBalance).toLocaleString(),
+        reference: data.reference || '—',
+        date: new Date().toLocaleDateString('en-NG', {
+          day: 'numeric', month: 'long', year: 'numeric',
+        }),
       },
     });
   },
@@ -184,10 +188,14 @@ const handlers = {
       subject: 'Withdrawal request received',
       template: 'withdrawal-initiated',
       data: {
-        runnerName: data.runnerName,
-        amount: data.amount,
-        bankName: data.bankName,
-        accountNumber: data.accountNumber,
+        firstName: data.runnerName?.split(' ')[0] || 'there',
+        amount: Number(data.amount).toLocaleString(),
+        bankName: data.bankName || '—',
+        accountNumber: data.accountNumber || '—',
+        reference: data.reference || '—',
+        date: new Date().toLocaleDateString('en-NG', {
+          day: 'numeric', month: 'long', year: 'numeric',
+        }),
       },
     });
   },
