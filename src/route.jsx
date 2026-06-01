@@ -9,6 +9,7 @@ import { Disputes } from "./pages/runner/Disputes";
 import { Wallet } from "./pages/runner/Wallet";
 import { Orders } from "./pages/runner/Orders";
 import { Payout } from "./pages/runner/Payout";
+import ChatDeepLink from "./utils/ChatDeepLink";
 
 import ProtectedRoute from "./components/common/ProtectedRoute";
 
@@ -16,31 +17,31 @@ export default function ProjectedRoutes() {
   return (
     <Routes>
       {/* Runner routes - require runner authentication */}
-    
+
       <Route path="/profile" element={
         <ProtectedRoute requireRunner={true}>
           <Profile />
         </ProtectedRoute>
       } />
-      
+
       <Route path="/all-orders" element={
         <ProtectedRoute requireRunner={true}>
           <Orders />
         </ProtectedRoute>
       } />
-      
+
       <Route path="/disputes" element={
         <ProtectedRoute requireRunner={true}>
           <Disputes />
         </ProtectedRoute>
       } />
-      
+
       <Route path="/wallet" element={
         <ProtectedRoute requireRunner={true}>
           <Wallet />
         </ProtectedRoute>
       } />
-      
+
       <Route path="/payout" element={
         <ProtectedRoute requireRunner={true}>
           <Payout />
@@ -53,12 +54,14 @@ export default function ProjectedRoutes() {
           <Welcome />
         </ProtectedRoute>
       } />
-      
+
 
       {/* Public routes - no authentication required */}
-      <Route path="/" element={ <Home /> } />
+      <Route path="/" element={<Home />} />
       <Route path="/auth" element={<Auth />} />
-      <Route path="/raw" element={ <WhatsAppLikeChat /> } />
+      <Route path="/raw" element={<WhatsAppLikeChat />} />
+      <Route path="/runner/chat/:chatId" element={<ChatDeepLink userType="runner" />} />
+      <Route path="/user/chat/:chatId" element={<ChatDeepLink userType="user" />} />
     </Routes>
   );
 }

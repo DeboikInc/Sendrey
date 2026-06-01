@@ -469,7 +469,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
         currentOrderRef.current = saved.currentOrder;
       }
     });
-    
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatId]);
 
@@ -584,8 +584,6 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
       'Purchase completed': { stage: 1, progress: 50 },
       'En route to delivery': { stage: 2, progress: 60 },
       'Arrived at delivery location': { stage: 3, progress: 80 },
-      'Item delivered': { stage: 4, progress: 95 },
-      'item delivered': { stage: 4, progress: 95 },
       'Task completed': { stage: 4, progress: 100 },
       'Arrived at pickup location': { stage: 1, progress: 25 },
       'Item collected': { stage: 5, progress: 50 },
@@ -634,6 +632,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
             ...m.trackingData,
             currentStage: match.stage,
             progressPercentage: match.progress,
+            orderStatus: currentOrderRef.current?.status,
           }
         }
         : m
@@ -1061,6 +1060,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
             orderId: data.orderId || currentOrderRef.current?.orderId,
             runnerId: data.runnerId,
             status: "en_route_to_delivery",
+            orderStatus: currentOrderRef.current?.status,
           },
         }];
       });
@@ -1126,7 +1126,14 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
 
       setMessages(prev => prev.map(m =>
         m.type === 'tracking'
-          ? { ...m, trackingData: { ...m.trackingData, currentStage: 4, progressPercentage: 100 } }
+          ? {
+            ...m, trackingData:
+            {
+              ...m.trackingData,
+              currentStage: 4,
+              progressPercentage: 100
+            }
+          }
           : m
       ));
     };
@@ -1144,7 +1151,11 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
     const onDeliveryMarkedComplete = () => {
       setMessages(prev => prev.map(m =>
         m.type === 'tracking'
-          ? { ...m, trackingData: { ...m.trackingData, currentStage: 4, progressPercentage: 95 } }
+          ? { ...m, trackingData: 
+            { ...m.trackingData, 
+              currentStage: 4, 
+              progressPercentage: 95 
+            } }
           : m
       ));
     };

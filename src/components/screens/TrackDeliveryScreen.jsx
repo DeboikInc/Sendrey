@@ -4,6 +4,41 @@ import { ArrowLeft, MapPin, Wifi, WifiOff, Clock } from "lucide-react";
 import useTracking from "../../hooks/useTracking";
 import { LiveTrackingMap } from "../tracking/LiveTrackingMap";
 
+
+const STATUS_TO_STAGE = {
+    // pick-up flow
+    'accepted': 0,
+    'active': 0,
+    'paid': 0,
+    'arrived_at_pickup_location': 1,
+    'item_collected': 1,
+    'en_route_to_delivery': 2,
+    'arrived_at_delivery_location': 3,
+    'item_delivered': 4,
+    'task_completed': 4,
+    // run-errand flow
+    'arrived_at_market': 1,
+    'purchase_in_progress': 1,
+    'purchase_completed': 1,
+    'delivered': 4,
+};
+
+const STATUS_TO_PROGRESS = {
+    'accepted': 5,
+    'active': 5,
+    'paid': 5,
+    'arrived_at_pickup_location': 25,
+    'arrived_at_market': 25,
+    'purchase_in_progress': 35,
+    'purchase_completed': 50,
+    'item_collected': 50,
+    'en_route_to_delivery': 60,
+    'arrived_at_delivery_location': 80,
+    'item_delivered': 95,
+    'task_completed': 100,
+    'delivered': 100,
+};
+
 export const TrackDeliveryScreen = ({
     darkMode,
     trackingData,
@@ -32,7 +67,10 @@ export const TrackDeliveryScreen = ({
 
     // Use live stage from hook; fall back to prop if hook hasn't caught up yet
     // Math.max always picks whichever source has the higher stage
-    const currentStage = trackingData?.currentStage ?? 0;
+    const orderStatus = trackingData?.orderStatus || trackingData?.status;
+    const currentStage = orderStatus
+        ? (STATUS_TO_STAGE[orderStatus] ?? trackingData?.currentStage ?? 0)
+        : (trackingData?.currentStage ?? 0)
     console.log('[TRACKSCREEN] render — trackingData:', JSON.stringify(trackingData), 'liveStage:', liveStage, 'currentStage:', currentStage);
 
     const isPickup = serviceType === 'pick-up' || serviceType === 'pick_up';
@@ -44,8 +82,9 @@ export const TrackDeliveryScreen = ({
         { label: isPickup ? "Item delivered" : "Delivered", time: trackingData?.stageTimes?.[4] || null },
     ];
 
-    const progressPercentage = currentStage === 0 ? (trackingData?.progressPercentage || 0)
-        : Math.round((currentStage / (stages.length - 1)) * 100);
+    const progressPercentage = orderStatus
+        ? (STATUS_TO_PROGRESS[orderStatus] ?? trackingData?.progressPercentage ?? 0)
+        : (trackingData?.progressPercentage ?? 0);
 
     const handleOpen = () => setIsFullScreen(true);
     const handleClose = () => {

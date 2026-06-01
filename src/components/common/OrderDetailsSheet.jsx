@@ -27,7 +27,7 @@ const STATE_TIMELINE = [
   { status: 'payment_pending', label: 'Order Created' },
   { status: 'paid', label: 'Payment Received' },
   { status: 'item_delivered', label: 'Delivered' },
-  { status: 'completed', label: 'Completed' },
+  { status: 'task_completed', label: 'Completed' },
 ];
 
 export default function OrderDetailsSheet({

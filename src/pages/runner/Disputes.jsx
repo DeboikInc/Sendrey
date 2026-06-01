@@ -31,9 +31,21 @@ export function Disputes({ darkMode, onBack, runnerId, currentOrder, chatId }) {
     [currentOrder?.serviceType, currentOrder?.taskType, currentOrder?.status, deliveryDisputeWindowOpen]
   );
 
-  const hasActiveOrder = !!currentOrder?.orderId;
+  const hasActiveOrder = !!currentOrder?.orderId &&
+    !['completed', 'cancelled', 'task_completed'].includes(currentOrder?.status);
   const windowClosed = hasActiveOrder && availableReasons.length === 0;
   const canRaise = hasActiveOrder && !windowClosed && !currentOrder?.hasDispute;
+
+  console.log('[Disputes] currentOrder:', {
+    orderId: currentOrder?.orderId,
+    serviceType: currentOrder?.serviceType,
+    taskType: currentOrder?.taskType,
+    status: currentOrder?.status,
+    hasDispute: currentOrder?.hasDispute,
+  });
+  console.log('[Disputes] deliveryDisputeWindowOpen:', deliveryDisputeWindowOpen);
+  console.log('[Disputes] availableReasons:', availableReasons.map(r => r.value));
+  console.log('[Disputes] hasActiveOrder:', hasActiveOrder, '| windowClosed:', windowClosed, '| canRaise:', canRaise);
 
   // ── Theme shortcuts ──────────────────────────────────────────────────────────
   const page = darkMode ? "bg-black-100" : "bg-gray-50";
@@ -157,9 +169,9 @@ export function Disputes({ darkMode, onBack, runnerId, currentOrder, chatId }) {
 
         {/* ── No active order — view-only ──────────────────────────────────── */}
         {!hasActiveOrder && (
-          <div className={`rounded-3xl p-5 border ${card} flex items-start gap-3`}>
+          <div className={`rounded-3xl p-5 border ${card} flex items-start space-between gap-3`}>
             <AlertCircle className="h-5 w-5 text-gray-400 flex-shrink-0 mt-0.5" />
-            <div>
+            <div className="flex flex-col ml-auto mr-auto justify-center items-center">
               <p className={`text-sm font-bold ${heading}`}>No disputes yet</p>
               <p className="text-xs text-gray-400 mt-1">
                 You can raise a dispute during an active order if something goes wrong.

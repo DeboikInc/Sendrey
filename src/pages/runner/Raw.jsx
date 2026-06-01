@@ -952,22 +952,32 @@ function WhatsAppLikeChat() {
       doJoin();
     };
 
-    const handleSessionRefreshOk = ({ chatId: inc }) => {
+    const handleSessionRefreshOk = ({ chatId: inc, orderChanged }) => {
       if (inc !== chatId) return;
-      console.log('[raw.jsx] sessionRefreshOk — rejoining quietly');
-      socket.emit('rejoinChat', {
-        chatId,
-        runnerId,
-        userType: 'runner',
-      });
+      console.log('[raw.jsx] sessionRefreshOk — rejoining');
+
+      if (orderChanged) {
+        // Order changed while offline — full rejoin
+        joined = false;
+        doJoin();
+      } else {
+        // Same order — just rejoin rooms without re-fetching history
+        socket.emit('runnerJoinChat', {
+          chatId,
+          runnerId,
+          userId: selectedUser._id,
+          serviceType: selectedUser.serviceType ?? selectedUser.currentRequest?.serviceType ?? null,
+        });
+      }
     };
 
     const handleReconnect = () => {
-      console.log('[RAW handleReconnect] fired', {
-        chatId,
-        hasOrderId: !!currentOrderRef.current?.orderId,
-        joined,
-        socketId: socket?.id
+      console.log('[RAW handleReconnect] fired', { chatId, socketId: socket?.id });
+
+      // Always rejoin runner room — lost on reconnect
+      socket.emit('joinRunnerRoom', {
+        runnerId,
+        serviceType: selectedUser?.serviceType ?? null,
       });
 
       const orderId = currentOrderRef.current?.orderId;
@@ -983,8 +993,6 @@ function WhatsAppLikeChat() {
         doJoin();
       }
     };
-
-
 
     const isReconnect = chatManager.get(chatId).messages.length > 0;
 
@@ -1803,7 +1811,9 @@ function ContactInfo({
         onClick={() => handleNavigation('disputes')}
       >
         <h3 className="px-4 py-5 font-bold text-md text-black-200 dark:text-gray-300">
-          {isChatActive ? 'Raise dispute' : 'Disputes'}
+          {isChatActive && currentOrder && !['completed', 'cancelled', 'task_completed'].includes(currentOrder?.status)
+            ? 'Raise dispute'
+            : 'Disputes'}
         </h3>
       </div>
 

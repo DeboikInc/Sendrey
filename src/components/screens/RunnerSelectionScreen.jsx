@@ -138,12 +138,15 @@ export default function RunnerSelectionScreen({
         (data.attemptToken && data.attemptToken === lastAttemptTokenRef.current) ||
         data.runnerId === selectedRunnerIdRef.current;
 
-      console.log('[RSS proceedToChat] received', {
-        dataChatId: data.chatId,
-        isExpected,
-        pendingChatId: pendingRequestRef.current?.chatId,
+      console.log('[RSS proceedToChat] isExpected:', isExpected, {
         expectedChatId,
+        dataChatId: data.chatId,
+        dataRunnerId: data.runnerId,
+        selectedRunnerId: selectedRunnerIdRef.current,
         lastAttempted: lastAttemptedChatIdRef.current,
+        pendingChatId: pendingRequestRef.current?.chatId,
+        dataAttemptToken: data.attemptToken,
+        lastAttemptToken: lastAttemptTokenRef.current,
       });
 
       if (!isExpected) { console.log('[RSS proceedToChat] BUFFERED — not expected yet'); return; }
