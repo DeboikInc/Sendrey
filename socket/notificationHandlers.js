@@ -105,19 +105,31 @@ const sendStatusUpdateNotification = async (chatId, status, updatedBy, updatedBy
 
     if (user && !user.isOnline && user.fcmToken) {
       const statusMessages = {
-        'accepted': '✅ Runner accepted your request',
-        'en_route_to_pickup': '🚗 Runner is on the way to pickup',
-        'arrived_at_pickup': '📍 Runner has arrived at pickup location',
-        'picked_up': '✅ Items picked up',
+        // Order lifecycle
+        'pending_payment': '💳 Payment required for your order',
+        'paid': '✅ Payment confirmed',
+
+        // Errand statuses (from stageMap / STATUS MAPPER)
+        'arrived_at_market': '🛒 Runner has arrived at the market',
+        'purchase_in_progress': '🛍️ Runner is purchasing your items',
+        'purchase_completed': '✅ Purchase completed',
         'en_route_to_delivery': '🚚 Runner is on the way to you',
-        'arrived_at_delivery': '📍 Runner has arrived',
-        'delivered': '✅ Order delivered',
+        'arrived_at_delivery_location': '📍 Runner has arrived at your location',
+        'item_delivered': '📦 Your items have been delivered',
+        'task_completed': '🎉 Task completed successfully',
+
+        // Pickup statuses
+        'arrived_at_pickup_location': '📍 Runner has arrived at pickup location',
+        'item_collected': '✅ Items have been collected',
+
+        // Cancellation
+        'cancelled': '❌ Order has been cancelled',
       };
 
       const message = statusMessages[status] || `Status updated to: ${status}`;
 
       await sendPushNotification(user.fcmToken, {
-        title: '📦 Order Update',
+        title: 'Order Update',
         body: message,
         data: {
           type: 'status_update',
@@ -126,7 +138,7 @@ const sendStatusUpdateNotification = async (chatId, status, updatedBy, updatedBy
           updatedBy,
           updatedByType,
         },
-        link: `/chat/${chatId}`,
+        link: `/user/chat/${chatId}`,
       });
 
       // console.log(`Status update notification sent to user ${user._id}`);
@@ -139,5 +151,5 @@ const sendStatusUpdateNotification = async (chatId, status, updatedBy, updatedBy
 module.exports = {
   sendMessageNotification,
   sendStatusUpdateNotification,
-  handleSaveFcmToken 
+  handleSaveFcmToken
 };

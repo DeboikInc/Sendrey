@@ -83,22 +83,29 @@ const notifyPaymentSuccess = async (runnerId, { orderId, amount }) => {
   });
 };
 // should be seperate for pickup and errand and they all need logo
-const notifyItemApprovalRequest = async (userId, { orderId, totalAmount }) => {
+const notifyItemApprovalRequest = async (userId, { orderId, totalAmount, itemName, serviceType }) => {
+  const isPickup = serviceType === 'pick-up' || serviceType === 'pick_up';
   return sendPushNotification({
     recipientId: userId,
     recipientType: 'user',
-    title: 'Items Ready for Approval',
-    body: `Your runner has submitted items worth ₦${totalAmount?.toLocaleString()}. Review and approve.`,
+    title: isPickup ? 'Item Ready for Approval' : 'Items Ready for Approval',
+    body: isPickup
+      ? `Your runner has submitted the pickup item${itemName ? ` "${itemName}"` : ''}. Review and approve.`
+      : `Your runner has submitted items worth ₦${totalAmount?.toLocaleString()}. Review and approve.`,
     data: { type: 'item_approval_request', orderId }
   });
 };
 
-const notifyItemApproved = async (runnerId, { orderId }) => {
+// wrong, shows for pickup too, should be seperate and no logo anywhere
+const notifyItemApproved = async (runnerId, { orderId, serviceType }) => {
+  const isPickup = serviceType === 'pick-up' || serviceType === 'pick_up';
   return sendPushNotification({
     recipientId: runnerId,
     recipientType: 'runner',
-    title: 'Items Approved!',
-    body: 'Your item submission was approved. Item budget has been released to your wallet.',
+    title: isPickup ? 'Item Approved!' : 'Items Approved!',
+    body: isPickup
+      ? 'The pickup item was approved. Proceed with collection.'
+      : 'Your item submission was approved. Item budget has been released to your wallet.',
     data: { type: 'item_approved', orderId }
   });
 };
@@ -117,7 +124,7 @@ const notifyDeliveryConfirmationRequest = async (userId, { orderId }) => {
   return sendPushNotification({
     recipientId: userId,
     recipientType: 'user',
-    title: '📦 Delivery Complete!',
+    title: 'Delivery Complete!',
     body: 'Your runner has marked delivery as complete. Please confirm delivery.',
     data: { type: 'delivery_confirmation_request', orderId }
   });
@@ -127,7 +134,7 @@ const notifyAutoConfirmWarning = async (userId, { orderId }) => {
   return sendPushNotification({
     recipientId: userId,
     recipientType: 'user',
-    title: '📦 Delivery Warning!',
+    title: 'Delivery Warning!',
     body: 'Your delivery will be auto marked in 10 minutes, mark as delivered now.',
     data: { type: 'delivery_confirmation_request', orderId }
   })
@@ -137,9 +144,26 @@ const notifyDeliveryConfirmed = async (runnerId, { orderId, amount }) => {
   return sendPushNotification({
     recipientId: runnerId,
     recipientType: 'runner',
-    title: '💰 Payment Released!',
-    body: `Delivery confirmed! ₦${amount?.toLocaleString()} has been added to your wallet.`,
+    title: 'Order Earnings!',
+    body: `Delivery confirmed! ₦${amount?.toLocaleString()} has been credited to your wallet.`,
     data: { type: 'delivery_confirmed', orderId }
+  });
+};
+
+const notifyOrderCancelled = async (userId, { orderId, cancelledBy, runnerName, reason }) => {
+  return sendPushNotification({
+    recipientId: userId,
+    recipientType: 'user',
+    title: '❌ Order Cancelled',
+    body: reason
+      ? `${runnerName} cancelled your order. Reason: ${reason}`
+      : `${runnerName} cancelled your order.`,
+    data: {
+      type: 'order_cancelled',
+      orderId,
+      cancelledBy,
+    },
+    link: `/user/chat/user-${userId}-runner-${cancelledBy === 'runner' ? 'cancelled' : ''}`,
   });
 };
 
@@ -197,7 +221,7 @@ const notifyEscrowReleased = async (runnerId, { orderId, amount }) => {
   return sendPushNotification({
     recipientId: runnerId,
     recipientType: 'runner',
-    title: '💸 Funds Released',
+    title: 'Funds Released',
     body: `₦${amount?.toLocaleString()} has been released to your wallet.`,
     data: { type: 'escrow_released', orderId }
   });
@@ -237,7 +261,7 @@ const notifyPartnerOffline = async (partnerId, partnerType, { chatId, name }) =>
   return sendPushNotification({
     recipientId: partnerId,
     recipientType: partnerType,
-    title: '⚫ Went Offline',
+    title: '🔴 Went Offline',
     body: `${name} has gone offline`,
     data: { type: 'partner_offline', chatId }
   });
@@ -262,4 +286,5 @@ module.exports = {
   notifyIncomingCall,
   notifyPartnerOnline,
   notifyPartnerOffline,
+  notifyOrderCancelled,
 };

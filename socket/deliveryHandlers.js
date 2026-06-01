@@ -11,8 +11,6 @@ const { handleRejectionStrike } = require('../utils/handleRejectionStrike');
 const {
     notifyDeliveryConfirmationRequest,
     notifyAutoConfirmWarning,
-    notifyDeliveryConfirmed,
-    notifyRatingPrompt
 } = require('../services/notificationService');
 
 // ─── Helpers 
@@ -268,14 +266,6 @@ const handleConfirmDelivery = async (io, socket, data) => {
     //  Side effects 
     logSocketAudit('USER_CONFIRMED_ORDER_DELIVERED', { userId, chatId, orderId });
 
-    Runner.findById(order.runnerId).select('firstName lastName').then(runner => {
-        notifyDeliveryConfirmed(order.runnerId, { orderId: order.orderId, amount: order.runnerPayout })
-            .catch(err => console.warn('[confirmDelivery] Runner notify failed:', err.message));
-        notifyRatingPrompt(userId, {
-            orderId: order.orderId,
-            runnerName: [runner?.firstName, runner?.lastName].filter(Boolean).join(' '),
-        }).catch(err => console.warn('[confirmDelivery] Rating notify failed:', err.message));
-    }).catch(err => console.warn('[confirmDelivery] Runner fetch for notify failed:', err.message));
 };
 
 // User denies delivery 

@@ -512,6 +512,8 @@ const handleAcceptRunnerRequest = async (socket, io, { runnerId, userId, chatId,
     state.runnerId = runnerId;
 
     socket.join(`pre-${chatId}`);
+    socket.runnerId = runnerId;
+    socket.userId = null;
     console.log(`[acceptRunnerRequest] Runner ${runnerId} joined pre-${chatId}`);
 
     await incrementErrandCount(runnerId);
@@ -525,14 +527,17 @@ const handleAcceptRunnerRequest = async (socket, io, { runnerId, userId, chatId,
       const payload = { chatId, runnerId, userId, serviceType, message: 'Runner accepted! Preparing chat...' };
 
       for (let attempt = 0; attempt < 5; attempt++) {
+        // Stop retrying if already locked
+        const currentState = preRoomState.get(chatId);
+        if (!currentState || currentState.locked) {
+          console.log('[enterPreRoom] state locked or gone, stopping retries');
+          break;
+        }
+
         const roomSize = (await io.in(`user-${userId}`).allSockets()).size;
         console.log(`[acceptRunnerRequest] enterPreRoom attempt ${attempt + 1}, user room size: ${roomSize}`);
-
         io.to(`user-${userId}`).emit('enterPreRoom', payload);
-
         if (roomSize > 0) break;
-
-        // User not in room yet — wait and retry
         await new Promise(r => setTimeout(r, 1000));
       }
     };
@@ -591,6 +596,12 @@ const handleRequestRunner = async (socket, io, data) => {
 
     if (state.user && !data.isReconnect) {
       console.warn('[requestRunner] user already in pre-room for chatId:', chatId);
+
+      if (state.runner && !state.locked) {
+        console.log('[requestRunner] runner already ready, calling lockAndProceed from guard');
+        if (state.globalTimer) { clearTimeout(state.globalTimer); state.globalTimer = null; }
+        await lockAndProceed(io, chatId, state);
+      }
       return;
     }
 
@@ -767,6 +778,11 @@ const initializeChatAndProceed = async (io, chatId, state) => {
 
     // User presence check (must wait - determines if we proceed)
     const userRoomSockets = await io.in(`user-${userId}`).allSockets();
+    const runnerSocketId = [...(io.sockets.adapter.rooms.get(`pre-${chatId}`) || [])]
+      .find(sid => {
+        const s = io.sockets.sockets.get(sid);
+        return s?.runnerId === runnerId;
+      });
     const userStillPresent = userRoomSockets.size > 0;
 
     if (!userStillPresent) {
@@ -779,6 +795,15 @@ const initializeChatAndProceed = async (io, chatId, state) => {
       return;
     }
 
+    if (runnerSocketId) {
+      const runnerSocket = io.sockets.sockets.get(runnerSocketId);
+      if (runnerSocket) {
+        runnerSocket.join(`runner-${runnerId}`);
+        runnerSocket.join(chatId);
+        console.log('[initializeChat] pre-joined runner socket to rooms:', runnerSocketId);
+      }
+    }
+
     const proceedPayload = {
       chatId, runnerId, userId, serviceType,
       chatReady: true,
@@ -788,9 +813,18 @@ const initializeChatAndProceed = async (io, chatId, state) => {
       attemptToken: state.attemptToken || null,
     };
 
+    console.log('[initializeChat] pre-room sockets:',
+      [...(io.sockets.adapter.rooms.get(`pre-${chatId}`) || [])]);
+    console.log('[initializeChat] user room sockets:',
+      [...(io.sockets.adapter.rooms.get(`user-${userId}`) || [])]);
+    console.log('[initializeChat] runner room sockets:',
+      [...(io.sockets.adapter.rooms.get(`runner-${runnerId}`) || [])]);
+
     io.to(`pre-${chatId}`).emit('proceedToChat', proceedPayload);
     io.to(`user-${userId}`).emit('proceedToChat', proceedPayload);
     io.to(`runner-${runnerId}`).emit('proceedToChat', proceedPayload);
+
+    console.log('[initializeChat] proceedToChat emitted to all 3 rooms');
 
     preRoomState.delete(chatId);
     logSocketAudit('PROCEED_TO_CHATROOM', { runnerId, userId, serviceType });
@@ -1219,10 +1253,19 @@ const handleRejoinChat = async (socket, io, { chatId, userId, runnerId, userType
   if (!chatId) return;
 
   console.log('[rejoinChat]', userType, 'rejoining room:', chatId);
-  socket.join(chatId);
 
-  if (userType === 'runner' && runnerId) socket.join(`runner-${runnerId}`);
-  else if (userType === 'user' && userId) socket.join(`user-${userId}`);
+  socket.join(chatId);
+  socket.currentChatId = chatId;
+
+  if (userType === 'runner' && runnerId) {
+    socket.join(`runner-${runnerId}`);
+    socket.runnerId = runnerId;   
+    socket.joinedChat = true;
+  } else if (userType === 'user' && userId) {
+    socket.join(`user-${userId}`);
+    socket.userId = userId;
+    socket.joinedChat = true;
+  }
 
   const snapshot = socketMessageSnapshot.get(socket.id);
 
