@@ -238,20 +238,6 @@ export const Welcome = () => {
 
         const handleEnterPreRoom = (data) => {
             console.log('[Welcome] enterPreRoom received:', data);
-            console.log('[Welcome enterPreRoom] socket.id:', socket?.id,
-                'RSS still mounted?', !!document.querySelector('[data-rss]') // won't work but shows timing
-            );
-            const { chatId, runnerId, serviceType } = data;
-
-            socket.emit('requestRunner', {
-                runnerId,
-                userId: currentUser._id,
-                chatId,
-                serviceType,
-                // read from ref — always current, never stale
-                specialInstructions: specialInstructionsRef.current,
-            });
-            console.log('[Welcome] requestRunner emitted in response to enterPreRoom');
         };
 
         socket.on('enterPreRoom', handleEnterPreRoom);
@@ -614,7 +600,7 @@ export const Welcome = () => {
                             if (activeChatId) {
                                 sessionStorage.removeItem(`session_validated_${activeChatId}`);
                             }
-                            
+
                             chatStorage.clearActiveChat();
                             chatStorage.clearRunnerData();
                             chatStorage.clearChatStatus?.(activeChatId);
