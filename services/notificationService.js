@@ -93,7 +93,7 @@ const notifyItemApprovalRequest = async (userId, { orderId, totalAmount, itemNam
       ? `Your runner has submitted the pickup item${itemName ? ` "${itemName}"` : ''}. Review and approve.`
       : `Your runner has submitted items worth ₦${totalAmount?.toLocaleString()}. Review and approve.`,
     data: { type: 'item_approval_request', orderId }
-  });
+  })
 };
 
 // wrong, shows for pickup too, should be seperate and no logo anywhere
