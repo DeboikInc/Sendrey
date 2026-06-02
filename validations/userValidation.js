@@ -282,6 +282,8 @@ const userValidation = {
             'number.positive': 'Budget must be a positive number'
           }),
 
+        canAdjustSlightly: Joi.boolean().optional(),
+
         budgetFlexibility: Joi.string()
           .valid('stay within budget', 'can adjust slightly')
           .default('stay within budget')

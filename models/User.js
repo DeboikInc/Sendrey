@@ -304,6 +304,8 @@ const userSchema = new mongoose.Schema({
       lat: { type: Number },
       lng: { type: Number }
     },
+    
+    canAdjustSlightly: { type: Boolean, default: false },
 
     // PICKUP-SPECIFIC FIELDS
     pickupLocation: { type: String },
