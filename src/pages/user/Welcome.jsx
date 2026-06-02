@@ -177,27 +177,37 @@ export const Welcome = () => {
     // restore chat session if valid, or clear it if not
     const restoreIfActive = useCallback(async () => {
         const { chatId: storedChatId } = await chatStorage.getActiveChat();
+        console.log('[restore] storedChatId:', storedChatId);
         if (!storedChatId) return;
 
         const status = await chatStorage.getChatStatus(storedChatId);
+        console.log('[restore] status:', status);
         if (!status) return;
         if (status.taskCompleted || status.orderCancelled) return;
         if (!status.currentOrder) return;
 
         const runner = await chatStorage.getRunnerData();
+        console.log('[restore] runner:', runner?._id);
         if (!runner) return;
 
         try {
-            const response = await api.post('/sessions/validate', { chatId: storedChatId });
+            const response = await api.post('/sessions/validate',
+                { chatId: storedChatId },
+                { _skipInterceptor: true }
+            );
+            console.log('[restore] validate response:', response.data);
             const { isValid, hasActiveOrder } = response.data.data;
+            console.log('[restore] isValid:', isValid, 'hasActiveOrder:', hasActiveOrder);
             if (!isValid || !hasActiveOrder) {
+                console.log('[restore] BAILING — clearing storage');
                 chatStorage.clearActiveChat();
                 chatStorage.clearRunnerData();
                 chatStorage.clearChatStatus(storedChatId);
                 return;
             }
         } catch (err) {
-            if (err.response?.status === 404 || err.response?.status === 401 || err.response?.status === 429) {
+            console.log('[restore] validate error:', err.response?.status, err.message);
+            if (err.response?.status === 404) {
                 chatStorage.clearActiveChat();
                 chatStorage.clearRunnerData();
                 chatStorage.clearChatStatus(storedChatId);

@@ -286,7 +286,8 @@ export default function RunnerSelectionScreen({
       }
 
       if (!pending) return;
-
+      if (proceedBufferRef.current) return;
+      
       // Re-emit the runner request — server will re-emit proceedToChat
       // if the pre-room is already ready, or queue it if runner hasn't accepted yet
       socket.emit("requestRunner", {
@@ -371,7 +372,7 @@ export default function RunnerSelectionScreen({
         setSelectedRunnerId(null);
         setTimedOutRunnerId(runnerId);
       }
-    }, 30000);
+    }, 90000);
   }, [socket, selectedService, specialInstructions, advanceToChat, currentOrder]);
 
   const handleRunnerClick = useCallback((runner) => {

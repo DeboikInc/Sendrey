@@ -367,6 +367,15 @@ function RunnerNotifications({
                             </>
                           )}
 
+                          {req.canAdjustSlightly && (
+                            <div className="flex items-center gap-2 mt-3 px-3 py-2">
+                              <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse flex-shrink-0" />
+                              <p className="text-xs text-amber-400 font-medium">
+                                The budget for these items can be adjust slightly below the total price indicated below
+                              </p>
+                            </div>
+                          )}
+
                           <div className="h-px bg-gray-100 dark:bg-white/10 my-3" />
                           <div className="flex gap-3">
                             <FeeBox label="Item Budget" value={itemBudget != null ? formatNaira(itemBudget) : "Not specified"} color="text-green-500" />
