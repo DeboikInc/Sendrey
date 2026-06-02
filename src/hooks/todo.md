@@ -27,4 +27,6 @@ MongoDB Atlas — make sure it's not on free tier either (512MB storage limit)
 
 "runner misconduct costs us X in Paystack fees per ban, do we absorb or pass to user?
 
-in disputes.jsx, if order terminal, rename to disputes from Raise Disputes
+
+and still chatscreen join issue still persists
+can adjust slightly indication

@@ -684,6 +684,7 @@ export default function ErrandFlowScreen({
                         deliveryLocation: msgText,
                         marketItems,
                         budget,
+                        canAdjustSlightly: budgetFlexibility === "can adjust slightly",
                         budgetFlexibility,
                         userId: currentUser?._id,
                         marketCoordinates: marketCoordinatesRef.current,
