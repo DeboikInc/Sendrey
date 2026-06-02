@@ -2,6 +2,7 @@ const redis = require('../config/redis');
 const User = require('../models/User');
 const Runner = require('../models/Runner');
 const { sendPushNotification } = require('../utils/sendPushNotification');
+const Order = require('../models/Order');
 
 const getRedis = () => redis.getClient();
 const OFFLINE_TIMEOUT_MS = 7000;
@@ -12,6 +13,13 @@ const parseChat = (chatId) => {
   const userId = parts?.[0]?.replace('user-', '');
   const runnerId = parts?.[1];
   return { userId, runnerId };
+};
+
+const isOrderTerminal = async (chatId) => {
+  if (!chatId) return false;
+  const order = await Order.findOne({ chatId })
+    .select('status').lean();
+  return ['completed', 'cancelled', 'task_completed'].includes(order?.status);
 };
 
 const presenceTimers = new Map();
@@ -33,7 +41,7 @@ const getPartner = (userType, chatId) => {
 const markOffline = (io, userId, userType, chatId) => {
   presenceTimers.delete(userId);
   confirmedOnline.delete(userId); // they're gone
-  getRedis().del(`presence:${userType}:${userId}`).catch(() => {});
+  getRedis().del(`presence:${userType}:${userId}`).catch(() => { });
 
   if (!chatId) return;
   const partner = getPartner(userType, chatId);
@@ -96,7 +104,7 @@ const handlePresenceHeartbeat = (socket, io) => {
   const { userId, userType, chatId } = socket;
   if (!userId || !userType) return;
 
-  getRedis().set(`presence:${userType}:${userId}`, chatId || 'online', 'EX', REDIS_TTL_S).catch(() => {});
+  getRedis().set(`presence:${userType}:${userId}`, chatId || 'online', 'EX', REDIS_TTL_S).catch(() => { });
 
   // wasOffline = timer didn't exist AND they weren't in confirmedOnline set
   // This means they genuinely dropped and came back, not just a new order
@@ -151,7 +159,7 @@ const handleUserDisconnect = async (socket, io) => {
   }
 
   confirmedOnline.delete(userId);
-  getRedis().del(`presence:${userType}:${userId}`).catch(() => {});
+  getRedis().del(`presence:${userType}:${userId}`).catch(() => { });
 
   if (chatId) {
     const partner = getPartner(userType, chatId);
@@ -179,12 +187,14 @@ const handleUserDisconnect = async (socket, io) => {
     }
   }
 
-  if (chatId) setImmediate(() => _sendOfflinePush(socket).catch(() => {}));
+  if (chatId) setImmediate(() => _sendOfflinePush(socket).catch(() => { }));
 };
 
 const _sendOfflinePush = async (socket) => {
   const { userId, userType, chatId } = socket;
   try {
+    if (await isOrderTerminal(chatId)) return;
+    
     if (userType === 'user') {
       const user = await User.findById(userId).select('firstName lastName fcmToken currentRunnerId').lean();
       if (user?.currentRunnerId) {
