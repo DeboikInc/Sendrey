@@ -4,7 +4,7 @@ const Order = require('../models/Order');
 const jwt = require('jsonwebtoken');
 const BaseController = require('./baseController');
 
-const TERMINAL_STATUSES = ['completed', 'cancelled', 'task_completed', 'delivered'];
+const TERMINAL_STATUSES = ['cancelled', 'task_completed'];
 
 class SessionController extends BaseController {
 
