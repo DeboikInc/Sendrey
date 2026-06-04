@@ -538,7 +538,8 @@ const handleAcceptRunnerRequest = async (socket, io, { runnerId, userId, chatId,
         console.log(`[acceptRunnerRequest] enterPreRoom attempt ${attempt + 1}, user room size: ${roomSize}`);
         io.to(`user-${userId}`).emit('enterPreRoom', payload);
         if (roomSize > 0) break;
-        await new Promise(r => setTimeout(r, 1000));
+
+        await new Promise(r => setTimeout(r, 1500));
       }
     };
 
@@ -872,10 +873,27 @@ const handleUserJoinChat = async (socket, io, data) => {
   if (joiningChats.has(chatId)) {
     console.log('[userJoinChat] concurrent join blocked for:', chatId);
     setTimeout(async () => {
-      const existing = await Chat.findOne({ chatId }).lean();
+      const [existing, order] = await Promise.all([
+        Chat.findOne({ chatId }).lean(),
+        Order.findOne({ chatId, status: { $nin: ['cancelled', 'completed', 'task_completed'] } })
+          .sort({ createdAt: -1 }).lean(),
+      ]);
       if (existing) {
         const clean = await deduplicateAndPersist(chatId, existing.messages);
         socket.emit('chatHistory', clean);
+      }
+      // ← add this: if order exists by now, emit it; if not, retry once more
+      if (order) {
+        socket.emit('orderCreated', { order: cleanForEmit(order) });
+      } else {
+        // order creation may still be in flight — wait and retry once
+        setTimeout(async () => {
+          const retryOrder = await Order.findOne({
+            chatId,
+            status: { $nin: ['cancelled', 'completed', 'task_completed'] }
+          }).sort({ createdAt: -1 }).lean();
+          if (retryOrder) socket.emit('orderCreated', { order: cleanForEmit(retryOrder) });
+        }, 1500);
       }
     }, 600);
     return;
@@ -1084,6 +1102,7 @@ const handleUserJoinChat = async (socket, io, data) => {
 // Always read fresh from DB. Filter payment_request if order is paid.
 //
 const handleRunnerJoinChat = async (socket, io, data) => {
+  console.log('[handleRunnerJoinChat] RECEIVED from socket:', socket.id, '| data:', JSON.stringify(data));
   const { runnerId, userId, chatId } = data;
 
   // Always (re-)join these rooms
@@ -1259,7 +1278,7 @@ const handleRejoinChat = async (socket, io, { chatId, userId, runnerId, userType
 
   if (userType === 'runner' && runnerId) {
     socket.join(`runner-${runnerId}`);
-    socket.runnerId = runnerId;   
+    socket.runnerId = runnerId;
     socket.joinedChat = true;
   } else if (userType === 'user' && userId) {
     socket.join(`user-${userId}`);
