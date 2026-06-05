@@ -503,15 +503,47 @@ connectWithRetry().then(async () => {
 
   // Graceful shutdown
   process.on('SIGTERM', async () => {
-    console.log('SIGTERM received — shutting down socket server');
+    console.log('SIGTERM received — flushing pending writes');
+    
+    // Flush all pending message batches before shutdown
+    const flushPromises = [];
+    for (const [chatId, pending] of pendingWrites.entries()) {
+        if (pending.timer) clearTimeout(pending.timer);
+        if (pending.messages.length) {
+            flushPromises.push(
+                Chat.findOneAndUpdate(
+                    { chatId },
+                    { $push: { messages: { $each: pending.messages } } },
+                    { upsert: true }
+                ).catch(err => console.error('[shutdown flush] failed for', chatId, err.message))
+            );
+        }
+    }
+    await Promise.all(flushPromises);
+    console.log('[shutdown flush] done, flushed', flushPromises.length, 'chats');
+    
     await redis.disconnect();
     io.close(() => console.log('Socket.IO closed'));
     server.close(async () => {
-      await mongoose.connection.close();
-      console.log('MongoDB connection closed');
-      process.exit(0);
+        await mongoose.connection.close();
+        process.exit(0);
     });
-  });
+});
+
+process.on('SIGINT', async () => {
+    console.log('SIGINT received — flushing pending writes');
+    for (const [chatId, pending] of pendingWrites.entries()) {
+        if (pending.timer) clearTimeout(pending.timer);
+        if (pending.messages.length) {
+            await Chat.findOneAndUpdate(
+                { chatId },
+                { $push: { messages: { $each: pending.messages } } },
+                { upsert: true }
+            ).catch(() => {});
+        }
+    }
+    process.exit(0);
+});
 
 })
   .catch((err) => {
