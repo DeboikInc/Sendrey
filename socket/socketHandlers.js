@@ -1181,6 +1181,26 @@ const handleSendMessage = async (socket, io, { chatId, message }) => {
 
     if (message?.isPresenceMessage) return;
 
+     const isCritical =
+      message.type === 'system' ||
+      message.messageType === 'system' ||
+      message.type === 'payment_request' ||
+      message.type === 'task_completed' ||
+      message.type === 'delivery_confirmation_request';
+    
+    if (isCritical) {
+      await Chat.findOneAndUpdate(
+        { chatId },
+        { $push: { messages: message } },
+        { upsert: true }
+      );
+      if (room) {
+        for (const socketId of room) snapshotMessage(socketId, chatId, message.id);
+      }
+      await logMetric({ type: 'message', status: 'success', latency: Date.now() - startTime, chatId });
+      return;
+    }
+
     if (!pendingWrites.has(chatId)) {
       pendingWrites.set(chatId, { messages: [], timer: null });
     }
@@ -1201,7 +1221,7 @@ const handleSendMessage = async (socket, io, { chatId, message }) => {
       } catch (err) {
         console.error('[sendMessage] batch write failed:', err.message);
       }
-    }, 2000);
+    }, 500);
 
     if (room) {
       for (const socketId of room) snapshotMessage(socketId, chatId, message.id);
