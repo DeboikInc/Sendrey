@@ -1,27 +1,34 @@
+// src/pages/UsersTab.jsx
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { listUsers, exportUsers, updateUserStatus, bulkUserAction, deleteUser } from '../Redux/usersSlice';
-import { Download, Ban, Trash2, CheckCircle, UserX, RefreshCw, AlertTriangle } from 'lucide-react';
+import { listUsers, 
+  // exportUsers, 
+  updateUserStatus, bulkUserAction, deleteUser } from '../Redux/usersSlice';
+import { 
+  // Download,
+  Ban, Trash2, CheckCircle, UserX, AlertTriangle, Users } from 'lucide-react';
+import Button from '../components/ui/Button';
+import PageLayout from '../components/layout/PageLayout';
 
-export default function UsersList() {
+export default function UsersTab() {
   const dispatch = useDispatch();
   const { list: rawList, loading = false, error = null } = useSelector(state => state.users || {});
   const list = Array.isArray(rawList) ? rawList : [];
 
   const [selectedIds, setSelectedIds] = useState([]);
-  const [refreshing, setRefreshing]   = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     dispatch(listUsers());
   }, [dispatch]);
 
   const handleRefresh = async () => {
-    setRefreshing(true);
+    setIsRefreshing(true);
     setSelectedIds([]);
     try {
       await dispatch(listUsers());
     } finally {
-      setRefreshing(false);
+      setIsRefreshing(false);
     }
   };
 
@@ -31,6 +38,10 @@ export default function UsersList() {
     );
   };
 
+  const handleSelectAll = (e) => {
+    setSelectedIds(e.target.checked ? list.map(u => u._id) : []);
+  };
+
   const handleBulkAction = (action) => {
     if (window.confirm(`Perform ${action} on ${selectedIds.length} users?`)) {
       dispatch(bulkUserAction({ userIds: selectedIds, action }));
@@ -38,71 +49,106 @@ export default function UsersList() {
     }
   };
 
+  // const handleExport = () => {
+  //   dispatch(exportUsers());
+  // };
+
+  // Stats for header
+  const stats = [
+    {
+      label: 'Total Users',
+      value: list.length,
+      icon: Users,
+      bgClass: 'bg-primary/10',
+      borderClass: 'border-primary/20',
+      textClass: 'text-primary',
+      iconClass: 'text-primary'
+    },
+    {
+      label: 'Active',
+      value: list.filter(u => u.status === 'Active').length,
+      icon: CheckCircle,
+      bgClass: 'bg-green-500/10',
+      borderClass: 'border-green-500/20',
+      textClass: 'text-green-500',
+      iconClass: 'text-green-500'
+    },
+    {
+      label: 'Suspended',
+      value: list.filter(u => u.status === 'Suspended').length,
+      icon: Ban,
+      bgClass: 'bg-red-500/10',
+      borderClass: 'border-red-500/20',
+      textClass: 'text-red-500',
+      iconClass: 'text-red-500'
+    }
+  ];
+
+  // Header action button (Export)
+  // const HeaderAction = () => (
+  //   <Button
+  //     onClick={handleExport}
+  //     variant="outline"
+  //     size="sm"
+  //     leftIcon={<Download size={15} />}
+  //   >
+  //     Export CSV
+  //   </Button>
+  // );
+
   return (
-    <div className="px-6 py-8 space-y-6 bg-navy min-h-full">
-
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
-        <div>
-          <h1 className="text-white text-xl font-bold tracking-tight">User Accounts</h1>
-          <p className="text-white/40 text-sm mt-1">Manage and moderate customer accounts</p>
-          <button
-            onClick={handleRefresh}
-            disabled={refreshing || loading}
-            className="mt-4 flex items-center gap-2 px-4 py-2 bg-orange text-white rounded-lg text-sm font-medium hover:bg-orange/80 disabled:opacity-50 transition-all"
-          >
-            <RefreshCw size={15} className={refreshing ? 'animate-spin' : ''} />
-            {refreshing ? 'Refreshing...' : 'Refresh'}
-          </button>
-        </div>
-
-        <button
-          onClick={() => dispatch(exportUsers())}
-          className="self-start flex items-center gap-2 bg-royal/10 text-royal border border-royal/20 px-4 py-2 rounded-xl text-sm font-medium hover:bg-royal hover:text-white transition-all"
-        >
-          <Download size={15} /> Export CSV
-        </button>
-      </div>
-
-      {/* Error */}
+    <PageLayout 
+      title="User Accounts" 
+      icon={Users}
+      description="Manage and moderate customer accounts"
+      stats={stats}
+      onRefresh={handleRefresh}
+      isRefreshing={isRefreshing}
+      // headerAction={<HeaderAction />}
+    >
+      {/* Error Display */}
       {error && (
-        <div className="bg-crimson/10 border border-crimson/30 text-crimson px-4 py-3 rounded-lg text-sm flex items-center gap-2">
-          <AlertTriangle size={15} /> {error}
+        <div className="mb-4 flex items-center gap-2 px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-500 text-xs">
+          <AlertTriangle size={13} /> {error}
         </div>
       )}
 
       {/* Bulk action bar */}
       {selectedIds.length > 0 && (
-        <div className="bg-orange/10 border border-orange/20 px-4 py-3 rounded-xl flex justify-between items-center">
-          <span className="text-orange text-sm font-medium">{selectedIds.length} users selected</span>
+        <div className="mb-4 bg-primary/10 border border-primary/20 px-4 py-3 rounded-xl flex justify-between items-center">
+          <span className="text-primary text-sm font-medium">{selectedIds.length} users selected</span>
           <div className="flex gap-2">
-            <button
+            <Button
               onClick={() => handleBulkAction('suspend')}
-              className="flex items-center gap-1.5 bg-white/5 border border-white/10 px-3 py-1.5 rounded-lg text-xs font-medium text-white/70 hover:text-white transition-all"
+              variant="outline"
+              size="sm"
+              leftIcon={<Ban size={13} />}
             >
-              <Ban size={13} /> Suspend
-            </button>
-            <button
+              Suspend
+            </Button>
+            <Button
               onClick={() => handleBulkAction('delete')}
-              className="flex items-center gap-1.5 bg-crimson/10 border border-crimson/20 px-3 py-1.5 rounded-lg text-xs font-medium text-crimson hover:bg-crimson hover:text-white transition-all"
+              variant="destructive"
+              size="sm"
+              leftIcon={<Trash2 size={13} />}
             >
-              <Trash2 size={13} /> Delete
-            </button>
+              Delete
+            </Button>
           </div>
         </div>
       )}
 
       {/* Table */}
-      <div className="bg-white/[0.03] border border-white/10 rounded-2xl overflow-hidden">
+      <div className="bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
         <table className="w-full text-left text-sm">
           <thead>
-            <tr className="border-b border-white/5">
+            <tr className="border-b border-white/5 bg-secondary/50">
               <th className="px-5 py-3 w-10">
                 <input
                   type="checkbox"
                   checked={selectedIds.length === list.length && list.length > 0}
-                  onChange={(e) => setSelectedIds(e.target.checked ? list.map(u => u._id) : [])}
-                  className="accent-orange"
+                  onChange={handleSelectAll}
+                  className="accent-primary"
                 />
               </th>
               <th className="px-5 py-3 text-[10px] text-white/30 tracking-widest uppercase font-medium">Customer</th>
@@ -114,14 +160,14 @@ export default function UsersList() {
             {list.map(user => (
               <tr
                 key={user._id}
-                className={`hover:bg-white/5 transition-all ${selectedIds.includes(user._id) ? 'bg-orange/5' : ''}`}
+                className={`hover:bg-white/5 transition-all ${selectedIds.includes(user._id) ? 'bg-primary/5' : ''}`}
               >
                 <td className="px-5 py-4">
                   <input
                     type="checkbox"
                     checked={selectedIds.includes(user._id)}
                     onChange={() => handleSelect(user._id)}
-                    className="accent-orange"
+                    className="accent-primary"
                   />
                 </td>
                 <td className="px-5 py-4">
@@ -131,8 +177,8 @@ export default function UsersList() {
                 <td className="px-5 py-4">
                   <span className={`px-2.5 py-1 rounded-lg text-[10px] font-medium border ${
                     user.status === 'Active'
-                      ? 'bg-purple/10 text-purple border-purple/20'
-                      : 'bg-crimson/10 text-crimson border-crimson/20'
+                      ? 'bg-green-500/10 text-green-500 border-green-500/20'
+                      : 'bg-red-500/10 text-red-500 border-red-500/20'
                   }`}>
                     {user.status}
                   </span>
@@ -150,8 +196,12 @@ export default function UsersList() {
                       {user.status === 'Active' ? <UserX size={17} /> : <CheckCircle size={17} />}
                     </button>
                     <button
-                      onClick={() => dispatch(deleteUser(user._id))}
-                      className="text-white/30 hover:text-crimson transition-colors"
+                      onClick={() => {
+                        if (window.confirm(`Delete ${user.name}? This action cannot be undone.`)) {
+                          dispatch(deleteUser(user._id));
+                        }
+                      }}
+                      className="text-white/30 hover:text-red-500 transition-colors"
                       title="Delete"
                     >
                       <Trash2 size={17} />
@@ -163,14 +213,16 @@ export default function UsersList() {
           </tbody>
         </table>
 
-        {loading && (
+        {/* Loading State */}
+        {loading && list.length === 0 && (
           <div className="p-10 text-center text-white/30 text-sm">Loading users...</div>
         )}
 
+        {/* Empty State */}
         {!loading && !error && list.length === 0 && (
           <div className="p-10 text-center text-white/30 text-sm">No users found</div>
         )}
       </div>
-    </div>
+    </PageLayout>
   );
 }

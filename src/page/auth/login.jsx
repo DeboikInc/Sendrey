@@ -1,7 +1,9 @@
+// src/pages/auth/Login.jsx (or wherever your auth pages are)
 import React, { useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { adminLogin } from '../../Redux/authSlice';
 import { useNavigate, Link } from "react-router-dom";
+import Button from '../../components/ui/Button';
 
 const Login = () => {
     const dispatch = useDispatch();
@@ -37,12 +39,11 @@ const Login = () => {
                     {/* Header */}
                     <div className="text-center mb-8">
                         <h1 className="text-3xl font-bold text-secondary mb-2">Welcome Back</h1>
-                        <p className="text-gray-500">Sign in</p>
+                        <p className="text-gray-500">Sign in to your account</p>
                     </div>
 
                     {/* Form */}
                     <form onSubmit={handleSubmit} className="space-y-4" autoComplete="off">
-
                         <div>
                             <label className="block text-sm font-medium text-secondary mb-1">
                                 Email Address
@@ -78,22 +79,17 @@ const Login = () => {
                             />
                         </div>
 
-                        {/* <div className="flex justify-end">
-                            <button
-                                type="button"
-                                className="text-sm text-primary hover:text-secondary transition-colors"
-                            >
-                                Forgot Password?
-                            </button>
-                        </div> */}
-
-                        <button
+                        <Button
                             type="submit"
-                            disabled={status === 'loading'}
-                            className="w-full bg-orange text-white py-3 rounded-md font-medium hover:bg-opacity-90 transition-all disabled:opacity-50 disabled:cursor-not-allowed mt-6"
+                            variant="primary"
+                            size="lg"
+                            fullWidth
+                            isLoading={status === 'loading'}
+                            loadingText="Please wait..."
+                            className="mt-6"
                         >
-                            {status === 'loading' ? 'Please wait...' : 'Sign In'}
-                        </button>
+                            Sign In
+                        </Button>
                     </form>
 
                     <div className="mt-6 text-center">
@@ -108,15 +104,6 @@ const Login = () => {
                         </p>
                     </div>
                 </div>
-
-                {/* <div className="mt-6 text-center">
-                    <p className="text-sm text-gray-600">
-                        Need help?{' '}
-                        <button className="text-primary hover:text-secondary font-medium">
-                            Contact Support
-                        </button>
-                    </p>
-                </div> */}
             </div>
         </div>
     );

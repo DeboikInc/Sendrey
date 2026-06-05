@@ -36,3 +36,57 @@
     transform: rotate(360deg);
   }
 }
+
+/* Import Space Grotesk font */
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&display=swap');
+
+/* Avone Font - Add your font files to public/fonts/ folder */
+@font-face {
+  font-family: 'Avone';
+  src: url('/fonts/Avone-Regular.woff2') format('woff2'),
+       url('/fonts/Avone-Regular.woff') format('woff');
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Avone';
+  src: url('/fonts/Avone-Medium.woff2') format('woff2'),
+       url('/fonts/Avone-Medium.woff') format('woff');
+  font-weight: 500;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Avone';
+  src: url('/fonts/Avone-SemiBold.woff2') format('woff2'),
+       url('/fonts/Avone-SemiBold.woff') format('woff');
+  font-weight: 600;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Avone';
+  src: url('/fonts/Avone-Bold.woff2') format('woff2'),
+       url('/fonts/Avone-Bold.woff') format('woff');
+  font-weight: 700;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Set default font for the app */
+body {
+  font-family: 'Space Grotesk', sans-serif;
+}
+
+/* Utility classes for font families */
+.font-avone {
+  font-family: 'Avone', sans-serif;
+}
+
+.font-space-grotesk {
+  font-family: 'Space Grotesk', sans-serif;
+}

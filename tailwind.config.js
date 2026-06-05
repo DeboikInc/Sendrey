@@ -3,6 +3,10 @@ module.exports = {
     content: ["./src/**/*.{js,jsx,ts,tsx}"],
     theme: {
         extend: {
+            fontFamily: {
+                'space-grotesk': ['Space Grotesk', 'sans-serif'],
+                'avone': ['Avone', 'sans-serif'],
+            },
             colors: {
                 'black-100': '#131313',
                 'black-200': '#000000',
@@ -18,11 +22,23 @@ module.exports = {
                 'gray-1000': '#F8F8F8',
                 'gray-1001': '#E8ECEF',
                 'gray-1002': '#E1E1E1',
+                'primary': '#F47C20',
+                'secondary': '#152C3D',
                 'navy': '#131313',
-                'orange': '#F47C20',
-                'purple': '#695BA7',
-                'royal': '#204199',
-                'crimson': '#6B2737',
+                'tetiary': '#695BA7',
+                'flash-white': '#EDEDEE',
+                'marian': '#204199',
+                'wine': ' #6B2737'
+            },
+            animation: {
+                'spin-slow': 'spin 3s linear infinite',
+                'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+            },
+            keyframes: {
+                spin: {
+                    from: { transform: 'rotate(0deg)' },
+                    to: { transform: 'rotate(360deg)' },
+                },
             },
         },
     },

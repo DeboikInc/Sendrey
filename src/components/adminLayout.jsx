@@ -1,6 +1,6 @@
 // components/AdminLayout.jsx
 import React, { useState } from 'react';
-import Sidebar from './sidebar';
+import Sidebar from './layout/Sidebar';
 
 const AdminLayout = ({ children, activeTab, setActiveTab }) => {
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);

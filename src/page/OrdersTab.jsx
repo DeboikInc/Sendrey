@@ -1,22 +1,23 @@
-// pages/OrdersList.jsx
+// src/pages/OrdersTab.jsx
 import React, { useEffect, useState, useMemo } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { getAllOrders } from '../Redux/orderSlice';
 import {
-    CheckCircle, Clock, RefreshCw, ShoppingBag,
+    CheckCircle, Clock, ShoppingBag,
     XCircle, AlertTriangle, MapPin, Bike, Calendar,
-    Package, ChevronDown, ChevronUp
+    Package, ChevronDown, ChevronUp,
 } from 'lucide-react';
+import PageLayout from '../components/layout/PageLayout';
 
 const STATUS_CONFIG = {
-    completed:       { color: 'bg-purple/10 text-purple border-purple/20',  icon: CheckCircle },
-    paid:            { color: 'bg-royal/10 text-royal border-royal/20',     icon: CheckCircle },
-    delivered:       { color: 'bg-purple/10 text-purple border-purple/20',  icon: CheckCircle },
-    items_approved:  { color: 'bg-purple/10 text-purple border-purple/20',  icon: CheckCircle },
-    items_submitted: { color: 'bg-orange/10 text-orange border-orange/20',  icon: Clock },
-    pending_payment: { color: 'bg-orange/10 text-orange border-orange/20',  icon: Clock },
-    cancelled:       { color: 'bg-crimson/10 text-crimson border-crimson/20', icon: XCircle },
-    disputed:        { color: 'bg-crimson/10 text-crimson border-crimson/20', icon: AlertTriangle },
+    completed:       { color: 'bg-green-500/10 text-green-500 border-green-500/20',  icon: CheckCircle },
+    paid:            { color: 'bg-primary/10 text-primary border-primary/20',     icon: CheckCircle },
+    delivered:       { color: 'bg-green-500/10 text-green-500 border-green-500/20',  icon: CheckCircle },
+    items_approved:  { color: 'bg-green-500/10 text-green-500 border-green-500/20',  icon: CheckCircle },
+    items_submitted: { color: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20',  icon: Clock },
+    pending_payment: { color: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20',  icon: Clock },
+    cancelled:       { color: 'bg-red-500/10 text-red-500 border-red-500/20', icon: XCircle },
+    disputed:        { color: 'bg-red-500/10 text-red-500 border-red-500/20', icon: AlertTriangle },
 };
 
 function StatusPill({ status }) {
@@ -29,16 +30,6 @@ function StatusPill({ status }) {
     );
 }
 
-function StatCard({ label, value, icon, color }) {
-    return (
-        <div className="bg-white/[0.03] border border-white/10 p-5 rounded-2xl">
-            <div className={`mb-2 ${color}`}>{icon}</div>
-            <div className="text-white text-2xl font-bold">{value ?? '—'}</div>
-            <div className="text-white/35 text-[10px] font-medium uppercase tracking-wider mt-1">{label}</div>
-        </div>
-    );
-}
-
 function OrderCard({ order }) {
     const [expanded, setExpanded] = useState(false);
 
@@ -47,7 +38,7 @@ function OrderCard({ order }) {
     const location = order.deliveryLocation?.address || order.marketLocation?.address || '—';
 
     return (
-        <div className="bg-white/[0.03] border border-white/10 rounded-2xl transition-all hover:border-orange/20">
+        <div className="bg-secondary/30 border border-white/10 rounded-2xl transition-all hover:border-primary/20">
             {/* Main row */}
             <div
                 className="p-4 sm:p-5 cursor-pointer"
@@ -56,7 +47,7 @@ function OrderCard({ order }) {
                 <div className="flex flex-col sm:flex-row sm:items-center gap-4">
                     {/* Order ID & Date */}
                     <div className="min-w-[120px]">
-                        <p className="text-xs font-mono text-orange font-bold">{order.orderId}</p>
+                        <p className="text-xs font-mono text-primary font-bold">{order.orderId}</p>
                         <div className="flex items-center gap-1 mt-1">
                             <Calendar size={10} className="text-white/30" />
                             <p className="text-[9px] text-white/30">{new Date(order.createdAt).toLocaleDateString()}</p>
@@ -65,20 +56,20 @@ function OrderCard({ order }) {
 
                     {/* Customer */}
                     <div className="min-w-[140px]">
-                        <p className="text-xs text-white/80 font-medium">{customer?.firstName ?? '—'}</p>
+                        <p className="text-xs text-white/80 font-medium">{customer?.firstName ?? '—'} {customer?.lastName ?? ''}</p>
                         <p className="text-[10px] text-white/40 mt-0.5">{customer?.phone}</p>
                     </div>
 
                     {/* Runner */}
                     <div className="min-w-[140px]">
-                        <p className="text-xs text-white/80 font-medium">{runner?.firstName ?? '—'}</p>
+                        <p className="text-xs text-white/80 font-medium">{runner?.firstName ?? '—'} {runner?.lastName ?? ''}</p>
                         <p className="text-[10px] text-white/40 mt-0.5">{runner?.phone}</p>
                     </div>
 
                     {/* Service + Location */}
                     <div className="flex-1 min-w-[160px]">
                         <div className="flex items-center gap-1 text-[10px] text-white/50">
-                            <Bike size={11} className="text-orange shrink-0" />
+                            <Bike size={11} className="text-primary shrink-0" />
                             <span className="capitalize">{order.serviceType?.replace(/-/g, ' ')}</span>
                         </div>
                         <div className="flex items-center gap-1 mt-0.5 text-[10px] text-white/30">
@@ -97,7 +88,7 @@ function OrderCard({ order }) {
                     <div className="min-w-[110px]">
                         <StatusPill status={order.status} />
                         {order.hasDispute && (
-                            <div className="mt-1 flex items-center gap-1 text-[9px] text-crimson">
+                            <div className="mt-1 flex items-center gap-1 text-[9px] text-red-500">
                                 <AlertTriangle size={9} /> Dispute
                             </div>
                         )}
@@ -106,7 +97,7 @@ function OrderCard({ order }) {
                     {/* Expand button */}
                     <button
                         onClick={e => { e.stopPropagation(); setExpanded(!expanded); }}
-                        className="p-2 bg-white/5 rounded-lg hover:text-orange text-white/40 transition-colors border border-white/10 shrink-0"
+                        className="p-2 bg-white/5 rounded-lg hover:text-primary text-white/40 transition-colors border border-white/10 shrink-0"
                     >
                         {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                     </button>
@@ -115,12 +106,12 @@ function OrderCard({ order }) {
 
             {/* Expanded detail panel */}
             {expanded && (
-                <div className="border-t border-white/5 px-4 sm:px-5 py-4">
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                <div className="border-t border-white/5 px-4 sm:px-5 py-4 bg-secondary/50">
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
                         {/* Financials breakdown */}
-                        <div className="bg-white/5 rounded-xl p-3 border border-white/5">
+                        <div className="bg-secondary/30 rounded-xl p-3 border border-white/5">
                             <div className="flex items-center gap-2 mb-2">
-                                <Package size={12} className="text-orange" />
+                                <p size={12} className="text-primary" >₦</p>
                                 <p className="text-[9px] text-white/30 uppercase tracking-widest">Financials</p>
                             </div>
                             {[
@@ -138,9 +129,9 @@ function OrderCard({ order }) {
                         </div>
 
                         {/* Order info */}
-                        <div className="bg-white/5 rounded-xl p-3 border border-white/5">
+                        <div className="bg-secondary/30 rounded-xl p-3 border border-white/5">
                             <div className="flex items-center gap-2 mb-2">
-                                <Package size={12} className="text-orange" />
+                                <Package size={12} className="text-primary" />
                                 <p className="text-[9px] text-white/30 uppercase tracking-widest">Order Info</p>
                             </div>
                             {[
@@ -158,7 +149,7 @@ function OrderCard({ order }) {
                         </div>
 
                         {/* Customer */}
-                        <div className="bg-white/5 rounded-xl p-3 border border-white/5">
+                        <div className="bg-secondary/30 rounded-xl p-3 border border-white/5">
                             <p className="text-[9px] text-white/30 uppercase tracking-widest mb-2">Customer</p>
                             <p className="text-xs text-white/80 font-medium">{customer?.firstName} {customer?.lastName}</p>
                             <p className="text-[10px] text-white/40 mt-0.5">{customer?.email}</p>
@@ -166,7 +157,7 @@ function OrderCard({ order }) {
                         </div>
 
                         {/* Runner */}
-                        <div className="bg-white/5 rounded-xl p-3 border border-white/5">
+                        <div className="bg-secondary/30 rounded-xl p-3 border border-white/5">
                             <p className="text-[9px] text-white/30 uppercase tracking-widest mb-2">Runner</p>
                             <p className="text-xs text-white/80 font-medium">{runner?.firstName} {runner?.lastName}</p>
                             <p className="text-[10px] text-white/40 mt-0.5">{runner?.email}</p>
@@ -176,13 +167,13 @@ function OrderCard({ order }) {
 
                     {/* Status history timeline */}
                     {order.statusHistory?.length > 0 && (
-                        <div className="bg-white/5 rounded-xl p-3 border border-white/5">
+                        <div className="bg-secondary/30 rounded-xl p-3 border border-white/5">
                             <p className="text-[9px] text-white/30 uppercase tracking-widest mb-3">Status History</p>
                             <div className="flex flex-col gap-2">
                                 {order.statusHistory.map((h, idx) => (
                                     <div key={h._id || idx} className="flex items-start gap-3">
                                         <div className="flex flex-col items-center shrink-0">
-                                            <div className="w-2 h-2 rounded-full bg-orange mt-0.5" />
+                                            <div className="w-2 h-2 rounded-full bg-primary mt-0.5" />
                                             {idx < order.statusHistory.length - 1 && (
                                                 <div className="w-px h-4 bg-white/10 mt-1" />
                                             )}
@@ -214,12 +205,12 @@ function OrderCard({ order }) {
     );
 }
 
-export default function OrdersList() {
+export default function OrdersTab() {
     const dispatch = useDispatch();
     const { list: rawList, loading = false, error = null } = useSelector(state => state.orders || {});
     const list = Array.isArray(rawList) ? rawList : [];
 
-    const [refreshing, setRefreshing] = useState(false);
+    const [isRefreshing, setIsRefreshing] = useState(false);
     const [sortBy, setSortBy] = useState('date_desc');
     const [statusFilter, setStatusFilter] = useState('all');
 
@@ -228,11 +219,11 @@ export default function OrdersList() {
     }, [dispatch]);
 
     const handleRefresh = async () => {
-        setRefreshing(true);
+        setIsRefreshing(true);
         try {
             await dispatch(getAllOrders());
         } finally {
-            setRefreshing(false);
+            setIsRefreshing(false);
         }
     };
 
@@ -265,83 +256,103 @@ export default function OrdersList() {
     const totalSpent = list.reduce((sum, o) => sum + (o.totalAmount || 0), 0);
     const completedOrders = list.filter(o => o.status === 'completed').length;
 
+    // Stats for header
+    const stats = [
+        {
+            label: 'Total Orders',
+            value: totalOrders,
+            icon: ShoppingBag,
+            bgClass: 'bg-primary/10',
+            borderClass: 'border-primary/20',
+            textClass: 'text-primary',
+            iconClass: 'text-primary'
+        },
+        {
+            label: 'Completed',
+            value: completedOrders,
+            icon: CheckCircle,
+            bgClass: 'bg-green-500/10',
+            borderClass: 'border-green-500/20',
+            textClass: 'text-green-500',
+            iconClass: 'text-green-500'
+        },
+        {
+            label: 'Total Spent',
+            value: `₦${totalSpent.toLocaleString()}`,
+            icon: Package,
+            bgClass: 'bg-yellow-500/10',
+            borderClass: 'border-yellow-500/20',
+            textClass: 'text-yellow-500',
+            iconClass: 'text-yellow-500'
+        }
+    ];
+
     const statuses = ['all', 'pending_payment', 'items_submitted', 'items_approved', 'completed', 'cancelled', 'disputed'];
 
-    return (
-        <div className="px-4 sm:px-6 py-6 sm:py-8 space-y-5 bg-navy min-h-full">
-            {/* Header */}
-            <div>
-                <h1 className="text-white text-xl font-bold tracking-tight">Orders</h1>
-                <p className="text-white/40 text-sm mt-1">Track and manage customer orders</p>
-            </div>
-
-            {/* Stat cards */}
-            <div className="grid grid-cols-3 gap-3">
-                <StatCard label="Total Orders" value={totalOrders} icon={<ShoppingBag size={18} />} color="text-orange" />
-                <StatCard label="Completed" value={completedOrders} icon={<CheckCircle size={18} />} color="text-purple" />
-                <StatCard label="Total Spent" value={`₦${totalSpent.toLocaleString()}`} icon={<Package size={18} />} color="text-gray-400" />
-            </div>
-
-            {/* Error */}
-            {error && (
-                <div className="bg-crimson/10 border border-crimson/30 text-crimson px-4 py-3 rounded-lg text-sm flex items-center gap-2">
-                    <AlertTriangle size={15} /> Error: {typeof error === 'string' ? error : 'Failed to load orders'}
-                </div>
-            )}
-
+    // Toolbar component
+    const Toolbar = () => (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             {/* Status filter tabs */}
             <div className="flex gap-1 flex-wrap">
-                {statuses.map(s => (
+                {statuses.map(status => (
                     <button
-                        key={s}
-                        onClick={() => setStatusFilter(s)}
+                        key={status}
+                        onClick={() => setStatusFilter(status)}
                         className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wide transition-all
-                            ${statusFilter === s
-                                ? 'bg-orange/10 text-orange border border-orange/20'
-                                : 'bg-navy text-white/40 border border-white/10 hover:text-white/70'}`}
+                            ${statusFilter === status
+                                ? 'bg-primary/10 text-primary border border-primary/20'
+                                : 'bg-secondary/50 text-white/40 border border-white/10 hover:text-white/70'}`}
                     >
-                        {s === 'all' ? `All (${list.length})` : s.replace(/_/g, ' ')}
+                        {status === 'all' ? `All (${list.length})` : status.replace(/_/g, ' ')}
                     </button>
                 ))}
             </div>
 
-            {/* Toolbar */}
-            <div className="flex justify-end">
-                <div className="flex gap-2">
-                    <select
-                        value={sortBy}
-                        onChange={(e) => setSortBy(e.target.value)}
-                        className="px-4 py-2 rounded-lg text-sm bg-navy border border-white/10 text-white outline-none focus:border-orange/40 transition-colors"
-                    >
-                        <option value="date_desc">Newest first</option>
-                        <option value="date_asc">Oldest first</option>
-                        <option value="amount_desc">Highest amount</option>
-                        <option value="amount_asc">Lowest amount</option>
-                        <option value="budget_desc">Highest budget</option>
-                        <option value="budget_asc">Lowest budget</option>
-                    </select>
-
-                    <button
-                        onClick={handleRefresh}
-                        disabled={refreshing || loading}
-                        className="flex items-center gap-2 px-4 py-2 bg-orange text-white rounded-lg text-sm font-medium hover:bg-orange/80 disabled:opacity-50 transition-all shrink-0"
-                    >
-                        <RefreshCw size={15} className={refreshing ? 'animate-spin' : ''} />
-                        <span className="hidden sm:inline">{refreshing ? 'Refreshing...' : 'Refresh'}</span>
-                    </button>
-                </div>
+            {/* Sort and Refresh */}
+            <div className="flex gap-2">
+                <select
+                    value={sortBy}
+                    onChange={(e) => setSortBy(e.target.value)}
+                    className="px-4 py-2 rounded-lg text-sm bg-secondary/50 border border-white/10 text-white outline-none focus:border-primary/40 transition-colors"
+                >
+                    <option value="date_desc">Newest first</option>
+                    <option value="date_asc">Oldest first</option>
+                    <option value="amount_desc">Highest amount</option>
+                    <option value="amount_asc">Lowest amount</option>
+                    <option value="budget_desc">Highest budget</option>
+                    <option value="budget_asc">Lowest budget</option>
+                </select>
             </div>
+        </div>
+    );
 
-            {/* Loading */}
-            {loading && (
+    return (
+        <PageLayout 
+            title="Orders" 
+            icon={ShoppingBag}
+            description="Track and manage customer orders"
+            stats={stats}
+            onRefresh={handleRefresh}
+            isRefreshing={isRefreshing}
+            toolbar={<Toolbar />}
+        >
+            {/* Error Display */}
+            {error && (
+                <div className="mb-4 flex items-center gap-2 px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-500 text-xs">
+                    <AlertTriangle size={13} /> Error: {typeof error === 'string' ? error : 'Failed to load orders'}
+                </div>
+            )}
+
+            {/* Loading State */}
+            {loading && sortedOrders.length === 0 && (
                 <div className="p-10 text-center text-white/30 text-sm">Loading orders...</div>
             )}
 
-            {/* Empty */}
+            {/* Empty State */}
             {!loading && !error && sortedOrders.length === 0 && (
-                <div className="text-center py-20 bg-white/5 rounded-2xl border border-dashed border-white/10">
-                    <ShoppingBag size={32} className="mx-auto text-gray-600 mb-3" />
-                    <p className="text-gray-500 italic">No orders found</p>
+                <div className="text-center py-20 bg-secondary/30 rounded-2xl border border-dashed border-white/10">
+                    <ShoppingBag size={32} className="mx-auto text-white/20 mb-3" />
+                    <p className="text-white/40 text-sm">No orders found</p>
                 </div>
             )}
 
@@ -353,6 +364,6 @@ export default function OrdersList() {
                     ))}
                 </div>
             )}
-        </div>
+        </PageLayout>
     );
 }

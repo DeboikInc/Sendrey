@@ -1,43 +1,44 @@
+// src/pages/Home.jsx
 import React, { useState } from 'react';
 import { Menu } from 'lucide-react';
-import Sidebar from '../components/sidebar';
+import Sidebar from '../components/layout/Sidebar';
 
-import Disputes from './Disputes';
-import BusinessUsers from './BusinessUsers';
-import KycDashBoard from './KycDashBoard';
-import RunnersList from './RunnerList';
-import UsersList from './UserList';
-import OrdersList from './OrdersList';
-import Payout from './Payout';
+import Disputes from './DisputesTab';
+import BusinessTab from './BusinessTab';
+import KycTab from './KycTab';
+import RunnersTab from './RunnersTab';
+import UsersTab from './UsersTab';
+import OrdersTab from './OrdersTab';
+import PayoutTab from './PayoutTab';
 
 const PAGES = {
-  'dashboard':      <KycDashBoard title="Dashboard" />,
-  'disputes':       <Disputes title="Disputes" />,
-  'business-users': <BusinessUsers title="Business Users" />,
-  'runner-list':    <RunnersList title="Runner List" />,
-  'users':          <UsersList title="User List" />,
-  'orders':         <OrdersList title="Order List" />,
-  'payout':         <Payout title="Payout List" />,
+  'dashboard':      <KycTab />,
+  'disputes':       <Disputes />,
+  'business-users': <BusinessTab />,
+  'runner-list':    <RunnersTab />,
+  'users':          <UsersTab />,
+  'orders':         <OrdersTab />,
+  'payout':         <PayoutTab />,
 };
 
 export default function Home() {
   const [activePage, setActivePage] = useState('dashboard');
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   return (
-    <div className="flex h-screen bg-navy overflow-hidden">
+    <div className="flex h-screen bg-secondary overflow-hidden">
       <Sidebar
         activePage={activePage}
         onNavigate={setActivePage}
-        open={sidebarOpen}
-        onClose={() => setSidebarOpen(false)}
+        isOpen={isSidebarOpen}  // Changed from 'open' to 'isOpen'
+        onClose={() => setIsSidebarOpen(false)}
       />
 
       <div className="flex-1 flex flex-col overflow-hidden">
         {/* Mobile topbar */}
-        <div className="lg:hidden flex items-center gap-3 px-4 py-3 bg-navy border-b border-white/5">
+        <div className="lg:hidden flex items-center gap-3 px-4 py-3 bg-neutral border-b border-white/5">
           <button
-            onClick={() => setSidebarOpen(true)}
+            onClick={() => setIsSidebarOpen(true)}
             className="p-2 rounded-lg text-white/60 hover:text-white hover:bg-white/5 transition-all"
           >
             <Menu size={20} />

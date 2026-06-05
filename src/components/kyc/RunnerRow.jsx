@@ -1,14 +1,15 @@
-// components/kyc/RunnerRow.jsx
+// src/components/kyc/RunnerRow.jsx
 import { Eye } from 'lucide-react';
-import StatusBadge from './StatusBadge';
-import DocPill from './DocPill';
+import Button from '../ui/Button';
+import StatusIndicator from './StatusIndicator';
+import DocumentTag from './DocumentTag';
 
-export default function RunnerRow({ runner, view, i, onReview }) {
+export default function RunnerRow({ runner, view, onReview }) {
   return (
     <tr className="border-b border-white/5 hover:bg-white/[0.03] transition-colors">
       <td className="px-5 py-3.5">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-orange/10 border border-orange/20 flex items-center justify-center text-[10px] font-bold text-orange shrink-0">
+          <div className="w-8 h-8 rounded-lg bg-primary/10 border border-primary/20 flex items-center justify-center text-[10px] font-bold text-primary shrink-0">
             {runner.firstName?.[0]}{runner.lastName?.[0]}
           </div>
           <div>
@@ -26,7 +27,7 @@ export default function RunnerRow({ runner, view, i, onReview }) {
       <td className="px-5 py-3.5">
         {runner.pendingItems?.length > 0 ? (
           <div className="flex flex-wrap gap-1">
-            {runner.pendingItems.map((item, idx) => <DocPill key={idx} label={item} />)}
+            {runner.pendingItems.map((item, idx) => <DocumentTag key={idx} label={item} />)}
           </div>
         ) : (
           <span className="text-[10px] text-white/30">
@@ -35,15 +36,17 @@ export default function RunnerRow({ runner, view, i, onReview }) {
         )}
       </td>
       <td className="px-5 py-3.5">
-        <StatusBadge status={runner.runnerStatus} />
+        <StatusIndicator status={runner.runnerStatus} />
       </td>
       <td className="px-5 py-3.5 text-right">
-        <button
+        <Button
           onClick={onReview}
-          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange/10 border border-orange/20 text-orange text-[10px] font-bold hover:bg-orange/20 transition-all"
+          variant="outline"
+          size="xs"
+          leftIcon={<Eye size={11} />}
         >
-          <Eye size={11} /> Review
-        </button>
+          Review
+        </Button>
       </td>
     </tr>
   );
