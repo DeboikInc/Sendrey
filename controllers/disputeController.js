@@ -50,10 +50,10 @@ class DisputeController extends BaseController {
 
       if (userType === 'runner') {
         allowedReasons = (RUNNER_DISPUTE_REASONS[normalisedType] ?? []).map(r => r.value);
-        isValid = isRunnerReasonValid(order.serviceType, order.status, reason);
+        isValid = isRunnerReasonValid(order.serviceType, reason);
       } else {
         allowedReasons = (DISPUTE_REASONS[normalisedType] ?? []).map(r => r.value);
-        isValid = isReasonValid(order.serviceType, order.status, reason);
+        isValid = isReasonValid(order.serviceType, reason);
       }
 
       // ── Validate reason exists for this service type ───────────────────────
@@ -99,10 +99,6 @@ class DisputeController extends BaseController {
         evidenceFiles: evidenceFiles || [], // Will contain Cloudinary URLs after upload
       });
 
-      // Update order status
-      order.status = 'disputed';
-      await order.save();
-
       return this.success(res, dispute);
     } catch (error) {
       console.error('raiseDispute error:', error.message, error);
@@ -126,6 +122,7 @@ class DisputeController extends BaseController {
 
       return this.success(res, result);
     } catch (error) {
+      // console.error('[resolveDispute controller] error:', error.message, error);
       return this.error(res, error.message);
     }
   }

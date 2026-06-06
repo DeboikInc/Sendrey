@@ -717,6 +717,7 @@ class PaymentService {
 
   // service
   async transferToVendor({ amount, bankName, accountNumber, accountName, vendorName, orderId, runnerId }) {
+    
     // ── DEV MOCK ───────────────────────────────────────────
     if (process.env.NODE_ENV === 'development') {
       console.log('⚠️  transferToVendor: DEV mock — skipping real Paystack transfer');
