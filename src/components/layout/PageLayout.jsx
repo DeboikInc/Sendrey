@@ -16,7 +16,7 @@ const PageLayout = ({
   className = ''
 }) => {
   return (
-    <div className={`flex-1 flex flex-col overflow-hidden bg-secondary/30 h-full ${className}`}>
+    <div className={`flex-1 flex flex-col overflow-hidden bg-secondary/90 h-full ${className}`}>
       {/* Header */}
       <header className="px-4 sm:px-6 py-4 border-b border-white/5 shrink-0">
         <div className="flex items-start justify-between gap-3">

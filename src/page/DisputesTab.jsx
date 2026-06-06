@@ -1,5 +1,5 @@
 // src/pages/Disputes.jsx
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
     getAllDisputes, resolveDispute,
@@ -7,7 +7,7 @@ import {
 } from '../Redux/disputeSlice';
 import {
     AlertTriangle, Clock, CheckCircle, MessageSquare,
-    RefreshCw, X, ShieldAlert
+    RefreshCw, X, ShieldAlert, ArrowUpDown, SortAsc, SortDesc
 } from 'lucide-react';
 import Button from '../components/ui/Button';
 import PageLayout from '../components/layout/PageLayout';
@@ -234,9 +234,13 @@ export default function Disputes() {
         resolveError,
     } = useSelector(state => state.dispute || {});
     
-    const disputeList = Array.isArray(rawDisputeList) ? rawDisputeList : [];
+    // Wrap disputeList in useMemo to prevent recreation on every render
+    const disputeList = useMemo(() => {
+        return Array.isArray(rawDisputeList) ? rawDisputeList : [];
+    }, [rawDisputeList]);
 
     const [activeFilter, setActiveFilter] = useState('All');
+    const [sortBy, setSortBy] = useState('newest');
     const [isRefreshing, setIsRefreshing] = useState(false);
 
     useEffect(() => {
@@ -252,8 +256,10 @@ export default function Disputes() {
         }
     };
 
-    const getFilteredDisputes = () => {
-        return disputeList.filter(dispute => {
+    // Filter and sort disputes
+    const filteredAndSortedDisputes = useMemo(() => {
+        // First filter by status
+        let filtered = disputeList.filter(dispute => {
             if (activeFilter === 'All') return true;
             if (activeFilter === 'Pending') {
                 return dispute.status === 'open' || dispute.status === 'pending' || dispute.status === 'under_review';
@@ -262,65 +268,119 @@ export default function Disputes() {
             if (activeFilter === 'Dismissed') return dispute.status === 'dismissed';
             return true;
         });
-    };
 
-    const getDisputeCardBorderClass = (dispute) => {
+        // Then sort
+        const sorted = [...filtered];
+        switch (sortBy) {
+            case 'newest':
+                return sorted.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+            case 'oldest':
+                return sorted.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+            case 'amount_high':
+                return sorted.sort((a, b) => (b.orderAmount || 0) - (a.orderAmount || 0));
+            case 'amount_low':
+                return sorted.sort((a, b) => (a.orderAmount || 0) - (b.orderAmount || 0));
+            default:
+                return sorted;
+        }
+    }, [disputeList, activeFilter, sortBy]);
+
+    // Calculate stats with useMemo to prevent recalculations
+    const stats = useMemo(() => {
+        const pendingCount = disputeList.filter(d => d.status === 'open' || d.status === 'pending' || d.status === 'under_review').length;
+        const resolvedCount = disputeList.filter(d => d.status === 'resolved').length;
+        
+        return [
+            {
+                label: 'Total Disputes',
+                value: disputeList.length,
+                icon: ShieldAlert,
+                bgClass: 'bg-primary/10',
+                borderClass: 'border-primary/20',
+                textClass: 'text-primary',
+                iconClass: 'text-primary'
+            },
+            {
+                label: 'Pending',
+                value: pendingCount,
+                icon: Clock,
+                bgClass: 'bg-yellow-500/10',
+                borderClass: 'border-yellow-500/20',
+                textClass: 'text-yellow-500',
+                iconClass: 'text-yellow-500'
+            },
+            {
+                label: 'Resolved',
+                value: resolvedCount,
+                icon: CheckCircle,
+                bgClass: 'bg-green-500/10',
+                borderClass: 'border-green-500/20',
+                textClass: 'text-green-500',
+                iconClass: 'text-green-500'
+            }
+        ];
+    }, [disputeList]);
+
+    const handleFilterChange = useCallback((filter) => {
+        setActiveFilter(filter);
+    }, []);
+
+    const handleSortChange = useCallback((e) => {
+        setSortBy(e.target.value);
+    }, []);
+
+    const getSortIcon = useCallback(() => {
+        switch (sortBy) {
+            case 'newest': return <SortDesc size={14} />;
+            case 'oldest': return <SortAsc size={14} />;
+            default: return <ArrowUpDown size={14} />;
+        }
+    }, [sortBy]);
+
+    const getDisputeCardBorderClass = useCallback((dispute) => {
         const isPending = dispute.status === 'open' || dispute.status === 'pending' || dispute.status === 'under_review';
         const isDismissed = dispute.status === 'dismissed';
         
         if (isPending) return 'border-primary/20 hover:border-primary/40';
         if (isDismissed) return 'border-orange-500/20 hover:border-orange-500/40';
         return 'border-white/10 hover:border-green-500/30';
-    };
+    }, []);
 
-    const filteredDisputes = getFilteredDisputes();
+    // Toolbar component with sorting dropdown
+    const Toolbar = useCallback(() => (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            {/* Filter buttons */}
+            <div className="flex gap-2 flex-wrap">
+                {['All', 'Pending', 'Resolved', 'Dismissed'].map((filterLabel) => (
+                    <Button
+                        key={filterLabel}
+                        onClick={() => handleFilterChange(filterLabel)}
+                        variant={activeFilter === filterLabel ? 'primary' : 'outline'}
+                        size="sm"
+                    >
+                        {filterLabel}
+                    </Button>
+                ))}
+            </div>
 
-    // Stats for the header
-    const stats = [
-        {
-            label: 'Total Disputes',
-            value: disputeList.length,
-            icon: ShieldAlert,
-            bgClass: 'bg-primary/10',
-            borderClass: 'border-primary/20',
-            textClass: 'text-primary',
-            iconClass: 'text-primary'
-        },
-        {
-            label: 'Pending',
-            value: disputeList.filter(d => d.status === 'open' || d.status === 'pending' || d.status === 'under_review').length,
-            icon: Clock,
-            bgClass: 'bg-yellow-500/10',
-            borderClass: 'border-yellow-500/20',
-            textClass: 'text-yellow-500',
-            iconClass: 'text-yellow-500'
-        },
-        {
-            label: 'Resolved',
-            value: disputeList.filter(d => d.status === 'resolved').length,
-            icon: CheckCircle,
-            bgClass: 'bg-green-500/10',
-            borderClass: 'border-green-500/20',
-            textClass: 'text-green-500',
-            iconClass: 'text-green-500'
-        }
-    ];
-
-    // Toolbar component
-    const Toolbar = () => (
-        <div className="flex gap-2 flex-wrap">
-            {['All', 'Pending', 'Resolved', 'Dismissed'].map((filterLabel) => (
-                <Button
-                    key={filterLabel}
-                    onClick={() => setActiveFilter(filterLabel)}
-                    variant={activeFilter === filterLabel ? 'primary' : 'outline'}
-                    size="sm"
+            {/* Sort dropdown */}
+            <div className="relative">
+                <select
+                    value={sortBy}
+                    onChange={handleSortChange}
+                    className="appearance-none bg-secondary border border-white/10 rounded-lg px-3 py-2 pr-8 text-xs text-white/70 focus:outline-none focus:border-primary/40 cursor-pointer"
                 >
-                    {filterLabel}
-                </Button>
-            ))}
+                    <option value="newest">Newest First</option>
+                    <option value="oldest">Oldest First</option>
+                    {/* <option value="amount_high">Highest Amount</option>
+                    <option value="amount_low">Lowest Amount</option> */}
+                </select>
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
+                    {getSortIcon()}
+                </div>
+            </div>
         </div>
-    );
+    ), [activeFilter, sortBy, handleFilterChange, handleSortChange, getSortIcon]);
 
     return (
         <>
@@ -331,7 +391,7 @@ export default function Disputes() {
                 stats={stats}
                 onRefresh={handleRefresh}
                 isRefreshing={isRefreshing}
-                toolbar={<Toolbar />}  // Pass toolbar as a prop
+                toolbar={<Toolbar />}
             >
                 {/* Error Display */}
                 {errorMessage && (
@@ -341,23 +401,30 @@ export default function Disputes() {
                 )}
 
                 {/* Loading State */}
-                {isLoading && filteredDisputes.length === 0 && (
+                {isLoading && filteredAndSortedDisputes.length === 0 && (
                     <div className="flex justify-center py-16">
                         <RefreshCw className="animate-spin text-primary" size={22} />
                     </div>
                 )}
 
                 {/* Empty State */}
-                {!isLoading && filteredDisputes.length === 0 && (
+                {!isLoading && filteredAndSortedDisputes.length === 0 && (
                     <div className="text-center py-20 bg-secondary/30 rounded-2xl border border-dashed border-white/10">
                         <AlertTriangle size={28} className="text-white/20 mx-auto mb-3" />
                         <p className="text-white/40 text-sm">No disputes found.</p>
                     </div>
                 )}
 
+                {/* Results count */}
+                {!isLoading && filteredAndSortedDisputes.length > 0 && activeFilter !== 'All' && (
+                    <div className="mb-3 text-xs text-white/40">
+                        Showing {filteredAndSortedDisputes.length} dispute{filteredAndSortedDisputes.length !== 1 ? 's' : ''} in {activeFilter.toLowerCase()}
+                    </div>
+                )}
+
                 {/* Disputes List */}
                 <div className="grid gap-4">
-                    {filteredDisputes.map((dispute) => {
+                    {filteredAndSortedDisputes.map((dispute) => {
                         const isInitiatorUser = dispute.initiatedByModel === 'User';
                         const initiator = isInitiatorUser ? dispute.userId : dispute.runnerId;
                         const respondent = isInitiatorUser ? dispute.runnerId : dispute.userId;
@@ -429,6 +496,11 @@ export default function Disputes() {
                                                     <MessageSquare size={12} />
                                                     {dispute.messages?.length || 0} messages
                                                 </span>
+                                                {dispute.orderAmount && (
+                                                    <span className="flex items-center gap-1.5">
+                                                        💰 ₦{dispute.orderAmount.toLocaleString()}
+                                                    </span>
+                                                )}
                                             </div>
                                         </div>
                                     </div>

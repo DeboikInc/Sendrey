@@ -1,17 +1,17 @@
 // src/pages/RunnersTab.jsx
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
     Search, Star, Trash2, ShieldAlert,
-    Bike, AlertTriangle, RotateCcw, Users
+    Bike, AlertTriangle, RotateCcw, Users,
+    ArrowUpDown, SortAsc, SortDesc
 } from 'lucide-react';
 import {
-    getRunners, searchRunners, getRunnerStats,
+    getRunners, getRunnerStats,
     deleteRunner, banRunner, unbanRunner, resetStrikeCount
 } from '../Redux/runnersSlice';
 import Button from '../components/ui/Button';
 import PageLayout from '../components/layout/PageLayout';
-import debounce from 'lodash/debounce';
 
 function RunnerActions({ runner, dispatch, handleDelete, isMobile }) {
     return (
@@ -68,22 +68,15 @@ function RunnerActions({ runner, dispatch, handleDelete, isMobile }) {
     );
 }
 
-// function StatCard({ label, value, icon, colorClass }) {
-//     return (
-//         <div className="bg-secondary/30 border border-white/10 p-4 rounded-2xl">
-//             <div className={`mb-2 ${colorClass}`}>{icon}</div>
-//             <div className="text-white text-xl font-bold">{value ?? '—'}</div>
-//             <div className="text-white/35 text-[10px] font-medium uppercase tracking-wider mt-1">{label}</div>
-//         </div>
-//     );
-// }
-
 export default function RunnersTab() {
     const dispatch = useDispatch();
     const { list: rawList, stats = {}, loading = false, error = null } = useSelector(state => state.runners || {});
-    const list = Array.isArray(rawList) ? rawList : [];
+    
+    // Memoize the list to prevent unnecessary re-renders
+    const list = useMemo(() => Array.isArray(rawList) ? rawList : [], [rawList]);
 
-    const [searchTerm, setSearchTerm] = useState('');
+    const [searchQuery, setSearchQuery] = useState('');
+    const [sortBy, setSortBy] = useState('name_asc'); // name_asc, name_desc, rating_high, rating_low, trips_high, trips_low, newest, oldest
     const [isRefreshing, setIsRefreshing] = useState(false);
 
     useEffect(() => {
@@ -101,16 +94,81 @@ export default function RunnersTab() {
         }
     };
 
-    const debouncedSearch = useMemo(
-        () => debounce((query) => { dispatch(searchRunners(query)); }, 500),
-        [dispatch]
-    );
+    // Filter and sort runners
+    const filteredAndSortedRunners = useMemo(() => {
+        // First filter by search query
+        let filtered = list;
+        if (searchQuery.trim()) {
+            const query = searchQuery.toLowerCase();
+            filtered = list.filter(runner => {
+                const firstName = (runner.firstName || '').toLowerCase();
+                const lastName = (runner.lastName || '').toLowerCase();
+                const email = (runner.email || '').toLowerCase();
+                const phone = (runner.phone || '').toLowerCase();
+                return firstName.includes(query) || 
+                       lastName.includes(query) || 
+                       email.includes(query) || 
+                       phone.includes(query);
+            });
+        }
 
-    const handleSearch = (e) => {
-        const value = e.target.value;
-        setSearchTerm(value);
-        debouncedSearch(value);
-    };
+        // Then sort
+        const sorted = [...filtered];
+        switch (sortBy) {
+            case 'name_asc':
+                return sorted.sort((a, b) => {
+                    const nameA = `${a.firstName || ''} ${a.lastName || ''}`.toLowerCase();
+                    const nameB = `${b.firstName || ''} ${b.lastName || ''}`.toLowerCase();
+                    return nameA.localeCompare(nameB);
+                });
+            case 'name_desc':
+                return sorted.sort((a, b) => {
+                    const nameA = `${a.firstName || ''} ${a.lastName || ''}`.toLowerCase();
+                    const nameB = `${b.firstName || ''} ${b.lastName || ''}`.toLowerCase();
+                    return nameB.localeCompare(nameA);
+                });
+            case 'rating_high':
+                return sorted.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+            case 'rating_low':
+                return sorted.sort((a, b) => (a.rating || 0) - (b.rating || 0));
+            case 'trips_high':
+                return sorted.sort((a, b) => (b.completedOrders || 0) - (a.completedOrders || 0));
+            case 'trips_low':
+                return sorted.sort((a, b) => (a.completedOrders || 0) - (b.completedOrders || 0));
+            case 'newest':
+                return sorted.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+            case 'oldest':
+                return sorted.sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+            default:
+                return sorted;
+        }
+    }, [list, searchQuery, sortBy]);
+
+    const handleSearchChange = useCallback((e) => {
+        setSearchQuery(e.target.value);
+    }, []);
+
+    const handleClearSearch = useCallback(() => {
+        setSearchQuery('');
+    }, []);
+
+    const handleSortChange = useCallback((e) => {
+        setSortBy(e.target.value);
+    }, []);
+
+    const getSortIcon = useCallback(() => {
+        switch (sortBy) {
+            case 'newest': return <SortDesc size={14} />;
+            case 'oldest': return <SortAsc size={14} />;
+            case 'name_asc': return <SortAsc size={14} />;
+            case 'name_desc': return <SortDesc size={14} />;
+            case 'rating_high': return <SortDesc size={14} />;
+            case 'rating_low': return <SortAsc size={14} />;
+            case 'trips_high': return <SortDesc size={14} />;
+            case 'trips_low': return <SortAsc size={14} />;
+            default: return <ArrowUpDown size={14} />;
+        }
+    }, [sortBy]);
 
     const handleDelete = (id, name) => {
         if (window.confirm(`Delete ${name}? This action is permanent.`)) {
@@ -132,7 +190,7 @@ export default function RunnersTab() {
     };
 
     // Stats for header
-    const runnerStats = [
+    const runnerStats = useMemo(() => [
         {
             label: 'Total Runners',
             value: stats.total || 0,
@@ -151,23 +209,55 @@ export default function RunnersTab() {
             icon: ShieldAlert,
             colorClass: 'text-red-500'
         }
-    ];
+    ], [stats]);
 
-    // Toolbar component
-    const Toolbar = () => (
-        <div className="flex gap-2">
+    // Toolbar component with search and sort
+    const Toolbar = useCallback(() => (
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            {/* Search Input */}
             <div className="relative flex-1">
                 <Search className="absolute left-3 top-2.5 text-white/25" size={15} />
                 <input
                     type="text"
-                    value={searchTerm}
-                    onChange={handleSearch}
+                    value={searchQuery}
+                    onChange={handleSearchChange}
                     placeholder="Search runners by name, email, or phone..."
                     className="w-full bg-secondary/50 border border-white/10 rounded-lg py-2 pl-9 pr-4 text-sm text-white placeholder-white/25 outline-none focus:border-primary/40 transition-colors"
+                    autoComplete="off"
                 />
+                {searchQuery && (
+                    <button
+                        onClick={handleClearSearch}
+                        className="absolute right-3 top-2.5 text-white/30 hover:text-white/70 transition-colors text-sm font-bold"
+                        type="button"
+                    >
+                        ×
+                    </button>
+                )}
+            </div>
+
+            {/* Sort Dropdown */}
+            <div className="relative">
+                <select
+                    value={sortBy}
+                    onChange={handleSortChange}
+                    className="appearance-none bg-secondary border border-white/10 rounded-lg px-3 py-2 pr-8 text-xs text-white/70 focus:outline-none focus:border-primary/40 cursor-pointer"
+                >
+                    <option value="name_asc">Name (A-Z)</option>
+                    <option value="name_desc">Name (Z-A)</option>
+                    <option value="rating_high">Highest Rating</option>
+                    <option value="rating_low">Lowest Rating</option>
+                    <option value="trips_high">Most Trips</option>
+                    <option value="trips_low">Least Trips</option>
+                    <option value="newest">Newest First</option>
+                    <option value="oldest">Oldest First</option>
+                </select>
+                <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
+                    {getSortIcon()}
+                </div>
             </div>
         </div>
-    );
+    ), [searchQuery, sortBy, handleSearchChange, handleClearSearch, handleSortChange, getSortIcon]);
 
     return (
         <PageLayout 
@@ -186,21 +276,41 @@ export default function RunnersTab() {
                 </div>
             )}
 
+            {/* Search Results Count */}
+            {!loading && searchQuery && filteredAndSortedRunners.length > 0 && (
+                <div className="mb-3 text-xs text-white/40">
+                    Found {filteredAndSortedRunners.length} runner{filteredAndSortedRunners.length !== 1 ? 's' : ''} matching "{searchQuery}"
+                </div>
+            )}
+
             {/* Loading State */}
-            {loading && list.length === 0 && (
+            {loading && filteredAndSortedRunners.length === 0 && (
                 <div className="p-10 text-center text-white/30 text-sm">Loading runners...</div>
             )}
 
             {/* Empty State */}
-            {!loading && !error && list.length === 0 && (
+            {!loading && !error && filteredAndSortedRunners.length === 0 && (
                 <div className="text-center py-20 bg-secondary/30 rounded-2xl border border-dashed border-white/10">
                     <Bike size={32} className="mx-auto text-white/20 mb-3" />
-                    <p className="text-white/40 text-sm">No runners found</p>
+                    <p className="text-white/40 text-sm">
+                        {searchQuery 
+                            ? `No runners match "${searchQuery}"`
+                            : 'No runners found'
+                        }
+                    </p>
+                    {searchQuery && (
+                        <button
+                            onClick={handleClearSearch}
+                            className="mt-2 text-xs text-primary hover:text-primary/80 transition-colors"
+                        >
+                            Clear search
+                        </button>
+                    )}
                 </div>
             )}
 
             {/* Desktop Table */}
-            {!loading && list.length > 0 && (
+            {!loading && filteredAndSortedRunners.length > 0 && (
                 <>
                     <div className="hidden md:block bg-secondary/30 border border-white/10 rounded-2xl overflow-hidden">
                         <table className="w-full text-left text-sm">
@@ -213,18 +323,28 @@ export default function RunnersTab() {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-white/5">
-                                {list.map(runner => (
+                                {filteredAndSortedRunners.map(runner => (
                                     <tr key={runner._id} className="hover:bg-white/5 transition-all">
                                         <td className="px-5 py-4">
                                             <div className="text-white font-medium text-sm">{runner.firstName} {runner.lastName}</div>
                                             <div className="text-white/35 text-xs mt-0.5">{runner.email}</div>
                                             <div className="text-white/25 text-xs mt-0.5">{runner.phone}</div>
+                                            {runner.createdAt && (
+                                                <div className="text-white/25 text-[9px] mt-0.5">
+                                                    Joined: {new Date(runner.createdAt).toLocaleDateString()}
+                                                </div>
+                                            )}
                                         </td>
                                         <td className="px-5 py-4">
                                             <div className="flex items-center gap-1 text-primary font-medium text-sm">
                                                 <Star size={13} fill="currentColor" /> {runner.rating || 'N/A'}
                                             </div>
                                             <div className="text-white/35 text-xs mt-0.5">{runner.completedOrders || 0} trips</div>
+                                            {runner.totalEarnings && (
+                                                <div className="text-white/25 text-[9px] mt-0.5">
+                                                    ₦{runner.totalEarnings.toLocaleString()} earned
+                                                </div>
+                                            )}
                                         </td>
                                         <td className="px-5 py-4">
                                             <span className={`px-2.5 py-1 rounded-lg text-[10px] font-medium border ${getStatusStyle(runner.runnerStatus)}`}>
@@ -252,7 +372,7 @@ export default function RunnersTab() {
 
                     {/* Mobile Cards */}
                     <div className="md:hidden space-y-3">
-                        {list.map(runner => (
+                        {filteredAndSortedRunners.map(runner => (
                             <div key={runner._id} className="bg-secondary/30 border border-white/10 rounded-2xl p-4 space-y-3">
                                 {/* Top row: name + status */}
                                 <div className="flex items-start justify-between gap-2">
@@ -267,7 +387,7 @@ export default function RunnersTab() {
                                 </div>
 
                                 {/* Stats row */}
-                                <div className="flex items-center gap-4 text-xs">
+                                <div className="flex items-center gap-4 text-xs flex-wrap">
                                     <div className="flex items-center gap-1 text-primary font-medium">
                                         <Star size={12} fill="currentColor" /> {runner.rating || 'N/A'}
                                     </div>

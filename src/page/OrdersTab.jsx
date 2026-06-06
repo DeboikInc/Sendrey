@@ -1,11 +1,12 @@
 // src/pages/OrdersTab.jsx
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { getAllOrders } from '../Redux/orderSlice';
 import {
     CheckCircle, Clock, ShoppingBag,
     XCircle, AlertTriangle, MapPin, Bike, Calendar,
-    Package, ChevronDown, ChevronUp,
+    Package, ChevronDown, ChevronUp, Search,
+    ArrowUpDown, SortAsc, SortDesc
 } from 'lucide-react';
 import PageLayout from '../components/layout/PageLayout';
 
@@ -208,11 +209,19 @@ function OrderCard({ order }) {
 export default function OrdersTab() {
     const dispatch = useDispatch();
     const { list: rawList, loading = false, error = null } = useSelector(state => state.orders || {});
-    const list = Array.isArray(rawList) ? rawList : [];
+    
+    // Memoize the list to prevent unnecessary re-renders
+    const list = useMemo(() => Array.isArray(rawList) ? rawList : [], [rawList]);
 
+    const [searchQuery, setSearchQuery] = useState('');
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [sortBy, setSortBy] = useState('date_desc');
     const [statusFilter, setStatusFilter] = useState('all');
+
+    // Define statuses as a constant inside the component or use useMemo
+    const statuses = useMemo(() => 
+        ['all', 'pending_payment', 'items_submitted', 'items_approved', 'completed', 'cancelled', 'disputed'],
+    []);
 
     useEffect(() => {
         dispatch(getAllOrders());
@@ -227,12 +236,31 @@ export default function OrdersTab() {
         }
     };
 
-    // Filter by status
-    const filteredByStatus = statusFilter === 'all' ? list : list.filter(o => o.status === statusFilter);
+    // Filter and sort orders
+    const filteredAndSortedOrders = useMemo(() => {
+        // First filter by status
+        let filtered = statusFilter === 'all' ? list : list.filter(o => o.status === statusFilter);
+        
+        // Then filter by search query
+        if (searchQuery.trim()) {
+            const query = searchQuery.toLowerCase();
+            filtered = filtered.filter(order => {
+                const orderId = (order.orderId || '').toLowerCase();
+                const customerName = `${order.userId?.firstName || ''} ${order.userId?.lastName || ''}`.toLowerCase();
+                const customerEmail = (order.userId?.email || '').toLowerCase();
+                const runnerName = `${order.runnerId?.firstName || ''} ${order.runnerId?.lastName || ''}`.toLowerCase();
+                const location = (order.deliveryLocation?.address || order.marketLocation?.address || '').toLowerCase();
+                
+                return orderId.includes(query) || 
+                       customerName.includes(query) || 
+                       customerEmail.includes(query) ||
+                       runnerName.includes(query) ||
+                       location.includes(query);
+            });
+        }
 
-    // Sort orders
-    const sortedOrders = useMemo(() => {
-        const sorted = [...filteredByStatus];
+        // Then sort
+        const sorted = [...filtered];
         switch (sortBy) {
             case 'date_asc':
                 return sorted.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
@@ -249,7 +277,35 @@ export default function OrdersTab() {
             default:
                 return sorted;
         }
-    }, [filteredByStatus, sortBy]);
+    }, [list, statusFilter, searchQuery, sortBy]);
+
+    const handleSearchChange = useCallback((e) => {
+        setSearchQuery(e.target.value);
+    }, []);
+
+    const handleClearSearch = useCallback(() => {
+        setSearchQuery('');
+    }, []);
+
+    const handleStatusFilterChange = useCallback((status) => {
+        setStatusFilter(status);
+    }, []);
+
+    const handleSortChange = useCallback((e) => {
+        setSortBy(e.target.value);
+    }, []);
+
+    const getSortIcon = useCallback(() => {
+        switch (sortBy) {
+            case 'date_desc': return <SortDesc size={14} />;
+            case 'date_asc': return <SortAsc size={14} />;
+            case 'amount_desc': return <SortDesc size={14} />;
+            case 'amount_asc': return <SortAsc size={14} />;
+            case 'budget_desc': return <SortDesc size={14} />;
+            case 'budget_asc': return <SortAsc size={14} />;
+            default: return <ArrowUpDown size={14} />;
+        }
+    }, [sortBy]);
 
     // Calculate stats
     const totalOrders = list.length;
@@ -257,7 +313,7 @@ export default function OrdersTab() {
     const completedOrders = list.filter(o => o.status === 'completed').length;
 
     // Stats for header
-    const stats = [
+    const stats = useMemo(() => [
         {
             label: 'Total Orders',
             value: totalOrders,
@@ -285,19 +341,63 @@ export default function OrdersTab() {
             textClass: 'text-yellow-500',
             iconClass: 'text-yellow-500'
         }
-    ];
+    ], [totalOrders, completedOrders, totalSpent]);
 
-    const statuses = ['all', 'pending_payment', 'items_submitted', 'items_approved', 'completed', 'cancelled', 'disputed'];
+    // Toolbar component with search, filters, and sort
+    const Toolbar = useCallback(() => (
+        <div className="flex flex-col gap-3">
+            {/* Search and Sort Row */}
+            <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                {/* Search Input */}
+                <div className="flex-1">
+                    <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-3 py-2 w-full focus-within:border-primary/40 transition-colors">
+                        <Search size={12} className="text-white/30 shrink-0" />
+                        <input
+                            type="text"
+                            value={searchQuery}
+                            onChange={handleSearchChange}
+                            placeholder="Search by order ID, customer, runner, or location..."
+                            className="bg-transparent text-xs text-white/70 placeholder-white/25 outline-none w-full"
+                            autoComplete="off"
+                        />
+                        {searchQuery && (
+                            <button
+                                onClick={handleClearSearch}
+                                className="text-white/30 hover:text-white/70 transition-colors text-sm font-bold"
+                                type="button"
+                            >
+                                ×
+                            </button>
+                        )}
+                    </div>
+                </div>
 
-    // Toolbar component
-    const Toolbar = () => (
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            {/* Status filter tabs */}
+                {/* Sort Dropdown */}
+                <div className="relative">
+                    <select
+                        value={sortBy}
+                        onChange={handleSortChange}
+                        className="appearance-none bg-secondary border border-white/10 rounded-lg px-3 py-2 pr-8 text-xs text-white/70 focus:outline-none focus:border-primary/40 cursor-pointer"
+                    >
+                        <option value="date_desc">Newest First</option>
+                        <option value="date_asc">Oldest First</option>
+                        <option value="amount_desc">Highest Amount</option>
+                        <option value="amount_asc">Lowest Amount</option>
+                        <option value="budget_desc">Highest Budget</option>
+                        <option value="budget_asc">Lowest Budget</option>
+                    </select>
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
+                        {getSortIcon()}
+                    </div>
+                </div>
+            </div>
+
+            {/* Status Filter Tabs */}
             <div className="flex gap-1 flex-wrap">
                 {statuses.map(status => (
                     <button
                         key={status}
-                        onClick={() => setStatusFilter(status)}
+                        onClick={() => handleStatusFilterChange(status)}
                         className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wide transition-all
                             ${statusFilter === status
                                 ? 'bg-primary/10 text-primary border border-primary/20'
@@ -307,24 +407,8 @@ export default function OrdersTab() {
                     </button>
                 ))}
             </div>
-
-            {/* Sort and Refresh */}
-            <div className="flex gap-2">
-                <select
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value)}
-                    className="px-4 py-2 rounded-lg text-sm bg-secondary/50 border border-white/10 text-white outline-none focus:border-primary/40 transition-colors"
-                >
-                    <option value="date_desc">Newest first</option>
-                    <option value="date_asc">Oldest first</option>
-                    <option value="amount_desc">Highest amount</option>
-                    <option value="amount_asc">Lowest amount</option>
-                    <option value="budget_desc">Highest budget</option>
-                    <option value="budget_asc">Lowest budget</option>
-                </select>
-            </div>
         </div>
-    );
+    ), [searchQuery, sortBy, statusFilter, list.length, statuses, handleSearchChange, handleClearSearch, handleSortChange, handleStatusFilterChange, getSortIcon]);
 
     return (
         <PageLayout 
@@ -343,23 +427,43 @@ export default function OrdersTab() {
                 </div>
             )}
 
+            {/* Search Results Count */}
+            {!loading && searchQuery && filteredAndSortedOrders.length > 0 && (
+                <div className="mb-3 text-xs text-white/40">
+                    Found {filteredAndSortedOrders.length} order{filteredAndSortedOrders.length !== 1 ? 's' : ''} matching "{searchQuery}"
+                </div>
+            )}
+
             {/* Loading State */}
-            {loading && sortedOrders.length === 0 && (
+            {loading && filteredAndSortedOrders.length === 0 && (
                 <div className="p-10 text-center text-white/30 text-sm">Loading orders...</div>
             )}
 
             {/* Empty State */}
-            {!loading && !error && sortedOrders.length === 0 && (
+            {!loading && !error && filteredAndSortedOrders.length === 0 && (
                 <div className="text-center py-20 bg-secondary/30 rounded-2xl border border-dashed border-white/10">
                     <ShoppingBag size={32} className="mx-auto text-white/20 mb-3" />
-                    <p className="text-white/40 text-sm">No orders found</p>
+                    <p className="text-white/40 text-sm">
+                        {searchQuery 
+                            ? `No orders match "${searchQuery}"`
+                            : 'No orders found'
+                        }
+                    </p>
+                    {searchQuery && (
+                        <button
+                            onClick={handleClearSearch}
+                            className="mt-2 text-xs text-primary hover:text-primary/80 transition-colors"
+                        >
+                            Clear search
+                        </button>
+                    )}
                 </div>
             )}
 
             {/* Order cards */}
-            {!loading && sortedOrders.length > 0 && (
+            {!loading && filteredAndSortedOrders.length > 0 && (
                 <div className="grid gap-4">
-                    {sortedOrders.map(order => (
+                    {filteredAndSortedOrders.map(order => (
                         <OrderCard key={order._id} order={order} />
                     ))}
                 </div>
