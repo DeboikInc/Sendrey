@@ -46,21 +46,9 @@ const disputeSchema = new mongoose.Schema({
     type: String,
     required: true,
     enum: [
-      // user reasons
-      'item_not_delivered',
-      'item_damaged_in_transit',
       'runner_misconduct',
       'runner_unresponsive',
-      'item_not_collected',
-      'wrong_item_collected',
-      // runner reasons
-      'user_wont_confirm_delivery',
-      'user_claiming_non_delivery',
-      'wrong_item_given_by_sender',
-      'dangerous_pickup_location',
-      'dangerous_delivery_location',
       'user_misconduct',
-      // shared
       'other',
     ]
   },
@@ -82,16 +70,21 @@ const disputeSchema = new mongoose.Schema({
   }],
   status: {
     type: String,
-    enum: ['open', 'under_review', 'resolved', 'closed'],
+    enum: ['open', 'under_review', 'resolved', 'closed', 'dismissed'],
     default: 'open'
   },
 
-  escrowPaused: {        // track if escrow is paused
+  flaggedAsFraud: {
+    type: Boolean,
+    default: false
+  },
+
+  escrowPaused: {
     type: Boolean,
     default: true
   },
 
-  isFinal: {             // no appeals after resolution
+  isFinal: {
     type: Boolean,
     default: false
   },
@@ -104,7 +97,7 @@ const disputeSchema = new mongoose.Schema({
     type: {
       outcome: {
         type: String,
-        enum: ['full_release', 'partial_release', 'full_refund', 'partial_refund']
+        enum: ['full_release', 'partial_release', 'full_refund', 'partial_refund', 'dismiss_dispute']
       },
       amountToUser: Number,
       amountToRunner: Number,
@@ -114,8 +107,7 @@ const disputeSchema = new mongoose.Schema({
       resolvedAt: Date,
       notifiedAt: Date
     },
-
-    default: undefined  // Don't set resolution at all until resolved
+    default: undefined
   },
 
   messages: [{
@@ -146,6 +138,7 @@ disputeSchema.index({ orderId: 1 });
 disputeSchema.index({ userId: 1, status: 1 });
 disputeSchema.index({ runnerId: 1, status: 1 });
 disputeSchema.index({ status: 1, createdAt: -1 });
+disputeSchema.index({ flaggedAsFraud: 1 });
 
 const Dispute = mongoose.model('Dispute', disputeSchema);
 

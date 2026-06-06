@@ -14,7 +14,7 @@ const receiptHistorySchema = new mongoose.Schema({
   submittedAt: { type: Date, default: Date.now },
   status: { type: String, enum: ['pending', 'approved', 'rejected'], default: 'pending' },
   reviewedAt: { type: Date, default: null },
-}, { _id: false });
+}, { _id: true });
 
 const runnerPayoutSchema = new mongoose.Schema({
   orderId: { type: String, required: true, unique: true, index: true },

@@ -442,8 +442,8 @@ class PayoutController extends BaseController {
 
       const receipts = payouts.flatMap(p =>
         p.receiptHistory.map(r => ({
-          payoutId: p._id,          // ✅ added — frontend needs this to build the PATCH URL
-          receiptId: r._id,
+          payoutId: p._id,  
+          receiptId: r.submissionId || r._id,
           receiptUrl: r.receiptUrl,
           vendorName: r.vendorName || p.vendorName,
           amountSpent: r.amountSpent || p.amountSpent,

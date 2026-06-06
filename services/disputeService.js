@@ -171,13 +171,17 @@ const raiseDispute = async ({
       await Escrow.findByIdAndUpdate(escrowId, { status: 'disputed' });
     }
 
-    await orderStateMachine.transition(orderId, 'disputed', {
-      triggeredBy: raisedBy,
-      triggeredById: raisedById,
-      note: `Dispute raised: ${reason}`,
-    });
-
-    await order.save();
+    const nonTransitionableStatuses = ['pending_payment', 'payment_failed', 'cancelled', 'completed', 'task_completed'];
+    if (!nonTransitionableStatuses.includes(order.status)) {
+      await orderStateMachine.transition(orderId, 'disputed', {
+        triggeredBy: raisedBy,
+        triggeredById: raisedById,
+        note: `Dispute raised: ${reason}`,
+      });
+    } else {
+      order.hasDispute = true;
+      await order.save();
+    }
   }
 
   console.log(`Dispute ${dispute.disputeId} raised for order ${orderId} (${isPostCompletion ? 'post-completion' : 'mid-order'})`);
@@ -212,8 +216,9 @@ const resolveDispute = async ({
 
   // No escrow — close dispute without moving money
   if (!escrow) {
-    dispute.status = 'resolved';
+    dispute.status = outcome === 'dismiss_dispute' ? 'dismissed' : 'resolved';
     dispute.isFinal = true;
+    dispute.flaggedAsFraud = outcome === 'dismiss_dispute';
     dispute.resolution = {
       outcome,
       amountToUser: 0,
@@ -233,115 +238,107 @@ const resolveDispute = async ({
   }
 
   // ── 1. Calculate split ──────────────────────────────────────────────────────
-  // Post-completion: pool is lockedRunnerAmount (only runner's payout was clawed back).
-  // Mid-order: pool is full escrow.totalAmount.
   const isPostCompletion = (dispute.lockedRunnerAmount ?? 0) > 0;
   const totalAmount = isPostCompletion ? dispute.lockedRunnerAmount : escrow.totalAmount;
+  const isDismissed = outcome === 'dismiss_dispute';
 
   let amountToUser = 0;
   let amountToRunner = 0;
 
-  switch (outcome) {
-    case 'full_release':
-      amountToRunner = totalAmount;
-      break;
-    case 'full_refund':
-      amountToUser = totalAmount;
-      break;
-    case 'partial_release': {
-      const runnerPct = releasePercentage || 50;
-      amountToRunner = Math.round(totalAmount * (runnerPct / 100));
-      amountToUser = totalAmount - amountToRunner;
-      break;
-    }
-    case 'partial_refund': {
-      const userPct = releasePercentage || 50;
-      amountToUser = Math.round(totalAmount * (userPct / 100));
-      amountToRunner = totalAmount - amountToUser;
-      break;
-    }
-    default:
-      throw new Error(`Unknown outcome: ${outcome}`);
-  }
-
-  // ── 2. Move funds ───────────────────────────────────────────────────────────
-  if (isPostCompletion) {
-    // Money is in runner's lockedBalance — redistribute from there
-    const runnerWallet = await Wallet.findOne({ userId: dispute.runnerId, userType: 'runner' });
-    if (!runnerWallet) throw new Error('Runner wallet not found');
-
-    runnerWallet.lockedBalance = Math.max(
-      0,
-      (runnerWallet.lockedBalance || 0) - dispute.lockedRunnerAmount
-    );
-    if (amountToRunner > 0) runnerWallet.balance += amountToRunner;
-    await runnerWallet.save();
-
-    if (amountToUser > 0) {
-      const userWallet = await Wallet.findOne({ userId: dispute.userId, userType: 'user' });
-      if (!userWallet) throw new Error('User wallet not found');
-      userWallet.balance += amountToUser;
-      await userWallet.save();
-    }
-  } else {
-    // Money still in escrow — credit wallets directly
-    if (amountToUser > 0) {
-      const userWallet = await Wallet.findOne({ userId: escrow.userId, userType: 'user' });
-      if (!userWallet) throw new Error('User wallet not found');
-      userWallet.balance += amountToUser;
-      await userWallet.save();
+  if (!isDismissed) {
+    switch (outcome) {
+      case 'full_release':
+        amountToRunner = totalAmount;
+        break;
+      case 'full_refund':
+        amountToUser = totalAmount;
+        break;
+      case 'partial_release': {
+        const runnerPct = releasePercentage || 50;
+        amountToRunner = Math.round(totalAmount * (runnerPct / 100));
+        amountToUser = totalAmount - amountToRunner;
+        break;
+      }
+      case 'partial_refund': {
+        const userPct = releasePercentage || 50;
+        amountToUser = Math.round(totalAmount * (userPct / 100));
+        amountToRunner = totalAmount - amountToUser;
+        break;
+      }
+      default:
+        throw new Error(`Unknown outcome: ${outcome}`);
     }
 
-    if (amountToRunner > 0) {
-      const runnerWallet = await Wallet.findOne({ userId: escrow.runnerId, userType: 'runner' });
+    // ── 2. Move funds ─────────────────────────────────────────────────────────
+    if (isPostCompletion) {
+      const runnerWallet = await Wallet.findOne({ userId: dispute.runnerId, userType: 'runner' });
       if (!runnerWallet) throw new Error('Runner wallet not found');
-      runnerWallet.balance += amountToRunner;
+      runnerWallet.lockedBalance = Math.max(0, (runnerWallet.lockedBalance || 0) - dispute.lockedRunnerAmount);
+      if (amountToRunner > 0) runnerWallet.balance += amountToRunner;
       await runnerWallet.save();
+
+      if (amountToUser > 0) {
+        const userWallet = await Wallet.findOne({ userId: dispute.userId, userType: 'user' });
+        if (!userWallet) throw new Error('User wallet not found');
+        userWallet.balance += amountToUser;
+        await userWallet.save();
+      }
+    } else {
+      if (amountToUser > 0) {
+        const userWallet = await Wallet.findOne({ userId: escrow.userId, userType: 'user' });
+        if (!userWallet) throw new Error('User wallet not found');
+        userWallet.balance += amountToUser;
+        await userWallet.save();
+      }
+      if (amountToRunner > 0) {
+        const runnerWallet = await Wallet.findOne({ userId: escrow.runnerId, userType: 'runner' });
+        if (!runnerWallet) throw new Error('Runner wallet not found');
+        runnerWallet.balance += amountToRunner;
+        await runnerWallet.save();
+      }
     }
+
+    // ── 3. Ledger entries ─────────────────────────────────────────────────────
+    const ledgerEntries = [];
+    if (amountToUser > 0) {
+      ledgerEntries.push({
+        userId: dispute.userId,
+        userModel: 'User',
+        type: 'refund',
+        grossAmount: amountToUser,
+        netAmount: amountToUser,
+        providerFee: 0,
+        provider: 'system',
+        orderId: dispute.orderId,
+        escrowId: escrow._id,
+        description: `Dispute refund for order ${dispute.orderId} — ${outcome}`,
+        status: 'completed',
+      });
+    }
+    if (amountToRunner > 0) {
+      ledgerEntries.push({
+        userId: dispute.runnerId,
+        userModel: 'Runner',
+        runnerId: dispute.runnerId,
+        type: 'escrow_release',
+        grossAmount: amountToRunner,
+        netAmount: amountToRunner,
+        providerFee: 0,
+        provider: 'system',
+        orderId: dispute.orderId,
+        escrowId: escrow._id,
+        description: `Dispute payout for order ${dispute.orderId} — ${outcome}`,
+        status: 'completed',
+      });
+    }
+    if (ledgerEntries.length > 0) await LedgerEntry.create(ledgerEntries);
   }
-
-  // ── 3. Ledger entries ───────────────────────────────────────────────────────
-  const ledgerEntries = [];
-
-  if (amountToUser > 0) {
-    ledgerEntries.push({
-      userId: dispute.userId,
-      userModel: 'User',
-      type: 'refund',
-      grossAmount: amountToUser,
-      netAmount: amountToUser,
-      providerFee: 0,
-      provider: 'system',
-      orderId: dispute.orderId,
-      escrowId: escrow._id,
-      description: `Dispute refund for order ${dispute.orderId} — ${outcome}`,
-      status: 'completed',
-    });
-  }
-
-  if (amountToRunner > 0) {
-    ledgerEntries.push({
-      userId: dispute.runnerId,
-      userModel: 'Runner',
-      runnerId: dispute.runnerId,
-      type: 'escrow_release',
-      grossAmount: amountToRunner,
-      netAmount: amountToRunner,
-      providerFee: 0,
-      provider: 'system',
-      orderId: dispute.orderId,
-      escrowId: escrow._id,
-      description: `Dispute payout for order ${dispute.orderId} — ${outcome}`,
-      status: 'completed',
-    });
-  }
-
-  if (ledgerEntries.length > 0) await LedgerEntry.create(ledgerEntries);
 
   // ── 4. Update dispute ───────────────────────────────────────────────────────
-  dispute.status = 'resolved';
+  dispute.status = isDismissed ? 'dismissed' : 'resolved';
   dispute.isFinal = true;
   dispute.escrowPaused = false;
+  dispute.flaggedAsFraud = isDismissed;
   dispute.resolution = {
     outcome,
     amountToUser,
@@ -354,16 +351,18 @@ const resolveDispute = async ({
   };
   dispute.messages.push({
     from: 'admin',
-    message: `Dispute resolved: ${outcome}. ${adminNote || ''}`,
+    message: isDismissed
+      ? `Dispute dismissed — suspected fraud. ${adminNote || ''}`
+      : `Dispute resolved: ${outcome}. ${adminNote || ''}`,
     timestamp: new Date(),
   });
   await dispute.save();
 
-  await Escrow.findByIdAndUpdate(escrow._id, { status: 'released' });
+  await Escrow.findByIdAndUpdate(escrow._id, {
+    status: isDismissed ? 'disputed' : 'released',
+  });
 
-  // Only transition order state for mid-order disputes —
-  // post-completion orders are already terminal, don't touch them.
-  if (!isPostCompletion) {
+  if (!isPostCompletion && !isDismissed) {
     await orderStateMachine.transition(dispute.orderId, 'dispute_resolved', {
       triggeredBy: 'admin',
       triggeredById: resolvedBy,
@@ -372,48 +371,66 @@ const resolveDispute = async ({
   }
 
   // ── 5. Notify both parties ──────────────────────────────────────────────────
-  const outcomeMessages = {
-    full_release: {
-      user: 'Your dispute was reviewed. No refund was issued.',
-      runner: `₦${amountToRunner.toLocaleString()} has been released to your wallet.`,
-    },
-    full_refund: {
-      user: `₦${amountToUser.toLocaleString()} has been refunded to your wallet.`,
-      runner: 'Your dispute was reviewed. Funds were returned to the customer.',
-    },
-    partial_release: {
-      user: amountToUser > 0
-        ? `₦${amountToUser.toLocaleString()} was refunded to your wallet.`
-        : 'Your dispute was reviewed. No refund was issued.',
-      runner: `₦${amountToRunner.toLocaleString()} has been released to your wallet.`,
-    },
-    partial_refund: {
-      user: `₦${amountToUser.toLocaleString()} was refunded to your wallet.`,
-      runner: amountToRunner > 0
-        ? `₦${amountToRunner.toLocaleString()} has been released to your wallet.`
-        : 'Your dispute was reviewed. Funds were returned to the customer.',
-    },
-  };
-
-  const msgs = outcomeMessages[outcome];
-  if (msgs) {
+  if (isDismissed) {
     await Promise.allSettled([
       sendPushNotification({
         recipientId: dispute.userId,
         recipientType: 'user',
-        title: 'Dispute Resolved',
-        body: msgs.user,
-        data: { type: 'dispute_resolved', orderId: dispute.orderId, outcome },
+        title: 'Dispute Dismissed',
+        body: `Your dispute for order ${dispute.orderId} was reviewed and dismissed. No further action will be taken.`,
+        data: { type: 'dispute_dismissed', orderId: dispute.orderId },
       }),
-
       sendPushNotification({
         recipientId: dispute.runnerId,
         recipientType: 'runner',
-        title: 'Dispute Resolved',
-        body: msgs.runner,
-        data: { type: 'dispute_resolved', orderId: dispute.orderId, outcome },
+        title: 'Dispute Dismissed',
+        body: `A dispute for order ${dispute.orderId} was reviewed and dismissed.`,
+        data: { type: 'dispute_dismissed', orderId: dispute.orderId },
       }),
     ]);
+  } else {
+    const outcomeMessages = {
+      full_release: {
+        user: 'Your dispute was reviewed. No refund was issued.',
+        runner: `₦${amountToRunner.toLocaleString()} has been released to your wallet.`,
+      },
+      full_refund: {
+        user: `₦${amountToUser.toLocaleString()} has been refunded to your wallet.`,
+        runner: 'Your dispute was reviewed. Funds were returned to the customer.',
+      },
+      partial_release: {
+        user: amountToUser > 0
+          ? `₦${amountToUser.toLocaleString()} was refunded to your wallet.`
+          : 'Your dispute was reviewed. No refund was issued.',
+        runner: `₦${amountToRunner.toLocaleString()} has been released to your wallet.`,
+      },
+      partial_refund: {
+        user: `₦${amountToUser.toLocaleString()} was refunded to your wallet.`,
+        runner: amountToRunner > 0
+          ? `₦${amountToRunner.toLocaleString()} has been released to your wallet.`
+          : 'Your dispute was reviewed. Funds were returned to the customer.',
+      },
+    };
+
+    const msgs = outcomeMessages[outcome];
+    if (msgs) {
+      await Promise.allSettled([
+        sendPushNotification({
+          recipientId: dispute.userId,
+          recipientType: 'user',
+          title: 'Dispute Resolved',
+          body: msgs.user,
+          data: { type: 'dispute_resolved', orderId: dispute.orderId, outcome },
+        }),
+        sendPushNotification({
+          recipientId: dispute.runnerId,
+          recipientType: 'runner',
+          title: 'Dispute Resolved',
+          body: msgs.runner,
+          data: { type: 'dispute_resolved', orderId: dispute.orderId, outcome },
+        }),
+      ]);
+    }
   }
 
   // ── 6. Return ───────────────────────────────────────────────────────────────
@@ -422,6 +439,8 @@ const resolveDispute = async ({
     .populate('runnerId', 'firstName lastName email');
 
   console.log(`Dispute ${disputeId} resolved: ${outcome} | toUser=₦${amountToUser} | toRunner=₦${amountToRunner}`);
+
+
   return { dispute: populated, amountToUser, amountToRunner };
 };
 
