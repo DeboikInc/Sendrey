@@ -1,8 +1,8 @@
 import { Routes, Route, } from "react-router-dom";
-import Home from "./page/Home";
-import Login from "./page/auth/Login";
-import Register from "./page/auth/Register";
-import ProtectedRoute from "./components/ProtectedRoute";
+import Home from "./page/Home.jsx";
+import Login from "./page/auth/Login.jsx";
+import Register from "./page/auth/Register.jsx";
+import ProtectedRoute from "./components/ProtectedRoute.jsx";
 
 
 export default function AppRoutes() {
