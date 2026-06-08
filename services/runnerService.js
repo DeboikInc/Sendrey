@@ -39,11 +39,11 @@ class RunnerService {
   /**
    * Find nearby runners within specified distance
    */
-  async findNearbyRunners({ 
-    pickupLat, pickupLng, 
+  async findNearbyRunners({
+    pickupLat, pickupLng,
     // serviceType, 
     fleetType
-   }) {
+  }) {
     return await Runner.findNearbyRunners({
       pickupLat,
       pickupLng,
@@ -190,34 +190,16 @@ class RunnerService {
    * Get runner statistics
    */
   async getRunnerStats() {
-    const totalRunners = await Runner.countDocuments();
-    const onlineRunners = await Runner.countDocuments({ isOnline: true });
-    const availableRunners = await Runner.countDocuments({
-      isOnline: true,
-      isAvailable: true,
-      runnerStatus: 'verified'
-    });
-
-    const runnersByService = await Runner.aggregate([
-      { $group: { _id: '$serviceType', count: { $sum: 1 } } }
+    const [total, online, available, byService, byFleet, byStatus] = await Promise.all([
+      Runner.countDocuments(),
+      Runner.countDocuments({ isOnline: true }),
+      Runner.countDocuments({ isOnline: true, isAvailable: true }),
+      Runner.aggregate([{ $group: { _id: '$serviceType', count: { $sum: 1 } } }]),
+      Runner.aggregate([{ $group: { _id: '$fleetType', count: { $sum: 1 } } }]),
+      Runner.aggregate([{ $group: { _id: '$runnerStatus', count: { $sum: 1 } } }]),
     ]);
 
-    const runnersByFleet = await Runner.aggregate([
-      { $group: { _id: '$fleetType', count: { $sum: 1 } } }
-    ]);
-
-    const runnersByStatus = await Runner.aggregate([
-      { $group: { _id: '$runnerStatus', count: { $sum: 1 } } }
-    ]);
-
-    return {
-      total: totalRunners,
-      online: onlineRunners,
-      available: availableRunners,
-      byService: runnersByService,
-      byFleet: runnersByFleet,
-      byStatus: runnersByStatus
-    };
+    return { total, online, available, byService, byFleet, byStatus };
   }
 
   /**

@@ -344,25 +344,23 @@ class RunnerController extends BaseController {
   async updateRunnerStatus(req, res, next) {
     try {
       const { runnerId } = req.params;
-      const { status } = req.body;
+      const { status, previousStatus, isActive } = req.body;
       const updatedBy = req.user.id;
 
-      const validStatuses = ['active', 'inactive', 'suspended', 'pending', 'banned'];
+      const validStatuses = [
+        'active', 'inactive', 'suspended', 'pending',
+        'banned', 'pending_verification', 'approved_limited',
+        'approved_full', 'pending_review', 'submitted'
+      ];
       if (!validStatuses.includes(status)) {
         return this.badRequest(res, `Invalid status. Must be one of: ${validStatuses.join(', ')}`);
       }
 
-      const runner = await this.service.updateRunnerStatus(runnerId, status, updatedBy);
+      const updatePayload = { runnerStatus: status };
+      if (typeof isActive === 'boolean') updatePayload.isActive = isActive;
+      if (previousStatus !== undefined) updatePayload.previousStatus = previousStatus || null;
 
-      // emit unban event via socket
-      // const io = req.app.get('io');
-      // if (io && status !== 'banned') {
-      //   io.to(`runner-${runnerId}`).emit('verificationStatus', {
-      //     isBanned: false,
-      //     isUnbanned: true,
-      //     reason: null,
-      //   });
-      // }
+      const runner = await this.service.updateRunnerStatus(runnerId, updatePayload);
 
       logger.info(`Runner status updated: ${runnerId} to ${status} by admin ${updatedBy}`);
 

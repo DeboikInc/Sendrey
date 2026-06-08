@@ -281,6 +281,11 @@ const runnerSchema = new mongoose.Schema({
     }
   },
 
+  previousStatus: {
+    type: String,
+    default: null,
+  },
+
   // Address Information
   address: {
     type: String, maxlength: 255
