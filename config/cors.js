@@ -16,8 +16,12 @@ const allowedOrigins = [
   // 'https://sendrey-server-1.onrender.com', // socket
   'https://sendrey-server-api.onrender.com', // api alias
   'https://sendrey-server-socket.onrender.com', // socket alias
+  // app
   'https://sendrey.netlify.app',
-  'https://sendrey-backoffice.vercel.app',
+  'https://app.sendrey.com',
+
+  // admins
+  'https://backoffice.sendrey.com',
 ];
 
 
