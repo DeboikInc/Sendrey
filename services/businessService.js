@@ -733,6 +733,7 @@ const adminConvertToBusiness = async (userId, businessName) => {
 
 const adminRevokeBusiness = async (userId) => {
   const user = await User.findById(userId);
+  console.log('[adminRevokeBusiness] user:', user?._id, 'accountType:', user?.accountType);
   if (!user) throw Object.assign(new Error('User not found'), { statusCode: 404 });
   if (user.accountType !== 'business') throw Object.assign(new Error('Not a business account'), { statusCode: 400 });
 

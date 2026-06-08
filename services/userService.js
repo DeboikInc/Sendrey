@@ -3,7 +3,7 @@ const activityService = require('./activityService');
 const logger = require('../utils/logger');
 const runnerService = require('./runnerService');
 const { sendPushNotification } = require('./notificationService');
-
+const Order = require('../models/Order');
 class UserService {
   /**
    * Update last login user
@@ -112,18 +112,15 @@ class UserService {
     try {
       const {
         page = 1,
-        limit = 10,
+        limit = 50,
         search,
-        role = 'user', // Default to 'user' only
         isActive,
-        isVerified,
         sortBy = 'createdAt',
         sortOrder = 'desc',
         dateFrom,
         dateTo
       } = filters;
 
-      // Build query - only 'user' role
       const query = { role: 'user' };
 
       if (search) {
@@ -135,41 +132,48 @@ class UserService {
       }
 
       if (isActive !== undefined) query.isActive = isActive;
-      if (isVerified !== undefined) query.isVerified = isVerified;
 
-      // Date range filter
       if (dateFrom || dateTo) {
         query.createdAt = {};
         if (dateFrom) query.createdAt.$gte = new Date(dateFrom);
         if (dateTo) query.createdAt.$lte = new Date(dateTo);
       }
 
-      // Calculate pagination
       const skip = (page - 1) * limit;
 
-      // Execute query
       const [users, total] = await Promise.all([
         User.find(query)
-          .select('-password -verificationToken -resetPasswordToken')
+          .select('-password -verificationToken -resetPasswordToken -pin')
           .sort({ [sortBy]: sortOrder === 'desc' ? -1 : 1 })
           .skip(skip)
-          .limit(limit),
+          .limit(limit)
+          .lean(),
         User.countDocuments(query)
       ]);
 
-      const totalPages = Math.ceil(total / limit);
-      const hasNext = page < totalPages;
-      const hasPrev = page > 1;
+      
+      const userIds = users.map(u => u._id);
+      const orderCounts = await Order.aggregate([
+        { $match: { userId: { $in: userIds } } },
+        { $group: { _id: '$userId', count: { $sum: 1 }, totalSpent: { $sum: '$totalAmount' } } }
+      ]);
+
+      const orderMap = {};
+      orderCounts.forEach(o => { orderMap[o._id.toString()] = o; });
+
+      const enriched = users.map(u => ({
+        ...u,
+        orderCount: orderMap[u._id.toString()]?.count ?? 0,
+        totalSpent: orderMap[u._id.toString()]?.totalSpent ?? 0,
+      }));
 
       return {
-        users,
+        users: enriched,
         pagination: {
           page: parseInt(page),
           limit: parseInt(limit),
           total,
-          totalPages,
-          hasNext,
-          hasPrev
+          totalPages: Math.ceil(total / limit),
         }
       };
     } catch (error) {
@@ -547,6 +551,12 @@ class UserService {
           result = await User.updateMany(
             { _id: { $in: userIds } },
             { $set: { role: role } }
+          );
+          break;
+        case 'suspend':
+          result = await User.updateMany(
+            { _id: { $in: userIds } },
+            { $set: { isActive: false } }
           );
           break;
         case 'deactivate':
