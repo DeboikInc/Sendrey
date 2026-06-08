@@ -44,14 +44,14 @@ export const refundToWallet = createAsyncThunk(
 const escrowSlice = createSlice({
     name: 'escrow',
     initialState: {
-        list:           [],
-        refunded:       [],
-        total:          0,
+        list: [],
+        refunded: [],
+        total: 0,
         selectedEscrow: null,
-        status:         'idle',
-        error:          null,
-        refundStatus:   'idle',
-        refundError:    null,
+        status:  'idle',
+        error: null,
+        refundStatus: 'idle',
+        refundError: null,
     },
     reducers: {
         clearSelectedEscrow(state) { state.selectedEscrow = null; },

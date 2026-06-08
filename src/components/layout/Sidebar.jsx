@@ -62,7 +62,7 @@ export default function Sidebar({ activePage, onNavigate, isOpen, onClose }) {
       <aside
         className={`
           fixed inset-y-0 left-0 z-50 w-64 flex flex-col 
-          bg-white dark:bg-secondary/90 border-r border-gray-200 dark:border-white/5
+          bg-secondary/90 border-r border-gray-200 dark:border-white/5
           transform transition-transform duration-300 ease-in-out
           ${isOpen ? 'translate-x-0' : '-translate-x-full'}
           lg:relative lg:translate-x-0 lg:flex lg:z-auto
@@ -97,7 +97,7 @@ export default function Sidebar({ activePage, onNavigate, isOpen, onClose }) {
                 className={`w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-sm font-medium transition-all
                   ${isActive
                     ? 'bg-primary text-white'
-                    : 'text-gray-600 dark:text-white/50 hover:bg-gray-100 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white'
+                    : 'text-gray-600 dark:text-white/50 hover:bg-secondary/50 dark:hover:bg-white/5 hover:text-gray-900 dark:hover:text-white'
                   }`}
               >
                 <Icon size={17} />

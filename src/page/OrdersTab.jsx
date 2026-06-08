@@ -11,14 +11,14 @@ import {
 import PageLayout from '../components/layout/PageLayout';
 
 const STATUS_CONFIG = {
-    completed:       { color: 'bg-green-500/10 text-green-500 border-green-500/20',  icon: CheckCircle },
-    paid:            { color: 'bg-primary/10 text-primary border-primary/20',     icon: CheckCircle },
-    delivered:       { color: 'bg-green-500/10 text-green-500 border-green-500/20',  icon: CheckCircle },
-    items_approved:  { color: 'bg-green-500/10 text-green-500 border-green-500/20',  icon: CheckCircle },
-    items_submitted: { color: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20',  icon: Clock },
-    pending_payment: { color: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20',  icon: Clock },
-    cancelled:       { color: 'bg-red-500/10 text-red-500 border-red-500/20', icon: XCircle },
-    disputed:        { color: 'bg-red-500/10 text-red-500 border-red-500/20', icon: AlertTriangle },
+    completed: { color: 'bg-green-500/10 text-green-500 border-green-500/20', icon: CheckCircle },
+    paid: { color: 'bg-primary/10 text-primary border-primary/20', icon: CheckCircle },
+    delivered: { color: 'bg-green-500/10 text-green-500 border-green-500/20', icon: CheckCircle },
+    items_approved: { color: 'bg-green-500/10 text-green-500 border-green-500/20', icon: CheckCircle },
+    items_submitted: { color: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20', icon: Clock },
+    pending_payment: { color: 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20', icon: Clock },
+    cancelled: { color: 'bg-red-500/10 text-red-500 border-red-500/20', icon: XCircle },
+    disputed: { color: 'bg-red-500/10 text-red-500 border-red-500/20', icon: AlertTriangle },
 };
 
 function StatusPill({ status }) {
@@ -138,9 +138,9 @@ function OrderCard({ order }) {
                             {[
                                 ['Fleet', order.fleetType],
                                 ['Payment', order.paymentStatus],
-                                ['Approval', order.approvalStatus],
+                                // ['Approval', order.approvalStatus],
                                 ['Rated', order.isRated ? 'Yes' : 'No'],
-                                ['Confirmed By', order.deliveryConfirmedBy ?? '—'],
+                                // ['Confirmed By', order.deliveryConfirmedBy ?? '—'],
                             ].map(([k, v]) => (
                                 <div key={k} className="flex justify-between items-center py-0.5">
                                     <span className="text-[10px] text-white/40 capitalize">{k}</span>
@@ -209,7 +209,7 @@ function OrderCard({ order }) {
 export default function OrdersTab() {
     const dispatch = useDispatch();
     const { list: rawList, loading = false, error = null } = useSelector(state => state.orders || {});
-    
+
     // Memoize the list to prevent unnecessary re-renders
     const list = useMemo(() => Array.isArray(rawList) ? rawList : [], [rawList]);
 
@@ -219,9 +219,14 @@ export default function OrdersTab() {
     const [statusFilter, setStatusFilter] = useState('all');
 
     // Define statuses as a constant inside the component or use useMemo
-    const statuses = useMemo(() => 
-        ['all', 'pending_payment', 'items_submitted', 'items_approved', 'completed', 'cancelled', 'disputed'],
-    []);
+    const statuses = useMemo(() =>
+        [
+            'all',
+            'pending_payment',
+            // 'items_submitted',
+            // 'items_approved',
+            'completed', 'cancelled', 'disputed'],
+        []);
 
     useEffect(() => {
         dispatch(getAllOrders());
@@ -240,7 +245,7 @@ export default function OrdersTab() {
     const filteredAndSortedOrders = useMemo(() => {
         // First filter by status
         let filtered = statusFilter === 'all' ? list : list.filter(o => o.status === statusFilter);
-        
+
         // Then filter by search query
         if (searchQuery.trim()) {
             const query = searchQuery.toLowerCase();
@@ -250,12 +255,12 @@ export default function OrdersTab() {
                 const customerEmail = (order.userId?.email || '').toLowerCase();
                 const runnerName = `${order.runnerId?.firstName || ''} ${order.runnerId?.lastName || ''}`.toLowerCase();
                 const location = (order.deliveryLocation?.address || order.marketLocation?.address || '').toLowerCase();
-                
-                return orderId.includes(query) || 
-                       customerName.includes(query) || 
-                       customerEmail.includes(query) ||
-                       runnerName.includes(query) ||
-                       location.includes(query);
+
+                return orderId.includes(query) ||
+                    customerName.includes(query) ||
+                    customerEmail.includes(query) ||
+                    runnerName.includes(query) ||
+                    location.includes(query);
             });
         }
 
@@ -411,8 +416,8 @@ export default function OrdersTab() {
     ), [searchQuery, sortBy, statusFilter, list.length, statuses, handleSearchChange, handleClearSearch, handleSortChange, handleStatusFilterChange, getSortIcon]);
 
     return (
-        <PageLayout 
-            title="Orders" 
+        <PageLayout
+            title="Orders"
             icon={ShoppingBag}
             description="Track and manage customer orders"
             stats={stats}
@@ -444,7 +449,7 @@ export default function OrdersTab() {
                 <div className="text-center py-20 bg-secondary/30 rounded-2xl border border-dashed border-white/10">
                     <ShoppingBag size={32} className="mx-auto text-white/20 mb-3" />
                     <p className="text-white/40 text-sm">
-                        {searchQuery 
+                        {searchQuery
                             ? `No orders match "${searchQuery}"`
                             : 'No orders found'
                         }

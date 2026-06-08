@@ -125,10 +125,10 @@ function ReceiptCard({ receipt }) {
                         {/* Extra details row */}
                         <div className="sm:col-span-3 grid grid-cols-2 sm:grid-cols-4 gap-3">
                             {[
-                                ['Receipt ID', receipt.receiptId?.slice(-8) || receipt.submissionId?.slice(-8) || '—'],
+                                ['Receipt ID / Transaction ID', receipt.receiptId?.slice(-8) || receipt.submissionId?.slice(-8) || '—'],
                                 ['Status', receipt.payoutStatus],
                                 ['Date', new Date(receipt.submittedAt).toLocaleString()],
-                                ['Reviewed', receipt.reviewedAt ? new Date(receipt.reviewedAt).toLocaleString() : '—'],
+                                // ['Reviewed', receipt.reviewedAt ? new Date(receipt.reviewedAt).toLocaleString() : '—'],
                             ].map(([k, v]) => (
                                 <div key={k} className="bg-secondary/30 rounded-lg p-2 border border-white/5">
                                     <p className="text-[9px] text-white/30 uppercase tracking-widest">{k}</p>

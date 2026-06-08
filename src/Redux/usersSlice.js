@@ -6,76 +6,34 @@ export const listUsers = createAsyncThunk('users/list', async (_, { rejectWithVa
         const response = await api.get('/users');
         return response.data;
     } catch (err) {
-        return rejectWithValue(err.response.data);
+        return rejectWithValue(err.response?.data);
     }
 });
 
-export const searchUsers = createAsyncThunk('users/search', async (query, { rejectWithValue }) => {
+export const updateUserStatus = createAsyncThunk('users/updateStatus', async ({ userId, isActive }, { rejectWithValue }) => {
     try {
-        const response = await api.get(`/api/admin/users/search?q=${query}`);
+        const response = await api.patch(`/users/${userId}/status`, { isActive });
         return response.data;
     } catch (err) {
-        return rejectWithValue(err.response.data);
-    }
-});
-
-export const getSingleUser = createAsyncThunk('users/getOne', async (userId, { rejectWithValue }) => {
-    try {
-        const response = await api.get(`/api/admin/users/${userId}`);
-        return response.data;
-    } catch (err) {
-        return rejectWithValue(err.response.data);
-    }
-});
-
-export const updateUserRole = createAsyncThunk('users/updateRole', async ({ userId, role }, { rejectWithValue }) => {
-    try {
-        const response = await api.patch(`/api/admin/users/${userId}/role`, { role });
-        return response.data;
-    } catch (err) {
-        return rejectWithValue(err.response.data);
-    }
-});
-
-export const updateUserStatus = createAsyncThunk('users/updateStatus', async ({ userId, status }, { rejectWithValue }) => {
-    try {
-        const response = await api.patch(`/api/admin/users/${userId}/status`, { status });
-        return response.data;
-    } catch (err) {
-        return rejectWithValue(err.response.data);
+        return rejectWithValue(err.response?.data);
     }
 });
 
 export const bulkUserAction = createAsyncThunk('users/bulkAction', async ({ userIds, action }, { rejectWithValue }) => {
     try {
-        const response = await api.post('/api/admin/users/bulk/action', { userIds, action });
+        const response = await api.post('/users/bulk/action', { userIds, action });
         return { userIds, action, data: response.data };
     } catch (err) {
-        return rejectWithValue(err.response.data);
+        return rejectWithValue(err.response?.data);
     }
 });
 
 export const deleteUser = createAsyncThunk('users/delete', async (userId, { rejectWithValue }) => {
     try {
-        await api.delete(`/api/admin/users/${userId}`);
-        return userId; 
+        await api.delete(`/users/${userId}`);
+        return userId;
     } catch (err) {
-        return rejectWithValue(err.response.data);
-    }
-});
-
-export const exportUsers = createAsyncThunk('users/export', async (_, { rejectWithValue }) => {
-    try {
-        const response = await api.get('/api/admin/users/export', { responseType: 'blob' });
-        const url = window.URL.createObjectURL(new Blob([response.data]));
-        const link = document.createElement('a');
-        link.href = url;
-        link.setAttribute('download', 'users_export.csv');
-        document.body.appendChild(link);
-        link.click();
-        return { success: true };
-    } catch (err) {
-        return rejectWithValue(err.response.data);
+        return rejectWithValue(err.response?.data);
     }
 });
 
@@ -84,44 +42,49 @@ const usersSlice = createSlice({
     initialState: {
         list: [],
         count: 0,
-        selectedUser: null,
         loading: false,
         error: null,
     },
-    reducers: {
-        clearSelectedUser: (state) => { state.selectedUser = null; }
-    },
     extraReducers: (builder) => {
         builder
-            .addCase(listUsers.pending, (state) => { state.loading = true; })
+            .addCase(listUsers.pending, (state) => {
+                state.loading = true;
+                state.error = null;
+            })
             .addCase(listUsers.fulfilled, (state, action) => {
                 state.loading = false;
-                state.list = action.payload.users;   
-                state.count = action.payload.count;
+                state.list = action.payload.users ?? [];
+                state.count = action.payload.pagination?.total ?? state.list.length;
             })
             .addCase(listUsers.rejected, (state, action) => {
                 state.loading = false;
-                state.error = action.payload;
-            })
-            .addCase(searchUsers.fulfilled, (state, action) => {
-                state.list = action.payload.users;  
-            })
-            .addCase(getSingleUser.fulfilled, (state, action) => {
-                state.selectedUser = action.payload.user; 
+                state.error = action.payload?.message || 'Failed to load users';
             })
             .addCase(updateUserStatus.fulfilled, (state, action) => {
-                
-                const updated = action.payload.user;  
-                
+                const updated = action.payload.user;
                 const index = state.list.findIndex(u => u._id === updated._id);
-                if (index !== -1) state.list[index] = updated;
+                if (index !== -1) state.list[index] = { ...state.list[index], ...updated };
+            })
+            .addCase(updateUserStatus.rejected, (state, action) => {
+                state.error = action.payload?.message || 'Failed to update status';
+            })
+            .addCase(bulkUserAction.fulfilled, (state, action) => {
+                const { userIds, action: act } = action.payload;
+                if (act === 'delete') {
+                    state.list = state.list.filter(u => !userIds.includes(u._id));
+                } else if (act === 'suspend') {
+                    state.list = state.list.map(u =>
+                        userIds.includes(u._id) ? { ...u, isActive: false } : u
+                    );
+                }
             })
             .addCase(deleteUser.fulfilled, (state, action) => {
-                
                 state.list = state.list.filter(u => u._id !== action.payload);
+            })
+            .addCase(deleteUser.rejected, (state, action) => {
+                state.error = action.payload?.message || 'Failed to delete user';
             });
     }
 });
 
-export const { clearSelectedUser } = usersSlice.actions;
 export default usersSlice.reducer;
