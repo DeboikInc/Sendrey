@@ -12,7 +12,7 @@ const deboikLogo = '/deboik-20.png'
 const senditLogo = '/sendit.png'
 
 const COLORS = { accent: '#F47C20', deep: '#152C3D' }
-const LAUNCH_DATE = '2026-12-01T10:00:00Z'
+const LAUNCH_DATE = '2026-08-08T10:00:00Z'
 
 export default function ComingSoon() {
   const [timeLeft, setTimeLeft] = useState(null)
