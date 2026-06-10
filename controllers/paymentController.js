@@ -40,11 +40,13 @@ class PaymentController extends BaseController {
 
     async createPaymentIntent(req, res) {
         console.log('[paymentIntent] full req.body:', JSON.stringify(req.body, null, 2));
+        console.log('[intent] PAYSTACK_SECRET_KEY present:', !!process.env.PAYSTACK_SECRET_KEY);
+        console.log('[intent] PAYSTACK_SECRET_KEY prefix:', process.env.PAYSTACK_SECRET_KEY?.slice(0, 8));
         console.log('[paymentIntent] pin received:', req.body.pin);
         console.log('[paymentIntent] paymentMethod:', req.body.paymentMethod);
         try {
             const { orderId, chatId, paymentMethod, pin } = req.body;
-            console.log('createPaymentIntent body:', req.body); // ← add this
+            console.log('createPaymentIntent body:', req.body); 
             console.log('Looking for orderId:', orderId);
             const userId = req.user._id;
             const userEmail = req.user.email;
@@ -80,6 +82,9 @@ class PaymentController extends BaseController {
             this.success(res, result);
         } catch (error) {
             console.error('Error creating payment:', error);
+            console.error('[intent] ERROR:', error.message);
+            console.error('[intent] ERROR stack:', error.stack?.split('\n').slice(0, 5).join('\n'));
+            console.error('[intent] Paystack response:', error.response?.status, JSON.stringify(error.response?.data));
             this.error(res, error.message);
         }
     }
