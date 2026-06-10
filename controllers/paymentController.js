@@ -39,6 +39,7 @@ class PaymentController extends BaseController {
     }
 
     async createPaymentIntent(req, res) {
+        console.log('START createPaymentIntent');
         console.log('[paymentIntent] full req.body:', JSON.stringify(req.body, null, 2));
         console.log('[intent] PAYSTACK_SECRET_KEY present:', !!process.env.PAYSTACK_SECRET_KEY);
         console.log('[intent] PAYSTACK_SECRET_KEY prefix:', process.env.PAYSTACK_SECRET_KEY?.slice(0, 8));
