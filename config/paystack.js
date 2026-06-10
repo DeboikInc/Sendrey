@@ -155,7 +155,7 @@
     // Verify account number
     async verifyAccountNumber({ account_number, bank_code }) {
       
-      if (process.env.NODE_ENV === 'development') {
+      if (process.env.NODE_ENV === 'production') {
         console.log(`[DEV] Mock account verify: ${account_number} | bank: ${bank_code}`);
         return {
           status: true,
