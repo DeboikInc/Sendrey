@@ -163,7 +163,7 @@ class PaymentService {
           userId: order.userId,
           type: 'escrow_lock',
           amount: order.totalAmount,
-          ledgerEntryId: result?._id,
+          // ledgerEntryId: order?._id,
           timestamp: new Date().toISOString()
         });
 
