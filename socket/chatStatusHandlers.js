@@ -6,6 +6,8 @@ const { getReports } = require('../services/businessService');
 const { STATUS_FLOWS, TASK_TYPES } = require('../config/constants');
 const { logMetric } = require('../utils/metricsLogger');
 const { checkAndSuggestBusiness } = require('../services/businessService');
+const { stampMessage } = require('./messageHandlers');
+
 
 const Task = require('../models/Task');
 const User = require('../models/User');
@@ -183,8 +185,8 @@ const handleUpdateStatus = async (socket, io, data, callback) => {
     await Promise.all(writePromises);
 
     // ── 3. Emit — no waiting on DB 
-    io.to(chatId).emit('message', systemMessage);
-    // if (trackingMessage) io.to(chatId).emit('message', trackingMessage);
+    const stamped = stampMessage(chatId, systemMessage);
+    io.to(chatId).emit('message', stamped);
     socket.emit('statusUpdated', { status, chatId, displayText, serviceType: resolvedServiceType });
 
     // Tracking room events (fire and forget)
@@ -228,7 +230,9 @@ const handleUpdateStatus = async (socket, io, data, callback) => {
             Chat.findOneAndUpdate({ chatId }, { $push: { messages: summaryMessage } }),
             User.findByIdAndUpdate(userId, { lastExpenseSummaryAt: new Date() }),
           ]);
-          io.to(chatId).emit('message', summaryMessage);
+
+          const stamped = stampMessage(chatId, summaryMessage);
+          io.to(chatId).emit('message', stamped);
         }).catch(e => console.error('Expense summary failed:', e.message));
       }
     }

@@ -9,6 +9,8 @@ const orderStateMachine = require("../services/orderStateMachine");
 const cloudinary = require("../config/cloudinary");
 const { handleRejectionStrike } = require('../utils/handleRejectionStrike');
 
+const { stampMessage } = require('./messageHandlers');
+
 const {
   notifyItemApprovalRequest,
   notifyItemApproved,
@@ -122,8 +124,8 @@ const handleSubmitItems = async (socket, io, data) => {
       await chat.save();
     }
 
-
-    io.to(chatId).emit("message", cleanForEmit(message));
+    const stamped = stampMessage(chatId, cleanForEmit(message));
+    io.to(chatId).emit('message', stamped);
 
     // push notification to user about item approval
     await notifyItemApprovalRequest(userId, {
@@ -424,7 +426,8 @@ const handleSubmitPickupItem = async (socket, io, data) => {
       await chat.save();
     }
 
-    io.to(chatId).emit("message", cleanForEmit(message));
+    const stamped = stampMessage(chatId, cleanForEmit(message));
+    io.to(chatId).emit('message', stamped);
 
     // Push notification to user about pickup item approval
     await notifyItemApprovalRequest(userId, {
