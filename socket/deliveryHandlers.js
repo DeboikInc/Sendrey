@@ -7,7 +7,7 @@ const Runner = require('../models/Runner');
 const orderStateMachine = require('../services/orderStateMachine');
 const { logSocketAudit } = require('../utils/socketAudit');
 const { handleRejectionStrike } = require('../utils/handleRejectionStrike');
-
+const { stampMessage } = require('./messageHandlers');
 const {
     notifyDeliveryConfirmationRequest,
     notifyAutoConfirmWarning,
@@ -134,7 +134,7 @@ const handleMarkDeliveryComplete = async (io, socket, data) => {
         console.warn('[markDeliveryComplete] Could not fetch runner name:', err.message);
     }
 
-    const confirmationMessage = {
+    const confirmationMessage = stampMessage(chatId, {
         id: `delivery-confirm-${Date.now()}`,
         from: 'system',
         type: 'delivery_confirmation_request',
@@ -146,17 +146,15 @@ const handleMarkDeliveryComplete = async (io, socket, data) => {
         deliveryProof: deliveryProof || null,
         confirmationStatus: 'pending',
         runnerName,
-    };
+    });
 
-    const runnerAckMessage = {
+    const runnerAckMessage = stampMessage(chatId, {
         id: `delivery-marked-runner-${Date.now() + 1}`,
         from: 'system', type: 'system', messageType: 'system',
         text: 'You marked delivery as complete. Waiting for the user to confirm.',
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         status: 'sent', senderId: 'system', senderType: 'system',
-    };
-
-    
+    });
 
     // Emit immediately (optimistic)
     io.to(`user-${order.userId.toString()}`).emit('message', confirmationMessage);
@@ -229,21 +227,21 @@ const handleConfirmDelivery = async (io, socket, data) => {
         console.warn('[confirmDelivery] Could not fetch user name:', err.message);
     }
 
-    const userSystemMsg = {
+    const userSystemMsg = stampMessage(chatId, {
         id: `delivery-confirmed-user-${Date.now()}`,
         from: 'system', type: 'delivery_confirmation', messageType: 'delivery_confirmation',
         text: 'You confirmed delivery.',
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         status: 'sent', senderId: 'system', senderType: 'system',
-    };
+    });
 
-    const runnerSystemMsg = {
+    const runnerSystemMsg = stampMessage(chatId, {
         id: `delivery-confirmed-runner-${Date.now() + 1}`,
         from: 'system', type: 'delivery_confirmation', messageType: 'delivery_confirmation',
         text: `${userName} confirmed the delivery of their item(s).`,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         status: 'sent', senderId: 'system', senderType: 'system',
-    };
+    });
 
     // Emit 
     io.to(chatId).emit('deliveryConfirmed', { orderId: order.orderId, status: 'completed' });
@@ -311,21 +309,21 @@ const handleDenyDelivery = async (io, socket, data) => {
         console.warn('[denyDelivery] Could not fetch user name:', err.message);
     }
 
-    const userSystemMsg = {
+    const userSystemMsg = stampMessage(chatId, {
         id: `delivery-denied-user-${Date.now()}`,
         from: 'system', type: 'delivery_denied', messageType: 'delivery_denied',
         text: 'You reported that your item(s) were not delivered.',
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         status: 'sent', senderId: 'system', senderType: 'system', style: 'error',
-    };
+    });
 
-    const runnerSystemMsg = {
+    const runnerSystemMsg = stampMessage(chatId, {
         id: `delivery-denied-runner-${Date.now() + 1}`,
         from: 'system', type: 'delivery_denied', messageType: 'delivery_denied',
         text: `${userName} denied the delivery of their item(s). Please ensure you deliver their order.`,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         status: 'sent', senderId: 'system', senderType: 'system', style: 'error',
-    };
+    });
 
     io.to(chatId).emit('deliveryDenied', { orderId: order.orderId, status: 'denied' });
     io.to(`user-${userId}`).emit('message', userSystemMsg);
@@ -359,13 +357,13 @@ const scheduleAutoConfirm = (io, chatId, orderId, escrowId) => {
             // Only warn if still waiting for confirmation
             if (!order || order.deliveryConfirmedAt || order.status !== 'delivered') return;
 
-            const warningMessage = {
+            const warningMessage = stampMessage(chatId, {
                 id: `auto-confirm-warning-${Date.now()}`,
                 from: 'system', type: 'system', messageType: 'system',
                 text: 'Your order will be automatically marked as completed in 10 minutes if no action is taken.',
                 time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                 status: 'sent', senderId: 'system', senderType: 'system', style: 'warning',
-            };
+            });
 
             // Send warning only to user (runner doesn't need it)
             io.to(`user-${order.userId.toString()}`).emit('message', warningMessage);
@@ -416,14 +414,14 @@ const scheduleAutoConfirm = (io, chatId, orderId, escrowId) => {
             await Runner.findByIdAndUpdate(order.runnerId, { activeOrderId: null, currentUserId: null });
 
             // ── System message shown in chat ──────────────────────────────────
-            const autoCompleteMessage = {
+            const autoCompleteMessage = stampMessage(chatId, {
                 id: `auto-confirm-${Date.now()}`,
                 from: 'system', type: 'task_completed', messageType: 'task_completed',
                 text: 'This order has been marked as completed because the user did not respond in time.',
                 time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
                 status: 'sent', senderId: 'system', senderType: 'system',
                 orderId: order.orderId,
-            };
+            });
 
             // Emit task_completed event so both sides trigger their completion UI
             io.to(chatId).emit('message', autoCompleteMessage);
@@ -436,7 +434,7 @@ const scheduleAutoConfirm = (io, chatId, orderId, escrowId) => {
             persistMessages(chatId, [autoCompleteMessage])
                 .catch(err => console.error('[autoConfirm] Chat persist failed:', err));
 
-            
+
 
             logSocketAudit('ORDER_AUTO_CONFIRM_DELIVERED', { chatId, orderId });
 

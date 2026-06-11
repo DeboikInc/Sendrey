@@ -11,6 +11,20 @@ const { computeDeliveryFeeFromDocs } = require('../config/pricing');
 const { canRunnerAcceptErrand, incrementErrandCount } = require('../utils/verificationCheck');
 const { logSocketAudit } = require('../utils/socketAudit');
 
+
+const {
+  socketMessageSnapshot,
+  pendingWrites,
+  stripForTransport,
+  cleanForEmit,
+  deduplicateMessages,
+  deduplicateAndPersist,
+  snapshotMessage,
+  handleSendMessage,
+  handleDeleteMessage,
+  handleGetSpecialInstructions,
+} = require('./messageHandlers');
+
 // ─── Global state ─────────────────────────────────────────────────────────────
 
 const runnersByService = {
@@ -19,58 +33,8 @@ const runnersByService = {
 };
 
 const preRoomState = new Map();
-const pendingWrites = new Map();
 const joiningChats = new Set();
 
-// ─── In-memory snapshot store: socketId → { chatId, messageIds: Set }
-const socketMessageSnapshot = new Map();
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-const stripForTransport = (msg) => {
-  if (!msg) return msg;
-  const stripped = { ...msg };
-  if (stripped.file && stripped.file.length > 1000) delete stripped.file;
-  if (stripped.receiptBase64) delete stripped.receiptBase64;
-  if (stripped.photoBase64) delete stripped.photoBase64;
-  return stripped;
-};
-
-const cleanForEmit = (data) => {
-  if (data && typeof data === 'object') {
-    if (data.toObject && typeof data.toObject === 'function') return stripForTransport(data.toObject());
-    if (Array.isArray(data)) return data.map(cleanForEmit);
-    const result = {};
-    for (const key in data) result[key] = cleanForEmit(data[key]);
-    return stripForTransport(result);
-  }
-  return data;
-};
-
-const deduplicateMessages = (messages) => {
-  const seen = new Set();
-  return messages.filter(m => {
-    if (!m.id || seen.has(m.id)) return false;
-    seen.add(m.id);
-    return true;
-  });
-};
-
-const deduplicateAndPersist = async (chatId, messages) => {
-  const deduped = deduplicateMessages(messages);
-  if (deduped.length !== messages.length) {
-    await Chat.findOneAndUpdate({ chatId }, { $set: { messages: deduped } });
-  }
-  return deduped;
-};
-
-const snapshotMessage = (socketId, chatId, messageId) => {
-  if (!messageId) return;
-  if (!socketMessageSnapshot.has(socketId)) {
-    socketMessageSnapshot.set(socketId, { chatId, messageIds: new Set() });
-  }
-  socketMessageSnapshot.get(socketId).messageIds.add(messageId);
-};
 
 const sanitizeSpecialInstructions = (specialInstructions) => {
   console.log('[sanitize] input:', JSON.stringify(specialInstructions, null, 2));
@@ -1162,77 +1126,6 @@ const handleRunnerJoinChat = async (socket, io, data) => {
   logSocketAudit('RUNNER_JOINED_CHAT', { runnerId, chatId, userId });
 };
 
-// ─── Message handlers ─────────────────────────────────────────────────────────
-
-const handleSendMessage = async (socket, io, { chatId, message }) => {
-  const startTime = Date.now();
-  try {
-    socket.to(chatId).emit('message', cleanForEmit(message));
-
-    // Echo back to sender with delivered status if partner is in room
-    const room = io.sockets.adapter.rooms.get(chatId);
-    const partnerPresent = room && room.size > 1;
-
-    socket.emit('messageEcho', {
-      id: message.id,
-      tempId: message.tempId,
-      status: partnerPresent ? 'delivered' : 'sent',
-    });
-
-    if (message?.isPresenceMessage) return;
-
-     const isCritical =
-      message.type === 'system' ||
-      message.messageType === 'system' ||
-      message.type === 'payment_request' ||
-      message.type === 'task_completed' ||
-      message.type === 'delivery_confirmation_request';
-    
-    if (isCritical) {
-      await Chat.findOneAndUpdate(
-        { chatId },
-        { $push: { messages: message } },
-        { upsert: true }
-      );
-      if (room) {
-        for (const socketId of room) snapshotMessage(socketId, chatId, message.id);
-      }
-      await logMetric({ type: 'message', status: 'success', latency: Date.now() - startTime, chatId });
-      return;
-    }
-
-    if (!pendingWrites.has(chatId)) {
-      pendingWrites.set(chatId, { messages: [], timer: null });
-    }
-
-    const pending = pendingWrites.get(chatId);
-    pending.messages.push(message);
-
-    if (pending.timer) clearTimeout(pending.timer);
-    pending.timer = setTimeout(async () => {
-      const toWrite = pending.messages.splice(0);
-      pendingWrites.delete(chatId);
-      try {
-        await Chat.findOneAndUpdate(
-          { chatId },
-          { $push: { messages: { $each: toWrite } } },
-          { upsert: true }
-        );
-      } catch (err) {
-        console.error('[sendMessage] batch write failed:', err.message);
-      }
-    }, 500);
-
-    if (room) {
-      for (const socketId of room) snapshotMessage(socketId, chatId, message.id);
-    }
-
-    await logMetric({ type: 'message', status: 'success', latency: Date.now() - startTime, chatId });
-  } catch (error) {
-    console.error('Error sending message:', error);
-    socket.to(chatId).emit('message', cleanForEmit(message));
-  }
-};
 
 const handleStartTrackRunner = (io, data) => {
   if (!data?.chatId || !data?.runnerId) {
@@ -1247,45 +1140,6 @@ const handleStartTrackRunner = (io, data) => {
     timestamp: new Date().toISOString(),
   }));
   logSocketAudit('TRACK_RUNNER', { chatId, runnerId, userId });
-};
-
-const handleDeleteMessage = async (socket, io, { chatId, messageId, userId, deleteForEveryone = true }) => {
-  try {
-    const chat = await Chat.findOne({ chatId });
-    if (!chat) return;
-
-    if (deleteForEveryone) {
-      const idx = chat.messages.findIndex(m => m.id === messageId);
-      if (idx !== -1) {
-        chat.messages[idx] = {
-          ...chat.messages[idx],
-          deleted: true,
-          text: "This message was deleted",
-          type: "deleted",
-          fileUrl: null,
-          fileName: null,
-          createdAt: new Date(),
-        };
-        await chat.save();
-        io.to(chatId).emit("messageDeleted", { messageId, deletedBy: userId, deleteForEveryone: true });
-      }
-    } else {
-      socket.emit("messageDeletedForMe", { messageId, chatId });
-    }
-
-    logSocketAudit('MESSAGE_DELETED', { messageId, deletedBy: userId, chatId });
-  } catch (error) {
-    console.error("Error deleting message:", error);
-  }
-};
-
-const handleGetSpecialInstructions = async (socket, { chatId }) => {
-  try {
-    const chat = await Chat.findOne({ chatId }).lean();
-    socket.emit("specialInstructions", { chatId, specialInstructions: chat?.specialInstructions || null });
-  } catch (error) {
-    console.error("Error fetching special instructions:", error);
-  }
 };
 
 const handleRejoinChat = async (socket, io, { chatId, userId, runnerId, userType }) => {
@@ -1468,18 +1322,19 @@ module.exports = {
   runnersByService,
   handleJoinRunnerRoom,
   handleAcceptRunnerRequest,
-  handleSendMessage,
   handleStartTrackRunner,
   handleRequestRunner,
   handleUserJoinChat,
   handleRunnerJoinChat,
   handleDisconnect,
-  handleDeleteMessage,
-  handleGetSpecialInstructions,
   handleRejoinChat,
   archiveCurrentSession,
   handleGetOrderSession,
   handleGetArchivedMessages,
   createOrder,
   requestSessionRefresh,
+  
+  handleGetSpecialInstructions,
+  handleDeleteMessage,
+  handleSendMessage,
 };
