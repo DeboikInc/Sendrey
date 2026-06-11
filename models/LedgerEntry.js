@@ -45,7 +45,7 @@ const ledgerEntrySchema = new mongoose.Schema({
   providerReference: {
     type: String,
     unique: true,
-    sparse: true,
+    index: { unique: true, sparse: true }
   },
 
   orderId: { type: String, default: null },
