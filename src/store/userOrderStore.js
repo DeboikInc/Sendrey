@@ -17,6 +17,7 @@ const useUserOrderStore = create(
       orderCancelled: false,
       cancelledByName: null,
       taskCompleted: false,
+      isPaid: false,
 
       // ── Setters ────────────────────────────────────────────────────────────
 
@@ -37,12 +38,15 @@ const useUserOrderStore = create(
 
       setTaskCompleted: (done) => set({ taskCompleted: done }),
 
+      setIsPaid: (paid) => set({ isPaid: paid }),
+
       clearOrder: () =>
         set({
           currentOrder: null,
           orderCancelled: false,
           cancelledByName: null,
           taskCompleted: false,
+          isPaid: false,
         }),
 
       // ── Derived ───────────────────────────────────────────────────────────
@@ -69,6 +73,7 @@ const useUserOrderStore = create(
           status: s.currentOrder?.status,
           orderCancelled: s.orderCancelled,
           taskCompleted: s.taskCompleted,
+          isPaid: s.isPaid,
         });
       },
     }),
@@ -78,6 +83,7 @@ const useUserOrderStore = create(
       partialize: (state) => ({
         // Don't persist taskCompleted / orderCancelled — rehydrated from chat history
         currentOrder: state.currentOrder,
+        isPaid: state.isPaid,
       }),
     }
   )
