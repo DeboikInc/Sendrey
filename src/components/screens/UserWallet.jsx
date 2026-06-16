@@ -8,7 +8,7 @@ import {
   fundWallet,
   verifyWalletFunding,
 } from '../../Redux/paymentSlice';
-import PaystackPaymentModal from '../common/PaystackPaymentModal';
+import PaystackPaymentModal from '../payments/PaystackPaymentModal';
 
 export default function UserWallet({ darkMode, onBack, userData }) {
   const dispatch = useDispatch();

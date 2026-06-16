@@ -10,10 +10,12 @@ import CallScreen from "../common/CallScreen";
 
 import { TrackDeliveryScreen } from "./TrackDeliveryScreen";
 import ProfileCardMessage from "../runnerScreens/ProfileCardMessage";
-import PaymentRequestMessage from "../common/PaymentRequestMessage";
 import ItemSubmissionMessage from "./ItemSubmissionMessage";
 import PickupItemSubmissionMessage from './PickupItemSubmissionMessage';
 import DeliveryConfirmationMessage from './DeliveryConfirmationMessage';
+
+import PaymentRequestMessage from "../payments/PaymentRequestMessage";
+import PaymentReceipt from '../payments/PaymentReceipt';
 
 import { useSocket } from "../../hooks/useSocket";
 import { useCallHook } from "../../hooks/useCallHook";
@@ -22,7 +24,7 @@ import { useMessageDedup } from "../../hooks/useMessageDedup";
 import { useTypingAndRecordingIndicator } from '../../hooks/useTypingIndicator';
 
 import { useDispatch, useSelector } from 'react-redux';
-import PaystackPaymentModal from "../common/PaystackPaymentModal";
+import PaystackPaymentModal from "../payments/PaystackPaymentModal";
 
 import MoreOptionsSheet from './MoreOptionsSheet';
 import UserWallet from './UserWallet';
@@ -732,11 +734,14 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
 
       const isPaidSession = msgs.some(m =>
         m.type === 'system' && m.text?.toLowerCase().includes('made payment for this task')
-      ) || paidChatIdsRef.current.has(chatId);
+      ) || paidChatIdsRef.current.has(chatId) || useUserOrderStore.getState().isPaid;
 
-      const filteredServerMessages = isPaidSession
-        ? serverMessages.filter(m => m.type !== 'payment_request' && m.messageType !== 'payment_request')
-        : serverMessages;
+      if (isPaidSession) {
+        setIsPaid(true);  // ← set store from history
+        setPaidChatIds(prev => new Set(prev).add(chatId));
+      }
+
+      const filteredServerMessages = serverMessages;
 
       // Check if this is a new session
       const firstMsg = msgs[0];
@@ -839,7 +844,10 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
         (m.type === "system" && m.text?.toLowerCase().includes("made payment for this task")) ||
         m.paymentConfirmed === true
       );
-      if (hasPaid) setPaidChatIds(prev => new Set(prev).add(chatId));
+      if (hasPaid) {
+        setPaidChatIds(prev => new Set(prev).add(chatId));
+        setIsPaid(true);
+      }
 
       const paymentConfirmations = serverMessages.filter(m =>
         m.type === 'system' && m.text?.toLowerCase().includes('made payment for this task')
@@ -1514,12 +1522,14 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
         });
 
         setIsPaid(true);
-        
+
         return true;
 
       } else if (paymentMethod === 'card') {
         setPaystackModal({
           reference: result?.reference,
+          access_code: result?.access_code,
+          authorization_url: result?.authorization_url,
           amount: result?.amount,
           chatId,
           email: userData?.email,
@@ -2047,12 +2057,22 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
               // Message.jsx also has a handler but uses different prop interface
 
               if (m.type === 'payment_request' || m.messageType === 'payment_request') {
+                const paid = isPaid || useUserOrderStore.getState().isPaid;
+
+                if (paid) {
+                  return (
+                    <div key={m.id} className="my-4">
+                      <PaymentReceipt paymentData={m.paymentData} darkMode={darkMode} />
+                    </div>
+                  );
+                }
+
                 return (
                   <div key={m.id} className="my-4">
                     <PaymentRequestMessage
                       darkMode={darkMode}
                       paymentData={m.paymentData}
-                      alreadyPaid={isPaid}
+                      alreadyPaid={false}
                       onPayment={handlePayment}
                       resetRef={resetPaymentUIRef}
                       markPaidRef={markPaidRef}
@@ -2060,6 +2080,10 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
                     />
                   </div>
                 );
+              }
+
+              if (m.type === 'payment_confirmed' || m.messageType === 'payment_confirmed') {
+                return null;
               }
 
               // dispute
@@ -2093,23 +2117,6 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
                 );
               }
 
-              if (m.type === 'payment_confirmed' || m.messageType === 'payment_confirmed') {
-                const alreadyPaid = paidChatIds.has(chatId);
-                return (
-                  <div key={m.id} className="my-4">
-                    <PaymentRequestMessage
-                      darkMode={darkMode}
-                      paymentData={m.paymentData}
-                      message={m}
-                      alreadyPaid={alreadyPaid}
-                      onPayment={handlePayment}
-                      resetRef={resetPaymentUIRef}
-                      markPaidRef={markPaidRef}
-                      orderCancelled={orderCancelled}
-                    />
-                  </div>
-                );
-              }
 
               if (m.type === 'item_submission' || m.messageType === 'item_submission') {
                 // console.log('ITEM SUBMISSION MSG:', m);
