@@ -5,8 +5,8 @@ import { Button } from "@material-tailwind/react";
 import ContextMenu from "./ContextMenu";
 
 // payment messages
-import PaymentFailedMessage from './PaymentFailedMessage';
-import PaymentPendingMessage from './PaymentPendingMessage';
+import PaymentFailedMessage from '../payments/PaymentFailedMessage';
+import PaymentPendingMessage from '../payments/PaymentPendingMessage';
 
 import DeliveryConfirmationMessage from '../screens/DeliveryConfirmationMessage';
 
@@ -605,7 +605,7 @@ export default function Message({
               }
             }}
           >
-             Resend
+            Resend
           </span>
           {parts[1] || ''}
         </div>

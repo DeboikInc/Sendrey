@@ -23,3 +23,76 @@ MongoDB Atlas — make sure it's not on free tier either (512MB storage limit)
 "runner misconduct costs us X in Paystack fees per ban, do we absorb or pass to user?
 
 
+
+
+i need to prevent this multiple calls, 2026-06-16 21:56:28 [warn]: Client error: GET /user/me - 401
+
+{
+
+  "service": "sendrey-server",
+
+  "environment": "development",
+
+  "method": "GET",
+
+  "url": "/user/me",
+
+  "statusCode": 401,
+
+  "userId": "anonymous"
+
+}
+
+2026-06-16 21:56:30 [warn]: Client error: GET /user/me - 401
+
+{
+
+  "service": "sendrey-server",
+
+  "environment": "development",
+
+  "method": "GET",
+
+  "url": "/user/me",
+
+  "statusCode": 401,
+
+  "userId": "anonymous"
+
+}
+
+2026-06-16 21:56:31 [warn]: Client error: GET /user/me - 401
+
+{
+
+  "service": "sendrey-server",
+
+  "environment": "development",
+
+  "method": "GET",
+
+  "url": "/user/me",
+
+  "statusCode": 401,
+
+  "userId": "anonymous"
+
+}
+
+2026-06-16 21:56:33 [warn]: Client error: GET /user/me - 401
+
+{
+
+  "service": "sendrey-server",
+
+  "environment": "development",
+
+  "method": "GET",
+
+  "url": "/user/me",
+
+  "statusCode": 401,
+
+  "userId": "anonymous"
+
+}
