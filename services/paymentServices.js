@@ -185,6 +185,7 @@ class PaymentService {
       return {
         reference: paystackResponse.data.reference,
         authorizationUrl: paystackResponse.data.authorization_url,
+        access_code: paystackResponse.data.access_code,
         amount: order.totalAmount,
         paymentStatus: 'pending',
         feeSplit,
@@ -319,6 +320,7 @@ class PaymentService {
     console.log('✅ Wallet funding initialized');
     return {
       reference: paystackResponse.data.reference,
+      access_code: paystackResponse.data.access_code,
       authorizationUrl: paystackResponse.data.authorization_url,
       accessCode: paystackResponse.data.access_code,
     };

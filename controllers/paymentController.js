@@ -40,6 +40,7 @@ class PaymentController extends BaseController {
 
     async createPaymentIntent(req, res) {
         console.log('START createPaymentIntent');
+        console.log('[intent] key loaded:', !!process.env.PAYSTACK_SECRET_KEY, process.env.PAYSTACK_SECRET_KEY?.slice(0, 6));
         console.log('[paymentIntent] full req.body:', JSON.stringify(req.body, null, 2));
         console.log('[intent] PAYSTACK_SECRET_KEY present:', !!process.env.PAYSTACK_SECRET_KEY);
         console.log('[intent] PAYSTACK_SECRET_KEY prefix:', process.env.PAYSTACK_SECRET_KEY?.slice(0, 8));
@@ -47,7 +48,7 @@ class PaymentController extends BaseController {
         console.log('[paymentIntent] paymentMethod:', req.body.paymentMethod);
         try {
             const { orderId, chatId, paymentMethod, pin } = req.body;
-            console.log('createPaymentIntent body:', req.body); 
+            console.log('createPaymentIntent body:', req.body);
             console.log('Looking for orderId:', orderId);
             const userId = req.user._id;
             const userEmail = req.user.email;
@@ -79,6 +80,16 @@ class PaymentController extends BaseController {
                 userId,
                 userEmail
             );
+
+            if (paymentMethod === 'card') {
+                return this.success(res, {
+                    reference: result.reference,
+                    access_code: result.access_code,
+                    authorization_url: result.authorizationUrl,
+                    amount: result.amount,
+                    paymentStatus: result.paymentStatus,
+                });
+            }
 
             this.success(res, result);
         } catch (error) {
