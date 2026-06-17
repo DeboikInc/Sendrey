@@ -45,6 +45,7 @@ class AuthService {
           driverLicenseStatus: existingUser.verificationDocuments?.driverLicense?.status || 'not_submitted',
           selfieVerified: existingUser.biometricVerification?.selfieVerified || false,
           selfieStatus: existingUser.biometricVerification?.status || 'not_submitted',
+          overallVerified: existingUser.isVerifiedKyc || false,
         };
 
         console.log('Existing user found during registration:', {
@@ -54,6 +55,7 @@ class AuthService {
           driverLicenseStatus: existingUser.verificationDocuments?.driverLicense?.status || 'not_submitted',
           selfieVerified: existingUser.biometricVerification?.selfieVerified || false,
           selfieStatus: existingUser.biometricVerification?.status || 'not_submitted',
+          overallVerified: existingUser.isVerifiedKyc || false,
         });
         throw err;
       }
@@ -106,7 +108,6 @@ class AuthService {
         await Wallet.create({
           userId: user._id,
           userType: userType === 'runner' ? 'runner' : 'user',
-          balance: 0,
           lockedBalance: 0,
         });
       }
@@ -323,6 +324,7 @@ class AuthService {
       ninStatus: user.verificationDocuments?.nin?.status || 'not_submitted',
       driverLicenseStatus: user.verificationDocuments?.driverLicense?.status || 'not_submitted',
       selfieVerified: user.biometricVerification?.selfieVerified || false,
+      overallVerified: user.isVerifiedKyc || false,
     } : {
       isVerified: user.isVerified,
       // isPhoneVerified: user.isPhoneVerified,
@@ -345,6 +347,7 @@ class AuthService {
         ninStatus: user.verificationDocuments?.nin?.status || 'not_submitted',
         driverLicenseStatus: user.verificationDocuments?.driverLicense?.status || 'not_submitted',
         selfieVerified: user.biometricVerification?.selfieVerified || false,
+        overallVerified: user.isVerifiedKyc || false,
       }
     };
   }

@@ -14,7 +14,7 @@ const {
 // router.get('/check-runner', authController.checkExistingUserOrRunner);
 
 router.post('/send-returning-user-otp',
-  ipRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 5 }),
+  ipRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 10 }),
   authController.sendReturningUserEmailOTP
 );
 
