@@ -232,6 +232,12 @@ const runnerSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+
+  isVerifiedKyc: {
+    type: Boolean,
+    default: false
+  },
+
   isPhoneVerified: {
     type: Boolean,
     default: false
@@ -433,6 +439,7 @@ runnerSchema.index({ phone: 1 }, { sparse: true });
 runnerSchema.index({ role: 1 });
 runnerSchema.index({ isActive: 1 });
 runnerSchema.index({ isVerified: 1 });
+runnerSchema.index({ isVerifiedKyc: 1 });
 runnerSchema.index({ createdAt: -1 });
 runnerSchema.index({ lastLogin: -1 });
 runnerSchema.index({ location: '2dsphere' });

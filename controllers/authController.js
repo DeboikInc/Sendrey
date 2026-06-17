@@ -592,7 +592,7 @@ class AuthController extends BaseController {
 
       if (latitude && longitude) {
         const Model = userType === 'runner' ? Runner : User;
-        await Model.findByIdAndUpdate(runner._id, {
+        await Model.findByIdAndUpdate(user._id, {
           latitude,
           longitude,
           location: { type: 'Point', coordinates: [longitude, latitude] }
@@ -784,8 +784,11 @@ class AuthController extends BaseController {
 
       let kycStatus = null;
       if (userType === 'runner') {
+        const selfieApproved = user.biometricVerification?.selfieVerified === true
+          && user.biometricVerification?.status === 'approved';
+
         kycStatus = {
-          overallVerified: user.isVerified || user.runnerStatus === 'active',
+          overallVerified: user.isVerifiedKyc || selfieApproved,
           selfieVerified: user.biometricVerification?.selfieVerified ?? false,
           selfieStatus: user.biometricVerification?.status ?? 'not_submitted',
           ninStatus: user.verificationDocuments?.nin?.status ?? 'not_submitted',
@@ -940,7 +943,7 @@ class AuthController extends BaseController {
       let kycStatus = null;
       if (userType === 'runner') {
         kycStatus = {
-          overallVerified: user.isVerified || user.runnerStatus === 'active',
+          overallVerified: user.isVerifiedKyc ?? false,
           selfieVerified: user.biometricVerification?.selfieVerified ?? false,
           selfieStatus: user.biometricVerification?.status ?? 'not_submitted',
           ninStatus: user.verificationDocuments?.nin?.status ?? 'not_submitted',
@@ -987,7 +990,7 @@ class AuthController extends BaseController {
   }
 
 
-  
+
 
 
   // ─────────────────────────────────────────────

@@ -10,6 +10,16 @@ const isRunner = (req, res, next) => {
   next();
 };
 
+const isUser = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({ success: false, message: 'Authentication required' });
+  }
+  if (req.user.role !== 'user') {
+    return res.status(403).json({ success: false, message: 'Access denied. Only users can perform this action.' });
+  }
+  next();
+};
+
 const isAdmin = (req, res, next) => {
   if (!req.user) {
     return res.status(401).json({ success: false, message: 'Authentication required' });
@@ -137,6 +147,7 @@ const requireBusiness = (allowedRoles = []) => {
 
 module.exports = {
   isRunner,
+  isUser,
   isAdmin,
   isSuperAdmin,
   isRunnerOrAdmin,
