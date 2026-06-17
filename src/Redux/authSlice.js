@@ -262,6 +262,7 @@ export const wipeRunnerLocalStorage = (runnerId) => {
 };
 
 
+
 // ── Slice ─────────────────────────────────────────────────────────────────────
 
 const authSlice = createSlice({
@@ -285,6 +286,11 @@ const authSlice = createSlice({
             if (action.payload.user) state.user = action.payload.user;
             if (action.payload.runner) state.runner = action.payload.runner;
             state.isAuthenticated = true;
+        },
+        updateRunner(state, action) {
+            if (state.runner) {
+                state.runner = { ...state.runner, ...action.payload };
+            }
         },
         clearCredentials(state) {
             console.log('[clearCredentials] called, runner at time of call:', state.runner?._id);
@@ -480,6 +486,7 @@ export default authSlice.reducer;
 export const {
     updateUser,
     setToken,
+    updateRunner,
     setCredentials,
     clearCredentials,
     clearRunnerSession,

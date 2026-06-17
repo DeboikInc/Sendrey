@@ -70,7 +70,8 @@ export const RUNNER_TERMS = {
     "Accepted tasks are binding. Never use personal funds for purchases.",
     "Payouts are released only after user approval or system confirmation.",
     "Platform fees are deducted automatically from your earnings.",
-    "Ratings impact your task access and account status."
+    "Ratings impact your task access and account status.",
+    "Sendrey uses your location to match you with nearby errands and keep users updated on your delivery in real time. For this reason, we require location access to remain active while you're online as a runner.",
   ],
   sections: [
     {

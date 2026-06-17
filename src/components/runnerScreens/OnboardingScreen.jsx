@@ -337,6 +337,7 @@ function OnboardingScreen({
               effectiveReturningKycStatus={effectiveReturningKycStatus}
               isSubmitting={isSubmitting}
               isVerifyingOtp={isVerifyingOtp}
+              kycStatus={kycStatus}
               isReturningUser={isReturningUser}
               returningUserData={returningUserData}
               onReturningUserChoice={onReturningUserChoice}

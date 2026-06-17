@@ -24,24 +24,22 @@ const fetchWithRetry = async (fetchFn, type, retryDelays = RETRY_DELAYS) => {
       const result = await fetchFn();
       return { status: 'ok', data: result };
     } catch (error) {
-      const isAuthError = error?.response?.status === 401 || error?.status === 401;
-      const isNetworkError = !error?.response && error?.message?.includes('Network');
+      const status = error?.response?.status ?? error?.status;
+      const isAuthError = status === 401;
 
       if (isAuthError) {
         return { status: 'auth_failed', data: error };
       }
 
-      if (isNetworkError && i < retryDelays.length) {
-        console.log(`[Bootstrap] ${type} network error, retrying in ${retryDelays[i]}ms...`);
+      // Anything that isn't a confirmed 401 is treated as transient —
+      // timeouts, connection refused, CORS, server down, etc.
+      if (i < retryDelays.length) {
+        console.log(`[Bootstrap] ${type} request failed (non-401), retrying in ${retryDelays[i]}ms...`, error?.message);
         await new Promise(resolve => setTimeout(resolve, retryDelays[i]));
         continue;
       }
 
-      if (i >= retryDelays.length) {
-        return { status: 'network_error', data: error };
-      }
-
-      return { status: 'error', data: error };
+      return { status: 'network_error', data: error };
     }
   }
 

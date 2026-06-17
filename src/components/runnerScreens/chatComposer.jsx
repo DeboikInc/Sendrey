@@ -3,7 +3,7 @@ import { Button } from "@material-tailwind/react";
 import { Camera } from "lucide-react";
 import CustomInput from "../common/CustomInput";
 import { useState, useRef, useCallback } from "react";
-import { shouldShowKycPendingMessage } from '../../utils/returningUserKycUtils';
+// import { shouldShowKycPendingMessage } from '../../utils/returningUserKycUtils';
 
 export default function ChatComposer({
   // State
@@ -70,6 +70,7 @@ export default function ChatComposer({
   returningUserData,
 
   isVerifyingOtp,
+  kycStatus
 }) {
 
   const [isConnectDisabled, setIsConnectDisabled] = useState(false);
@@ -153,8 +154,7 @@ export default function ChatComposer({
 
   if (
     registrationComplete && !isChatActive && isVerified === false &&
-    !isCollectingCredentials && !needsOtpVerification && kycStep === 6 &&
-    shouldShowKycPendingMessage(effectiveReturningKycStatus, { overallVerified: false, selfieVerified: false })
+    !isCollectingCredentials && !needsOtpVerification && kycStep === 6
   ) {
     return (
       <div className="p-4 py-6 flex justify-center">
@@ -266,20 +266,20 @@ export default function ChatComposer({
     );
   }
 
-  // ── KYC Step 1 - Processing ───────────────────────────────────────────────
+  // KYC Step 1 - Processing 
   if (registrationComplete && !isChatActive && kycStep === 1) {
     return null;
   }
 
 
 
-  // ── KYC Step 2 - ID Photo Camera ─────────────────────────────────────────
+  // ── KYC Step 2 - ID Photo Camera 
   if (registrationComplete && !isChatActive && kycStep === 2) {
     return (
-      <div className="p-4 py-7 flex justify-center items-center gap-3">
+      <div className="py-3 flex justify-center items-center gap-3">
         <Button
           onClick={openCamera}
-          className="bg-primary rounded-lg w-24 h-14 sm:text-lg flex items-center justify-center gap-3"
+          className="bg-primary rounded-lg sm:text-lg flex items-center justify-center gap-3"
         >
           <Camera size={28} />
         </Button>
@@ -314,7 +314,7 @@ export default function ChatComposer({
       <div className="p-4 flex justify-center items-center w-full">
         <Button
           onClick={handleGetStarted}
-          className={`bg-primary rounded-lg sm:text-sm flex items-center justify-center py-4 ${isLetsGetStarted ? 'bg-gray-500 opacity-50 cursor-not-allowed' : ''}`}
+          className={`bg-primary rounded-lg sm:text-sm flex items-center justify-center ${isLetsGetStarted ? 'bg-gray-500 opacity-50 cursor-not-allowed' : ''}`}
         >
           <span>Okay, let's get started</span>
         </Button>
@@ -397,10 +397,7 @@ export default function ChatComposer({
   // ── KYC Step 6 - Connect to Service ──────────────────────────────────────
   if (!newOrderComplete && registrationComplete && !isChatActive && kycStep === 6) {
 
-    if (
-      !isVerified &&
-      shouldShowKycPendingMessage(effectiveReturningKycStatus, { overallVerified: false, selfieVerified: false })
-    ) {
+    if (!isVerified ) {
       return (
         <div className="p-4 py-6 flex justify-center">
           <p className="text-sm text-center text-gray-500 dark:text-gray-400">

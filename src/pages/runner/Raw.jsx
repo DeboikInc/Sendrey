@@ -8,6 +8,7 @@ import { shallow } from 'zustand/shallow';
 import RunnerChatScreen from "../../components/runnerScreens/RunnerChatScreen";
 import OnboardingScreen from "../../components/runnerScreens/OnboardingScreen";
 import Sidebar from "../../components/runnerScreens/Sidebar";
+import { updateRunner } from '../../Redux/authSlice';
 
 import { useSocket } from "../../hooks/useSocket";
 import useDarkMode from "../../hooks/useDarkMode";
@@ -538,7 +539,7 @@ function WhatsAppLikeChat() {
     if (kycStatus.overallVerified || kycStep === 6) { console.log('[RAW] KYC effect BLOCKED — already verified'); return; }
     if (isReturningUser) { console.log('[RAW] KYC effect BLOCKED — isReturningUser still true (waiting for choice)'); return; }
 
-    if ((runner?.isVerified || runner?.runnerStatus === 'active') && !isFreshRegistrationRef.current) {
+    if (runner?.isVerifiedKyc && !isFreshRegistrationRef.current) {
       console.log('[RAW] KYC effect BLOCKED — runner already verified server-side (preexisting session)');
       kycStartedRef.current = true;
       localStorage.setItem(`kyc_flow_started_${runnerId}`, 'true');
@@ -1038,6 +1039,19 @@ function WhatsAppLikeChat() {
     const handler = (data) => {
       setVerificationState(data);
       if (data.isBanned) setShowBannedModal(true);
+
+      // sync Redux so isVerified prop updates instantly
+      if (data.isVerifiedKyc === true) {
+        dispatch(updateRunner({
+          isVerifiedKyc: true,
+          runnerStatus: data.runnerStatus,
+        }));
+      } else if (data.isVerifiedKyc === false) {
+        dispatch(updateRunner({
+          isVerifiedKyc: false,
+          runnerStatus: data.runnerStatus,
+        }));
+      }
     };
     socket.on('verificationStatus', handler);
     return () => socket.off('verificationStatus', handler);
@@ -1319,7 +1333,7 @@ function WhatsAppLikeChat() {
               chatManager.set(BOT_CHAT_ID, { newOrderComplete: val });
             }}
 
-            isVerified={kycStatus.overallVerified}
+            isVerified={runner?.isVerifiedKyc ?? false}
             active={active}
             text={text}
             setText={setText}
