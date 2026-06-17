@@ -19,6 +19,7 @@ export default function App() {
   const [splashDone, setSplashDone] = useState(
     () => safeSession.get('splash_done') === 'true'
   );
+  const runnerInStore = useSelector(s => s.auth.runner);
   const authStatus = useSelector(s => s.auth.status);
   const [minTimePassed, setMinTimePassed] = useState(false);
 
@@ -66,6 +67,8 @@ export default function App() {
   if (!isReady) {
     return <BarLoader fullScreen />;
   }
+
+  console.log('[APP] rendering routes, isReady:', isReady, 'runner in store:', runnerInStore);
 
   return <ProjectedRoutes />;
 }

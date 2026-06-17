@@ -971,7 +971,6 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
           );
 
           if (hasPaymentRequest) {
-            // flip existing payment_request to show receipt
             return prev.map(m =>
               (m.type === 'payment_request' || m.messageType === 'payment_request')
                 ? { ...m, alreadyPaid: true }
@@ -979,10 +978,10 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
             );
           }
 
-          // no payment_request in list — inject receipt directly in place of this system message
+          // no payment_request — inject receipt after the system message
           const order = currentOrderRef.current;
-          return [...prev.filter(m => m.id !== normalizedMsg.id), {
-            id: normalizedMsg.id,
+          return [...prev, {
+            id: `receipt-${normalizedMsg.id}`,
             type: 'payment_receipt',
             messageType: 'payment_receipt',
             from: 'system',
@@ -998,7 +997,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
 
         setPaidChatIds(prev => new Set(prev).add(chatId));
         updateCurrentOrder({ paymentStatus: "paid", status: "paid" });
-        return; // don't fall through to the normal setMessages below
+        return;
       }
 
       if (isSystem && msg.text?.toLowerCase().includes("cancelled this order")) {

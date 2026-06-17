@@ -301,7 +301,7 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
                         <p className="text-xs text-black-100/80 dark:text-gray-500 mb-1">KYC Status</p>
 
                         {(() => {
-                            const isVerified = runnerData.isVerified || runnerData.runnerStatus === 'active';
+                            const isVerified = runnerData.isVerifiedKyc;
                             const isPending = ['pending_verification', 'pending_review'].includes(runnerData.runnerStatus);
                             const isRejected = runnerData.runnerStatus === 'rejected' || runnerData.runnerStatus === 'banned';
 

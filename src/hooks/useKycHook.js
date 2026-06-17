@@ -2,7 +2,7 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useDispatch } from 'react-redux';
 import { verifyNIN, verifyDriverLicense, verifySelfie, getVerificationStatus } from '../Redux/kycSlice';
-
+import { updateRunner } from '../Redux/authSlice';
 
 // ─── Maps server kycStatus → the correct step to resume from ─────────────────
 // Called once after a returning user completes OTP, before startKycFlow runs.
@@ -571,6 +571,13 @@ export const useKycHook = (runnerId, fleetType) => {
 
         isAlreadyVerifiedRef.current = true; // ← always set after allApproved
         setKycStatus({ documentVerified: true, selfieVerified: true, overallVerified: true });
+
+        // push verified state into Redux so raw.jsx re-renders with isVerified=true
+        dispatch(updateRunner({
+          isVerifiedKyc: true,
+          runnerStatus: runnerStatus  
+        }));
+
         setTimeout(() => setKycStep(6), 800);
         localStorage.removeItem(`kyc_step_${runnerId}`);
         localStorage.removeItem(`kyc_doc_type_${runnerId}`);
