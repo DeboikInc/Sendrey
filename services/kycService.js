@@ -262,7 +262,7 @@ class KYCService {
                     { 'verificationDocuments.driverLicense.status': 'pending_review' },
                     { 'biometricVerification.status': 'pending_review' }
                 ]
-            }).select('firstName lastName email phone createdAt verificationDocuments biometricVerification runnerStatus');
+            }).select('firstName lastName email phone createdAt verificationDocuments biometricVerification kycStatus');
 
             return pendingRunners.map(runner => ({
                 id: runner._id,
@@ -271,7 +271,7 @@ class KYCService {
                 email: runner.email,
                 phone: runner.phone,
                 createdAt: runner.createdAt,
-                runnerStatus: runner.runnerStatus,
+                kycStatus: runner.kycStatus,
                 pendingItems: this.getPendingItems(runner)
             }));
 
@@ -313,7 +313,7 @@ class KYCService {
                 phone: runner.phone,
                 dateOfBirth: runner.dateOfBirth,
                 createdAt: runner.createdAt,
-                runnerStatus: runner.runnerStatus,
+                kycStatus: runner.kycStatus,
                 isVerified: runner.isVerified,
                 isVerifiedKyc: runner.isVerifiedKyc,
                 documents: {
@@ -372,10 +372,10 @@ class KYCService {
             const newStatus = await this.calculateRunnerStatus(runnerId);
             const isVerifiedKyc = newStatus === 'approved_full';
 
-            await Runner.findByIdAndUpdate(runnerId, { runnerStatus: newStatus, isVerifiedKyc });
+            await Runner.findByIdAndUpdate(runnerId, { kycStatus: newStatus, isVerifiedKyc });
 
-            console.log('[approveDocument]', documentType, '→ runnerStatus:', newStatus, 'isVerifiedKyc:', isVerifiedKyc);
-            return { success: true, runnerStatus: newStatus };
+            console.log('[approveDocument]', documentType, '→ kycStatus:', newStatus, 'isVerifiedKyc:', isVerifiedKyc);
+            return { success: true, kycStatus: newStatus };
         } catch (error) {
             console.error('Error approving document:', error);
             return { success: false, error: error.message };
@@ -397,9 +397,9 @@ class KYCService {
 
             const newStatus = await this.calculateRunnerStatus(runnerId);
             const isVerifiedKyc = newStatus === 'approved_full';
-            await Runner.findByIdAndUpdate(runnerId, { runnerStatus: newStatus, isVerifiedKyc });
+            await Runner.findByIdAndUpdate(runnerId, { kycStatus: newStatus, isVerifiedKyc });
 
-            return { success: true, runnerStatus: newStatus };
+            return { success: true, kycStatus: newStatus };
         } catch (error) {
             console.error('Error rejecting document:', error);
             return { success: false, error: error.message };
@@ -417,10 +417,10 @@ class KYCService {
             const newStatus = await this.calculateRunnerStatus(runnerId);
             const isVerifiedKyc = newStatus === 'approved_full';
 
-            await Runner.findByIdAndUpdate(runnerId, { runnerStatus: newStatus, isVerifiedKyc });
+            await Runner.findByIdAndUpdate(runnerId, { kycStatus: newStatus, isVerifiedKyc });
 
-            console.log('[approveSelfie] → runnerStatus:', newStatus, 'isVerifiedKyc:', isVerifiedKyc);
-            return { success: true, runnerStatus: newStatus, isVerifiedKyc };
+            console.log('[approveSelfie] → kycStatus:', newStatus, 'isVerifiedKyc:', isVerifiedKyc);
+            return { success: true, kycStatus: newStatus, isVerifiedKyc };
         } catch (error) {
             console.error('Error approving selfie:', error);
             return { success: false, error: error.message };
@@ -439,9 +439,9 @@ class KYCService {
 
             const newStatus = await this.calculateRunnerStatus(runnerId);
             const isVerifiedKyc = newStatus === 'approved_full';
-            await Runner.findByIdAndUpdate(runnerId, { runnerStatus: newStatus, isVerifiedKyc });
+            await Runner.findByIdAndUpdate(runnerId, { kycStatus: newStatus, isVerifiedKyc });
 
-            return { success: true, runnerStatus: newStatus };
+            return { success: true, kycStatus: newStatus };
         } catch (error) {
             console.error('Error rejecting selfie:', error);
             return { success: false, error: error.message };
@@ -474,8 +474,8 @@ class KYCService {
         try {
             const verifiedRunners = await Runner.find({
                 role: 'runner',
-                runnerStatus: { $in: ['approved_full', 'approved_limited'] }
-            }).select('firstName lastName email phone createdAt verificationDocuments biometricVerification runnerStatus');
+                kycStatus: { $in: ['approved_full', 'approved_limited'] }
+            }).select('firstName lastName email phone createdAt verificationDocuments biometricVerification kycStatus');
 
             return verifiedRunners.map(runner => ({
                 id: runner._id,
@@ -485,7 +485,7 @@ class KYCService {
                 // isKycVerified: runner.isKycVerified,
                 phone: runner.phone,
                 createdAt: runner.createdAt,
-                runnerStatus: runner.runnerStatus,
+                kycStatus: runner.kycStatus,
                 pendingItems: [] // Verified runners have no pending items
             }));
 

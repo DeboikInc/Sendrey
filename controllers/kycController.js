@@ -3,7 +3,7 @@ const BaseController = require('./baseController');
 const KYCService = require('../services/kycService');
 const Runner = require('../models/Runner');
 const { sendPushNotification } = require('../services/notificationService');
-const { getIO } = require('../socket');
+const redis = require('../config/redis');
 
 class KYCController extends BaseController {
     constructor() {
@@ -27,13 +27,8 @@ class KYCController extends BaseController {
     // ==================== RUNNER METHODS ====================
 
     async verifyNIN(req, res) {
-
         try {
             const userId = req.user.id || req.user._id;
-
-            // console.log('=== NIN Verification Request ===');
-            // console.log('User ID:', userId);
-
             const runner = await Runner.findById(userId);
             if (!runner) {
                 return this.notFound(res, 'Runner not found');
@@ -44,16 +39,12 @@ class KYCController extends BaseController {
                 return this.badRequest(res, 'NIN document image is required');
             }
 
-            // console.log('File received:', req.file.originalname, req.file.size, 'bytes');
-
             const userInfo = {
                 userId,
                 firstName: runner.firstName,
                 lastName: runner.lastName,
                 dateOfBirth: runner.dateOfBirth || null
             };
-
-            // console.log('DEBUG: Calling service.submitNIN with userInfo:', userInfo);
 
             const result = await this.service.submitNIN(
                 null,
@@ -62,14 +53,10 @@ class KYCController extends BaseController {
                 userInfo
             );
 
-            // console.log('Service result:', result);
-
             if (result.success) {
                 await Runner.findByIdAndUpdate(userId, {
-                    runnerStatus: 'pending_verification'
+                    kycStatus: 'pending_verification'
                 });
-
-                // console.log('NIN document saved successfully');
 
                 return this.success(res, {
                     status: 'pending_review',
@@ -86,15 +73,9 @@ class KYCController extends BaseController {
     }
 
     async verifyDriverLicense(req, res) {
-
         try {
             const userId = req.user.id || req.user._id;
-
-            // console.log('=== Driver License Verification Request ===');
-            // console.log('User ID from token:', userId);
-
             const runner = await Runner.findById(userId);
-            // console.log('Found runner:', runner ? 'Yes' : 'No');
 
             if (!runner) {
                 return this.notFound(res, 'User not found');
@@ -111,8 +92,6 @@ class KYCController extends BaseController {
                 dateOfBirth: runner.dateOfBirth || null
             };
 
-            // console.log('DEBUG: Calling service.submitDriverLicense');
-
             const result = await this.service.submitDriverLicense(
                 null,
                 req.file.buffer,
@@ -122,9 +101,8 @@ class KYCController extends BaseController {
 
             if (result.success) {
                 await Runner.findByIdAndUpdate(userId, {
-                    runnerStatus: 'pending_verification'
+                    kycStatus: 'pending_verification'
                 });
-
 
                 return this.success(res, {
                     status: 'pending_review',
@@ -142,7 +120,6 @@ class KYCController extends BaseController {
 
     // google vision api
     async validateFaceWithVision(base64Image) {
-
         const response = await fetch(
             `https://vision.googleapis.com/v1/images:annotate?key=${process.env.GOOGLE_VISION_KEY}`,
             {
@@ -191,7 +168,6 @@ class KYCController extends BaseController {
 
         return { valid: true, message: null };
     };
-
 
     async verifySelfie(req, res) {
         try {
@@ -265,7 +241,7 @@ class KYCController extends BaseController {
             const biometrics = runner.biometricVerification || {};
 
             const verificationStatus = {
-                runnerStatus: runner.runnerStatus,
+                kycStatus: runner.kycStatus,
                 documents: {
                     nin: {
                         verified: docs.nin?.verified || false,
@@ -283,8 +259,8 @@ class KYCController extends BaseController {
                     status: biometrics.status || 'not_submitted',
                     submittedAt: biometrics.submittedAt || null
                 },
-                canAcceptJobs: runner.runnerStatus === 'approved_full',
-                canAcceptLimitedJobs: runner.runnerStatus === 'approved_limited'
+                canAcceptJobs: runner.kycStatus === 'approved_full',
+                canAcceptLimitedJobs: runner.kycStatus === 'approved_limited'
             };
 
             return this.success(res, verificationStatus);
@@ -351,7 +327,7 @@ class KYCController extends BaseController {
                         status: 'pending'
                     });
                 }
-            } else if (runner.runnerStatus === 'approved_full') {
+            } else if (runner.kycStatus === 'approved_full') {
                 steps.push({
                     step: 3,
                     action: 'complete',
@@ -362,7 +338,7 @@ class KYCController extends BaseController {
             }
 
             return this.success(res, {
-                currentStatus: runner.runnerStatus,
+                currentStatus: runner.kycStatus,
                 steps: steps,
                 progress: {
                     documentsVerified: verifiedDocs.length,
@@ -419,6 +395,22 @@ class KYCController extends BaseController {
         }
     }
 
+    async publishToSocket(runnerId, payload) {
+        try {
+            // Get Redis client and publish
+            const client = redis.getClient();
+            await client.publish('kyc:events', JSON.stringify({
+                runnerId,
+                data: payload
+            }));
+            console.log(`[Redis] Published KYC event for runner ${runnerId}:`, payload.event);
+            return true;
+        } catch (error) {
+            console.error('[Redis] Failed to publish:', error.message);
+            return false;
+        }
+    }
+
     async approveDocument(req, res) {
         try {
             const { runnerId } = req.params;
@@ -432,28 +424,30 @@ class KYCController extends BaseController {
             console.log('[approveDocument CTRL] result:', result);
 
             if (result.success) {
-                const io = getIO();
-                if (io) {
-                    io.to(`runner-${runnerId}`).emit('verificationStatus', {
-                        runnerStatus: result.runnerStatus,
-                        isVerifiedKyc: result.isVerifiedKyc ?? false,
-                        isBanned: false,
-                        event: 'kyc_document_approved',
-                        documentType,
-                    });
-                }
+                const payload = {
+                    kycStatus: result.kycStatus,
+                    isVerifiedKyc: result.isVerifiedKyc ?? false,
+                    isBanned: false,
+                    event: 'kyc_document_approved',
+                    documentType,
+                };
+
+                console.log("APPROVE doc payload", payload);
+
+                // Publish to Redis for socket server
+                await this.publishToSocket(runnerId, payload);
 
                 // Notify runner their document was approved
                 sendPushNotification({
                     recipientId: runnerId,
                     recipientType: 'runner',
                     title: '✅ Document Approved',
-                    body: `Your kyc documents have been approved. ${result.runnerStatus === 'approved_limited' ? 'You can now accept limited jobs!' : 'Submit your selfie to complete verification.'}`,
-                    data: { type: 'kyc_document_approved', documentType, runnerStatus: result.runnerStatus }
+                    body: `Your kyc documents have been approved. ${result.kycStatus === 'approved_limited' ? 'You can now accept limited jobs!' : 'Submit your selfie to complete verification.'}`,
+                    data: { type: 'kyc_document_approved', documentType, kycStatus: result.kycStatus }
                 });
 
                 return this.success(res, {
-                    runnerStatus: result.runnerStatus
+                    kycStatus: result.kycStatus
                 }, `${documentType} approved successfully`);
             } else {
                 return this.badRequest(res, result.error || 'Failed to approve document');
@@ -477,17 +471,19 @@ class KYCController extends BaseController {
             const result = await this.service.rejectDocument(runnerId, documentType, reason);
 
             if (result.success) {
-                const io = getIO();
-                if (io) {
-                    io.to(`runner-${runnerId}`).emit('verificationStatus', {
-                        runnerStatus: result.runnerStatus,
-                        isVerifiedKyc: false,
-                        isBanned: false,
-                        event: 'kyc_document_rejected',
-                        documentType,
-                        reason,
-                    });
-                }
+                const payload = {
+                    kycStatus: result.kycStatus,
+                    isVerifiedKyc: false,
+                    isBanned: false,
+                    event: 'kyc_document_rejected',
+                    documentType,
+                    reason,
+                };
+
+                console.log("REJECT doc payload", payload);
+
+                // Publish to Redis for socket server
+                await this.publishToSocket(runnerId, payload);
 
                 // Notify runner their document was rejected
                 sendPushNotification({
@@ -499,7 +495,7 @@ class KYCController extends BaseController {
                 });
 
                 return this.success(res, {
-                    runnerStatus: result.runnerStatus
+                    kycStatus: result.kycStatus
                 }, `${documentType} rejected`);
             } else {
                 return this.badRequest(res, result.error || 'Failed to reject document');
@@ -523,26 +519,28 @@ class KYCController extends BaseController {
             console.log('[approveSelfie CTRL] result:', result);
 
             if (result.success) {
-                const io = getIO();
-                if (io) {
-                    io.to(`runner-${runnerId}`).emit('verificationStatus', {
-                        runnerStatus: result.runnerStatus,
-                        isVerifiedKyc: result.isVerifiedKyc,
-                        isBanned: false,
-                        event: 'kyc_selfie_approved',
-                    });
-                }
+                const payload = {
+                    kycStatus: result.kycStatus,
+                    isVerifiedKyc: result.isVerifiedKyc,
+                    isBanned: false,
+                    event: 'kyc_selfie_approved',
+                };
+
+                console.log("APPROVE selfie payload", payload);
+
+                // Publish to Redis for socket server
+                await this.publishToSocket(runnerId, payload);
 
                 sendPushNotification({
                     recipientId: runnerId,
                     recipientType: 'runner',
                     title: 'Account Fully Verified!',
                     body: 'Your kyc documents have been approved. Your account is now fully verified — you can start accepting jobs!',
-                    data: { type: 'kyc_selfie_approved', runnerStatus: result.runnerStatus }
+                    data: { type: 'kyc_selfie_approved', kycStatus: result.kycStatus }
                 });
 
                 return this.success(res, {
-                    runnerStatus: result.runnerStatus,
+                    kycStatus: result.kycStatus,
                     isVerifiedKyc: result.isVerifiedKyc
                 }, 'Selfie approved successfully');
             } else {
@@ -567,16 +565,19 @@ class KYCController extends BaseController {
             const result = await this.service.rejectSelfie(runnerId, reason);
 
             if (result.success) {
-                const io = getIO();
-                if (io) {
-                    io.to(`runner-${runnerId}`).emit('verificationStatus', {
-                        runnerStatus: result.runnerStatus,
-                        isVerifiedKyc: false,
-                        isBanned: false,
-                        event: 'kyc_selfie_rejected',
-                        reason,
-                    });
-                }
+                const payload = {
+                    kycStatus: result.kycStatus,
+                    isVerifiedKyc: false,
+                    isBanned: false,
+                    event: 'kyc_selfie_rejected',
+                    reason,
+                };
+
+                console.log("REJECT selfie payload", payload);
+
+                // Publish to Redis for socket server
+                await this.publishToSocket(runnerId, payload);
+
                 // Notify runner their selfie was rejected
                 sendPushNotification({
                     recipientId: runnerId,
@@ -587,7 +588,7 @@ class KYCController extends BaseController {
                 });
 
                 return this.success(res, {
-                    runnerStatus: result.runnerStatus
+                    kycStatus: result.kycStatus
                 }, 'Selfie rejected');
             } else {
                 return this.badRequest(res, result.error || 'Failed to reject selfie');

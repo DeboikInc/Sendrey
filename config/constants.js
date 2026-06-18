@@ -5,14 +5,17 @@ const EDUCATION = ['graduate', 'undergraduate', 'high-school'];
 SERVICE_TYPE = ['pick-up', 'run-errand'];
 
 BUSINESS_STATUS = ['active', 'suspended', 'banned']
+
 const RUNNER_STATUS = [
   'pending_verification',
-  'approved_limited', //  Basic verification complete, limited operations, like no kyc
-  'approved_full', // Full verification complete, all operations allowed
+  'approved_limited', 
+  'approved_full', 
   'suspended',
-  'banned'
+  'banned',
+  
 ]
-// For individual document/KYC verification status
+
+
 const VERIFICATION_STATUS = [
   'not_submitted',
   'pending_review',
@@ -21,8 +24,8 @@ const VERIFICATION_STATUS = [
 ];
 
 const TASK_TYPES = {
-  RUN_ERRAND: 'run-errand', // includes market and shopping
-  PICK_UP: 'pick-up' // includes simple pickup and delivery tasks 
+  RUN_ERRAND: 'run-errand', 
+  PICK_UP: 'pick-up'
 };
 
 const STATUS_FLOWS = {

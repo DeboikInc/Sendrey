@@ -519,7 +519,7 @@ class AuthController extends BaseController {
       if (!runner) return this.error(res, 'Runner not found', 404);
 
       const kycStatus = {
-        overallStatus: runner.runnerStatus,
+        overallStatus: runner.kycStatus,
         nin: {
           status: runner.verificationDocuments?.nin?.status ?? 'not_submitted',
           verified: runner.verificationDocuments?.nin?.verified ?? false,
