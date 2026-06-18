@@ -6,6 +6,7 @@ module.exports = {
 
   database: {
     url: process.env.DATABASE_URL,
+    
     options: {
       useNewUrlParser: true,
       useUnifiedTopology: true,
@@ -14,7 +15,9 @@ module.exports = {
 
   jwt: {
     secret: process.env.JWT_SECRET,
-    expiresIn: process.env.JWT_EXPIRES_IN || '7d'
+    expiresIn: process.env.JWT_EXPIRES_IN,
+    refreshSecret: process.env.JWT_REFRESH_SECRET,
+    refreshTokenExpiresIn: process.env.JWT_REFRESH_TOKEN_EXPIRES_IN
   },
 
   auth: {
@@ -39,7 +42,7 @@ module.exports = {
   },
 
   sms: {
-    provider: process.env.SMS_PROVIDER, // 'twilio' or other
+    provider: 'twilio', // 
     twilio: {
       accountSid: process.env.TWILIO_ACCOUNT_SID,
       authToken: process.env.TWILIO_AUTH_TOKEN,

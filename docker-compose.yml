@@ -1,0 +1,22 @@
+services:
+  api:
+    build: .
+    ports:
+      # Ports
+      # 3000 - REST API (app.js)
+      # 3001 - Socket.io (socket.js)
+      - "3000:3000"
+      - "3001:3001"
+    env_file:
+      - .env
+    volumes:
+      - .:/app
+      - /app/node_modules
+    command: npx nodemon app.js  # overrides CMD in Dockerfile
+    depends_on:
+      - redis
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"

@@ -4,6 +4,8 @@ const fs = require('fs').promises;
 const path = require('path');
 const config = require('../config');
 const logger = require('../utils/logger');
+const { subtle } = require('crypto');
+
 
 class EmailService {
   constructor() {
@@ -12,6 +14,7 @@ class EmailService {
     this.fromName = config.email.elastic.fromName;
     this.baseUrl = 'https://api.elasticemail.com/v4';
   }
+
 
   /**
  * Compile Handlebars template
@@ -54,6 +57,9 @@ class EmailService {
               Content: html,
             },
           ],
+          Options: {
+            TrackClicks: false,
+          },
           Attachments: formattedAttachments,
         },
       };
@@ -73,15 +79,15 @@ class EmailService {
     }
   }
 
-  /**
-    * Send email using Elastic Email API (raw HTML)
-    */
+
   async sendEmail(to, subject, templateName, data = {}) {
     try {
+
       const html = await this.compileTemplate(templateName, data);
+      console.log('Template compiled successfully');
 
       const payload = {
-        Recipients: {To: [to] },
+        Recipients: { To: [to] },
         Content: {
           From: `${this.fromName} <${this.fromEmail}>`,
           Subject: subject,
@@ -92,8 +98,14 @@ class EmailService {
               Content: html,
             },
           ],
+          Options: {
+            TrackClicks: false,
+          }
         },
       };
+
+      // console.log('Payload:', JSON.stringify(payload, null, 2));
+      console.log('Making API request to:', `${this.baseUrl}/emails/transactional`);
 
       const res = await axios.post(`${this.baseUrl}/emails/transactional`, payload, {
         headers: {
@@ -105,21 +117,42 @@ class EmailService {
       logger.info(`Email sent via Elastic Email API to ${to}`, res.data);
       return res.data;
     } catch (error) {
+      console.error('=== EMAIL ERROR ===');
+      console.error('Error response:', error.response?.data);
+      console.error('Error message:', error.message);
+      console.error('Error status:', error.response?.status);
+      console.error('=== EMAIL ERROR END ===');
 
       logger.error('Email sending error:', error.response?.data || error.message);
       throw new Error('Failed to send email');
     }
   }
 
-  async sendWelcomeEmail(user) {
+  async sendWelcomeEmail(user, token) {
     return this.sendEmail(
       user.email,
       'Welcome to Sendrey',
       'welcome',
       {
-        name: user.name,
-        loginUrl: `${process.env.FRONTEND_URL}/login`,
+        name: user.firstName || user.name,
+        loginUrl: `${process.env.FRONTEND_URL}/?token=${token}`,
         supportEmail: process.env.SUPPORT_EMAIL
+      }
+    );
+  }
+
+  async sendTeamInviteEmail(invitee, businessName, role, token) {
+    return this.sendEmail(
+      invitee.email,
+      `You've been invited to join ${businessName} on Sendrey`,
+      'teamInvite',
+      {
+        name: invitee.firstName || invitee.name,
+        businessName,
+        role,
+        year: new Date().getFullYear(),
+        loginUrl: `${process.env.FRONTEND_URL}/?invite=${token}`,
+        supportEmail: process.env.SUPPORT_EMAIL,
       }
     );
   }
@@ -163,17 +196,23 @@ class EmailService {
     );
   }
 
-  async sendOTPEmail(user, otp) {
-    return this.sendEmail(
+  async sendOTPEmail(user, otp,) {
+    if (process.env.NODE_ENV === 'development') {
+      console.log(`DEV DEBUG: OTP for ${user.email} is ${otp}`);
+    }
+    const result = this.sendEmail(
       user.email,
       'Your Verification Code',
       'otpEmail',
       {
         name: user.name,
+        email: user.email,
         otp: otp,
         expiryTime: '10 minutes'
       }
     );
+
+    return result;
   }
 
   // Additional email methods
@@ -190,6 +229,23 @@ class EmailService {
       'adminNotification',
       { message, timestamp: new Date().toISOString() }
     );
+  }
+
+  async sendRefundNotification(user, escrow) {
+    return this.sendEmail(
+      user.email,
+      'Refund Processed — Your funds are back in your wallet',
+      'refundNotification',
+      {
+        name: user.firstName || user.name,
+        amount: escrow.totalAmount?.toLocaleString(),
+        orderId: escrow.orderId?.orderId || escrow.taskId,
+        reason: escrow.metadata?.refundReason || 'Order cancelled',
+        walletBalance: escrow.metadata?.walletBalanceAfter?.toLocaleString(),
+        supportEmail: process.env.SUPPORT_EMAIL,
+        year: new Date().getFullYear(),
+      }
+    )
   }
 }
 

@@ -119,6 +119,14 @@ const commonSchemas = {
       'string.length': 'OTP must be exactly 6 digits',
       'string.pattern.base': 'OTP must contain only numbers',
       'any.required': 'OTP is required'
+    }),
+
+  serviceType: Joi.string().
+    valid('pick-up', 'run-errand')
+    .optional()
+    .messages({
+      'any.only': 'Service type must be one of: pick-up, run-errand',
+      'any.required': 'Service type is required'
     })
 };
 
@@ -161,7 +169,7 @@ const authValidation = {
         'any.empty': 'Gender must be one of: male, female'
       }),
     fleetType: Joi.string()
-      .valid('cycling', 'bike', 'car', 'van', 'pedestran')
+      .valid('cycling', 'bike', 'car', 'van', 'pedestrian')
       .messages({
         'any.empty': 'Provide fleet type'
       }),
@@ -176,13 +184,27 @@ const authValidation = {
       }),
     role: Joi.string()
       .valid('user', 'runner', 'sales', 'manager', 'admin', 'super-admin')
-      .default('user')
+      .optional()
       .messages({
         'any.only': 'Role must be one of: user, admin, moderator'
       }),
+    serviceType: Joi.string()
+      .valid('pick-up', 'run-errand')
+      .optional()
+      .messages({
+        'any.only': 'Service type must be one of: pick-up, run-errand',
+        'any.required': 'Service type is required'
+      }),
+    latitude: Joi.number().min(-90).max(90).optional(),
+    longitude: Joi.number().min(-180).max(180).optional(),
+    isOnline: Joi.boolean().optional(),
+    isAvailable: Joi.boolean().default(true),
+    isActive: Joi.boolean().optional()
   }),
 
   registerUser: Joi.object({
+    email: commonSchemas.email.optional(),
+    password: commonSchemas.password.optional(),
     phone: commonSchemas.phone.required(),
     firstName: commonSchemas.name
       .messages({
@@ -191,16 +213,39 @@ const authValidation = {
     lastName: commonSchemas.name
       .messages({
         'string.empty': 'Last name is required',
-      })
-  }).messages(validationMessages),
+      }),
+    latitude: Joi.number().min(-90).max(90).optional()
+      .messages({ 'any.required': 'Location is required' }),
+    longitude: Joi.number().min(-180).max(180).optional()
+      .messages({ 'any.required': 'Location is required' }),
+    isAvailable: Joi.boolean().default(true),
+    isActive: Joi.boolean().optional()
+  }),
 
-  // // Login validation
+
+  // Login validation
   login: Joi.object({
     email: commonSchemas.email.optional(),
     phone: commonSchemas.phone.optional(),
     password: Joi.string()
       .min(1).optional(),
     rememberMe: Joi.boolean().optional()
+  }).messages(validationMessages),
+
+  // Admin login validation
+  adminLogin: Joi.object({
+    email: Joi.string()
+      .trim()
+      .required()
+      .messages({
+        'any.required': 'Admin email is required'
+      }),
+    password: Joi.string()
+      .min(1)
+      .required()
+      .messages({
+        'any.required': 'Admin password is required'
+      })
   }).messages(validationMessages),
 
   // Email verification validation
@@ -249,6 +294,17 @@ const authValidation = {
     otp: commonSchemas.otp
   }).messages(validationMessages),
 
+  requestEmailVerification: Joi.object({
+    email: commonSchemas.email.required().messages({
+      'any.required': 'Email address is required'
+    })
+  }).messages(validationMessages),
+
+  verifyEmailOTP: Joi.object({
+    otp: commonSchemas.otp,
+    userType: Joi.string().valid('user', 'runner').optional()
+  }).messages(validationMessages),
+
   // Social login validation
   socialLogin: Joi.object({
     provider: Joi.string()
@@ -271,21 +327,25 @@ const authValidation = {
   // Logout validation (optional - for token blacklisting)
   logout: Joi.object({}).messages(validationMessages),
 
-  // Admin user creation validation
   createAdmin: Joi.object({
-    email: commonSchemas.email,
-    password: commonSchemas.password,
-    firstName: commonSchemas.name.required(),
-    lastName: commonSchemas.name.required(),
-    phone: commonSchemas.phone.optional(),
-    role: Joi.string()
-      .valid('user', 'runner', 'sales', 'manager', 'admin', 'super-admin')
-      .default('user')
-      .messages({
-        'any.only': 'Role must be one of: user, admin, moderator'
-      }),
-    isActive: Joi.boolean().default(true),
-    sendWelcomeEmail: Joi.boolean().default(true)
+    email: Joi.string().email().required().messages({
+      'string.email': 'Please provide a valid email address',
+      'any.required': 'Email is required'
+    }),
+    password: Joi.string().min(6).required().messages({
+      'string.min': 'Password must be at least 6 characters',
+      'any.required': 'Password is required'
+    }),
+    firstName: Joi.string().min(2).required().messages({
+      'string.min': 'First name must be at least 2 characters',
+      'any.required': 'First name is required'
+    }),
+    lastName: Joi.string().min(2).required().messages({
+      'string.min': 'Last name must be at least 2 characters',
+      'any.required': 'Last name is required'
+    }),
+    phone: Joi.string().optional(),
+    role: Joi.string().valid('admin', 'super-admin').default('admin').required()
   }).messages(validationMessages),
 };
 
@@ -298,19 +358,34 @@ const userParamsValidation = {
 };
 
 // Validation middleware helper
-const validate = (schema) => {
+const validate = (schema, property = 'body') => {
   return (req, res, next) => {
-    const { error, value } = schema.validate(req.body, {
+
+    if (!schema || typeof schema.validate !== 'function') {
+      console.error(`ERROR: Validation schema is undefined for route ${req.originalUrl}`);
+      return res.status(500).json({
+        success: false,
+        message: 'Internal Server Error: Validation configuration missing'
+      });
+    }
+
+    const data = req[property];
+    const { error, value } = schema.validate(data, {
       abortEarly: false,
       stripUnknown: true,
       allowUnknown: false
     });
 
     if (error) {
+      // console.log('Validation errors:', JSON.stringify(error.details, null, 2));
+      // console.log('Error message:', error.message);
+
       const errorDetails = error.details.map(detail => ({
         field: detail.path.join('.'),
         message: detail.message
       }));
+
+      // console.log('Formatted errors:', JSON.stringify(errorDetails, null, 2));
 
       return res.status(400).json({
         success: false,
@@ -319,11 +394,13 @@ const validate = (schema) => {
       });
     }
 
-    // Replace req.body with validated and sanitized data
-    req.body = value;
+    req[property] = value; // put sanitized data back in the right place
     next();
   };
 };
+
+
+
 
 // Validate query parameters
 const validateQuery = (schema) => {
