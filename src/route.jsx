@@ -1,51 +1,67 @@
+// route.js
 import { Routes, Route } from "react-router";
 import WhatsAppLikeChat from "./pages/runner/Raw";
 import { Home } from "./pages/user/Home";
 import { Auth } from "./pages/user/Auth";
 import { Welcome } from "./pages/user/Welcome";
 import { Profile } from "./pages/runner/Profile"
+import { Disputes } from "./pages/runner/Disputes";
 import { Wallet } from "./pages/runner/Wallet";
 import { Orders } from "./pages/runner/Orders";
-import Landing from "./pages/Landing";
 import { Payout } from "./pages/runner/Payout";
+import ChatDeepLink from "./utils/ChatDeepLink";
 
 import ProtectedRoute from "./components/common/ProtectedRoute";
-// import RunnerProtectedRoute from "./components/common/RunnerProtectedRoute";
-
 
 export default function ProjectedRoutes() {
   return (
     <Routes>
-      <Route path="/raw" element={<WhatsAppLikeChat />} />
-      <Route path="/auth" element={<Auth />} />
+      {/* Runner routes - require runner authentication */}
 
+      <Route path="/profile" element={
+        <ProtectedRoute requireRunner={true}>
+          <Profile />
+        </ProtectedRoute>
+      } />
+
+      <Route path="/all-orders" element={
+        <ProtectedRoute requireRunner={true}>
+          <Orders />
+        </ProtectedRoute>
+      } />
+
+      <Route path="/disputes" element={
+        <ProtectedRoute requireRunner={true}>
+          <Disputes />
+        </ProtectedRoute>
+      } />
+
+      <Route path="/wallet" element={
+        <ProtectedRoute requireRunner={true}>
+          <Wallet />
+        </ProtectedRoute>
+      } />
+
+      <Route path="/payout" element={
+        <ProtectedRoute requireRunner={true}>
+          <Payout />
+        </ProtectedRoute>
+      } />
+
+      {/* User routes - require user authentication */}
       <Route path="/welcome" element={
-        <ProtectedRoute>
+        <ProtectedRoute requireRunner={false}>
           <Welcome />
         </ProtectedRoute>
       } />
 
-      <Route path="/profile" element={<Profile />} />
 
-      <Route path="/all-orders" element={<Orders />} />
-      <Route path="/landing" element={<Landing />} />
-      <Route path="/wallet" element={
-        // <RunnerProtectedRoute>
-        // </RunnerProtectedRoute>
-          <Wallet />
-      } />
-
-      <Route path="/payout" element={
-        // <RunnerProtectedRoute>
-        // </RunnerProtectedRoute>
-          <Payout />
-      } />
-
+      {/* Public routes - no authentication required */}
       <Route path="/" element={<Home />} />
-
-      {/* <Route path="/reg" element={<BankHome />} /> */}
+      <Route path="/auth" element={<Auth />} />
+      <Route path="/raw" element={<WhatsAppLikeChat />} />
+      <Route path="/runner/chat/:chatId" element={<ChatDeepLink userType="runner" />} />
+      <Route path="/user/chat/:chatId" element={<ChatDeepLink userType="user" />} />
     </Routes>
-  )
+  );
 }
-
-

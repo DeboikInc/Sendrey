@@ -1,22 +1,25 @@
 // runner/profile
 import { useState, useEffect, useRef } from 'react';
-import { useDispatch, useSelector, } from 'react-redux';
-import { ChevronLeft, ChevronRight, User, Trash2, Camera, Star, Phone, Shield, KeyRound } from 'lucide-react';
+import { useDispatch, useSelector } from 'react-redux';
+import {
+    ChevronLeft, ChevronRight, User, Trash2, Camera,
+    Star, Phone, Shield, KeyRound, Clock, XCircle, CheckCircle
+} from 'lucide-react';
 import { getRunnerRatings } from '../../Redux/ratingSlice';
-import api from '../../utils/api';
 import { setPin, resetPin, setPinSet } from '../../Redux/pinSlice';
+import { updateProfile, getProfile } from '../../Redux/runnerSlice';
 import { PinPad } from '../../components/common/PinPad';
 
 const ConfirmModal = ({ field, value, onConfirm, onCancel, dark }) => (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
         <div className={`bg-white dark:bg-black-100 rounded-2xl shadow-xl max-w-sm w-full p-6`}>
             <h2 className="text-lg font-bold text-black-200 dark:text-gray-200 mb-2">Save changes?</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-1">
+            <p className="text-sm text-black-100/80 dark:text-gray-400 mb-1">
                 Update <span className="font-medium capitalize">{field}</span> to:
             </p>
             <p className="text-sm font-semibold text-black-200 dark:text-white mb-6 break-all">"{value}"</p>
             <div className="flex justify-end gap-3 font-medium">
-                <button onClick={onCancel} className="text-gray-500 dark:text-gray-400">Cancel</button>
+                <button onClick={onCancel} className="text-black-100/80 dark:text-gray-400">Cancel</button>
                 <button onClick={onConfirm} className="text-primary">Save</button>
             </div>
         </div>
@@ -43,44 +46,54 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
     const averageRating = useSelector(s => s.rating.averageRating);
     const totalRatings = useSelector(s => s.rating.totalRatings);
     const isPinSet = useSelector(s => s.pin.isPinSet);
+    const profileFromStore = useSelector(s => s.runners.profile);
 
     const [runnerData, setRunnerData] = useState(initialRunnerData || {});
-    const [editingField, setEditingField] = useState(null); // 'firstName' | 'lastName' | 'email'
+    const [editingField, setEditingField] = useState(null);
     const [editValue, setEditValue] = useState('');
-    const [confirmModal, setConfirmModal] = useState(null); // { field, value }
+    const [confirmModal, setConfirmModal] = useState(null);
     const [saving, setSaving] = useState(false);
     const [saveError, setSaveError] = useState(null);
     const [avatarUploading, setAvatarUploading] = useState(false);
     const fileInputRef = useRef(null);
 
-
-    const [pinMode, setPinMode] = useState(null); // null | 'set' | 'reset_current' | 'reset_new' | 'forgot'
-    const [pinStep, setPinStep] = useState(null); // eslint-disable-line no-unused-vars
+    const [pinMode, setPinMode] = useState(null);
     const [collectedCurrentPin, setCollectedCurrentPin] = useState('');
     const [pinSaveError, setPinSaveError] = useState(null);
     const [pinSuccess, setPinSuccess] = useState(null);
 
-    // check is user has pin already
     const hasPinSet = isPinSet || runnerData?.hasPin === true;
 
     // Fetch fresh profile + ratings on mount
     useEffect(() => {
         if (!runnerId) return;
 
-        api.get('/runners/profile')
-            .then(res => {
-                const runner = res.data?.runner || res.data?.data?.runner;
+        const fetchData = async () => {
+            try {
+                const result = await dispatch(getProfile()).unwrap();
+                // Handle different response structures
+                const runner = result?.data?.runner || result?.runner || result?.data || result;
                 if (runner) {
                     setRunnerData(runner);
                     if (runner.hasPinSet !== undefined) {
                         dispatch(setPinSet(runner.hasPinSet));
                     }
                 }
-            })
-            .catch(err => console.error('Profile fetch error:', err));
+            } catch (err) {
+                console.error('Profile fetch error:', err);
+            }
+        };
 
+        fetchData();
         dispatch(getRunnerRatings({ runnerId, page: 1 }));
     }, [runnerId, dispatch]);
+
+    // Update local state when store profile changes
+    useEffect(() => {
+        if (profileFromStore) {
+            setRunnerData(prev => ({ ...prev, ...profileFromStore }));
+        }
+    }, [profileFromStore]);
 
     const handleEditStart = (field, currentValue) => {
         setEditingField(field);
@@ -95,7 +108,6 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
 
     const handleSaveAttempt = () => {
         if (!editValue.trim()) return;
-        // Only show modal if value actually changed
         if (editValue.trim() === (runnerData[editingField] || '').trim()) {
             setEditingField(null);
             return;
@@ -111,12 +123,16 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
         setSaveError(null);
 
         try {
-            const res = await api.patch(`/runners/${runnerId}`, { [field]: value });
-            const updated = res.data?.runner || res.data?.data?.runner;
-            if (updated) setRunnerData(updated);
-            else setRunnerData(prev => ({ ...prev, [field]: value }));
+            const updated = await dispatch(updateProfile({ [field]: value })).unwrap();
+            // Handle different response structures
+            const updatedRunner = updated?.data?.runner || updated?.runner || updated?.data || updated;
+            if (updatedRunner) {
+                setRunnerData(updatedRunner);
+            } else {
+                setRunnerData(prev => ({ ...prev, [field]: value }));
+            }
         } catch (err) {
-            setSaveError('Failed to save. Please try again.');
+            setSaveError(err?.message || 'Failed to save. Please try again.');
             console.error('Profile update error:', err);
         } finally {
             setSaving(false);
@@ -131,22 +147,22 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
         try {
             const formData = new FormData();
             formData.append('avatar', file);
-            const res = await api.patch(`/runners/${runnerId}/avatar`, formData, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            });
-            const updated = res.data?.runner || res.data?.data?.runner;
-            if (updated) setRunnerData(updated);
+            const updated = await dispatch(updateProfile(formData)).unwrap();
+            const updatedRunner = updated?.data?.runner || updated?.runner || updated?.data || updated;
+            if (updatedRunner?.avatar) {
+                setRunnerData(prev => ({ ...prev, avatar: updatedRunner.avatar }));
+            }
         } catch (err) {
             console.error('Avatar upload error:', err);
         } finally {
             setAvatarUploading(false);
+            if (fileInputRef.current) fileInputRef.current.value = '';
         }
     };
 
     const fields = [
         { key: 'firstName', label: 'First Name' },
         { key: 'lastName', label: 'Last Name' },
-        // { key: 'phone', label: 'Phone' },
     ];
 
     if (!registrationComplete) {
@@ -159,8 +175,7 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
                     <h1 className="text-lg font-bold mx-auto text-black-200 dark:text-gray-300">Profile</h1>
                 </div>
                 <div className="flex-1 flex flex-col items-center justify-center text-center px-6 py-20">
-                    <p className="text-gray-500 dark:text-gray-400 font-medium">Nothing to see here yet</p>
-                    <p className="text-sm text-gray-400 dark:text-gray-500 mt-1">Complete your registration first</p>
+                    <p className="text-black-100/80 dark:text-gray-500">Get Started to view profile</p>
                 </div>
             </div>
         );
@@ -181,10 +196,10 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
                 <div className="flex flex-col items-center py-6 px-4">
                     <div className="relative">
                         <div className="w-20 h-20 rounded-full bg-gray-200 dark:bg-black-200 overflow-hidden flex items-center justify-center">
-                            {runnerData.profilePicture ? (
-                                <img src={runnerData.profilePicture} alt="avatar" className="w-full h-full object-cover" />
+                            {runnerData.avatar ? (
+                                <img src={runnerData.avatar} alt="avatar" className="w-full h-full object-cover" />
                             ) : (
-                                <User className="w-8 h-8 text-gray-400" />
+                                <User className="w-8 h-8 text-black-100/80 dark:text-gray-400" />
                             )}
                         </div>
                         <button
@@ -203,28 +218,28 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
                         />
                     </div>
                     {avatarUploading && (
-                        <p className="text-xs text-gray-400 mt-2">Uploading...</p>
+                        <p className="text-xs text-black-100/80 dark:text-gray-400 mt-2">Uploading...</p>
                     )}
 
                     {/* Rating */}
                     {totalRatings > 0 && (
                         <div className="flex flex-col items-center mt-3 gap-1">
                             <StarDisplay rating={averageRating} />
-                            <p className="text-xs text-gray-400 dark:text-gray-500">
+                            <p className="text-xs text-black-100/80 dark:text-gray-500">
                                 {averageRating.toFixed(1)} · {totalRatings} rating{totalRatings !== 1 ? 's' : ''}
                             </p>
                         </div>
                     )}
                     {totalRatings === 0 && (
-                        <p className="text-xs text-gray-400 dark:text-gray-500 mt-3">No ratings yet</p>
+                        <p className="text-xs text-black-100/80 dark:text-gray-500 mt-3">No ratings yet</p>
                     )}
                 </div>
 
                 {/* Editable fields */}
                 <div className="px-4 pb-4 space-y-3">
                     {fields.map(({ key, label }) => (
-                        <div key={key} className="border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3">
-                            <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">{label}</p>
+                        <div key={key} className="border border-black-100/20 dark:border-white/10 rounded-xl px-4 py-3">
+                            <p className="text-xs text-black-100/80 dark:text-gray-500 mb-1">{label}</p>
                             {editingField === key ? (
                                 <input
                                     autoFocus
@@ -240,38 +255,138 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
                                     onClick={() => handleEditStart(key, runnerData[key])}
                                 >
                                     <p className="text-sm text-black-200 dark:text-gray-200">
-                                        {runnerData[key] || <span className="text-gray-400">Not set</span>}
+                                        {runnerData[key] || <span className="text-black-100/80 dark:text-gray-400">Not set</span>}
                                     </p>
-                                    <ChevronRight className="w-4 h-4 text-gray-400" />
+                                    <ChevronRight className="w-4 h-4 text-black-100/80 dark:text-gray-400" />
                                 </div>
                             )}
                         </div>
                     ))}
 
-                    {/* Phone — read only */}
+                    {/* Email — read only */}
                     <div className="border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3">
-                        <p className="text-xs text-gray-400 dark:text-gray-500 mb-1">Email</p>
+                        <p className="text-xs text-black-100/80 dark:text-gray-500 mb-1">Email</p>
                         <div className="flex items-center justify-between">
                             <p className="text-sm text-black-200 dark:text-gray-200">{runnerData.email || '—'}</p>
                             <div className="flex flex-col justify-center items-center gap-1">
-                                <Phone className="w-3.5 h-3.5 text-gray-400" />
-                                <span className="text-[10px] text-gray-400">Contact support to change</span>
+                                <Phone className="w-3.5 h-3.5 text-black-100/80 dark:text-gray-400" />
+                                <span className="text-[10px] text-black-100/80 dark:text-gray-400">Contact support to change</span>
                             </div>
                         </div>
+                    </div>
+
+                    <div className="border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3">
+                        <p className="text-xs text-black-100/80 dark:text-gray-500 mb-1">Phone</p>
+                        <div className="flex items-center justify-between">
+                            <p className="text-sm text-black-200 dark:text-gray-200">{runnerData.phone || '—'}</p>
+                            <div className="flex flex-col justify-center items-center gap-1">
+                                <Phone className="w-3.5 h-3.5 text-black-100/80 dark:text-gray-400" />
+                                <span className="text-[10px] text-black-100/80 dark:text-gray-400">Contact support to change</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Fleet Type — read only */}
+                    <div className="border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3">
+                        <p className="text-xs text-black-100/80 dark:text-gray-500 mb-1">Your Fleet Type</p>
+                        <div className="flex items-center justify-between">
+                            <p className="text-sm text-black-200 dark:text-gray-200 capitalize">
+                                {runnerData.fleetType ?? '—'}
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* KYC — read only */}
+                    <div className="border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 space-y-3">
+                        <p className="text-xs text-black-100/80 dark:text-gray-500 mb-1">KYC Status</p>
+
+                        {(() => {
+                            const isVerified = runnerData.isVerifiedKyc;
+                            const isPending = ['pending_verification', 'pending_review'].includes(runnerData.kycStatus);
+                            const isRejected = runnerData.kycStatus === 'rejected' || runnerData.kycStatus === 'banned';
+
+                            const nin = runnerData.verificationDocuments?.nin;
+                            const license = runnerData.verificationDocuments?.driverLicense;
+                            const selfie = runnerData.biometricVerification;
+
+                            // Docs actually submitted (not_submitted means runner didn't provide it)
+                            const submittedDocs = [
+                                nin?.status && nin.status !== 'not_submitted' ? 'ID (NIN)' : null,
+                                license?.status && license.status !== 'not_submitted' ? 'Driver\'s License' : null,
+                                selfie?.status && selfie.status !== 'not_submitted' ? 'Facial Recognition' : null,
+                            ].filter(Boolean);
+
+                            if (isVerified) {
+                                return (
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                                                <CheckCircle className="w-3.5 h-3.5 text-primary" />
+                                            </div>
+                                            <p className="text-sm font-bold text-primary">Verified</p>
+                                        </div>
+                                        <p className="text-xs text-black-100/80 dark:text-gray-400">{submittedDocs.join(' · ')}</p>
+                                    </div>
+                                );
+                            }
+
+                            if (isPending) {
+                                return (
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-6 h-6 rounded-full bg-secondary/10 flex items-center justify-center flex-shrink-0">
+                                                <Clock className="w-3.5 h-3.5 text-secondary dark:text-gray-300" />
+                                            </div>
+                                            <p className="text-sm font-bold text-secondary dark:text-gray-300">Pending Review</p>
+                                        </div>
+                                        <p className="text-xs text-black-100/80 dark:text-gray-400">
+                                            {submittedDocs.length > 0 ? submittedDocs.join(' · ') : 'Under review'}
+                                        </p>
+                                    </div>
+                                );
+                            }
+
+                            if (isRejected) {
+                                return (
+                                    <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-6 h-6 rounded-full bg-gray-1000 dark:bg-white/5 flex items-center justify-center flex-shrink-0">
+                                                <XCircle className="w-3.5 h-3.5 text-gray-500" />
+                                            </div>
+                                            <p className="text-sm font-bold text-gray-500">Verification Failed</p>
+                                        </div>
+                                        <p className="text-xs text-black-100/80 dark:text-gray-400">Contact support</p>
+                                    </div>
+                                );
+                            }
+
+                            // not_submitted / pending_verification initial state
+                            return (
+                                <div className="flex items-center gap-2">
+                                    <div className="w-6 h-6 rounded-full bg-gray-1000 dark:bg-white/5 flex items-center justify-center flex-shrink-0">
+                                        <Shield className="w-3.5 h-3.5 text-black-100/80 dark:text-gray-400" />
+                                    </div>
+                                    <div>
+                                        <p className="text-sm font-bold text-black-100/80 dark:text-gray-400">Not Verified</p>
+                                        <p className="text-xs text-black-100/80 dark:text-gray-400 mt-0.5">Complete onboarding to verify</p>
+                                    </div>
+                                </div>
+                            );
+                        })()}
                     </div>
 
                     {saveError && (
                         <p className="text-xs text-red-500 text-center">{saveError}</p>
                     )}
                     {saving && (
-                        <p className="text-xs text-gray-400 text-center">Saving...</p>
+                        <p className="text-xs text-black-100/80 dark:text-gray-400 text-center">Saving...</p>
                     )}
                 </div>
 
-                {/* ── PIN Management ─────────────────────────────────────────── */}
+                {/* PIN Management */}
                 <div className="px-4 pb-4">
                     <p className={`text-xs font-semibold uppercase tracking-widest mb-3 
-    ${darkMode ? 'text-gray-500' : 'text-gray-400'}`}>
+    ${darkMode ? 'text-gray-500' : 'text-black-100/80'}`}>
                         Security
                     </p>
 
@@ -287,7 +402,6 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
                     )}
 
                     {!hasPinSet ? (
-                        // ── No PIN set yet ──────────────────────────────────────────
                         <button
                             onClick={() => { setPinMode('set'); setPinSaveError(null); setPinSuccess(null); }}
                             className="w-full flex items-center justify-between border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3"
@@ -298,13 +412,12 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
                                 </div>
                                 <div className="text-left">
                                     <p className="text-sm font-medium text-black-200 dark:text-gray-200">Set Transaction PIN</p>
-                                    <p className="text-xs text-gray-400 mt-0.5">Required for withdrawals & transfers</p>
+                                    <p className="text-xs text-black-100/80 dark:text-gray-400 mt-0.5">Required for withdrawals & transfers</p>
                                 </div>
                             </div>
-                            <ChevronRight className="w-4 h-4 text-gray-400" />
+                            <ChevronRight className="w-4 h-4 text-black-100/80 dark:text-gray-400" />
                         </button>
                     ) : (
-                        // ── PIN already set ─────────────────────────────────────────
                         <div className="space-y-2">
                             <button
                                 onClick={() => { setPinMode('reset_current'); setPinSaveError(null); setPinSuccess(null); }}
@@ -316,10 +429,10 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
                                     </div>
                                     <div className="text-left">
                                         <p className="text-sm font-medium text-black-200 dark:text-gray-200">Change PIN</p>
-                                        <p className="text-xs text-gray-400 mt-0.5">Enter current PIN then set new one</p>
+                                        <p className="text-xs text-black-100/80 dark:text-gray-400 mt-0.5">Enter current PIN then set new one</p>
                                     </div>
                                 </div>
-                                <ChevronRight className="w-4 h-4 text-gray-400" />
+                                <ChevronRight className="w-4 h-4 text-black-100/80 dark:text-gray-400" />
                             </button>
 
                             <button
@@ -332,10 +445,10 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
                                     </div>
                                     <div className="text-left">
                                         <p className="text-sm font-medium text-black-200 dark:text-gray-200">Forgot PIN</p>
-                                        <p className="text-xs text-gray-400 mt-0.5">Reset via identity verification</p>
+                                        <p className="text-xs text-black-100/80 dark:text-gray-400 mt-0.5">Reset via identity verification</p>
                                     </div>
                                 </div>
-                                <ChevronRight className="w-4 h-4 text-gray-400" />
+                                <ChevronRight className="w-4 h-4 text-black-100/80 dark:text-gray-400" />
                             </button>
                         </div>
                     )}
@@ -348,9 +461,9 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
                             <Trash2 className="w-4 h-4 text-red-400" />
                             <span className="text-sm text-red-400">Delete Account</span>
                         </div>
-                        <ChevronRight className="w-4 h-4 text-gray-400" />
+                        <ChevronRight className="w-4 h-4 text-black-100/80 dark:text-gray-400" />
                     </div>
-                    <p className="text-xs text-gray-400 dark:text-gray-600 text-center mt-2">
+                    <p className="text-xs text-black-100/80 dark:text-gray-600 text-center mt-2">
                         Contact support to delete your account
                     </p>
                 </div>
@@ -367,10 +480,7 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
                 />
             )}
 
-
-            {/* ── PIN Modals ──────────────────────────────────────────────── */}
-
-            {/* Set PIN — single step, collect new PIN */}
+            {/* PIN Modals */}
             {pinMode === 'set' && (
                 <PinPad
                     dark={darkMode}
@@ -392,7 +502,6 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
                 />
             )}
 
-            {/* Reset PIN — step 1: verify current PIN */}
             {pinMode === 'reset_current' && (
                 <PinPad
                     dark={darkMode}
@@ -407,7 +516,6 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
                 />
             )}
 
-            {/* Reset PIN — step 2: enter new PIN */}
             {pinMode === 'reset_new' && (
                 <PinPad
                     dark={darkMode}
@@ -431,7 +539,6 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
                 />
             )}
 
-            {/* Forgot PIN — now handles OTP inside PinPad */}
             {pinMode === 'forgot' && (
                 <PinPad
                     dark={darkMode}
@@ -447,8 +554,8 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
                 />
             )}
 
-            <div className="flex justify-center p-4 text-xs text-gray-300 dark:text-gray-700">
-                Sendrey
+            <div className="flex justify-center p-4 text-xs text-black-100/80 dark:text-gray-700">
+                Sendrey - support@sendrey.com
             </div>
         </div>
     );

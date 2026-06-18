@@ -1,22 +1,42 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import api from "../utils/api";
-import { isCapacitor } from "../utils/api";
+import { isCapacitor, useTokenAuth } from "../utils/api";
 import useOrderStore from '../store/orderStore';
+import { authStorage } from "../utils/authStorage";
+
+// helper — call after any successful auth response
+const storeTokensIfNeeded = async (payload) => {
+    if (useTokenAuth && payload?.accessToken) {
+        await authStorage.setTokens(payload.accessToken, payload.refreshToken);
+    }
+};
 
 // ── Thunks ────────────────────────────────────────────────────────────────────
 
 export const register = createAsyncThunk("auth/register", async (data, thunkAPI) => {
-    const { role, email, fullName, firstName, lastName, phone, password, fleetType, serviceType, latitude, longitude } = data;
+    const { role, email, fullName, firstName, lastName, phone, password, fleetType, latitude, longitude } = data;
     try {
         const endpoint = role === "runner" ? "/auth/register-runner" : "/auth/register-user";
-        const payload = {
-            phone, password, email, fleetType, role, serviceType, latitude, longitude,
-            ...(role === 'runner' && { isOnline: true, isAvailable: true }),
-            ...(fullName && { fullName }),
-            ...(firstName && { firstName }),
-            ...(lastName && { lastName }),
-        };
+
+        const payload = role === "runner"
+            ? {
+                phone, password, email, fleetType, role, latitude, longitude,
+                isOnline: true, isAvailable: true,
+                ...(fullName && { fullName }),
+                ...(firstName && { firstName }),
+                ...(lastName && { lastName }),
+            }
+            : {
+                // user payload
+                phone, password, email, role, latitude, longitude,
+                ...(fullName && { fullName }),
+                ...(firstName && { firstName }),
+                ...(lastName && { lastName }),
+            };
+
         const response = await api.post(endpoint, payload);
+
+        await storeTokensIfNeeded(response.data);
         return response.data;
     } catch (error) {
         if (error.response?.data?.errors) {
@@ -56,6 +76,12 @@ export const verifyEmail = createAsyncThunk("auth/verify-email", async ({ token 
 export const verifyEmailOTP = createAsyncThunk("auth/verify-email-otp", async ({ otp, userType = 'user' }, thunkAPI) => {
     try {
         const response = await api.post("/auth/verify-email-otp", { otp, userType });
+        console.log('[verifyEmailOTP] response.data:', JSON.stringify(response.data));
+        console.log('[verifyEmailOTP] accessToken present:', !!response.data?.accessToken);
+
+        await storeTokensIfNeeded(response.data);
+        const { accessToken } = await authStorage.getTokens();
+        console.log('[verifyEmailOTP] token in storage after store:', !!accessToken);
         return response.data;
     } catch (error) {
         return thunkAPI.rejectWithValue(error.response?.data?.message || "email OTP verification failed");
@@ -168,7 +194,10 @@ export const fetchRunnerMe = createAsyncThunk('auth/fetchRunnerMe', async (_, { 
         return res.data;
     } catch (err) {
         // pass the full response so we can check status in the reducer
-        return rejectWithValue(err.response?.data ?? { status: err.response?.status });
+        return rejectWithValue({
+            ...(err.response?.data ?? {}),
+            status: err.response?.status,
+        });
     }
 });
 
@@ -177,19 +206,61 @@ export const fetchUserMe = createAsyncThunk('auth/fetchUserMe', async (_, { reje
         const res = await api.get('/auth/user/me', { _skipInterceptor: true });
         return res.data;
     } catch (err) {
-        return rejectWithValue(err.response?.data ?? { status: err.response?.status });
+        return rejectWithValue({
+            ...(err.response?.data ?? {}),
+            status: err.response?.status,
+        });
     }
 });
 
-const wipeRunnerLocalStorage = (runnerId) => {
+export const wipeRunnerLocalStorage = (runnerId) => {
+    console.log('[WIPE] called with runnerId:', runnerId);
+    console.log('[WIPE] localStorage BEFORE wipe:', {
+        runner_ui: localStorage.getItem('runner_ui'),
+        activeRunner: localStorage.getItem('activeRunner'),
+        'sendrey-order-store': localStorage.getItem('sendrey-order-store'),
+        'persist:auth': localStorage.getItem('persist:auth'),
+        'persist:pin': localStorage.getItem('persist:pin'),
+    });
+
+    // Fallback: get runnerId from persist:auth before nuking it
+    if (!runnerId) {
+        try {
+            const persisted = JSON.parse(localStorage.getItem('persist:auth') || '{}');
+            const runner = JSON.parse(persisted.runner || 'null');
+            runnerId = runner?._id;
+            console.log('[WIPE] runnerId resolved from persist:auth:', runnerId);
+        } catch (_) {
+            console.log('[WIPE] failed to parse persist:auth for runnerId');
+        }
+    }
+
     localStorage.removeItem('runner_ui');
+    localStorage.removeItem('activeRunner');
+    localStorage.removeItem('sendrey-order-store');
+    localStorage.removeItem('persist:auth');
+    localStorage.removeItem('persist:pin');
+
     if (runnerId) {
         localStorage.removeItem(`kyc_flow_started_${runnerId}`);
         localStorage.removeItem(`terms_accepted_${runnerId}`);
         localStorage.removeItem(`kyc_nudge_${runnerId}`);
         localStorage.removeItem(`currentOrder_${runnerId}`);
+        localStorage.removeItem(`kyc_step_${runnerId}`);
+        localStorage.removeItem(`kyc_verified_shown_${runnerId}`);
+        console.log('[WIPE] runner-keyed keys removed for:', runnerId);
+    } else {
+        console.warn('[WIPE] no runnerId — runner-keyed keys NOT removed');
     }
+
+    console.log('[WIPE] localStorage AFTER wipe:', {
+        runner_ui: localStorage.getItem('runner_ui'),
+        activeRunner: localStorage.getItem('activeRunner'),
+        'sendrey-order-store': localStorage.getItem('sendrey-order-store'),
+        'persist:auth': localStorage.getItem('persist:auth'),
+    });
 };
+
 
 
 // ── Slice ─────────────────────────────────────────────────────────────────────
@@ -216,14 +287,19 @@ const authSlice = createSlice({
             if (action.payload.runner) state.runner = action.payload.runner;
             state.isAuthenticated = true;
         },
+        updateRunner(state, action) {
+            if (state.runner) {
+                state.runner = { ...state.runner, ...action.payload };
+            }
+        },
         clearCredentials(state) {
+            console.log('[clearCredentials] called, runner at time of call:', state.runner?._id);
             const runnerId = state.runner?._id;
             state.user = null;
             state.runner = null;
             state.isAuthenticated = false;
             state.error = null;
             wipeRunnerLocalStorage(runnerId);
-            useOrderStore.getState()._reset();
         },
         clearRunnerSession(state) {
             const runnerId = state.runner?._id;
@@ -286,6 +362,7 @@ const authSlice = createSlice({
 
             // ── verifyEmailToken ───────────────────────────────────────────────────
             .addCase(verifyEmailToken.fulfilled, (state, action) => {
+                storeTokensIfNeeded(action.payload);
                 if (action.payload.isRunner) {
                     state.runner = action.payload.runner;
                 } else {
@@ -343,11 +420,8 @@ const authSlice = createSlice({
                 // cookie gone or invalid — wipe runner so WhatsAppLikeChatRoot key = 'no-runner'
                 const httpStatus = action.payload?.status ?? action.payload?.statusCode;
                 if (httpStatus === 401) {
-                    const runnerId = state.runner?._id;
                     state.runner = null;
                     state.isAuthenticated = false;
-                    wipeRunnerLocalStorage(runnerId);
-                    useOrderStore.getState()._reset();
                 }
             })
 
@@ -412,6 +486,7 @@ export default authSlice.reducer;
 export const {
     updateUser,
     setToken,
+    updateRunner,
     setCredentials,
     clearCredentials,
     clearRunnerSession,

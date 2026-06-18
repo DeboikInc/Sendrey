@@ -5,6 +5,7 @@ import {
   Send, X, Banknote, User, ArrowUpRight
 } from 'lucide-react';
 
+import useOrderStore from '../../store/orderStore';
 import { useDispatch, useSelector, shallowEqual } from 'react-redux';
 import {
   getCurrentPayout, transferToVendor, getPayoutBanks,
@@ -23,7 +24,7 @@ const ReceiptModal = ({ receipt, payout, dark, onClose }) => {
         <div className={`flex items-center justify-between px-5 py-4 border-b ${dark ? 'border-black-100' : 'border-gray-100'}`}>
           <p className={`font-semibold ${dark ? 'text-white' : 'text-black-200'}`}>Transfer Receipt</p>
           <button onClick={onClose} className={`p-1.5 rounded-full ${dark ? 'hover:bg-black-100' : 'hover:bg-gray-100'}`}>
-            <X className="w-4 h-4 text-gray-400" />
+            <X className="w-4 h-4 text-black-100/80 dark:text-gray-400" />
           </button>
         </div>
 
@@ -74,7 +75,7 @@ const ReceiptModal = ({ receipt, payout, dark, onClose }) => {
 
 const ReceiptRow = ({ label, value, bold, color, dark }) => (
   <div className="flex justify-between items-center gap-2 px-4 py-3">
-    <span className={`text-xs ${dark ? 'text-gray-500' : 'text-gray-400'}`}>{label}</span>
+    <span className={`text-xs ${dark ? 'text-gray-500' : 'text-black-100/80'}`}>{label}</span>
     <span className={`text-xs font-${bold ? 'semibold' : 'medium'} text-right ${color || (dark ? 'text-white' : 'text-black-200')}`}>{value}</span>
   </div>
 );
@@ -86,12 +87,12 @@ const ConfirmModal = ({ dark, vendorName, accountName, accountNumber, bankName, 
       <div className={`flex items-center justify-between px-5 py-4 border-b ${dark ? 'border-black-100' : 'border-gray-100'}`}>
         <p className={`font-semibold ${dark ? 'text-white' : 'text-black-200'}`}>Confirm Transfer</p>
         <button onClick={onCancel} className={`p-1.5 rounded-full ${dark ? 'hover:bg-black-100' : 'hover:bg-gray-100'}`}>
-          <X className="w-4 h-4 text-gray-400" />
+          <X className="w-4 h-4 text-black-100/80 dark:text-gray-400" />
         </button>
       </div>
 
       <div className="px-5 py-5 space-y-4 max-h-[60vh] overflow-y-auto">
-        <p className={`text-xs ${dark ? 'text-gray-400' : 'text-gray-500'}`}>
+        <p className={`text-xs ${dark ? 'text-gray-400' : 'text-black-100/80'}`}>
           Once confirmed, the transfer will be sent immediately to the vendor.
         </p>
 
@@ -114,7 +115,7 @@ const ConfirmModal = ({ dark, vendorName, accountName, accountNumber, bankName, 
 
       <div className={`px-5 py-4 border-t flex gap-3 ${dark ? 'border-black-100' : 'border-gray-100'}`}>
         <button onClick={onCancel} disabled={submitting}
-          className={`flex-1 py-3 rounded-xl text-sm font-semibold border transition-colors ${dark ? 'border-black-100 text-gray-400 hover:bg-black-100' : 'border-gray-200 text-gray-600 hover:bg-gray-50'}`}>
+          className={`flex-1 py-3 rounded-xl text-sm font-semibold border transition-colors ${dark ? 'border-black-100 text-gray-400 hover:bg-black-100' : 'border-gray-200 text-black-100/80 hover:bg-gray-50'}`}>
           Edit
         </button>
         <button onClick={onConfirm} disabled={submitting}
@@ -155,39 +156,66 @@ export const Payout = ({ darkMode, onBack, socket, runnerId, chatId, currentOrde
   const [showPinPad, setShowPinPad] = useState(false);
   const [authorisedPin, setAuthorisedPin] = useState(null);
   const [payoutResolved, setPayoutResolved] = useState(false);
+  const [payoutLocked, setPayoutLocked] = useState(false);
+  const [lockReason, setLockReason] = useState(null);
 
   const isSubmittingRef = useRef(false);
-  const payoutFetchedRef = useRef(null); // stores the chatId it fetched for, not just a bool
+  const payoutFetchedRef = useRef(null); // stores the orderId it fetched for, not just a bool
   const mountedAtRef = useRef(Date.now());
+
+  const storeOrder = useOrderStore(s => s.getChat(chatId).currentOrder);
+
+  // Prefer store over prop — store updates faster than prop drill
+  const activeOrder = storeOrder ?? currentOrder;
+
+  const itemApproved = activeOrder?.status === 'purchase_completed';
+
+  useEffect(() => {
+    if (!activeOrder?.orderId) return;
+    if (payout && payout.orderId !== activeOrder.orderId) {
+      setPayout(null);
+      setPayoutResolved(false);
+      setActiveTab('transfer');
+      payoutFetchedRef.current = null;
+    }
+  }, [activeOrder?.orderId, payout]);
+
 
   // ─── Socket ───────────────────────────────────────────────────────────────
   useEffect(() => {
+    const orderId = activeOrder?.orderId;
+
     console.log('[Payout] socket effect triggered', {
       socket: !!socket,
-      chatId,
+      orderId,
       alreadyFetched: payoutFetchedRef.current,
-      orderId: currentOrder?.orderId
     });
 
-    if (!socket || !chatId || payoutFetchedRef.current === chatId) {
-      console.log('[Payout] early return — reason:', !socket ? 'no socket' : !chatId ? 'no chatId' : 'already fetched for this chatId');
+    if (!socket || !chatId || !orderId) {
+      console.log('[Payout] early return — reason:', !socket ? 'no socket' : !orderId ? 'no orderId' : 'already fetched for this orderId');
       return;
     }
-    payoutFetchedRef.current = chatId;
+    payoutFetchedRef.current = orderId;
     setPayout(null);
     setPayoutResolved(false);
     setActiveTab('transfer');
-    socket.emit('getRunnerPayout', { chatId, runnerId, orderId: currentOrder?.orderId });
-    console.log('[Payout] emitted getRunnerPayout', { chatId, runnerId, orderId: currentOrder?.orderId });
+    socket.emit('getRunnerPayout', { chatId, runnerId, orderId: activeOrder?.orderId });
+    console.log('[Payout] emitted getRunnerPayout', { chatId, runnerId, orderId: activeOrder?.orderId });
 
 
     const onPayoutData = ({ payout: data }) => {
       console.log('[Payout] runnerPayoutData received:', data);
+      if (data?.orderId && data.orderId !== orderId) return;
       setPayout(data);
-      setPayoutResolved(true);
-      if (data?.orderId) {
-        dispatch(getRunnerReceipts({ orderId: data.orderId }));
+      if (data?.status === 'locked') {
+        setPayoutLocked(true);
+        setLockReason('Payout is locked pending admin review of a dispute.');
+      } else {
+        setPayoutLocked(false);
+        setLockReason(null);
       }
+      setPayoutResolved(true);
+      if (data?.orderId) dispatch(getRunnerReceipts({ orderId: data.orderId }));
     };
 
     const onReceiptSuccess = ({ status, usedPayoutSystem }) => {
@@ -209,7 +237,7 @@ export const Payout = ({ darkMode, onBack, socket, runnerId, chatId, currentOrde
         socket.emit('getRunnerPayout', {
           chatId,
           runnerId,
-          orderId: currentOrder?.orderId
+          orderId: activeOrder?.orderId
         });
       }
     };
@@ -222,11 +250,23 @@ export const Payout = ({ darkMode, onBack, socket, runnerId, chatId, currentOrde
       }
     };
 
+    const onPayoutLocked = ({ reason }) => {
+      setPayoutLocked(true);
+      setLockReason(reason || 'Payout locked pending admin review.');
+    };
+
+    const onPayoutUnlocked = () => {
+      setPayoutLocked(false);
+      setLockReason(null);
+    };
+
     socket.on('runnerPayoutData', onPayoutData);
     socket.on('payoutReceiptSuccess', onReceiptSuccess);
     socket.on('paymentSuccess', onPaymentSuccess);
     socket.on('itemSubmissionUpdated', onItemSubmissionUpdated);
     socket.on('payoutStatusUpdated', onPayoutStatusUpdated);
+    socket.on('payoutLocked', onPayoutLocked);
+    socket.on('payoutUnlocked', onPayoutUnlocked);
 
     return () => {
       socket.off('runnerPayoutData', onPayoutData);
@@ -234,20 +274,11 @@ export const Payout = ({ darkMode, onBack, socket, runnerId, chatId, currentOrde
       socket.off('paymentSuccess', onPaymentSuccess);
       socket.off('itemSubmissionUpdated', onItemSubmissionUpdated);
       socket.off('payoutStatusUpdated', onPayoutStatusUpdated);
-      payoutFetchedRef.current = null; // reset so new chatId triggers a fresh fetch
+      socket.off('payoutLocked', onPayoutLocked);
+      socket.off('payoutUnlocked', onPayoutUnlocked);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [socket, chatId, runnerId, mountedAtRef.current]);
-
-  useEffect(() => {
-    if (!socket || !chatId || !currentOrder?.orderId) return;
-    // orderId changed on same chatId — new order started
-    setPayout(null);
-    setPayoutResolved(false);
-    setActiveTab('transfer');
-    payoutFetchedRef.current = chatId; // keep chatId guard intact
-    socket.emit('getRunnerPayout', { chatId, runnerId, orderId: currentOrder.orderId });
-  }, [currentOrder?.orderId]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [socket, chatId, runnerId, activeOrder?.orderId, mountedAtRef.current]);
 
   useEffect(() => {
     if (!banks || banks.length === 0) dispatch(getPayoutBanks());
@@ -289,6 +320,7 @@ export const Payout = ({ darkMode, onBack, socket, runnerId, chatId, currentOrde
   const handleAccountNumberChange = async (value) => {
     setAccountNumber(value);
     setAccountName('');
+    setError(null);
     if (value.length === 10 && bankCode) {
       try {
         const result = await dispatch(verifyVendorAccount({ accountNumber: value, bankCode })).unwrap();
@@ -361,12 +393,19 @@ export const Payout = ({ darkMode, onBack, socket, runnerId, chatId, currentOrde
       isSubmittingRef.current = false;
     } catch (err) {
       setAuthorisedPin(null);
-      setError(typeof err === 'string' ? err : 'Transfer failed. Please try again.');
+
+      const message =
+        typeof err === 'string' ? err
+          : err?.message || err?.error || err?.data?.message || 'Transfer failed. Please try again.';
+          
+      setError(message);
       setSubmitting(false);
       setShowConfirm(false);
       isSubmittingRef.current = false;
     }
   };
+
+
 
   // ─── Guard ────────────────────────────────────────────────────────────────
   if (!runnerId) {
@@ -379,8 +418,8 @@ export const Payout = ({ darkMode, onBack, socket, runnerId, chatId, currentOrde
           <h1 className={`text-lg font-bold ${dark ? 'text-white' : 'text-black-200'}`}>Shopping Budget</h1>
         </div>
         <div className="flex-1 flex flex-col items-center justify-center gap-3 px-6 text-center">
-          <ShoppingBag className={`w-12 h-12 ${dark ? 'text-gray-500' : 'text-gray-400'}`} />
-          <p className={`text-sm font-medium ${dark ? 'text-white' : 'text-black-200'}`}>Pick a service to view this page</p>
+          <ShoppingBag className={`w-12 h-12 ${dark ? 'text-gray-500' : 'text-black-100/80'}`} />
+          <p className={`text-sm font-medium ${dark ? 'text-white' : 'text-black-200'}`}>Get Started to use shopping budget</p>
         </div>
       </div>
     );
@@ -441,7 +480,7 @@ export const Payout = ({ darkMode, onBack, socket, runnerId, chatId, currentOrde
           </button>
           <h1 className={`text-lg font-bold ${dark ? 'text-white' : 'text-black-200'}`}>Shopping Budget</h1>
           <button onClick={refresh} className="ml-auto p-2 rounded-full" disabled={loading}>
-            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''} ${dark ? 'text-gray-400' : 'text-gray-500'}`} />
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''} ${dark ? 'text-gray-400' : 'text-black-100/80'}`} />
           </button>
         </div>
 
@@ -450,19 +489,37 @@ export const Payout = ({ darkMode, onBack, socket, runnerId, chatId, currentOrde
           {/* Loading — waiting for first socket response */}
           {!payoutResolved && (
             <div className="flex flex-col items-center justify-center gap-3 px-6 text-center py-20">
-              <RefreshCw className={`w-6 h-6 animate-spin ${dark ? 'text-gray-500' : 'text-gray-400'}`} />
+              <RefreshCw className={`w-6 h-6 animate-spin ${dark ? 'text-gray-500' : 'text-black-100/80'}`} />
             </div>
           )}
 
           {/* Resolved but no payout doc — user hasn't paid yet */}
           {payoutResolved && !payout && (
-            <div className="flex flex-col items-center justify-center gap-3 px-6 text-center py-20">
-              <div className={`w-16 h-16 rounded-full flex items-center justify-center ${dark ? 'bg-black-200' : 'bg-gray-100'}`}>
-                <ShoppingBag className={`w-8 h-8 ${dark ? 'text-gray-500' : 'text-gray-400'}`} />
+            itemApproved ? (
+              // purchase_completed but doc hasn't arrived via socket yet — transient
+              <div className="flex flex-col items-center justify-center gap-3 px-6 text-center py-20">
+                <div className={`w-16 h-16 rounded-full flex items-center justify-center ${dark ? 'bg-black-200' : 'bg-gray-100'}`}>
+                  <ShoppingBag className={`w-8 h-8 ${dark ? 'text-gray-500' : 'text-black-100/80'}`} />
+                </div>
+                <p className={`text-sm font-medium ${dark ? 'text-white' : 'text-black-200'}`}>
+                  Loading budget…
+                </p>
               </div>
-              <p className={`text-sm font-medium ${dark ? 'text-white' : 'text-black-200'}`}>No active shopping budget</p>
-              <p className={`text-xs ${dark ? 'text-gray-400' : 'text-gray-500'}`}>Budget appears here once the user approves items</p>
-            </div>
+            ) : (
+              // Items not approved yet — clear blocker
+              <div className="flex flex-col items-center justify-center gap-4 px-6 text-center py-20">
+                <div className={`w-16 h-16 rounded-full flex items-center justify-center ${dark ? 'bg-black-200' : 'bg-gray-100'}`}>
+                  <ShoppingBag className={`w-8 h-8 ${dark ? 'text-gray-500' : 'text-black-100/80'}`} />
+                </div>
+                <p className={`text-sm font-semibold ${dark ? 'text-white' : 'text-black-200'}`}>
+                  Waiting for item approval
+                </p>
+                <p className={`text-xs leading-relaxed max-w-xs ${dark ? 'text-gray-400' : 'text-black-100/80'}`}>
+                  Send item in the chat. Once the user approves,
+                  your shopping budget will appear here.
+                </p>
+              </div>
+            )
           )}
 
           {payout && (
@@ -492,7 +549,7 @@ export const Payout = ({ darkMode, onBack, socket, runnerId, chatId, currentOrde
               {!payout.usedPayoutSystem && !isApproved && (
                 <div className="mx-4 mb-4 p-3 rounded-xl bg-yellow-500/10 border border-yellow-500/20 flex items-start gap-2">
                   <AlertCircle className="w-4 h-4 text-yellow-500 flex-shrink-0 mt-0.5" />
-                  <p className={`text-xs ${dark ? 'text-gray-300' : 'text-gray-700'}`}>
+                  <p className={`text-xs ${dark ? 'text-gray-300' : 'text-black-100/80'}`}>
                     You must complete a transfer here to receive your delivery earnings. Skipping will forfeit your runner fee.
                   </p>
                 </div>
@@ -503,7 +560,7 @@ export const Payout = ({ darkMode, onBack, socket, runnerId, chatId, currentOrde
                   <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />
                   <div>
                     <p className="text-sm font-semibold text-green-500">Transfer Approved</p>
-                    <p className={`text-xs ${dark ? 'text-gray-400' : 'text-gray-500'}`}>
+                    <p className={`text-xs ${dark ? 'text-gray-400' : 'text-black-100/80'}`}>
                       ₦{payout.amountSpent?.toLocaleString()} sent to {payout.vendorName}
                       {payout.changeAmount > 0 && ` · ₦${payout.changeAmount?.toLocaleString()} change`}
                     </p>
@@ -532,14 +589,14 @@ export const Payout = ({ darkMode, onBack, socket, runnerId, chatId, currentOrde
                         : 'bg-white text-black-200 shadow'
                       : dark
                         ? 'text-gray-500'
-                        : 'text-gray-400'
+                        : 'text-black-100/80'
                       }`}
                   >
                     {tab}
                     {tab === 'transactions' && receiptHistory.length > 0 && (
                       <span className={`ml-1.5 text-[10px] px-1.5 py-0.5 rounded-full ${activeTab === tab
                         ? 'bg-primary/20 text-primary'
-                        : dark ? 'bg-black-100 text-gray-500' : 'bg-gray-200 text-gray-400'
+                        : dark ? 'bg-black-100 text-gray-500' : 'bg-gray-200 text-black-100/80'
                         }`}>
                         {receiptHistory.length}
                       </span>
@@ -551,11 +608,20 @@ export const Payout = ({ darkMode, onBack, socket, runnerId, chatId, currentOrde
               {/* ── Transfer Tab ────────────────────────────────────────────── */}
               {activeTab === 'transfer' && (
                 <div className="px-4 space-y-4">
-                  {isSubmitted ? (
+                  {payoutLocked ? (
+                    <div className={`p-6 rounded-2xl border flex flex-col items-center gap-3 text-center ${dark ? 'bg-red-500/10 border-red-500/20' : 'bg-red-50 border-red-200'
+                      }`}>
+                      <AlertCircle className="w-8 h-8 text-primary" />
+                      <p className={`text-sm font-bold ${dark ? 'text-white' : 'text-black-200'}`}>
+                        Payout Locked
+                      </p>
+                      <p className="text-xs text-red-400 leading-relaxed">{lockReason}</p>
+                    </div>
+                  ) : isSubmitted ? (
                     <div className={`p-5 rounded-2xl text-center ${dark ? 'bg-black-200' : 'bg-gray-50'}`}>
                       <CheckCircle className="w-8 h-8 text-primary mx-auto mb-2" />
                       <p className={`text-sm font-semibold ${dark ? 'text-white' : 'text-black-200'}`}>Transfer already sent</p>
-                      <p className={`text-xs mt-1 ${dark ? 'text-gray-400' : 'text-gray-500'}`}>Check the Transactions tab for details</p>
+                      <p className={`text-xs mt-1 ${dark ? 'text-gray-400' : 'text-black-100/80'}`}>Check the Transactions tab for details</p>
                       <button
                         onClick={() => setActiveTab('transactions')}
                         className="mt-3 text-xs text-primary font-semibold flex items-center gap-1 mx-auto"
@@ -568,7 +634,7 @@ export const Payout = ({ darkMode, onBack, socket, runnerId, chatId, currentOrde
                       {/* How it works */}
                       <div className={`p-4 rounded-2xl ${dark ? 'bg-black-200' : 'bg-gray-50'}`}>
                         <p className={`text-sm font-medium mb-1 ${dark ? 'text-white' : 'text-black-200'}`}>How it works</p>
-                        <p className={`text-xs leading-relaxed ${dark ? 'text-gray-400' : 'text-gray-500'}`}>
+                        <p className={`text-xs leading-relaxed ${dark ? 'text-gray-400' : 'text-black-100/80'}`}>
                           Use the budget to buy the items. Enter the vendor's bank details and the amount spent — we'll transfer the money directly to the vendor.
                         </p>
                       </div>
@@ -582,17 +648,18 @@ export const Payout = ({ darkMode, onBack, socket, runnerId, chatId, currentOrde
 
                         <div className="p-4 space-y-4">
                           <FormField label="Vendor / Market Name" dark={dark}>
-                            <input type="text" value={vendorName} onChange={e => setVendorName(e.target.value)}
+                            <input type="text" value={vendorName}
+                              onChange={e => { setVendorName(e.target.value); setError(null); }}
                               placeholder="e.g. Balogun Market, Mama Ngozi Store"
-                              className={`w-full p-3 rounded-xl text-sm border outline-none ${dark ? 'bg-black-100 border-black-100 text-white placeholder-gray-500' : 'bg-gray-50 border-gray-200 text-black-200 placeholder-gray-400'}`} />
+                              className={`w-full p-3 rounded-xl text-sm border outline-none ${dark ? 'bg-black-100 border-black-100 text-white placeholder-gray-500' : 'bg-gray-50 border-gray-200 text-black-200 placeholder-black-100/80'}`} />
                           </FormField>
 
                           <FormField label="Amount Spent (₦)" dark={dark}>
                             <input
                               type="text" inputMode="numeric" value={amountSpent}
-                              onChange={e => setAmountSpent(e.target.value.replace(/[^0-9.]/g, ''))}
+                              onChange={e => { setAmountSpent(e.target.value.replace(/[^0-9.]/g, '')); setError(null); }}
                               placeholder="0"
-                              className={`w-full p-3 rounded-xl text-sm border outline-none ${dark ? 'bg-black-100 border-black-100 text-white placeholder-gray-500' : 'bg-gray-50 border-gray-200 text-black-200 placeholder-gray-400'}`} />
+                              className={`w-full p-3 rounded-xl text-sm border outline-none ${dark ? 'bg-black-100 border-black-100 text-white placeholder-gray-500' : 'bg-gray-50 border-gray-200 text-black-200 placeholder-black-100/80'}`} />
                             {amountSpent && parseFloat(amountSpent) > 0 && (
                               <p className={`text-xs mt-1.5 ${changeAmount >= 0 ? 'text-green-500' : 'text-red-400'}`}>
                                 {changeAmount >= 0
@@ -604,34 +671,37 @@ export const Payout = ({ darkMode, onBack, socket, runnerId, chatId, currentOrde
 
                           <div className="flex items-center gap-2">
                             <div className={`flex-1 h-px ${dark ? 'bg-black-100' : 'bg-gray-200'}`} />
-                            <span className={`text-xs font-medium ${dark ? 'text-gray-400' : 'text-gray-500'}`}>Vendor Bank Details</span>
+                            <span className={`text-xs font-medium ${dark ? 'text-gray-400' : 'text-black-100/80'}`}>Vendor Bank Details</span>
                             <div className={`flex-1 h-px ${dark ? 'bg-black-100' : 'bg-gray-200'}`} />
                           </div>
 
                           <FormField label="Bank" icon={Building2} dark={dark}>
                             {banks?.length > 0 ? (
-                              <select value={bankName} onChange={e => handleBankChange(e.target.value)}
+                              <select value={bankName}
+                                onChange={e => { handleBankChange(e.target.value); setError(null); }}
                                 className={`w-full p-3 rounded-xl text-sm border outline-none ${dark ? 'bg-black-100 border-black-100 text-white' : 'bg-gray-50 border-gray-200 text-black-200'}`}>
                                 <option value="">Select Bank</option>
                                 {banks.map(b => <option key={b.code} value={b.name}>{b.name}</option>)}
                               </select>
                             ) : (
-                              <input type="text" value={bankName} onChange={e => handleBankChange(e.target.value)}
+                              <input type="text" value={bankName}
+                                onChange={e => { handleBankChange(e.target.value); setError(null); }}
                                 placeholder="e.g. First Bank, GTBank"
-                                className={`w-full p-3 rounded-xl text-sm border outline-none ${dark ? 'bg-black-100 border-black-100 text-white placeholder-gray-500' : 'bg-gray-50 border-gray-200 text-black-200 placeholder-gray-400'}`} />
+                                className={`w-full p-3 rounded-xl text-sm border outline-none ${dark ? 'bg-black-100 border-black-100 text-white placeholder-gray-500' : 'bg-gray-50 border-gray-200 text-black-200 placeholder-black-100/80'}`} />
                             )}
                           </FormField>
 
                           <FormField label="Account Number" icon={Hash} dark={dark}>
-                            <input type="number" value={accountNumber} onChange={e => handleAccountNumberChange(e.target.value)}
+                            <input type="number" value={accountNumber}
+                              onChange={e => { handleAccountNumberChange(e.target.value); setError(null); }}
                               placeholder="10-digit account number"
-                              className={`w-full p-3 rounded-xl text-sm border outline-none ${dark ? 'bg-black-100 border-black-100 text-white placeholder-gray-500' : 'bg-gray-50 border-gray-200 text-black-200 placeholder-gray-400'}`} />
+                              className={`w-full p-3 rounded-xl text-sm border outline-none ${dark ? 'bg-black-100 border-black-100 text-white placeholder-gray-500' : 'bg-gray-50 border-gray-200 text-black-200 placeholder-black-100/80'}`} />
                           </FormField>
 
                           <FormField label="Account Name" icon={User} dark={dark}>
                             <div className={`w-full p-3 rounded-xl text-sm border ${accountName
                               ? dark ? 'bg-black-100 border-green-500/40 text-white' : 'bg-gray-50 border-green-500/40 text-black-200'
-                              : dark ? 'bg-black-100 border-black-100 text-gray-500' : 'bg-gray-50 border-gray-200 text-gray-400'
+                              : dark ? 'bg-black-100 border-black-100 text-gray-500' : 'bg-gray-50 border-gray-200 text-black-100/80'
                               }`}>
                               {accountName
                                 ? <span className="flex items-center gap-2">
@@ -669,8 +739,8 @@ export const Payout = ({ darkMode, onBack, socket, runnerId, chatId, currentOrde
                 <div className="px-4 space-y-3">
                   {receiptHistory.length === 0 ? (
                     <div className={`p-10 text-center rounded-2xl ${dark ? 'bg-black-200' : 'bg-gray-50'}`}>
-                      <Receipt className={`w-8 h-8 mx-auto mb-2 ${dark ? 'text-gray-600' : 'text-gray-300'}`} />
-                      <p className={`text-sm ${dark ? 'text-gray-400' : 'text-gray-500'}`}>No transfers yet</p>
+                      <Receipt className={`w-8 h-8 mx-auto mb-2 ${dark ? 'text-gray-600' : 'text-black-100/80'}`} />
+                      <p className={`text-sm ${dark ? 'text-gray-400' : 'text-black-100/80'}`}>No transfers yet</p>
                     </div>
                   ) : receiptHistory.map((r, i) => (
                     <button
@@ -689,7 +759,7 @@ export const Payout = ({ darkMode, onBack, socket, runnerId, chatId, currentOrde
                           <p className={`text-sm font-semibold ${dark ? 'text-white' : 'text-black-200'}`}>
                             {r.vendorName || payout.vendorName || 'Transfer'}
                           </p>
-                          <p className={`text-xs mt-0.5 ${dark ? 'text-gray-500' : 'text-gray-400'}`}>
+                          <p className={`text-xs mt-0.5 ${dark ? 'text-gray-500' : 'text-black-100/80'}`}>
                             {new Date(r.submittedAt).toLocaleDateString('en-NG', { day: 'numeric', month: 'short', year: 'numeric' })}
                             {' · '}
                             {new Date(r.submittedAt).toLocaleTimeString('en-NG', { hour: '2-digit', minute: '2-digit' })}
@@ -725,7 +795,7 @@ export const Payout = ({ darkMode, onBack, socket, runnerId, chatId, currentOrde
 
 const FormField = ({ label, icon: Icon, children, dark }) => (
   <div>
-    <label className={`flex items-center gap-1 text-xs font-medium mb-1.5 ${dark ? 'text-gray-400' : 'text-gray-600'}`}>
+    <label className={`flex items-center gap-1 text-xs font-medium mb-1.5 ${dark ? 'text-gray-400' : 'text-black-100/80'}`}>
       {Icon && <Icon className="w-3 h-3" />} {label}
     </label>
     {children}

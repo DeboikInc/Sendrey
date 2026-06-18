@@ -13,14 +13,24 @@ const DEFAULT_CHAT = () => ({
   taskCompleted: false,
   orderCancelled: false,
   cancellationReason: null,
+  deliveryDisputeWindowOpen: false,
 });
 
 const useOrderStore = create(persist((set, get) => ({
+  _hasHydrated: false,
   _chats: {},
+  activeChatId: null,
 
-  // ── Getter ─────────────────────────────────────────────────────────────────
+  setHasHydrated: () => set({ _hasHydrated: true }),
+
+  // ── chats Getter ─────────────────────────────────────────────────────────────────
   getChat: (chatId) => get()._chats[chatId] ?? DEFAULT_CHAT(),
 
+  // ── chatId setter ───────────────────────────────────────────────────────────────── 
+  setActiveChatId: (chatId) => set({ activeChatId: chatId }),
+
+  setDeliveryDisputeWindowOpen: (chatId, val) => get()._patch(chatId, { deliveryDisputeWindowOpen: val }),
+  
   // ── Internal helper ────────────────────────────────────────────────────────
   _patch: (chatId, partial) => set(state => ({
     _chats: {
@@ -37,6 +47,9 @@ const useOrderStore = create(persist((set, get) => ({
       : orderOrUpdater;
     return { _chats: { ...state._chats, [chatId]: { ...prev, currentOrder: next } } };
   }),
+
+  deliveryDisputeWindowOpen: false,
+
 
   mergeCurrentOrder: (chatId, partial) => set(state => {
     const prev = state._chats[chatId] ?? DEFAULT_CHAT();
@@ -110,6 +123,13 @@ const useOrderStore = create(persist((set, get) => ({
     const prev = state._chats[chatId] ?? DEFAULT_CHAT();
     return { _chats: { ...state._chats, [chatId]: { ...prev, messages: [] } } };
   }),
+  clearPersistedChat: (chatId) => {
+    set(state => {
+      const chats = { ...state._chats };
+      delete chats[chatId];
+      return { _chats: chats };
+    });
+  },
 
   _reset: () => set({ _chats: {} }),
 }),
@@ -117,11 +137,21 @@ const useOrderStore = create(persist((set, get) => ({
     name: 'sendrey-order-store',
     // version: 2,
     storage: createJSONStorage(() => localStorage),
-    partialize: (state) => ({ _chats: state._chats }),
-    // migrate: (persistedState, version) => {
-    //   // Wipe everything on version mismatch — fresh start
-    //   return { _chats: {} };
-    // }
+    onRehydrateStorage: () => (state) => {          
+      state?.setHasHydrated();
+    },
+    partialize: (state) => ({
+      activeChatId: state.activeChatId,
+      _chats: Object.fromEntries(
+        Object.entries(state._chats).map(([chatId, chat]) => [
+          chatId,
+          {
+            ...chat,
+            currentOrder: chat.currentOrder,
+          }
+        ])
+      )
+    }),
   }
 ));
 

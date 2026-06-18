@@ -1,12 +1,12 @@
-import React, { useState } from "react";
-import { X, MapPin, Phone, Package, DollarSign, Truck, Edit2, Trash2 } from "lucide-react";
+import React, { useState, useEffect, useMemo } from "react";
+import { X, MapPin, Phone, Package, Truck, Edit2, Trash2 } from "lucide-react";
 import { Button } from "@material-tailwind/react";
-import { useSocket } from "../../hooks/useSocket";
 import { useSelector } from "react-redux";
 import { useDispatch } from "react-redux";
 import { updateProfile } from "../../Redux/userSlice";
 import BarLoader from "../common/BarLoader";
 import { computeDeliveryFee, formatNaira } from "../../utils/pricing";
+import api from "../../utils/api";
 
 export default function ConfirmOrderScreen({
   isOpen,
@@ -16,12 +16,13 @@ export default function ConfirmOrderScreen({
   onEdit,
   onServerUpdated,
   darkMode,
+
 }) {
-  const { socket, isConnected, uploadFile } = useSocket();
+  // const { socket, isConnected, uploadFile } = useSocket();
   const currentUser = useSelector(s => s.auth?.user || s.auth?.userData || s.auth);
   const dispatch = useDispatch();
   const [isConnecting, setIsConnecting] = useState(false);
-  if (!isOpen) return null;
+
 
   const {
     serviceType,
@@ -34,6 +35,7 @@ export default function ConfirmOrderScreen({
     dropoffPhone,
     marketItems,
     budget,
+    canAdjustSlightly, // eslint-disable-line no-unused-vars
     budgetFlexibility,
     estimatedPrice, // eslint-disable-line no-unused-vars
     marketCoordinates, // eslint-disable-line no-unused-vars
@@ -49,26 +51,92 @@ export default function ConfirmOrderScreen({
     try {
       setIsConnecting(true);
       const userId = currentUser?._id;
+
+      console.log('[ConfirmOrder] orderData.specialInstructions:',
+        JSON.stringify(orderData?.specialInstructions, null, 2));
+      console.log('[ConfirmOrder] media array:',
+        orderData?.specialInstructions?.media?.map(m => ({
+          name: m.fileName || m.name,
+          hasFile: !!m.file,
+          fileUrl: m.fileUrl
+        })));
+
       if (!userId) {
-        console.error('No user found');
-        setIsConnecting(false);
         alert('User not found. Please login again.');
+        setIsConnecting(false);
         return;
       }
 
+      // ── Upload special instruction media first ──────────────────────────────
+      let uploadedMedia = [];
+      if (
+        orderData?.specialInstructions &&
+        typeof orderData.specialInstructions === 'object' &&
+        orderData.specialInstructions.media?.length > 0
+      ) {
+
+        uploadedMedia = await Promise.all(
+          orderData.specialInstructions.media.map(async (media) => {
+            if (media.fileUrl) return { // already uploaded
+              fileName: media.fileName || media.name,
+              fileType: media.fileType || media.type,
+              fileSize: media.fileSize || media.size,
+              fileUrl: media.fileUrl,
+            };
+
+            const formData = new FormData();
+
+            if (media.file) {
+              formData.append('file', media.file); // use File object directly
+            } else if (media.preview) {
+              const blob = await fetch(media.preview).then(r => r.blob());
+              const file = new File([blob], media.fileName || media.name, {
+                type: media.fileType || media.type
+              });
+              formData.append('file', file);
+            } else {
+              return null;
+            }
+
+            const res = await api.post('/upload/special-instructions', formData, {
+              headers: { 'Content-Type': 'multipart/form-data' },
+            });
+
+            return {
+              fileName: media.fileName || media.name,
+              fileType: media.fileType || media.type,
+              fileSize: media.fileSize || media.size,
+              fileUrl: res.data.secure_url,
+            };
+          })
+        );
+
+        uploadedMedia = uploadedMedia.filter(Boolean);
+      }
+
+      // ── Build resolved special instructions ────────────────────────────────
+      const resolvedSpecialInstructions = orderData?.specialInstructions
+        ? {
+          text: orderData.specialInstructions.text || null,
+          media: uploadedMedia,
+        }
+        : null;
+
       await dispatch(updateProfile({
         currentRequest: {
-          serviceType: serviceType,
-          fleetType: fleetType,
-          userId: userId,
+          serviceType,
+          fleetType,
+          userId,
+          specialInstructions: resolvedSpecialInstructions, // ← real URLs now
           timestamp: new Date().toISOString(),
           deliveryLocation: orderData?.deliveryLocation,
-          status: "awaiting_runner_connection",
-          ...(serviceType === "run-errand" ? {
+          status: 'awaiting_runner_connection',
+          ...(serviceType === 'run-errand' ? {
             marketLocation: orderData?.marketLocation,
             marketItems: orderData?.marketItems,
             budget: orderData?.budget,
-            budgetFlexibility: orderData?.budgetFlexibility || "stay within budget",
+            canAdjustSlightly: orderData?.canAdjustSlightly ?? false,
+            budgetFlexibility: orderData?.budgetFlexibility || 'stay within budget',
             marketCoordinates: orderData?.marketCoordinates,
             deliveryCoordinates: orderData?.deliveryCoordinates,
           } : {
@@ -79,53 +147,14 @@ export default function ConfirmOrderScreen({
             dropoffPhone: orderData?.dropoffPhone,
             deliveryCoordinates: orderData?.deliveryCoordinates,
           }),
-          businessAccount: currentUser?.accountType === 'business' ? currentUser._id : null,
-          createdByMember: currentUser?._id,
         }
       })).unwrap();
 
       onServerUpdated();
-
-      if (orderData?.specialInstructions &&
-        typeof orderData.specialInstructions === 'object' &&
-        orderData.specialInstructions.media?.length > 0 &&
-        socket && isConnected) {
-
-        const chatId = `user-${userId}-runner-pending`;
-
-        for (const media of orderData.specialInstructions.media) {
-          if (media.file) {
-            try {
-              const reader = new FileReader();
-              reader.readAsDataURL(media.file);
-              await new Promise((resolve, reject) => {
-                reader.onload = () => {
-                  uploadFile({
-                    chatId,
-                    file: reader.result,
-                    fileName: media.name,
-                    fileType: media.type,
-                    senderId: userId,
-                    senderType: "user",
-                    isSpecialInstruction: true,
-                  });
-                  resolve();
-                };
-                reader.onerror = reject;
-              });
-            } catch (error) {
-              console.error('Error uploading media:', error);
-            }
-          }
-        }
-      }
-
       onContinue();
-
     } catch (error) {
-      console.error('Failed to update profile:', error);
-      setIsConnecting(false);
-      alert('Failed to update server. Please try again.');
+      console.error('Failed:', error);
+      alert(error?.message || 'Failed. Please try again.');
     } finally {
       setIsConnecting(false);
     }
@@ -133,6 +162,32 @@ export default function ConfirmOrderScreen({
 
   const locationToDisplay = serviceType === "run-errand" ? marketLocation : pickupLocation;
 
+  const mediaPreviews = useMemo(() => {
+    if (!specialInstructions?.media) return {};
+    return specialInstructions.media.reduce((acc, media, idx) => {
+      if (media.fileUrl) {
+        acc[idx] = media.fileUrl;
+      } else if (media.file instanceof File) {
+        acc[idx] = URL.createObjectURL(media.file);
+      } else if (media.preview) {
+        acc[idx] = media.preview;
+      } else {
+        acc[idx] = null;
+      }
+      return acc;
+    }, {});
+  }, [specialInstructions?.media]);
+
+  // cleanups
+  useEffect(() => {
+    return () => {
+      Object.values(mediaPreviews).forEach(url => {
+        if (url?.startsWith('blob:')) URL.revokeObjectURL(url);
+      });
+    };
+  }, [mediaPreviews]);
+
+  if (!isOpen) return null;
   return (
     <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm">
       <div
@@ -253,13 +308,21 @@ export default function ConfirmOrderScreen({
           {serviceType === "run-errand" && budget && (
             <div className="flex items-start justify-between p-3 bg-gray-200 dark:bg-black-100 border-b">
               <div className="flex items-start gap-3 flex-1">
-                <DollarSign className="h-5 w-5 mt-0.5 text-green-600" />
+                <p className="h-5 w-5 mt-0.5 text-green-600">₦</p>
                 <div>
                   <p className="text-sm font-medium opacity-70">Budget</p>
                   <p className="font-semibold">₦{budget.toLocaleString()}</p>
                   <p className="text-xs opacity-60 mt-1">
                     {budgetFlexibility === "stay within budget" ? "Strict budget" : "Flexible budget"}
                   </p>
+                  {canAdjustSlightly && (                                         
+                    <div className="flex items-center gap-2 mt-2">
+                      <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse flex-shrink-0" />
+                      <p className="text-xs text-amber-400 font-medium">
+                        Budget can be adjusted slightly if needed
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
               <button
@@ -348,13 +411,7 @@ export default function ConfirmOrderScreen({
                           {specialInstructions.media && specialInstructions.media.length > 0 && (
                             <div className="flex flex-wrap gap-2 mt-3">
                               {specialInstructions.media.map((media, idx) => {
-                                const getPreviewUrl = () => {
-                                  if (media.preview && !media.preview.startsWith('blob:')) return media.preview;
-                                  if (media.fileUrl) return media.fileUrl;
-                                  if (media.file) return URL.createObjectURL(media.file);
-                                  return null;
-                                };
-                                const previewUrl = getPreviewUrl();
+                                const previewUrl = mediaPreviews[idx];
 
                                 return (
                                   <div key={idx} className="relative flex-shrink-0">

@@ -13,4 +13,19 @@ git merge dev
 git checkout main
 git merge staging
 
-next feature: if runner started registration with pedestrian, meaning they provided only one doc + selfie then start new order and is returning should provide only pedestrian options or maybe none, only serviceType should always be updated, for other users, same. if runner started with van then fleetType must always be van and i think it makes sense not to ask for it in start new order and isReturninguser flow 
+https://sendrey.netlify.app
+
+before we go live we need to upgrade these three services.
+Upgrade Render to paid plan
+Sort Cloudinary paid plan
+MongoDB Atlas — make sure it's not on free tier either (512MB storage limit)
+
+"runner misconduct costs us X in Paystack fees per ban, do we absorb or pass to user?
+
+
+
+
+i need to prevent this multiple calls, 2026-06-16 21:56:28 [warn]: Client error: GET /user/me - 401
+
+
+connection 5 to 65.62.43.22:27017 closed

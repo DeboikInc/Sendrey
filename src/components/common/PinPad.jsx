@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { verifyPin, clearVerifyStatus, sendForgotPinOtp, verifyForgotPinOtp, forgotPin, clearOtpStatus } from '../../Redux/pinSlice';
+import { 
+  verifyPin, clearVerifyStatus, 
+  // sendForgotPinOtp, verifyForgotPinOtp, 
+  sendForgotPinEmail, verifyForgotEmailOTP,
+  forgotPin, clearOtpStatus } from '../../Redux/pinSlice';
 import { X } from 'lucide-react';
 
 export const PinPad = ({
@@ -157,7 +161,7 @@ export const PinPad = ({
   };
 
   const submitOtp = (otp) => {
-    dispatch(verifyForgotPinOtp({ otp })).unwrap()
+    dispatch(verifyForgotEmailOTP({ otp })).unwrap()
       .catch(err => {
         triggerShake();
         setLocalError(err || 'Invalid OTP');
@@ -168,7 +172,7 @@ export const PinPad = ({
 
   const handleForgotPin = async () => {
     try {
-      await dispatch(sendForgotPinOtp()).unwrap();
+      await dispatch(sendForgotPinEmail()).unwrap();
       setOtpSent(true);
       setStep('forgot_otp');
       setLocalError(null);
@@ -293,9 +297,10 @@ export const PinPad = ({
         {/* Forgot PIN — only on initial pin step */}
         {step === 'pin' && !skipVerify && !confirmMode && (
           <div className="flex justify-center pb-5 pt-3">
-            <button onClick={handleForgotPin} disabled={isLoading || filled === 4}
-              className="text-xs text-primary underline underline-offset-2">
-              Forgot PIN?
+            <button 
+            // onClick={handleForgotPin} disabled={isLoading || filled === 4}
+              className="text-xs text-primary">
+              Forgot PIN? Go to profile to reset pin
             </button>
           </div>
         )}

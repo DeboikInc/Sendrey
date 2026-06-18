@@ -8,6 +8,7 @@ import sendreyBot from "../../assets/sendrey_bot.jpg";
 import { FaWalking, FaMotorcycle } from "react-icons/fa";
 import { Bike, Car, Truck, RefreshCw, Sun, Moon } from "lucide-react";
 import { useCameraHook } from "../../hooks/useCameraHook";
+import { returningUserNeedsKycPoll } from '../../utils/returningUserKycUtils';
 
 const FLEET_OPTIONS = [
   { type: "cycling", icon: Bike, label: "Cycling" },
@@ -65,7 +66,9 @@ function OnboardingScreen({
 
   isReturningUser,
   onReturningUserChoice,
-  returningUserData
+  returningUserData,
+  isVerifyingOtp,
+  effectiveReturningKycStatus
 }) {
 
   // ADD at the top of OnboardingScreen function, after the props destructure:
@@ -90,30 +93,17 @@ function OnboardingScreen({
 
   const listRef = useRef(null);
   const connectMessageSentRef = useRef(false);
-  const lastNewOrderTriggerRef = useRef(newOrderTrigger);
+  // const lastNewOrderTriggerRef = useRef(newOrderTrigger);
   const onMessagesChangeRef = useRef(onMessagesChange);
   const kycPollStartedRef = useRef(false);
   const isSyncingFromParent = useRef(false);
-  const newOrderFlowInjectedRef = useRef(false);
-  const isProcessingNewOrderRef = useRef(false);
   const mountedRef = useRef(true);
+  const isMountedSyncRef = useRef(false);
 
-
-  const [newOrderStep, setNewOrderStep] = useState(() => {
-    return window.parent.__chatManager?.get?.('sendrey-bot')?.newOrderStep ?? null;
-  });
-
-  const setNewOrderStepPersisted = useCallback((step) => {
-    setNewOrderStep(step);
-    window.parent.__chatManager?.set?.('sendrey-bot', { newOrderStep: step });
-  }, []);
   const [messages, setMessages] = useState(initialMessages || []);
-  const [, setNewOrderServiceType] = useState(null);
   const [showNotifications, setShowNotifications] = useState(false);
   const [isSubmitting] = useState(false);
   const [isUpdatingServer] = useState(false);
-  const [isServiceChoicePending, setIsServiceChoicePending] = useState(false);
-  const [serviceChoiceMade, setServiceChoiceMade] = useState(false);
 
   // trust the prop, which WhatsAppLikeChat reads fresh from manager
   const syncedNewOrderComplete = newOrderComplete;
@@ -154,6 +144,9 @@ function OnboardingScreen({
     setMessages(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
 
+      // Don't sync back to parent on the very first render — it would overwrite
+      if (!isMountedSyncRef.current) return next;
+
       if (!isSyncingFromParent.current && onMessagesChangeRef.current && mountedRef.current) {
         queueMicrotask(() => {
           if (mountedRef.current) onMessagesChangeRef.current(next);
@@ -162,6 +155,10 @@ function OnboardingScreen({
 
       return next;
     });
+  }, []);
+
+  useEffect(() => {
+    isMountedSyncRef.current = true;
   }, []);
 
   const { cameraOpen, capturedImage, videoRef, openCamera, closeCamera,
@@ -186,33 +183,35 @@ function OnboardingScreen({
     });
 
     if (!registrationComplete) { console.log('[kyc poll] blocked: not registered'); return; }
+    if (!runnerId) { console.log('[kyc poll] blocked: no runnerId'); return; }
     if (kycStatus.overallVerified) { console.log('[kyc poll] blocked: already verified'); return; }
+    if (kycStep === 6) { console.log('[kyc poll] blocked: kycStep 6'); return; }
     if (kycPollStartedRef.current) { console.log('[kyc poll] blocked: already started'); return; }
-    if (typeof checkVerificationStatus !== 'function') { console.log('[kyc poll] blocked: not a function'); return; }
+    if (typeof checkVerificationStatus !== 'function') { return; }
 
-    // if (kycStep === null || kycStep < 2 || kycStep === 6) {
-    //   console.log('[kyc poll] blocked: kycStep not in pollable range', { kycStep });
-    //   return;
-    // }
+    if (!returningUserNeedsKycPoll(returningUserData, kycStatus)) {
+      console.log('[kyc poll] blocked: returning user already submitted selfie');
+      return;
+    }
 
     console.log('[kyc poll] starting poll');
     const handleBanned = () => onBannedDetected?.();
+    const isReturning = !!returningUserData?.kycStatus;
 
     kycPollStartedRef.current = true;
-    checkVerificationStatus(setMessagesAndSync, handleBanned);
+    checkVerificationStatus(setMessagesAndSync, handleBanned, isReturning);
+
     const interval = setInterval(() => {
       console.log('[kyc poll] polling...');
-      if (!registrationComplete) {
-        clearInterval(interval);
-        return;
-      }
-      checkVerificationStatus(setMessagesAndSync, handleBanned);
+      if (!registrationComplete) { clearInterval(interval); return; }
+      checkVerificationStatus(setMessagesAndSync, handleBanned, isReturning);
     }, 30000);
+
     return () => {
       clearInterval(interval);
       kycPollStartedRef.current = false;
     };
-  }, [registrationComplete, kycStatus.overallVerified]);
+  }, [registrationComplete, kycStatus.overallVerified, kycStep, runnerId, returningUserData]);
 
   useEffect(() => {
     if (kycStep === null) {
@@ -220,141 +219,25 @@ function OnboardingScreen({
     }
   }, [kycStep]);
 
-  // New order flow injection
-  const injectNewOrderFlow = useCallback(() => {
-    if (isProcessingNewOrderRef.current) return;
-    if (newOrderFlowInjectedRef.current) return;
-
-    isProcessingNewOrderRef.current = true;
-
-    const runnerName = runnerData?.firstName || 'there';
-    const injected = [
-      {
-        id: `new-order-me-${Date.now()}`,
-        from: 'me',
-        text: 'Start New Order',
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        status: 'sent',
-        isCredential: true,
-      },
-      {
-        id: `new-order-welcome-${Date.now() + 1}`,
-        from: 'them',
-        text: `Welcome back ${runnerName}! Would you like to run a pickup or run an errand?`,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        status: 'delivered',
-        hasServiceChoice: true,
-      },
-    ];
-
-    setMessagesAndSync(prev => {
-      const hasNewOrderFlow = prev.some(m => m.hasServiceChoice === true);
-      if (hasNewOrderFlow) {
-        return prev;
-      }
-      newOrderFlowInjectedRef.current = true;
-      return [...prev, ...injected];
-    });
-
-    setNewOrderStepPersisted('service');
-    window.parent.__chatManager?.set?.('sendrey-bot', { showConnectButton: false });
-
-    connectMessageSentRef.current = false;
-
-    setTimeout(() => {
-      isProcessingNewOrderRef.current = false;
-    }, 500);
-  }, [runnerData?.firstName, setMessagesAndSync]);
-
   // Handle new order trigger
+  const lastNewOrderTriggerRef = useRef(newOrderTrigger);
   useEffect(() => {
     if (newOrderTrigger === 0) return;
     if (newOrderTrigger === lastNewOrderTriggerRef.current) return;
-    if (isProcessingNewOrderRef.current) return;
-
     lastNewOrderTriggerRef.current = newOrderTrigger;
-    newOrderFlowInjectedRef.current = false;
-    onSetNewOrderComplete(false);
+    connectMessageSentRef.current = false;
+    onSetNewOrderComplete(true);
+  }, [newOrderTrigger]);
 
-    setTimeout(() => {
-      injectNewOrderFlow();
-    }, 100);
-  }, [newOrderTrigger, injectNewOrderFlow]);
-
-  // Handle service choice
-  const handleServiceChoice = useCallback((svcType, label) => {
-    if (isProcessingNewOrderRef.current) return;
-    if (serviceChoiceMade) return; // ← guard
-    isProcessingNewOrderRef.current = true;
-    setIsServiceChoicePending(true);
-    setServiceChoiceMade(true); // ← grey out immediately
-
-    setNewOrderServiceType(svcType);
-
-    const choiceMsg = {
-      id: `service-choice-${Date.now()}`,
-      from: 'me',
-      text: label,
-      time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      status: 'sent',
-      isCredential: true,
-    };
-
-    const fleetType = runnerData?.fleetType;
-
-    setMessagesAndSync(prev => [...prev, choiceMsg]);
-
-    setTimeout(async () => {
-      try {
-        await onNewOrderFleetAndServiceSelected?.(svcType, fleetType);
-
-        const confirmMsg = {
-          id: `fleet-confirm-${Date.now()}`,
-          from: 'them',
-          text: `Got it! Your service type has been updated. Click "Connect to service" when ready.`,
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          status: 'delivered',
-        };
-        setMessagesAndSync(prev => [...prev, confirmMsg]);
-        setNewOrderStepPersisted(null);
-        onSetNewOrderComplete(true);
-
-        if (window.parent.__chatManager) {
-          window.parent.__chatManager.set('sendrey-bot', {
-            showConnectButton: true,
-            serviceType: svcType,
-            fleetType
-          });
-        }
-      } catch (error) {
-        const errorMsg = {
-          id: `server-error-${Date.now()}`,
-          from: 'them',
-          text: "Something went wrong. Please try again later.",
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          status: 'delivered',
-          isError: true,
-        };
-        setMessagesAndSync(prev => [...prev, errorMsg]);
-        setNewOrderStepPersisted('service');
-        setNewOrderServiceType(null);
-        onSetNewOrderComplete(false);
-        newOrderFlowInjectedRef.current = false;
-        setServiceChoiceMade(false); // ← re-enable on error
-      } finally {
-        setIsServiceChoicePending(false);
-        setTimeout(() => { isProcessingNewOrderRef.current = false; }, 500);
-      }
-    }, 600);
-  }, [runnerData?.fleetType, onNewOrderFleetAndServiceSelected, setMessagesAndSync, onSetNewOrderComplete, serviceChoiceMade]);
 
 
   const handleConnectToService = () => {
     if (!connectMessageSentRef.current) {
-      setMessagesAndSync(prev => [...prev, {
-        id: Date.now(), from: "me", text: "Connect to an errand service",
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), status: "sent",
-      }]);
+      // setMessagesAndSync(prev => [...prev, {
+      //   id: Date.now(), from: "me",
+      //   text: "Connect to an errand service",
+      //   time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), status: "sent",
+      // }]);
       connectMessageSentRef.current = true;
     }
     setShowNotifications(true);
@@ -377,11 +260,13 @@ function OnboardingScreen({
   };
 
   const handlePickServiceFromNotification = (user, specialInstructions, order) => {
+    console.log('[OS] ========== handlePickServiceFromNotification ==========');
+    console.log('[OS] user._id:', user?._id);
+    console.log('[OS] runnerId:', runnerId);
     setShowNotifications(false);
     onPickService?.(user, specialInstructions, order);
+    console.log('[OS] onPickService called');
   };
-
-  const isInNewOrderFlow = newOrderStep !== null;
 
   return (
     <>
@@ -393,7 +278,7 @@ function OnboardingScreen({
             <Avatar src={sendreyBot} alt="Sendrey Bot" size="sm" />
             <div className="truncate">
               <div className="font-bold text-[16px] truncate dark:text-white text-black-200">Sendrey Assistant</div>
-              <div className="text-sm font-medium text-gray-900">Online</div>
+              <div className="text-sm font-medium text-black-100/70 dark:text-gray-400">Online</div>
             </div>
           </div>
           <div className="hidden lg:flex">
@@ -410,9 +295,11 @@ function OnboardingScreen({
               <Message
                 key={m.id}
                 m={m}
-                canResendOtp={canResendOtp}
+                canResendOtp={registrationComplete ? false : canResendOtp}
+                isActiveResend={registrationComplete ? false : canResendOtp}
                 onMessageClick={() => handleMessageClick(m)}
                 showCursor={false}
+                showStatusIcons={false}
                 userType="runner"
                 disableContextMenu={true}
               />
@@ -422,15 +309,14 @@ function OnboardingScreen({
 
 
         {/* Registration fleet selection */}
-        {!isInNewOrderFlow &&
-          isCollectingCredentials &&
+        {isCollectingCredentials &&
           credentialStep !== null &&
           credentialQuestions[credentialStep]?.isFleetSelection &&
           !isSubmitting && (
             <div className="flex gap-2 justify-center mb-4 p-3 bg-gray-100 dark:bg-black-200">
               {FLEET_OPTIONS.map(({ type, icon: Icon, label }) => (
                 <Button key={type} variant="outlined"
-                  className="flex flex-col p-3 justify-center items-center"
+                  className="flex flex-col p-3 justify-center items-center text-black-100/60 dark:text-gray-400"
                   onClick={() => handleCredentialAnswer(type, setText, setMessagesAndSync)}>
                   <Icon className="text-2xl" />
                   <span className="text-[10px] capitalize">{label}</span>
@@ -448,7 +334,10 @@ function OnboardingScreen({
               credentialQuestions={credentialQuestions}
               needsOtpVerification={needsOtpVerification}
               registrationComplete={registrationComplete}
+              effectiveReturningKycStatus={effectiveReturningKycStatus}
               isSubmitting={isSubmitting}
+              isVerifyingOtp={isVerifyingOtp}
+              kycStatus={kycStatus}
               isReturningUser={isReturningUser}
               returningUserData={returningUserData}
               onReturningUserChoice={onReturningUserChoice}
@@ -473,11 +362,9 @@ function OnboardingScreen({
               verificationState={verificationState}
               isConnectLocked={isConnectLocked}
               onKycFileUpload={(imageData) => onIdVerified(imageData, setMessagesAndSync)}
-              isNewOrderFlow={isInNewOrderFlow}
-              newOrderStep={newOrderStep}
               newOrderComplete={syncedNewOrderComplete}
-              onServiceChoice={handleServiceChoice}
-              isUpdatingServer={isUpdatingServer || isServiceChoicePending}
+              // onServiceChoice={handleServiceChoice}
+              isUpdatingServer={isUpdatingServer}
             />
           </div>
         )}
@@ -502,7 +389,7 @@ function OnboardingScreen({
         {cameraOpen && (
           <div className="fixed inset-0 bg-black z-[9999] flex flex-col overflow-hidden">
             <div className="flex justify-between items-center p-4 bg-black/80 flex-shrink-0">
-              <Button onClick={closeCamera} className="text-white px-4 py-2">Cancel</Button>
+              <Button onClick={closeCamera} className="text-white bg-primary px-4 py-2">Cancel</Button>
               <h3 className="text-white">Take ID Photo</h3>
               <div className="w-16" />
             </div>
@@ -524,7 +411,7 @@ function OnboardingScreen({
                           else if (kycStep === 5) onSelfieVerified(photo, setMessagesAndSync);
                         }
                       }}
-                      className="px-6 py-3 bg-blue-600 text-white rounded-lg shadow-lg"
+                      className="px-6 py-3 bg-primary text-white rounded-lg shadow-lg"
                     >
                       Use Photo
                     </Button>

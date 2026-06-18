@@ -5,6 +5,10 @@ import { authStorage } from "./authStorage";
 const BASE_URL = process.env.REACT_APP_API_URL;
 export const isCapacitor = window.Capacitor?.isNativePlatform?.() ?? false;
 
+// Mobile browser = not Capacitor but also can't rely on cross-origin cookies
+export const isMobileBrowser = !isCapacitor && /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+const useTokenAuth = isCapacitor || isMobileBrowser; // both need header-based auth
+
 const api = axios.create({
   baseURL: BASE_URL,
   headers: {
@@ -14,17 +18,27 @@ const api = axios.create({
   withCredentials: true,
 });
 
+// ── Auth redirect helper ──────────────────────────────────────────────────────
+const redirectToAuth = async () => {
+  await authStorage.clearTokens();
+  if (!isCapacitor) {
+    document.cookie = 'token=; Max-Age=0; path=/';
+    document.cookie = 'refreshToken=; Max-Age=0; path=/';
+  }
+  localStorage.removeItem('runner_ui');
+  sessionStorage.clear();
+  window.location.reload();
+};
+
 // ── Request interceptor ───────────────────────────────────────────────────────
 api.interceptors.request.use(
   async (config) => {
-    if (isCapacitor) {
-      // Mobile only — attach token from secure storage
+    if (useTokenAuth) {
       const { accessToken } = await authStorage.getTokens();
       if (accessToken) {
         config.headers.Authorization = `Bearer ${accessToken}`;
       }
     }
-    // Web — HttpOnly cookie is attached automatically by the browser
 
     if (config.data instanceof FormData) {
       delete config.headers['Content-Type'];
@@ -33,6 +47,20 @@ api.interceptors.request.use(
   },
   (error) => Promise.reject(error)
 );
+
+
+
+// Add these above the interceptors
+let isRefreshing = false;
+let refreshQueue = []; // pending requests waiting for new token
+
+const processQueue = (error, token = null) => {
+  refreshQueue.forEach(({ resolve, reject }) => {
+    if (error) reject(error);
+    else resolve(token);
+  });
+  refreshQueue = [];
+};
 
 // ── Response interceptor ──────────────────────────────────────────────────────
 api.interceptors.response.use(
@@ -45,55 +73,65 @@ api.interceptors.response.use(
   async (error) => {
     const original = error.config;
 
-    if (original._skipInterceptor) return Promise.reject(error); 
-    
+    if (original._skipInterceptor) return Promise.reject(error);
+    if (error.response?.status === 401 && original.url?.includes('refresh-token')) {
+      await redirectToAuth();
+      return Promise.reject(error);
+    }
+
     if (error.response?.status === 401 && !original._retry) {
       original._retry = true;
 
-      if (original.url?.includes('refresh-token')) {
-        await authStorage.clearTokens();
-        window.location.href = '/';
-        return Promise.reject(error);
+      // If already refreshing, queue this request
+      if (isRefreshing) {
+        return new Promise((resolve, reject) => {
+          refreshQueue.push({ resolve, reject });
+        }).then(token => {
+          if (useTokenAuth) {
+            original.headers['Authorization'] = `Bearer ${token}`;
+          }
+          return api(original);
+        }).catch(err => Promise.reject(err));
       }
 
+      isRefreshing = true;
+
       try {
-        if (isCapacitor) {
-          // Mobile — send refresh token from secure storage in body
-          const { refreshToken } = await authStorage.getTokens();
+        let newAccess;
+
+        if (useTokenAuth) {
+          const { accessToken, refreshToken } = await authStorage.getTokens();
+          console.log('[API] useTokenAuth:', useTokenAuth, '| token exists:', !!accessToken, '| url:', original.url);
           if (!refreshToken) throw new Error('No refresh token');
 
           const { data } = await axios.post(
             `${BASE_URL}/auth/refresh-token`,
-            { refreshToken }
+            { refreshToken },
+            { withCredentials: true }
           );
 
-          // Save new access token to secure storage
-          await authStorage.setTokens(data.token, refreshToken);
+          newAccess = data.accessToken || data.token;
+          const newRefresh = data.refreshToken || refreshToken;
 
-          // Update Redux so any components reading token stay in sync
-          store.dispatch(setToken(data.token));
-
-          original.headers['Authorization'] = `Bearer ${data.token}`;
+          await authStorage.setTokens(newAccess, newRefresh);
+          store.dispatch(setToken(newAccess));
+          original.headers['Authorization'] = `Bearer ${newAccess}`;
         } else {
-          // Web — server reads HttpOnly cookie automatically, no body needed
           await axios.post(
             `${BASE_URL}/auth/refresh-token`,
             {},
             { withCredentials: true }
           );
-          // New access token is now in the cookie — nothing to do in Redux
         }
 
+        processQueue(null, newAccess);
         return api(original);
       } catch (refreshError) {
-        await authStorage.clearTokens();
-        // clear cookies on web so the loop can't restart
-        if (!isCapacitor) {
-          document.cookie = 'token=; Max-Age=0; path=/';
-          document.cookie = 'refreshToken=; Max-Age=0; path=/api/v1/auth/refresh-token';
-        }
-        window.location.href = '/';
+        processQueue(refreshError, null);
+        await redirectToAuth();
         return Promise.reject(refreshError);
+      } finally {
+        isRefreshing = false;
       }
     }
 
@@ -103,4 +141,5 @@ api.interceptors.response.use(
 
 let store;
 export const injectStore = (_store) => { store = _store; };
+export { useTokenAuth };
 export default api;
