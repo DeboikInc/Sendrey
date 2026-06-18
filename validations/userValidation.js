@@ -1,10 +1,8 @@
 const Joi = require('joi');
 const { commonSchemas, validationMessages, userParamsValidation } = require('./authValidation');
 
-// Custom validation for file uploads (avatars)
 const fileValidation = (value, helpers) => {
   if (typeof value === 'string') {
-    // URL validation for existing avatars
     try {
       new URL(value);
       return value;
@@ -13,10 +11,9 @@ const fileValidation = (value, helpers) => {
     }
   }
 
-  // For file objects (if handling multipart/form-data)
   if (value && value.mimetype) {
     const allowedMimeTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-    const maxSize = 5 * 1024 * 1024; // 5MB
+    const maxSize = 5 * 1024 * 1024;
 
     if (!allowedMimeTypes.includes(value.mimetype)) {
       return helpers.error('any.invalid');
@@ -30,7 +27,6 @@ const fileValidation = (value, helpers) => {
   return value;
 };
 
-// Custom validation for date of birth (must be at least 13 years old)
 const dateOfBirthValidation = (value, helpers) => {
   const minAge = 13;
   const maxAge = 120;
@@ -49,7 +45,6 @@ const dateOfBirthValidation = (value, helpers) => {
   return value;
 };
 
-// Custom validation for bio/description
 const bioValidation = (value, helpers) => {
   const wordCount = value.trim().split(/\s+/).length;
 
@@ -57,7 +52,6 @@ const bioValidation = (value, helpers) => {
     return helpers.error('any.invalid', { message: 'Bio cannot exceed 500 words' });
   }
 
-  // Check for inappropriate content (basic example)
   const blockedWords = ['spam', 'badword', 'inappropriate'];
   const containsBlockedWord = blockedWords.some(word =>
     value.toLowerCase().includes(word.toLowerCase())
@@ -70,7 +64,6 @@ const bioValidation = (value, helpers) => {
   return value;
 };
 
-// Extended common schemas for user validation
 const userCommonSchemas = {
   ...commonSchemas,
 
@@ -81,7 +74,7 @@ const userCommonSchemas = {
       }),
       Joi.object({
         mimetype: Joi.string().valid('image/jpeg', 'image/png', 'image/gif', 'image/webp'),
-        size: Joi.number().max(1 * 1024 * 1024) // 5MB
+        size: Joi.number().max(1 * 1024 * 1024)
       }).unknown()
     )
     .custom(fileValidation, 'File validation')
@@ -119,6 +112,13 @@ const userCommonSchemas = {
       'any.only': 'Role must be one of: user, admin, moderator'
     }),
 
+  pin: Joi.string()
+    .pattern(/^\d{4}$/)
+    .messages({
+      'string.pattern.base': 'PIN must be exactly 4 digits',
+      'string.empty': 'PIN is required',
+    }),
+
   isActive: Joi.boolean()
     .default(true),
 
@@ -142,11 +142,41 @@ const userCommonSchemas = {
       promotions: Joi.boolean().default(false)
     }).default()
   }).default(),
+
+  location: Joi.object({
+    name: Joi.string().required().trim().max(50).messages({
+      'string.empty': 'Location name is required',
+    }),
+    address: Joi.string().required().trim().messages({
+      'string.empty': 'Full address is required',
+    }),
+    lat: Joi.number().min(-90).max(90).required().messages({
+      'number.min': 'Latitude must be between -90 and 90',
+      'number.max': 'Latitude must be between -90 and 90',
+    }),
+    lng: Joi.number().min(-180).max(180).required().messages({
+      'number.min': 'Longitude must be between -180 and 180',
+      'number.max': 'Longitude must be between -180 and 180',
+    }),
+  }),
 };
 
-// User validation schemas
+// Reusable coordinate schema
+const coordinatesSchema = Joi.object({
+  lat: Joi.number().min(-90).max(90).required(),
+  lng: Joi.number().min(-180).max(180).required()
+}).optional().allow(null);
+
 const userValidation = {
-  // Update user profile
+
+  saveLocation: userCommonSchemas.location,
+
+  locationParams: Joi.object({
+    locationId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).required().messages({
+      'string.pattern.base': 'Invalid location ID format',
+    }),
+  }),
+
   updateProfile: Joi.object({
     firstName: userCommonSchemas?.name?.optional(),
     lastName: userCommonSchemas?.name?.optional(),
@@ -157,11 +187,6 @@ const userValidation = {
     gender: userCommonSchemas?.gender?.optional(),
     notificationPreferences: userCommonSchemas?.notificationPreferences?.optional(),
     address: userCommonSchemas?.address?.optional(),
-    fleetType: Joi.string()
-      .valid('cycling', 'bike', 'car', 'van', 'pedestran')
-      .messages({
-        'any.empty': 'Provide fleet type'
-      }),
     buidingName: Joi.string()
       .messages({
         'any.empty': 'You must provide building name',
@@ -174,6 +199,155 @@ const userValidation = {
       .messages({
         'any.empty': 'You must provide nearest bustop',
       }),
+    serviceType: Joi.string()
+      .valid('pick-up', 'run-errand')
+      .optional()
+      .messages({
+        'any.only': 'Service type must be either "pick-up" or "run-errand"'
+      }),
+    fleetType: Joi.string()
+      .valid('cycling', 'bike', 'car', 'van', 'pedestrian')
+      .optional()
+      .messages({
+        'any.only': 'Fleet type must be one of: cycling, bike, car, van, pedestrian'
+      }),
+    role: Joi.string()
+      .valid('runner', 'user', 'admin')
+      .optional(),
+
+    latitude: Joi.number().min(-90).max(90).optional(),
+    longitude: Joi.number().min(-180).max(180).optional(),
+
+    currentRequest: Joi.object({
+      serviceType: Joi.string().valid('pick-up', 'run-errand').optional()
+        .messages({
+          'any.only': 'Service type must be either "pick-up" or "run-errand"',
+          'any.required': 'Service type is required'
+        }),
+
+      fleetType: Joi.string().valid('cycling', 'bike', 'car', 'van', 'pedestrian').required()
+        .messages({
+          'any.only': 'Fleet type must be one of: cycling, bike, car, van, pedestrian',
+          'any.required': 'Fleet type is required'
+        }),
+
+      // Common fields for both services
+      deliveryLocation: Joi.string().required()
+        .messages({
+          'string.empty': 'Delivery location is required',
+          'any.required': 'Delivery location is required'
+        }),
+
+      dropoffPhone: Joi.string().allow('').optional()
+        .messages({
+          'string.empty': 'Dropoff phone cannot be empty'
+        }),
+
+      userId: Joi.string().pattern(/^[0-9a-fA-F]{24}$/).required()
+        .messages({
+          'string.pattern.base': 'Invalid user ID format',
+          'any.required': 'User ID is required'
+        }),
+
+      timestamp: Joi.date().default(Date.now)
+        .messages({
+          'date.base': 'Timestamp must be a valid date'
+        }),
+
+      status: Joi.string()
+        .valid('idle', 'searching', 'active', 'awaiting_runner_connection', 'completed', 'cancelled')
+        .default('awaiting_runner_connection')
+        .messages({
+          'any.only': 'Status must be one of: idle, searching, active, awaiting_runner_connection, completed, cancelled'
+        }),
+
+    }).when(Joi.object({ serviceType: Joi.valid('run-errand') }), {
+      then: Joi.object({
+        // Errand-specific fields
+        marketLocation: Joi.string().required()
+          .messages({
+            'string.empty': 'Market location is required for errand service',
+            'any.required': 'Market location is required for errand service'
+          }),
+
+        marketItems: Joi.string().required()
+          .messages({
+            'string.empty': 'Market items are required for errand service',
+            'any.required': 'Market items are required for errand service'
+          }),
+
+        budget: Joi.number().positive().optional()
+          .messages({
+            'number.base': 'Budget must be a number',
+            'number.positive': 'Budget must be a positive number'
+          }),
+
+        canAdjustSlightly: Joi.boolean().optional(),
+
+        budgetFlexibility: Joi.string()
+          .valid('stay within budget', 'can adjust slightly')
+          .default('stay within budget')
+          .messages({
+            'any.only': 'Budget flexibility must be either "stay within budget" or "can adjust slightly"'
+          }),
+
+        // Coordinates — both delivery and market allowed for run-errand
+        marketCoordinates: coordinatesSchema,
+        deliveryCoordinates: coordinatesSchema,
+
+        // Pickup fields forbidden for errands
+        pickupLocation: Joi.forbidden()
+          .messages({ 'any.unknown': 'pickupLocation is not allowed for errand service' }),
+        pickupPhone: Joi.forbidden()
+          .messages({ 'any.unknown': 'pickupPhone is not allowed for errand service' }),
+        pickupItems: Joi.forbidden()
+          .messages({ 'any.unknown': 'pickupItems is not allowed for errand service' }),
+        pickupCoordinates: Joi.forbidden()
+          .messages({ 'any.unknown': 'pickupCoordinates is not allowed for errand service' }),
+
+      }).unknown(true), // inherit base fields without errors
+
+      otherwise: Joi.object({
+        // Pickup-specific fields
+        pickupLocation: Joi.string().required()
+          .messages({
+            'string.empty': 'Pickup location is required for pickup service',
+            'any.required': 'Pickup location is required for pickup service'
+          }),
+
+        pickupPhone: Joi.string().allow('').optional()
+          .messages({
+            'string.empty': 'Pickup phone cannot be empty'
+          }),
+
+        pickupItems: Joi.string().allow('').optional()
+          .messages({
+            'string.empty': 'Pickup items cannot be empty'
+          }),
+
+        // Coordinates — both delivery and pickup allowed for pick-up
+        pickupCoordinates: coordinatesSchema,
+        deliveryCoordinates: coordinatesSchema,
+
+        // Errand fields forbidden for pickup
+        marketLocation: Joi.forbidden()
+          .messages({ 'any.unknown': 'marketLocation is not allowed for pickup service' }),
+        marketItems: Joi.forbidden()
+          .messages({ 'any.unknown': 'marketItems is not allowed for pickup service' }),
+        budget: Joi.forbidden()
+          .messages({ 'any.unknown': 'budget is not allowed for pickup service' }),
+        budgetFlexibility: Joi.forbidden()
+          .messages({ 'any.unknown': 'budgetFlexibility is not allowed for pickup service' }),
+        marketCoordinates: Joi.forbidden()
+          .messages({ 'any.unknown': 'marketCoordinates is not allowed for pickup service' }),
+
+      }).unknown(true), // inherit base fields without errors
+    }).optional().allow(null),
+
+    isActive: Joi.boolean().optional(),
+    isAvailable: Joi.boolean().optional(),
+    isOnline: Joi.boolean().optional(),
+    reason: Joi.string().optional().max(500)
   })
     .min(1)
     .messages({
@@ -181,7 +355,6 @@ const userValidation = {
       ...validationMessages
     }),
 
-  // Change email address
   changeEmail: Joi.object({
     newEmail: userCommonSchemas?.email
       .messages({
@@ -198,7 +371,6 @@ const userValidation = {
       })
   }).messages(validationMessages),
 
-  // Update notification preferences
   updateNotifications: Joi.object({
     email: Joi.object({
       marketing: Joi.boolean().optional(),
@@ -222,7 +394,6 @@ const userValidation = {
       ...validationMessages
     }),
 
-  // Update user role (admin only)
   updateRole: Joi.object({
     role: userCommonSchemas?.role
       .required()
@@ -231,12 +402,21 @@ const userValidation = {
       })
   }).messages(validationMessages),
 
-  // Update user status (admin only)
   updateStatus: Joi.object({
     isActive: Joi.boolean()
       .required()
       .messages({
         'any.required': 'Status is required'
+      }),
+    isAvailable: Joi.boolean()
+      .optional()
+      .messages({
+        'any.required': 'Availability status is required'
+      }),
+    isOnline: Joi.boolean()
+      .optional()
+      .messages({
+        'any.required': 'Online status is required'
       }),
     reason: Joi.string()
       .max(500)
@@ -246,7 +426,6 @@ const userValidation = {
       })
   }).messages(validationMessages),
 
-  // Bulk user actions (admin only)
   bulkAction: Joi.object({
     userIds: Joi.array()
       .items(Joi.string().pattern(/^[0-9a-fA-F]{24}$/))
@@ -275,7 +454,6 @@ const userValidation = {
     })
   }).messages(validationMessages),
 
-  // Search users with filters
   searchUsers: Joi.object({
     query: Joi.string()
       .trim()
@@ -293,7 +471,6 @@ const userValidation = {
     hasAvatar: Joi.boolean().optional()
   }).messages(validationMessages),
 
-  // Import users (admin only)
   importUsers: Joi.array()
     .items(
       Joi.object({
@@ -312,7 +489,6 @@ const userValidation = {
       ...validationMessages
     }),
 
-  // Export users (admin only)
   exportUsers: Joi.object({
     format: Joi.string()
       .valid('csv', 'json', 'xlsx')
@@ -334,7 +510,6 @@ const userValidation = {
   }).messages(validationMessages)
 };
 
-// Query validation for user listing
 const userQueryValidation = {
   listUsers: Joi.object({
     page: Joi.number()
@@ -382,4 +557,4 @@ module.exports = {
   userQueryValidation,
   userParamsValidation,
   userCommonSchemas
-};
+};  

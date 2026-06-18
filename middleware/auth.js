@@ -1,23 +1,50 @@
 const jwt = require('jsonwebtoken');
 const User = require('../models/User');
+const Runner = require('../models/Runner');
 const config = require('../config');
 const logger = require('../utils/logger');
+const Order = require('../models/Order');
+
+const TERMINAL_STATUSES = ['completed', 'cancelled', 'task_completed', 'delivered'];
+
+// allow these through mid actions
+const GRACE_ROUTES = [
+  '/api/v1/chat',
+  '/api/v1/orders',
+  '/api/v1/payment',
+  '/api/v1/disputes',
+  '/api/v1/delivery',
+];
+
+const hasActiveNonTerminalOrder = async (userId) => {
+  try {
+    // Check if user has any order that is NOT terminal
+    const activeOrder = await Order.findOne({
+      userId,
+      status: { $nin: TERMINAL_STATUSES }
+    }).sort({ createdAt: -1 }).lean();
+
+    return !!activeOrder;
+  } catch (error) {
+    logger.error('Error checking active order:', error);
+    return false;
+  }
+};
 
 /**
  * Authentication middleware - Verify JWT token
  */
+
 const authenticate = async (req, res, next) => {
   try {
+    let token;
+
     const authHeader = req.headers.authorization;
-
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({
-        success: false,
-        message: 'Access token required'
-      });
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      token = authHeader.split(' ')[1];
+    } else if (req.cookies?.token) {
+      token = req.cookies.token;
     }
-
-    const token = authHeader.split(' ')[1];
 
     if (!token) {
       return res.status(401).json({
@@ -26,10 +53,59 @@ const authenticate = async (req, res, next) => {
       });
     }
 
-    // Verify token
-    const decoded = jwt.verify(token, config.jwt.secret);
+    let decoded;
+    try {
+      decoded = jwt.verify(token, config.jwt.secret);
+    } catch (error) {
+      if (error.name === 'TokenExpiredError') {
+        const expiredDecoded = jwt.decode(token);
 
-    // Check if token is an access token
+        if (expiredDecoded) {
+          const userId = expiredDecoded.id || expiredDecoded.userId || expiredDecoded._id;
+
+          if (userId) {
+            const hasActiveOrder = await hasActiveNonTerminalOrder(userId);
+
+            if (hasActiveOrder) {
+              logger.info(`Token expired but user ${userId} has active order - granting grace access to ${req.path}`);
+
+              let user = await User.findById(userId);
+              let userType = 'user';
+
+              if (!user) {
+                user = await Runner.findById(userId);
+                userType = 'runner';
+              }
+
+              if (user && user.isActive) {
+                user.userType = userType;
+                req.user = user;
+                req.token = token;
+                req.tokenExpired = true;
+                return next();
+              }
+            }
+          }
+        }
+
+        return res.status(401).json({
+          success: false,
+          message: 'Token expired',
+          code: 'TOKEN_EXPIRED'
+        });
+      }
+
+      if (error.name === 'JsonWebTokenError') {
+        return res.status(401).json({ success: false, message: 'Invalid token' });
+      }
+
+      throw error;
+    }
+
+    if (!decoded) {
+      return res.status(401).json({ success: false, message: 'Invalid token' });
+    }
+
     if (decoded.type && decoded.type !== 'access') {
       return res.status(401).json({
         success: false,
@@ -37,8 +113,15 @@ const authenticate = async (req, res, next) => {
       });
     }
 
-    // Get user from database
-    const user = await User.findById(decoded.id).select('-password');
+    const userId = decoded.id || decoded.userId || decoded._id;
+
+    let user = await User.findById(userId);
+    let userType = 'user';
+
+    if (!user) {
+      user = await Runner.findById(userId);
+      userType = 'runner';
+    }
 
     if (!user) {
       return res.status(401).json({
@@ -54,42 +137,16 @@ const authenticate = async (req, res, next) => {
       });
     }
 
-    // Check if user needs to verify email (optional - based on your requirements)
-    if (!user.isVerified && config.auth.requireEmailVerification) {
-      return res.status(403).json({
-        success: false,
-        message: 'Please verify your email address before accessing this resource'
-      });
-    }
-
-    // Attach user to request
+    user.userType = userType;
     req.user = user;
     req.token = token;
 
-    logger.info(`User authenticated: ${user.email} - ${req.method} ${req.path}`);
+    logger.info(`User authenticated: ${user.email || user.phone || user._id} - ${req.method} ${req.path}`);
 
     next();
   } catch (error) {
     logger.error('Authentication error:', error);
-
-    if (error.name === 'JsonWebTokenError') {
-      return res.status(401).json({
-        success: false,
-        message: 'Invalid token'
-      });
-    }
-
-    if (error.name === 'TokenExpiredError') {
-      return res.status(401).json({
-        success: false,
-        message: 'Token expired'
-      });
-    }
-
-    return res.status(401).json({
-      success: false,
-      message: 'Authentication failed'
-    });
+    return res.status(401).json({ success: false, message: 'Authentication failed' });
   }
 };
 
@@ -110,25 +167,39 @@ const authenticateOptional = async (req, res, next) => {
       return next();
     }
 
-    // Verify token
-    const decoded = jwt.verify(token, config.jwt.secret);
+    let decoded;
+    try {
+      decoded = jwt.verify(token, config.jwt.secret);
+    } catch (error) {
+      // Even if token is expired, try to decode it to get user info
+      if (error.name === 'TokenExpiredError') {
+        decoded = jwt.decode(token);
+        if (decoded) {
+          req.tokenExpired = true;
+        }
+      } else {
+        return next();
+      }
+    }
 
-    // Only proceed if it's an access token
-    if (decoded.type && decoded.type !== 'access') {
+    if (!decoded) {
       return next();
     }
 
-    // Get user from database
-    const user = await User.findById(decoded.id).select('-password');
+    const userId = decoded.id || decoded.userId || decoded._id;
+
+    let user = await User.findById(userId);
+    let userType = 'user';
+
+    if (!user) {
+      user = await Runner.findById(userId);
+      userType = 'runner';
+    }
 
     if (user && user.isActive) {
+      user.userType = userType;
       req.user = user;
       req.token = token;
-
-      if (!user.isVerified && config.auth.requireEmailVerification) {
-        // Still attach user but mark as unverified
-        req.user.isVerified = false;
-      }
     }
 
     next();
@@ -169,7 +240,7 @@ const authorize = (roles = []) => {
       });
     }
 
-    logger.debug(`User authorized: ${req.user.email} - Role: ${req.user.role} - ${req.method} ${req.path}`);
+    logger.debug(`User authorized: ${req.user.email || req.user.phone} - Role: ${req.user.role} - ${req.method} ${req.path}`);
 
     next();
   };
@@ -249,7 +320,7 @@ const checkOwnership = (resourceOwnerIdPath = 'params.userId') => {
       return next();
     }
 
-    logger.warn(`Ownership violation: ${req.user.email} attempted to access resource owned by ${resourceOwnerId}`);
+    logger.warn(`Ownership violation: ${req.user.email || req.user.phone} attempted to access resource owned by ${resourceOwnerId}`);
 
     return res.status(403).json({
       success: false,
@@ -320,6 +391,58 @@ const userRateLimit = (options = {}) => {
     next();
   };
 };
+
+/**
+ * Ip Rate Limit
+ */
+const ipRateLimit = (options = {}) => {
+  const {
+    windowMs = 15 * 60 * 1000,
+    maxRequests = 10,
+    message = 'Too many requests, please try again later'
+  } = options;
+
+  const ipRequests = new Map();
+
+  return (req, res, next) => {
+    // Handle proxies — use x-forwarded-for if behind nginx/render/etc
+    const forwarded = req.headers['x-forwarded-for'];
+    const ip = forwarded
+      ? forwarded.split(',')[0].trim()
+      : req.ip || req.connection.remoteAddress;
+
+    const now = Date.now();
+    const windowStart = now - windowMs;
+
+    if (ipRequests.has(ip)) {
+      const requests = ipRequests.get(ip).filter(t => t > windowStart);
+      requests.length === 0 ? ipRequests.delete(ip) : ipRequests.set(ip, requests);
+    }
+
+    if (!ipRequests.has(ip)) ipRequests.set(ip, []);
+
+    const timestamps = ipRequests.get(ip);
+
+    if (timestamps.length >= maxRequests) {
+      return res.status(429).json({
+        success: false,
+        message,
+        retryAfter: Math.ceil((timestamps[0] + windowMs - now) / 1000)
+      });
+    }
+
+    timestamps.push(now);
+
+    res.set({
+      'X-RateLimit-Limit': maxRequests,
+      'X-RateLimit-Remaining': maxRequests - timestamps.length,
+      'X-RateLimit-Reset': new Date(now + windowMs).toISOString(),
+    });
+
+    next();
+  };
+};
+
 
 /**
  * API key authentication middleware
@@ -481,11 +604,14 @@ const auditLog = (operation) => {
     const originalSend = res.send;
 
     res.send = function (data) {
+      originalSend.call(this, data);
+
       // Log after response is sent
       const auditData = {
         timestamp: new Date().toISOString(),
         operation,
         userId: req.user?._id,
+        runnerId: req.runner?._id,
         userEmail: req.user?.email,
         ip: req.ip,
         userAgent: req.get('User-Agent'),
@@ -499,7 +625,6 @@ const auditLog = (operation) => {
 
       logger.audit('AUDIT_LOG', auditData);
 
-      originalSend.call(this, data);
     };
 
     next();
@@ -514,6 +639,7 @@ module.exports = {
   requirePhoneVerification,
   checkOwnership,
   userRateLimit,
+  ipRateLimit,
   apiKeyAuth,
   corsWithAuth,
   hasPermission,
