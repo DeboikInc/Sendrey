@@ -1,5 +1,5 @@
-import React, { useEffect, useState, useCallback, useRef } from "react";
-import { Card, CardBody, Chip, } from "@material-tailwind/react";
+import React, { useEffect, useState, useCallback, useRef, useMemo } from "react";
+import { Card, CardBody, Chip } from "@material-tailwind/react";
 import { Star, X } from "lucide-react";
 import BarLoader from "../common/BarLoader";
 import { useSocket } from "../../hooks/useSocket";
@@ -15,246 +15,399 @@ export default function RunnerSelectionScreen({
   className = "",
   runnerResponseData,
   specialInstructions = null,
-  onFindMore
+  onFindMore,
+  onFetchTopRated,
 }) {
   const [isVisible, setIsVisible] = useState(false);
   const [isWaitingForRunner, setIsWaitingForRunner] = useState(false);
   const [selectedRunnerId, setSelectedRunnerId] = useState(null);
   const [isMobile, setIsMobile] = useState(false); // eslint-disable-line no-unused-vars
+  const [topRatedLoading, setTopRatedLoading] = useState(false);
+  const [topRatedStatus, setTopRatedStatus] = useState(null);
 
-  const PAGE_SIZE = 2;
-  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
   const { socket, isConnected } = useSocket();
+  const [currentOrder, setCurrentOrder] = useState(null);
+  const [timedOutRunnerId, setTimedOutRunnerId] = useState(null);
+  const [networkError, setNetworkError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState(null);
 
   const timeoutRef = useRef(null);
   const pendingRequestRef = useRef(null);
-  const [currentOrder, setCurrentOrder] = useState(null);
+  const selectedRunnerIdRef = useRef(null);
+  const proceedBufferRef = useRef(null);
+  const handleProceedToChatRef = useRef(null);
+  const runnersRef = useRef([]);
+  const userIdRef = useRef(userData?._id);
+  const lastAttemptedChatIdRef = useRef(null);
+  const lastAttemptTokenRef = useRef(null)
+  const currentOrderRef = useRef(null);
 
-  // Use runnerResponseData directly
-  const runners = runnerResponseData?.runners || [];
+  const runners = useMemo(() => runnerResponseData?.runners || [], [runnerResponseData]);
   const count = runnerResponseData?.count || runners.length;
   const error = runnerResponseData?.error;
+
+  useEffect(() => { currentOrderRef.current = currentOrder; }, [currentOrder]);
+  useEffect(() => { userIdRef.current = userData?._id; }, [userData]);
+  useEffect(() => { runnersRef.current = runners; }, [runners]);
+
+  // ── Mobile check ──────────────────────────────────────────────────────────
+  useEffect(() => {
+    const check = () => setIsMobile(window.innerWidth <= 768);
+    check();
+    window.addEventListener("resize", check);
+    return () => window.removeEventListener("resize", check);
+  }, []);
+
+  // ── Cleanup on unmount ────────────────────────────────────────────────────
+  useEffect(() => {
+    return () => {
+      pendingRequestRef.current = null;
+      selectedRunnerIdRef.current = null;
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, []);
+
+  // ── Body scroll lock ──────────────────────────────────────────────────────
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = "hidden";
+      setTimeout(() => setIsVisible(true), 50);
+    } else {
+      document.body.style.overflow = "";
+      setIsVisible(false);
+    }
+    return () => { document.body.style.overflow = ""; };
+  }, [isOpen]);
 
   const handleClose = useCallback(() => {
     setIsVisible(false);
     setIsWaitingForRunner(false);
     setSelectedRunnerId(null);
-
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
-
+    selectedRunnerIdRef.current = null;
     pendingRequestRef.current = null;
-
-    setTimeout(() => {
-      if (typeof onClose === "function") onClose();
-    }, 200);
+    if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
+    setTimeout(() => { if (typeof onClose === "function") onClose(); }, 200);
   }, [onClose]);
 
-  // mobile ?
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth <= 768);
-    };
+  // ── Helper: advance to chat screen ───────────────────────────────────────
+  const advanceToChat = useCallback((runnerId, order) => {
+    if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
+    pendingRequestRef.current = null;
+    selectedRunnerIdRef.current = null;
+    setIsWaitingForRunner(false);
+    setSelectedRunnerId(null);
 
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
+    const runnerData = runnersRef.current.find(r => (r._id || r.id) === runnerId);
+    onSelectRunner?.(runnerData || { _id: runnerId, id: runnerId }, order);
+  }, [onSelectRunner]);
+
+  // assign directly during render:
+  handleProceedToChatRef.current = (data) => {
+    console.log('[RSS handleProceedToChat] ENTRY', {
+      chatReady: data.chatReady,
+      isExpectedResult: null, // will fill below
+      pendingChatId: pendingRequestRef.current?.chatId,
+      dataChatId: data.chatId,
+      lastToken: lastAttemptTokenRef.current,
+      dataToken: data.attemptToken,
+      selectedRunnerIdRef: selectedRunnerIdRef.current,
+      dataRunnerId: data.runnerId,
+    });
+
+    if (!data.chatReady) return;
+
+    const userId = userIdRef.current;
+    const expectedChatId = userId && data.runnerId
+      ? `user-${userId}-runner-${data.runnerId}`
+      : null;
+
+    const isExpected =
+      (expectedChatId && data.chatId === expectedChatId) ||
+      data.chatId === lastAttemptedChatIdRef.current ||
+      data.chatId === pendingRequestRef.current?.chatId ||
+      (data.attemptToken && data.attemptToken === lastAttemptTokenRef.current) ||
+      data.runnerId === selectedRunnerIdRef.current;
+
+    if (!isExpected) {
+      console.log('[RSS proceedToChat] BUFFERED');
+      proceedBufferRef.current = data;
+      return;
+    }
+
+    if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
+    pendingRequestRef.current = null;
+    selectedRunnerIdRef.current = null;
+    lastAttemptTokenRef.current = null;
+    setTimedOutRunnerId(null);
+    advanceToChat(data.runnerId, currentOrderRef.current);
+  };
+
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && proceedBufferRef.current) {
+        console.log('[RSS] page visible — flushing buffered proceedToChat');
+        const buffered = proceedBufferRef.current;
+        proceedBufferRef.current = null;
+        handleProceedToChatRef.current?.(buffered);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
   }, []);
 
+  // ── Core socket events ────────────────────────────────────────────────────
   useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = 'hidden';
-      setTimeout(() => setIsVisible(true), 50);
-    } else {
-      document.body.style.overflow = '';
-      setIsVisible(false);
+    if (!socket) {
+      console.log('[RSS socket effect] SKIPPED', { hasSocket: !!socket });
+      return;
+    }
+
+    console.log('[RSS socket effect] ATTACHING listeners', {
+      socketId: socket.id,
+      isOpen,
+      existingListeners: socket.listeners('proceedToChat').length,
+    });
+
+    const stableHandler = (data) => {
+      console.log('[RSS stableHandler CALLED]', {
+        chatId: data.chatId,
+        isOpen,           // ← is the sheet actually open?
+        pendingChatId: pendingRequestRef.current?.chatId,
+        lastAttemptToken: lastAttemptTokenRef.current,
+        dataToken: data.attemptToken,
+        selectedRunnerIdRef: selectedRunnerIdRef.current,
+        totalProceedListeners: socket?.listeners('proceedToChat').length, // ← key: should be 1
+      });
+      handleProceedToChatRef.current?.(data);
+    };
+
+    const handleOrderCreated = (data) => {
+      const order = data.order || data;
+      setCurrentOrder(order);
+      currentOrderRef.current = order;
+    };
+
+    const handleChatReset = (data) => {
+      console.log("[RSS] chatReset received:", data.chatId);
+      if (pendingRequestRef.current?.chatId === data.chatId) {
+        pendingRequestRef.current = null;
+        setIsWaitingForRunner(false);
+        setSelectedRunnerId(null);
+        selectedRunnerIdRef.current = null;
+        if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
+      }
+    };
+
+    const handleRunnerTimeout = (data) => {
+      if (data.chatId !== pendingRequestRef.current?.chatId) return;
+      if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
+      pendingRequestRef.current = null;
+      selectedRunnerIdRef.current = null;
+      setIsWaitingForRunner(false);
+      setSelectedRunnerId(null);
+      setTimedOutRunnerId(data.runnerId);
+    };
+
+    const handleChatError = (data) => {
+      console.error('[RSS] chatError received:', data);
+      // Only reset if it's for our current pending request
+      if (data.chatId && data.chatId !== lastAttemptedChatIdRef.current) return;
+
+      if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
+      pendingRequestRef.current = null;
+      selectedRunnerIdRef.current = null;
+      lastAttemptTokenRef.current = null;
+      setIsWaitingForRunner(false);
+      setSelectedRunnerId(null);
+      setTimedOutRunnerId(null);
+      setNetworkError(false);
+
+      // Show as a timed-out runner so user sees actionable UI
+      setErrorMessage(data.message || 'Something went wrong. Please try again.');
+    };
+
+    const handlePreRoomTimeout = (data) => {
+      console.warn('[RSS] preRoomTimeout:', data);
+      if (data.chatId && data.chatId !== lastAttemptedChatIdRef.current) return;
+
+      if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
+      pendingRequestRef.current = null;
+      selectedRunnerIdRef.current = null;
+      lastAttemptTokenRef.current = null;
+      setIsWaitingForRunner(false);
+      setSelectedRunnerId(null);
+      // Reuse the timedOut UI — user already knows what to do from that banner
+      setTimedOutRunnerId(selectedRunnerIdRef.current);
+      setErrorMessage('Connection timed out. Please try again.');
+    };
+
+    const handleDisconnect = () => setNetworkError(true);
+    const handleReconnectSuccess = () => setNetworkError(false);
+
+    socket.on('runnerTimeout', handleRunnerTimeout);
+    socket.on('connect', handleReconnectSuccess);
+    socket.on("proceedToChat", stableHandler);
+    socket.on("orderCreated", handleOrderCreated);
+    socket.on("chatReset", handleChatReset);
+    socket.on('disconnect', handleDisconnect);
+    socket.on('chatError', handleChatError);
+    socket.on('preRoomTimeout', handlePreRoomTimeout)
+
+    console.log('[RSS] proceedToChat listener registered on socket:', socket.id);
+
+    // flush any buffered event that arrived before the listener was ready
+    if (proceedBufferRef.current) {
+      console.log('[RSS] flushing buffered proceedToChat on listener attach');
+      const buffered = proceedBufferRef.current;
+      proceedBufferRef.current = null;
+      stableHandler(buffered); // re-run through the now-correct handler
     }
 
     return () => {
-      document.body.style.overflow = '';
-    };
-  }, [isOpen]);
+      console.log('[RSS socket effect] REMOVING listeners', {
+        socketId: socket?.id,
+        listenersBeforeRemove: socket?.listeners('proceedToChat').length,
+      });
 
-  // Setup socket event listeners
+      if (!socket) return;
+      socket.off("proceedToChat", stableHandler);
+      socket.off("orderCreated", handleOrderCreated);
+      socket.off("chatReset", handleChatReset);
+      socket.off('runnerTimeout', handleRunnerTimeout);
+      socket.off('disconnect', handleDisconnect);
+      socket.off('connect', handleReconnectSuccess);
+      socket.off('chatError', handleChatError);
+      socket.off('preRoomTimeout', handlePreRoomTimeout)
+
+
+    };
+    // eslint-disable-next-line 
+  }, [socket, advanceToChat]);
+
+  // ── On reconnect: re-emit pending request AND rejoin user room ────────────
   useEffect(() => {
-    if (!socket || !isConnected) return;
-
-    const userId = userData?._id;
-    if (!userId) return;
-
-    // Listen for enterPreRoom
-    const handleEnterPreRoom = (data) => {
-      // console.log(' enterPreRoom event received:', data);
-    };
-
-    // Listen for proceedToChat (when both are ready)
-    const handleProceedToChat = (data) => {
-      // console.log(' proceedToChat event received:', data);
-
-      const pending = pendingRequestRef.current;
-      if (!pending) return;
-
-      const matchesChat = data.chatId === pending.chatId;
-
-      if (matchesChat && data.chatReady) {
-        // console.log('✅ Chat ready! Proceeding to chat screen...');
-
-        if (timeoutRef.current) {
-          clearTimeout(timeoutRef.current);
-          timeoutRef.current = null;
-        }
-
-        pendingRequestRef.current = null;
-
-        // Join actual chat room
-        socket.emit('userJoinChat', {
-          userId,
-          runnerId: data.runnerId,
-          chatId: data.chatId,
-          serviceType: selectedService
-        });
-
-        setIsWaitingForRunner(false);
-        setSelectedRunnerId(null);
-
-        const runnerData = runners.find(r =>
-          (r._id || r.id) === data.runnerId
-        );
-
-        if (onSelectRunner) {
-          onSelectRunner(runnerData || {
-            _id: data.runnerId,
-            id: data.runnerId,
-          }, currentOrder);
-        }
-      }
-    };
-
-    socket.on('enterPreRoom', handleEnterPreRoom);
-    socket.on('proceedToChat', handleProceedToChat);
-
-    // console.log('Socket event listeners registered for user:', userId);
-
-    return () => {
-      socket.off('enterPreRoom', handleEnterPreRoom);
-      socket.off('proceedToChat', handleProceedToChat);
-
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [socket, isConnected, userData, selectedService, onSelectRunner, runners]);
-
-
-  useEffect(() => {
-    if (!socket || !isConnected) return;
+    if (!socket) return;
 
     const handleReconnect = () => {
       const pending = pendingRequestRef.current;
-      if (!pending) return;
+      const userId = userIdRef.current;
 
-      // Re-emit the original request — server may have lost the pre-room state
-      socket.emit('requestRunner', {
+      console.log("[RSS] socket reconnected — pending:", pending?.chatId);
+
+      // Always rejoin user room first
+      if (userId) {
+        socket.emit("rejoinUserRoom", { userId, userType: "user" });
+      }
+
+      if (!pending) return;
+      if (proceedBufferRef.current) return;
+
+      // Re-emit the runner request — server will re-emit proceedToChat
+      // if the pre-room is already ready, or queue it if runner hasn't accepted yet
+      socket.emit("requestRunner", {
         runnerId: pending.runnerId,
         userId: pending.userId,
         chatId: pending.chatId,
         serviceType: selectedService,
         specialInstructions: specialInstructions || null,
-      });
-
-      // Also rejoin user room in case it was lost
-      socket.emit('rejoinUserRoom', {
-        userId: pending.userId,
-        userType: 'user',
+        isReconnect: true, // ← hint to server: don't re-notify runner
       });
     };
 
-    socket.on('connect', handleReconnect);
-    return () => socket.off('connect', handleReconnect);
-  }, [socket, isConnected, selectedService, specialInstructions]);
+    socket.on("connect", handleReconnect);
+    return () => socket.off("connect", handleReconnect);
+  }, [socket, selectedService, specialInstructions]);
 
-  useEffect(() => {
-    if (!socket || !isConnected) return;
+  // ── Send runner request ───────────────────────────────────────────────────
+  const doRequest = useCallback((runnerId, userId) => {
+    console.log('[RSS doRequest] START', { runnerId, userId, pendingRef: pendingRequestRef.current });
 
-    const handleOrderCreated = (data) => {
-      // console.log('RunnerSelectionScreen received orderCreated:', data);
-      const order = data.order || data;
-      setCurrentOrder(order);
-    };
+    setErrorMessage(null);
+    console.log("[RSS] doRequest → runnerId:", runnerId, "userId:", userId);
 
-    socket.on('orderCreated', handleOrderCreated);
+    if (pendingRequestRef.current) {
+      const recent = Date.now() - pendingRequestRef.current.timestamp < 3000;
+      if (recent) {
+        console.warn("[RSS] BLOCKED — double tap debounce");
+        return;
+      }
+      if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
+      pendingRequestRef.current = null;
+      setIsWaitingForRunner(false);
+      setSelectedRunnerId(null);
+      selectedRunnerIdRef.current = null;
+    }
 
-    return () => {
-      socket.off('orderCreated', handleOrderCreated);
-    };
-  }, [socket, isConnected]);
+    const chatId = `user-${userId}-runner-${runnerId}`;
+    const attemptToken = `${chatId}-${Date.now()}`;
 
-  const handleRunnerClick = (runner) => {
-    const runnerId = runner._id || runner.id;
-    const userId = userData?._id;
+    // ── Set ALL refs before anything else ──
+    pendingRequestRef.current = { runnerId, userId, chatId, serviceType: selectedService, timestamp: Date.now() };
+    lastAttemptedChatIdRef.current = chatId;
+    lastAttemptTokenRef.current = attemptToken;
+    selectedRunnerIdRef.current = runnerId;
+    setSelectedRunnerId(runnerId);
+    setIsWaitingForRunner(true);
 
-    if (!socket || !userId) {
-      alert('Connection issue. Please try again.');
+    console.log('[RSS doRequest] about to emit requestRunner', { runnerId, chatId, socketId: socket.id, connected: socket.connected });
+
+    socket.emit("requestRunner", {
+      runnerId,
+      userId,
+      chatId,
+      attemptToken,
+      serviceType: selectedService,
+      specialInstructions: specialInstructions || null,
+    });
+
+    // ── NOW check buffer (refs are all set so token check works too) ──
+    if (proceedBufferRef.current?.chatId === chatId) {
+      console.log("[RSS doRequest] flushing buffer after emit");
+      const buffered = proceedBufferRef.current;
+      proceedBufferRef.current = null;
+      lastAttemptTokenRef.current = null;
+      pendingRequestRef.current = null;
+      selectedRunnerIdRef.current = null;
+      if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
+      advanceToChat(buffered.runnerId, currentOrder);
       return;
     }
 
-    // if disconnected, try to reconnect and wait
+    console.log('[RSS doRequest] requestRunner emitted', { runnerId, chatId, attemptToken });
+
+    timeoutRef.current = setTimeout(() => {
+      console.log('[RSS doRequest] TIMEOUT fired for runnerId:', runnerId);
+      if (pendingRequestRef.current?.runnerId === runnerId) {
+        pendingRequestRef.current = null;
+        selectedRunnerIdRef.current = null;
+        lastAttemptTokenRef.current = null;
+        timeoutRef.current = null;
+        setIsWaitingForRunner(false);
+        setSelectedRunnerId(null);
+        setTimedOutRunnerId(runnerId);
+      }
+    }, 90000);
+  }, [socket, selectedService, specialInstructions, advanceToChat, currentOrder]);
+
+  const handleRunnerClick = useCallback((runner) => {
+    const runnerId = runner._id || runner.id;
+    const userId = userData?._id;
+
+    if (!socket || !userId) { alert("Connection issue. Please try again."); return; }
+
     if (!isConnected) {
       socket.connect();
-      const waitForConnection = (attempts = 0) => {
-        if (socket.connected) {
-          doRequest(runnerId, userId);
-        } else if (attempts < 10) {
-          setTimeout(() => waitForConnection(attempts + 1), 500);
-        } else {
-          alert('Could not reconnect. Please check your connection and try again.');
-        }
-      };
-      waitForConnection();
+      let attempts = 0;
+      const wait = setInterval(() => {
+        attempts++;
+        if (socket.connected) { clearInterval(wait); doRequest(runnerId, userId); }
+        else if (attempts >= 10) { clearInterval(wait); alert("Could not reconnect. Check your connection."); }
+      }, 500);
       return;
     }
 
     doRequest(runnerId, userId);
-  };
-
-  const doRequest = (runnerId, userId) => {
-    if (isWaitingForRunner || pendingRequestRef.current) return;
-
-    const chatId = `user-${userId}-runner-${runnerId}`;
-
-    pendingRequestRef.current = {
-      runnerId, userId, chatId,
-      serviceType: selectedService,
-      timestamp: Date.now()
-    };
-
-    setSelectedRunnerId(runnerId);
-    setIsWaitingForRunner(true);
-
-    socket.emit('requestRunner', {
-      runnerId, userId, chatId,
-      serviceType: selectedService,
-      specialInstructions: specialInstructions || null
-    });
-
-    timeoutRef.current = setTimeout(() => {
-      if (pendingRequestRef.current?.runnerId === runnerId) {
-        pendingRequestRef.current = null;
-        setIsWaitingForRunner(false);
-        setSelectedRunnerId(null);
-        timeoutRef.current = null;
-        alert('Runner did not respond. Please try another runner.');
-      }
-    }, 35000);
-  };
-
-  useEffect(() => {
-    setVisibleCount(PAGE_SIZE);
-  }, [runnerResponseData]);
+  }, [socket, isConnected, userData, doRequest]);
 
   if (!isOpen) return null;
 
@@ -267,32 +420,29 @@ export default function RunnerSelectionScreen({
 
       <div className="fixed bottom-0 left-0 right-0 z-[10000] flex justify-center px-4">
         <div
-          className={`${darkMode ? "dark:bg-black-100" : "bg-white"} 
-            rounded-t-3xl shadow-2xl 
-            lg:h-full
-            h-[85vh]
+          className={`${darkMode ? "dark:bg-black-100" : "bg-white"}
+            rounded-t-3xl shadow-2xl
+            lg:h-full h-[85vh]
             w-full max-w-4xl mx-auto
-            flex flex-col 
-            transition-transform duration-300 ease-out 
+            flex flex-col
+            transition-transform duration-300 ease-out
             ${isVisible ? "translate-y-0" : "translate-y-full"}`}
         >
-          {/* Header - Fixed */}
+          {/* Header */}
           <div className="flex items-center justify-between p-4 flex-shrink-0 border-b border-gray-200 dark:border-gray-700">
             <h2 className="text-xl font-bold text-black dark:text-white">
               Available Runners Nearby
             </h2>
             <button
               onClick={handleClose}
-              aria-label="Close runner selection"
               className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition"
             >
               <X className="h-5 w-5 text-gray-600 dark:text-gray-300" />
             </button>
           </div>
 
-          {/* Scrollable Content Area */}
+          {/* Scrollable content */}
           <div className="flex-1 overflow-y-auto p-4 pb-8 min-h-0">
-            {/* Any Error or No Runners Available */}
             {error || runners.length === 0 ? (
               <div className="text-center py-12 px-4">
                 <p className="text-gray-600 dark:text-gray-400 text-lg mb-2">
@@ -306,23 +456,74 @@ export default function RunnerSelectionScreen({
               <div className="max-w-md mx-auto">
                 <div className="bg-gray-100 dark:bg-gray-800 rounded-2xl p-4 mb-4">
                   <p className="text-gray-700 dark:text-gray-300">
-                    Found {count} available runner{count !== 1 ? 's' : ''} nearby. Who would you like?
+                    Found {count} available runner{count !== 1 ? "s" : ""} nearby. Who would you like?
                   </p>
                 </div>
 
+                {networkError && (
+                  <div className={`rounded-2xl p-4 mb-4 border ${darkMode ? "bg-amber-950/40 border-amber-800/40" : "bg-amber-50 border-amber-200"}`}>
+                    <p className={`text-sm font-semibold ${darkMode ? "text-amber-300" : "text-amber-700"}`}>
+                      Connection lost — reconnecting, your request is preserved.
+                    </p>
+                  </div>
+                )}
+
+                {timedOutRunnerId && (
+                  <div className={`rounded-2xl p-4 mb-4 border ${darkMode ? "bg-red-950/40 border-red-800/40" : "bg-red-50 border-red-200"}`}>
+                    <p className={`text-sm font-semibold mb-2 ${darkMode ? "text-red-300" : "text-red-700"}`}>
+                      {runners.find(r => (r._id || r.id) === timedOutRunnerId)?.firstName || 'Runner'} didn't respond.
+                    </p>
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => {
+                          const runner = runners.find(r => (r._id || r.id) === timedOutRunnerId);
+                          setTimedOutRunnerId(null);
+                          if (runner) handleRunnerClick(runner);
+                        }}
+                        className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-red-500 text-white active:scale-95"
+                      >
+                        Retry
+                      </button>
+                      <button
+                        onClick={() => setTimedOutRunnerId(null)}
+                        className={`text-xs font-semibold px-3 py-1.5 rounded-lg border active:scale-95 ${darkMode ? "border-red-700 text-red-300" : "border-red-300 text-red-600"}`}
+                      >
+                        Choose another
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {errorMessage && (
+                  <div className={`rounded-2xl p-4 mb-4 border ${darkMode ? "bg-red-950/40 border-red-800/40" : "bg-red-50 border-red-200"}`}>
+                    <div className="flex items-start justify-between gap-2">
+                      <p className={`text-sm font-semibold ${darkMode ? "text-red-300" : "text-red-700"}`}>
+                        {errorMessage}
+                      </p>
+                      <button
+                        onClick={() => setErrorMessage(null)}
+                        className={`text-xs flex-shrink-0 ${darkMode ? "text-red-400" : "text-red-500"}`}
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <div className="space-y-3">
-                  {runners.slice(0, visibleCount).map((runner) => {
-                    const isThisRunnerWaiting = isWaitingForRunner && selectedRunnerId === (runner._id || runner.id);
+                  {runners.map((runner) => {
+                    const rid = runner._id || runner.id;
+                    const isThisWaiting = isWaitingForRunner && selectedRunnerId === rid;
                     return (
                       <Card
-                        key={runner._id || runner.id}
-                        className={`transition-all ${isThisRunnerWaiting ? 'opacity-70' : 'cursor-pointer hover:shadow-lg'} ${isWaitingForRunner && !isThisRunnerWaiting ? 'opacity-50 pointer-events-none' : ''}`}
+                        key={rid}
+                        className={`transition-all ${isThisWaiting ? "opacity-70" : "cursor-pointer hover:shadow-lg"} ${isWaitingForRunner && !isThisWaiting ? "opacity-50 pointer-events-none" : ""}`}
                         onClick={() => !isWaitingForRunner && handleRunnerClick(runner)}
                       >
                         <CardBody className="flex flex-row items-center p-3">
                           <img
                             src={runner.avatar || "https://cdn-icons-png.flaticon.com/512/149/149071.png"}
-                            alt={runner.firstName + " " + (runner.lastName || "")}
+                            alt={`${runner.firstName} ${runner.lastName || ""}`}
                             className="w-12 h-12 rounded-full mr-3 object-cover"
                           />
                           <div className="flex-1">
@@ -336,45 +537,30 @@ export default function RunnerSelectionScreen({
                                   const half = !full && runner.rating >= star - 0.5;
                                   return (
                                     <div key={star} className="relative h-4 w-4 flex-shrink-0">
-                                      <Star className="absolute h-4 w-4" style={{ fill: 'none', color: '#c0c4ca' }} />
-                                      {full && (
-                                        <Star className="absolute h-4 w-4" style={{ fill: '#facc15', color: '#facc15' }} />
-                                      )}
+                                      <Star className="absolute h-4 w-4" style={{ fill: "none", color: "#c0c4ca" }} />
+                                      {full && <Star className="absolute h-4 w-4" style={{ fill: "#facc15", color: "#facc15" }} />}
                                       {half && (
-                                        <div className="absolute overflow-hidden" style={{ width: '50%' }}>
-                                          <Star className="h-4 w-4" style={{ fill: '#facc15', color: '#facc15' }} />
+                                        <div className="absolute overflow-hidden" style={{ width: "50%" }}>
+                                          <Star className="h-4 w-4" style={{ fill: "#facc15", color: "#facc15" }} />
                                         </div>
                                       )}
                                     </div>
                                   );
                                 })}
-                                <span className="text-sm ml-1" style={{ color: '#6b7280' }}>
-                                  {runner.rating > 0 ? Number(runner.rating).toFixed(1) : 'New'}
+                                <span className="text-sm ml-1" style={{ color: "#6b7280" }}>
+                                  {runner.rating > 0 ? Number(runner.rating).toFixed(1) : "New"}
                                 </span>
                               </div>
-
                             </div>
                             <div className="flex justify-between items-center text-sm text-gray-600 dark:text-gray-400 mt-1">
                               <span>{runner.totalRuns || 0} deliveries</span>
                               <div className="flex items-center gap-2">
-                                <Chip
-                                  value={runner.fleetType || "N/A"}
-                                  size="sm"
-                                  className="capitalize"
-                                  color="blue"
-                                />
-                                {runner.isOnline && (
-                                  <Chip
-                                    value="Online"
-                                    size="sm"
-                                    color="green"
-                                  />
-                                )}
+                                <Chip value={runner.fleetType || "N/A"} size="sm" className="capitalize" color="blue" />
+                                {runner.isOnline && <Chip value="Online" size="sm" color="green" />}
                               </div>
                             </div>
                           </div>
-
-                          {isThisRunnerWaiting && (
+                          {isThisWaiting && (
                             <div className="ml-3 w-4 h-4 flex-shrink-0">
                               <BarLoader size="small" />
                             </div>
@@ -385,21 +571,37 @@ export default function RunnerSelectionScreen({
                   })}
                 </div>
 
-                {runners.length > PAGE_SIZE && (
-                  <div className="flex justify-center pt-3">
-                    <button
-                      onClick={() => visibleCount < runners.length
-                        ? setVisibleCount(prev => prev + PAGE_SIZE)
-                        : onFindMore?.()
+                <div className="flex flex-col items-center gap-2 pt-3">
+                  <button
+                    onClick={async () => {
+                      setTopRatedLoading(true);
+                      setTopRatedStatus(null);
+                      try {
+                        await onFetchTopRated();
+                        setTopRatedStatus("success");
+                      } catch {
+                        setTopRatedStatus("error");
+                      } finally {
+                        setTopRatedLoading(false);
+                        setTimeout(() => setTopRatedStatus(null), 3000);
                       }
-                      className="text-sm font-semibold text-primary border border-primary rounded-lg px-5 py-2 hover:bg-primary/30 transition">
-                      {visibleCount < runners.length
-                        ? `Find More Runners`
-                        : 'Find More Runners' // get top runners too
-                      }
-                    </button>
-                  </div>
-                )}
+                    }}
+                    disabled={topRatedLoading}
+                    className={`text-sm font-semibold border rounded-lg px-5 py-2 transition flex items-center gap-2
+                      ${topRatedLoading
+                        ? "text-yellow-300 border-yellow-300 opacity-60 cursor-not-allowed"
+                        : "text-yellow-500 border-yellow-500 hover:bg-yellow-500/10"
+                      }`}
+                  >
+                    {topRatedLoading ? (
+                      <><BarLoader size="small" /><span>Fetching...</span></>
+                    ) : (
+                      "⭐ Show Top Rated Runner"
+                    )}
+                  </button>
+                  {topRatedStatus === "success" && <p className="text-xs text-green-500 font-medium">✓ Top rated runners loaded</p>}
+                  {topRatedStatus === "error" && <p className="text-xs text-red-400 font-medium">✗ Failed to fetch. Try again.</p>}
+                </div>
               </div>
             )}
           </div>

@@ -1,12 +1,12 @@
 import React, { useState, useRef, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, CheckCheck, Download, FileText, Trash2, Reply, Video, } from "lucide-react";
+import { Check, CheckCheck, Download, FileText, Trash2, Reply, Video, Clock } from "lucide-react";
 import { Button } from "@material-tailwind/react";
 import ContextMenu from "./ContextMenu";
 
 // payment messages
-import PaymentFailedMessage from './PaymentFailedMessage';
-import PaymentPendingMessage from './PaymentPendingMessage';
+import PaymentFailedMessage from '../payments/PaymentFailedMessage';
+import PaymentPendingMessage from '../payments/PaymentPendingMessage';
 
 import DeliveryConfirmationMessage from '../screens/DeliveryConfirmationMessage';
 
@@ -45,7 +45,9 @@ export default function Message({
   onConfirmDelivery,
   darkMode,
   onRetryPayment,
-  isActiveResend
+  isActiveResend,
+  onBudgetConfirmClick,
+  showStatusIcons = true,
 
 }) {
 
@@ -598,7 +600,7 @@ export default function Message({
               } transition-colors`}
             onClick={(e) => {
               e.stopPropagation();
-              if (canResendOtp && onMessageClick) {
+              if (canResendOtp && onMessageClick && isActiveResend) {
                 onMessageClick(m);
               }
             }}
@@ -656,7 +658,7 @@ export default function Message({
       );
     }
 
-    if (m.hasUseMyNumberButton) {
+    if (m.hasUseMyNumberButton && onUseMyNumberClick) {
       const useMyNumberText = "Use My Phone Number";
       const index = m.text.indexOf(useMyNumberText);
 
@@ -667,10 +669,14 @@ export default function Message({
             {beforeText}
             <div className="mt-3">
               <Button
-                className="w-full bg-primary text-white"
+                className={`w-full text-white ${m.disableUseMyNumber
+                  ? 'opacity-40 bg-gray-500 cursor-not-allowed'
+                  : 'bg-primary cursor-pointer'
+                  }`}
+                disabled={m.disableUseMyNumber}
                 onClick={(e) => {
                   e.stopPropagation();
-                  onUseMyNumberClick && onUseMyNumberClick();
+                  if (!m.disableUseMyNumber) onUseMyNumberClick?.();
                 }}
               >
                 Use My Phone Number
@@ -685,13 +691,42 @@ export default function Message({
           {m.text}
           <div className="mt-3">
             <Button
-              className="w-full bg-primary text-white"
+              className={`w-full bg-primary text-white ${m.disableUseMyNumber ? 'opacity-40 bg-gray-500 cursor-not-allowed' : 'cursor-pointer'}`}
+              disabled={m.disableUseMyNumber}
               onClick={(e) => {
                 e.stopPropagation();
                 onUseMyNumberClick && onUseMyNumberClick();
               }}
             >
               Use My Phone Number
+            </Button>
+          </div>
+        </div>
+      );
+    }
+
+    if (m.hasBudgetConfirmButtons) {
+      return (
+        <div>
+          {m.text}
+          <div className="mt-3 flex flex-col sm:flex-row gap-2">
+            <Button
+              onClick={(e) => {
+                e.stopPropagation();
+                onBudgetConfirmClick?.(true, m.confirmedBudget);
+              }}
+              className="flex-1 bg-primary text-white text-sm py-2"
+            >
+              Yes, confirmed
+            </Button>
+            <Button
+              onClick={(e) => {
+                e.stopPropagation();
+                onBudgetConfirmClick?.(false, m.confirmedBudget);
+              }}
+              className="flex-1 bg-gray-600 text-white text-sm py-2"
+            >
+              No, re-enter
             </Button>
           </div>
         </div>
@@ -918,28 +953,27 @@ export default function Message({
             {m.edited && !isEditing && (
               <span className="text-xs text-gray-700 absolute -bottom-5 right-2">edited</span>
             )}
-
-            {!isSystem && (
-              <div
-                className={`mt-1 flex items-center gap-1 text-[10px] ${isMe ? "text-gray-100" : "text-primary"
-                  }`}
-              >
-                {isMe && (
-                  <span className="flex items-center">
-                    {m.status === "read" ? (
-                      <CheckCheck className="w-3 h-3" />
-                    ) : m.status === "delivered" ? (
-                      <Check className="w-3 h-3" />
-                    ) : null}
-                  </span>
-                )}
-              </div>
-            )}
           </div>
 
           {!isSystem && (
-            <span className="text-gray-800 text-xs font-medium">{m.time}</span>
+            <div className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${isMe ? "text-gray-100" : "text-primary"}`}>
+              <span className="text-gray-800 text-xs font-medium">{m.time}</span>
+              {isMe && showStatusIcons && (
+                <span className="flex items-center">
+                  {m.status === "read" ? (
+                    <CheckCheck className="w-3 h-3" />
+                  ) : m.status === "delivered" ? (
+                    <CheckCheck className="w-3 h-3 opacity-60" />
+                  ) : m.status === "sent" || m.status === "pending" ? (
+                    <Check className="w-3 h-3" />
+                  ) : m.status === "queued" ? (
+                    <Clock className="w-3 h-3 opacity-60" />
+                  ) : null}
+                </span>
+              )}
+            </div>
           )}
+
         </div>
       </motion.div>
 

@@ -1,8 +1,8 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-import React, { useState, useEffect, useRef, useCallback } from "react";
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { IconButton, Button } from "@material-tailwind/react";
 import ChatComposer from "../runnerScreens/chatComposer";
-import { Phone, Video, Sun, Moon, RefreshCw } from "lucide-react";
+import { Phone, Video, Sun, Moon, RefreshCw, AlertTriangle } from "lucide-react";
 import Message from "../common/Message";
 import OrderStatusFlow from "./OrderStatusFlow";
 import AttachmentOptionsFlow from "./AttachmentOptionsFlow";
@@ -16,6 +16,13 @@ import CallScreen from "../common/CallScreen";
 import { usePushNotifications } from '../../hooks/usePushNotifications';
 import { useTypingAndRecordingIndicator } from '../../hooks/useTypingIndicator';
 import useOrderStore from '../../store/orderStore';
+import BarLoader from "../common/BarLoader";
+
+import {
+  flushSocketQueue, enqueueSocketEvent,
+  submitItemsWithRetry, submitPickupItemWithRetry
+} from '../../utils/socketQueue';
+
 
 // ─── Normalise any service-type string → canonical form ───────────────────────
 const normaliseServiceType = (raw) => {
@@ -25,6 +32,12 @@ const normaliseServiceType = (raw) => {
   if (s === 'pick-up' || s === 'pick-up' || s === 'pickup') return 'pick-up';
   return null;
 };
+
+const STATUS_LABELS = new Set([
+  'Arrived at market', 'Purchase in progress', 'Purchase completed',
+  'En route to delivery', 'Arrived at delivery location', 'Item delivered',
+  'Task completed', 'Arrived at pickup location', 'Item collected',
+]);
 
 function RunnerChatScreen({
   initialMessages,
@@ -69,6 +82,7 @@ function RunnerChatScreen({
   openPreview,
   closePreview,
   setIsPreviewOpen,
+  // calls
   videoRef,
   callState,
   callType,
@@ -87,6 +101,9 @@ function RunnerChatScreen({
   endCall,
   toggleMute,
   toggleCamera,
+  isConnecting,
+  callError,
+
   runnerFleetType,
   onStartNewOrder,
   onBackToHome,
@@ -95,9 +112,14 @@ function RunnerChatScreen({
   initialDeliveryMarked,
   initialUserConfirmedDelivery,
   initialSpecialInstructions,
+  sessionKey,
+
 
 }) {
-  const chatId = selectedUser?._id ? `user-${selectedUser._id}-runner-${runnerId}` : null;
+
+  const chatId = useOrderStore(s => s.activeChatId)
+    ?? (selectedUser?._id ? `user-${selectedUser._id}-runner-${runnerId}` : null);
+  const [awaitingNewOrder, setAwaitingNewOrder] = useState(false);
 
   const {
     getChat, // eslint-disable-line no-unused-vars
@@ -126,6 +148,7 @@ function RunnerChatScreen({
   const setCurrentOrder = useCallback((v) => storeSetCurrentOrder(chatId, v), [chatId, storeSetCurrentOrder]);
   const setTaskCompleted = useCallback((v) => storeSetTaskCompleted(chatId, v), [chatId, storeSetTaskCompleted]);
 
+  const lastSeqRef = useRef(new Map());
   const listRef = useRef(null);
   const fileInputRef = useRef(null);
   const processedMessageIds = useRef(new Set());
@@ -135,7 +158,7 @@ function RunnerChatScreen({
   const mountedRef = useRef(true);
   const lastFetchedPayoutOrderIdRef = useRef(null);
   const partnerOnlineRef = useRef(true);
-
+  const deliveryDisputeTimerRef = useRef(null);
 
   const [partnerOnline, setPartnerOnline] = useState(true);
   const [showCameraPreview, setShowCameraPreview] = useState(false);
@@ -144,15 +167,34 @@ function RunnerChatScreen({
   const [showItemSubmissionForm, setShowItemSubmissionForm] = useState(false);
   const [showPickupItemForm, setShowPickupItemForm] = useState(false);
   const [runnerLocation, setRunnerLocation] = useState(null); // eslint-disable-line no-unused-vars
+  const [markingDelivery, setMarkingDelivery] = useState(false);
+
 
   const [backHomeDisabled] = useState(() => {
     try { return localStorage.getItem(`backHome_disabled_${chatId}`) === 'true'; } catch { return false; }
   });
 
-  const [messages, setMessages] = useState(initialMessages || []);
+  const [messages, setMessages] = useState(() => {
+    if (initialMessages?.length) return initialMessages;
+    if (!chatId) return [];
+    // Try store first, then fall back to empty
+    const storeMessages = useOrderStore.getState().getChat(chatId).messages ?? [];
+    return storeMessages;
+  });
+
+  const [itemsApproved, setItemsApproved] = useState(() =>
+    messages.some(m =>
+      (m.type === 'item_submission' || m.messageType === 'item_submission' ||
+        m.type === 'pickup_item_submission' || m.messageType === 'pickup_item_submission') && // ← add pickup
+      m.status === 'approved'
+    )
+  );
+
   const onMessagesChangeRef = useRef(onMessagesChange);
   const [attachFlowResetKey, setAttachFlowResetKey] = useState(0);
 
+
+  console.log('[RCS mount] currentOrder from store:', currentOrder?.orderId, 'chatId:', chatId, 'FULL STORE SLOT:', useOrderStore.getState()._chats[chatId]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -160,45 +202,79 @@ function RunnerChatScreen({
   }, []);
 
   useEffect(() => {
+    if (initialMessages?.length) {
+      processedMessageIds.current = new Set(initialMessages.map(m => m.id).filter(Boolean));
+    }
+  }, [sessionKey]);
+
+
+  useEffect(() => {
     if (!socket || !chatId || !runnerId) return;
 
-    // Tell server runner is online in this chat
-    socket.emit('userOnline', {
-      userId: runnerId,
-      userType: 'runner',
-      chatId,
-    });
-
-    const onPartnerOnline = ({ chatId: incomingChatId }) => {
-      if (incomingChatId !== chatId) return;
+    const onPartnerOnline = ({ chatId: inc }) => {
+      if (inc !== chatId) return;
       partnerOnlineRef.current = true;
       setPartnerOnline(true);
     };
 
-    const onPartnerOffline = ({ chatId: incomingChatId }) => {
-      if (incomingChatId !== chatId) return;
+    const onPartnerOffline = ({ chatId: inc }) => {
+      if (inc !== chatId) return;
       partnerOnlineRef.current = false;
       setPartnerOnline(false);
     };
 
+    const onPresenceStatus = ({ chatId: inc, isOnline }) => {
+      if (inc !== chatId) return;
+      partnerOnlineRef.current = isOnline;
+      setPartnerOnline(isOnline);
+    };
+
     socket.on('partnerOnline', onPartnerOnline);
     socket.on('partnerOffline', onPartnerOffline);
+    socket.on('partnerPresenceStatus', onPresenceStatus);
+
+    socket.emit('userOnline', { userId: runnerId, userType: 'runner', chatId });
+    socket.emit('queryPresence', { chatId, userId: runnerId, userType: 'runner' });
 
     return () => {
       socket.off('partnerOnline', onPartnerOnline);
       socket.off('partnerOffline', onPartnerOffline);
+      socket.off('partnerPresenceStatus', onPresenceStatus);
     };
+  }, [socket, chatId, runnerId]);
+
+  // Heartbeat — 3s interval to match server's tighter timeout
+  useEffect(() => {
+    if (!socket || !chatId || !runnerId) return;
+    const send = () => { if (socket.connected) socket.emit('presenceHeartbeat'); };
+    send();
+    const id = setInterval(send, 3000);
+    return () => clearInterval(id);
+  }, [socket, chatId, runnerId]);
+
+  useEffect(() => {
+    if (!socket || !chatId || !runnerId) return;
+
+    const sendHeartbeat = () => {
+      if (socket.connected) {
+        socket.emit('presenceHeartbeat');
+      }
+    };
+
+    sendHeartbeat(); // immediate on mount
+    const heartbeat = setInterval(sendHeartbeat, 5000);
+
+    return () => clearInterval(heartbeat);
   }, [socket, chatId, runnerId]);
 
   useEffect(() => {
     if (!chatId) return;
     const existing = useOrderStore.getState().getChat(chatId);
-    if (!existing.currentOrder && !existing.deliveryMarked && !existing.specialInstructions) {
-      if (initialDeliveryMarked) storeSetDeliveryMarked(chatId, initialDeliveryMarked);
-      if (initialUserConfirmedDelivery) storeSetUserConfirmedDelivery(chatId, initialUserConfirmedDelivery);
-      if (initialSpecialInstructions) storeSetSpecialInstructions(chatId, initialSpecialInstructions);
+
+    // Only seed from initialSpecialInstructions if store has nothing yet
+    if (!existing.specialInstructions && initialSpecialInstructions) {
+      storeSetSpecialInstructions(chatId, initialSpecialInstructions);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chatId]);
 
 
@@ -207,6 +283,12 @@ function RunnerChatScreen({
   const setMessagesAndSync = useCallback((updater) => {
     setMessages(prev => {
       const next = typeof updater === 'function' ? updater(prev) : updater;
+
+      // ── Always persist to store, even for parent-pushed messages ──
+      if (chatId && mountedRef.current) {
+        useOrderStore.getState().setMessages(chatId, next);
+      }
+
       if (!isSyncingFromParent.current && onMessagesChangeRef.current && mountedRef.current) {
         queueMicrotask(() => {
           if (mountedRef.current) onMessagesChangeRef.current(next);
@@ -214,7 +296,28 @@ function RunnerChatScreen({
       }
       return next;
     });
-  }, []);
+  }, [chatId])
+
+  useEffect(() => {
+    if (!socket || !chatId) return;
+
+    const onChatReset = () => {
+      storeSetCurrentOrder(chatId, null);
+      useOrderStore.getState()._patch(chatId, {
+        taskCompleted: false,
+        orderCancelled: false,
+        cancellationReason: null,
+        completedStatuses: [],
+        deliveryMarked: false,
+        userConfirmedDelivery: false,
+      });
+      setCompletedOrderStatuses([]);
+      setAwaitingNewOrder(true);
+    };
+
+    socket.on('chatReset', onChatReset);
+    return () => socket.off('chatReset', onChatReset);
+  }, [socket, chatId]);
 
   // Register parent push function
   useEffect(() => {
@@ -225,7 +328,7 @@ function RunnerChatScreen({
       queueMicrotask(() => { isSyncingFromParent.current = false; });
     };
     onRegisterSetMessages(pushFromParent, chatId);
-  }, [onRegisterSetMessages]);
+  }, [onRegisterSetMessages, chatId]);
 
   const { permission, requestPermission } = usePushNotifications({
     runnerId, userType: 'runner', socket,
@@ -235,15 +338,16 @@ function RunnerChatScreen({
     socket, chatId, currentUserId: runnerId, currentUserType: 'runner',
   });
 
+  const storedServiceType = useOrderStore(s => s._chats[chatId]?.resolvedServiceType ?? null);
+
   // ── Derive service type ONCE from currentOrder, locked for this render 
-  const resolvedServiceType = normaliseServiceType(
-    currentOrder?.serviceType
-    ?? currentOrder?.taskType
-    ?? currentOrder?.type
-    // Fall back to selectedUser only if currentOrder has no service type at all
-    ?? selectedUser?.currentRequest?.serviceType
+  const resolvedServiceType = useMemo(() => normaliseServiceType(
+    selectedUser?.currentRequest?.serviceType
     ?? selectedUser?.serviceType
-  );
+    ?? storedServiceType
+    ?? currentOrder?.serviceType
+    ?? currentOrder?.taskType
+  ), [selectedUser?._id, currentOrder?.serviceType, currentOrder?.taskType]);
 
   console.log('[RunnerChat] resolvedServiceType:', resolvedServiceType, {
     currentOrderServiceType: currentOrder?.serviceType,
@@ -255,12 +359,13 @@ function RunnerChatScreen({
   const isPickUp = resolvedServiceType === 'pick-up';
   const isPaid =
     currentOrder?.paymentStatus === 'paid' ||
+    currentOrder?.status === 'active' ||
     (!!currentOrder?.orderId && messages.some(
       m => m.type === 'system' &&
-        m.text?.toLowerCase().includes('made payment for this task')
+        m.text?.toLowerCase().includes('made payment for this task') &&
+        m.orderId === currentOrder.orderId
     ));
-  const canSubmitItems = isRunErrand && isPaid;
-
+  // logs
   console.log('RUNNERCHATSCREEN - Mount/Render:', {
     chatId,
     taskCompletedFromStore: taskCompleted,
@@ -324,9 +429,22 @@ function RunnerChatScreen({
   // Special instructions
   useEffect(() => {
     if (selectedUser?.specialInstructions && mountedRef.current) {
-      setSpecialInstructions(selectedUser.specialInstructions);
+      // Only set if store doesn't already have instructions with fileUrls
+      const existing = useOrderStore.getState().getChat(chatId).specialInstructions;
+      const hasRealUrls = existing?.media?.some(m => m.fileUrl);
+      if (!hasRealUrls) {
+        setSpecialInstructions(selectedUser.specialInstructions);
+      }
     }
   }, [selectedUser?.specialInstructions]);
+
+  useEffect(() => {
+    if (!onSpecialInstructions || !mountedRef.current) return;
+    onSpecialInstructions((data) => {
+      console.log('[RunnerChat] specialInstructions received:', JSON.stringify(data, null, 2));
+      if (mountedRef.current) setSpecialInstructions(data.specialInstructions);
+    });
+  }, [onSpecialInstructions]);
 
   // Payout receipt
   useEffect(() => {
@@ -345,6 +463,7 @@ function RunnerChatScreen({
   useEffect(() => {
     if (!socket || !chatId || !runnerId || !mountedRef.current) return;
     if (!currentOrder?.orderId) return;
+    if (['completed', 'cancelled', 'task_completed'].includes(currentOrder?.status)) return;
 
     // Always re-fetch when orderId changes
     lastFetchedPayoutOrderIdRef.current = currentOrder.orderId;
@@ -370,6 +489,8 @@ function RunnerChatScreen({
     const pollInterval = setInterval(() => {
       if (!mountedRef.current) return;
       const order = useOrderStore.getState().getChat(chatId).currentOrder;
+      if (!order?.orderId) return;
+      if (order?.paymentStatus !== 'paid') return;
       if (order?.usedPayoutSystem) {
         clearInterval(pollInterval);
         return;
@@ -386,7 +507,7 @@ function RunnerChatScreen({
   // Reset processedMessageIds
   useEffect(() => {
     processedMessageIds.current = new Set();
-  }, [selectedUser?._id, runnerId, currentOrder?.orderId]);
+  }, [selectedUser?._id, runnerId, sessionKey]);
 
   // Scroll to bottom
   useEffect(() => {
@@ -414,6 +535,17 @@ function RunnerChatScreen({
     });
   }, [onSpecialInstructions]);
 
+  console.log('[RCS debug]', {
+    chatId,
+    currentOrder,
+    resolvedServiceType,
+    isPaid,
+    taskCompleted,
+    orderCancelled,
+    messagesCount: messages.length,
+    showOrderFlow,
+  });
+
   // Order created handler — merge new order data, preserving serviceType
   useEffect(() => {
     if (!onOrderCreated || !mountedRef.current) return;
@@ -425,15 +557,12 @@ function RunnerChatScreen({
       if (!order?.orderId) return;
 
       setCurrentOrder(prev => {
-        // If same order, just merge
-        if (prev?.orderId === order.orderId) {
-          return { ...prev, ...order };
-        }
-
-        // For new order, use order data directly
-        // The order already has serviceType from the server
+        if (prev?.orderId === order.orderId) return { ...prev, ...order };
         return order;
       });
+
+      setAwaitingNewOrder(false);
+      setItemsApproved(false);
     });
   }, [onOrderCreated]);
 
@@ -464,20 +593,45 @@ function RunnerChatScreen({
   // Delivery confirmed/denied
   useEffect(() => {
     if (!socket || !chatId || !mountedRef.current) return;
-    const onConfirmed = () => { if (mountedRef.current) setUserConfirmedDelivery(true); };
+    const onConfirmed = () => {
+      if (mountedRef.current) {
+        setUserConfirmedDelivery(true);
+        // user confirmed — close user_wont_confirm_delivery window
+        clearTimeout(deliveryDisputeTimerRef.current);
+        useOrderStore.getState().setDeliveryDisputeWindowOpen(chatId, false);
+      }
+    };
     const onDenied = () => {
       if (mountedRef.current) {
         setUserConfirmedDelivery(false);
         setDeliveryMarked(false);
+        setMarkingDelivery(false);
       }
     };
+    const onTaskCompleted = ({ orderId }) => {
+      if (!mountedRef.current) return;
+      setTaskCompleted(true);        // triggers "Back to Home" button
+    };
+
+    const onDisputeRaised = ({ orderId }) => {
+      setCurrentOrder(prev =>
+        prev?.orderId === orderId ? { ...prev, hasDispute: true } : prev
+      );
+    };
+
+    socket.on('taskCompleted', onTaskCompleted)
     socket.on('deliveryConfirmed', onConfirmed);
     socket.on('deliveryAutoConfirmed', onConfirmed);
     socket.on('deliveryDenied', onDenied);
+    socket.on('disputeRaised', onDisputeRaised);
+
     return () => {
       socket.off('deliveryConfirmed', onConfirmed);
       socket.off('deliveryAutoConfirmed', onConfirmed);
       socket.off('deliveryDenied', onDenied);
+      socket.off('taskCompleted', onTaskCompleted);
+      socket.off('disputeRaised', onDisputeRaised);
+      clearTimeout(deliveryDisputeTimerRef.current);
     };
   }, [socket, chatId]);
 
@@ -485,46 +639,129 @@ function RunnerChatScreen({
   useEffect(() => {
     if (!socket || !mountedRef.current) return;
 
-    const handleItemSubmissionError = ({ error, submissionId, retryable }) => {
+    const handleItemSubmissionError = ({ error, submissionId, retryable, originalPayload }) => {
       if (!mountedRef.current) return;
       setAttachFlowResetKey(k => k + 1);
-      setMessagesAndSync(prev => [
-        ...prev,
-        {
+
+      // No payload to retry with — just show the error immediately
+      if (!originalPayload || retryable === false) {
+        setMessagesAndSync(prev => [...prev, {
           id: `item-submit-error-${Date.now()}`,
-          from: 'system',
-          type: 'system',
-          messageType: 'system',
+          from: 'system', type: 'system', messageType: 'system',
           text: error || 'Failed to submit items. Please try again.',
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          senderId: 'system',
-          senderType: 'system',
-          style: 'error',
-          retryable: retryable ?? true,
-          retryAction: 'submitItems',   // key used by Message renderer to show retry button
+          senderId: 'system', senderType: 'system',
+          style: 'error', retryable: false, retryAction: 'submitItems',
+        }]);
+        return;
+      }
+
+      const retryId = `items-retrying-${submissionId || Date.now()}`;
+
+      // Show "Retrying..." immediately on first server error
+      setMessagesAndSync(prev => [...prev, {
+        id: retryId,
+        from: 'system', type: 'system', messageType: 'system',
+        text: 'Failed to submit items. Retrying… (1/5)',
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        senderId: 'system', senderType: 'system',
+        style: 'warning',
+      }]);
+
+      submitItemsWithRetry(
+        socket,
+        originalPayload,
+        // onRetry — updates the retrying message each attempt
+        (attempt, max) => {
+          if (!mountedRef.current) return;
+          setMessagesAndSync(prev => prev.map(m =>
+            m.id === retryId
+              ? { ...m, text: `Failed to submit items. Retrying… (${attempt}/${max})` }
+              : m
+          ));
         },
-      ]);
+      )
+        .then(() => {
+          // Success — remove the retrying message silently
+          if (mountedRef.current) {
+            setMessagesAndSync(prev => prev.filter(m => m.id !== retryId));
+          }
+        })
+        .catch((err) => {
+          if (!mountedRef.current) return;
+          // All 5 retries exhausted — swap retrying message for final error
+          setMessagesAndSync(prev => [
+            ...prev.filter(m => m.id !== retryId),
+            {
+              id: `item-submit-error-${Date.now()}`,
+              from: 'system', type: 'system', messageType: 'system',
+              text: 'Failed to submit items. Please try again.',
+              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              senderId: 'system', senderType: 'system',
+              style: 'error', retryable: true, retryAction: 'submitItems',
+            },
+          ]);
+        });
     };
 
-    const handlePickupItemSubmissionError = ({ error, submissionId, retryable }) => {
+    const handlePickupItemSubmissionError = ({ error, submissionId, retryable, originalPayload }) => {
       if (!mountedRef.current) return;
       setAttachFlowResetKey(k => k + 1);
-      setMessagesAndSync(prev => [
-        ...prev,
-        {
+
+      if (!originalPayload || retryable === false) {
+        setMessagesAndSync(prev => [...prev, {
           id: `pickup-submit-error-${Date.now()}`,
-          from: 'system',
-          type: 'system',
-          messageType: 'system',
+          from: 'system', type: 'system', messageType: 'system',
           text: error || 'Failed to submit pickup item. Please try again.',
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-          senderId: 'system',
-          senderType: 'system',
-          style: 'error',
-          retryable: retryable ?? true,
-          retryAction: 'submitPickupItem',
+          senderId: 'system', senderType: 'system',
+          style: 'error', retryable: false, retryAction: 'submitPickupItem',
+        }]);
+        return;
+      }
+
+      const retryId = `pickup-retrying-${submissionId || Date.now()}`;
+
+      setMessagesAndSync(prev => [...prev, {
+        id: retryId,
+        from: 'system', type: 'system', messageType: 'system',
+        text: 'Failed to submit pickup item. Retrying… (1/5)',
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        senderId: 'system', senderType: 'system',
+        style: 'warning',
+      }]);
+
+      submitPickupItemWithRetry(
+        socket,
+        originalPayload,
+        (attempt, max) => {
+          if (!mountedRef.current) return;
+          setMessagesAndSync(prev => prev.map(m =>
+            m.id === retryId
+              ? { ...m, text: `Failed to submit pickup item. Retrying… (${attempt}/${max})` }
+              : m
+          ));
         },
-      ]);
+      )
+        .then(() => {
+          if (mountedRef.current) {
+            setMessagesAndSync(prev => prev.filter(m => m.id !== retryId));
+          }
+        })
+        .catch(() => {
+          if (!mountedRef.current) return;
+          setMessagesAndSync(prev => [
+            ...prev.filter(m => m.id !== retryId),
+            {
+              id: `pickup-submit-error-${Date.now()}`,
+              from: 'system', type: 'system', messageType: 'system',
+              text: 'Failed to submit pickup item. Please try again.',
+              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              senderId: 'system', senderType: 'system',
+              style: 'error', retryable: true, retryAction: 'submitPickupItem',
+            },
+          ]);
+        });
     };
 
     socket.on('itemSubmissionError', handleItemSubmissionError);
@@ -561,7 +798,29 @@ function RunnerChatScreen({
     if (!socket || !chatId || !mountedRef.current) return;
 
     const handleIncomingMessage = (msg) => {
+      // drop server echos
       if (!mountedRef.current) return;
+
+      if (msg.type === 'payment_confirmed' || msg.messageType === 'payment_confirmed') return;
+
+      if (
+        (msg.type === 'item_submission' || msg.messageType === 'item_submission' ||
+          msg.type === 'pickup_item_submission' || msg.messageType === 'pickup_item_submission') &&
+        msg.senderId === runnerId
+      ) return;
+
+      if (msg.id?.startsWith('delivery-marked-runner-')) return;
+
+      if (
+        msg.type === 'system' &&
+        STATUS_LABELS.has(msg.text)
+      ) return;
+
+      if (
+        msg.type === 'system' &&
+        msg.text?.toLowerCase().includes('cancelled this order')
+      ) return;
+
       const isSpecialType = [
         'payment_request', 'payment_success', 'payment_confirmed',
         'delivery_confirmation_request', 'item_submission', 'pickup_item_submission',
@@ -572,6 +831,11 @@ function RunnerChatScreen({
 
       if (processedMessageIds.current.has(msg.id)) return;
       processedMessageIds.current.add(msg.id);
+
+      if (msg.seq) {
+        const current = lastSeqRef.current.get(chatId) || 0;
+        if (msg.seq > current) lastSeqRef.current.set(chatId, msg.seq);
+      }
 
       if (msg.type === 'fileUploadSuccess' || msg.messageType === 'fileUploadSuccess') return;
       if (msg.type === 'system' && msg.text?.includes('must approve the items you sent')) return;
@@ -585,7 +849,9 @@ function RunnerChatScreen({
         }
       }
 
-      if (msg.type === 'system' && msg.id?.startsWith('delivery-confirmed-runner-')) {
+      if (msg.id?.startsWith('delivery-confirmed-runner-') ||
+        msg.type === 'delivery_confirmation' ||
+        msg.messageType === 'delivery_confirmation') {
         setUserConfirmedDelivery(true);
       }
 
@@ -647,8 +913,33 @@ function RunnerChatScreen({
 
   useEffect(() => {
     if (!socket || !mountedRef.current) return;
+
+    const handleItemApproved = (data) => {
+      if (!mountedRef.current) return;
+      console.log('[RunnerChat] itemSubmissionApproved received:', data);
+      setItemsApproved(true);
+    };
+
+    // Also catch it from the existing itemSubmissionUpdated shape
+    const handleSubmissionUpdated = (data) => {
+      if (!mountedRef.current) return;
+      if (data.status === 'approved') setItemsApproved(true);
+    };
+
+    socket.on('itemSubmissionApproved', handleItemApproved);
+    socket.on('itemSubmissionUpdated', handleSubmissionUpdated);
+
+    return () => {
+      socket.off('itemSubmissionApproved', handleItemApproved);
+      socket.off('itemSubmissionUpdated', handleSubmissionUpdated);
+    };
+  }, [socket]);
+
+  useEffect(() => {
+    if (!socket || !mountedRef.current) return;
     const handler = (data) => {
       if (!mountedRef.current) return;
+      if (data.status === 'approved') setItemsApproved(true);
       setMessagesAndSync(prev => prev.map(m =>
         m.submissionId === data.submissionId || m.id === data.submissionId
           ? { ...m, status: data.status, rejectionReason: data.rejectionReason }
@@ -664,7 +955,9 @@ function RunnerChatScreen({
     if (!socket || !chatId || !mountedRef.current) return;
 
     const handleReconnect = () => {
-      socket.emit('rejoinChat', { chatId, runnerId, userType: 'runner' });
+      flushSocketQueue(socket);
+      const lastSeq = lastSeqRef.current.get(chatId) || 0;
+      socket.emit('getMissedMessages', { chatId, fromSeq: lastSeq });
     };
 
     const handleMissedMessages = (msgs) => {
@@ -692,12 +985,16 @@ function RunnerChatScreen({
 
     socket.on('connect', handleReconnect);
     socket.on('missedMessages', handleMissedMessages);
+
+    // flush immediately on mount too
+    if (socket.connected) flushSocketQueue(socket);
+
     return () => {
+      if (!socket) return;
       socket.off('connect', handleReconnect);
       socket.off('missedMessages', handleMissedMessages);
     };
   }, [socket, chatId, runnerId, setMessagesAndSync, setCurrentOrder, setCompletedOrderStatuses]);
-
 
   // ── Message actions ────────────────────────────────────────────────────────
   const handleDeleteMessage = useCallback((messageId, deleteForEveryone = false) => {
@@ -705,8 +1002,14 @@ function RunnerChatScreen({
       ? { ...msg, deleted: true, text: "You deleted this message", type: "deleted", fileUrl: null, fileName: null }
       : msg
     ));
-    if (deleteForEveryone && socket && chatId) {
-      socket.emit("deleteMessage", { chatId, messageId, userId: runnerId, deleteForEveryone: true });
+
+    if (deleteForEveryone && chatId) {
+      const payload = { chatId, messageId, userId: runnerId, deleteForEveryone: true };
+      if (socket?.connected) {
+        socket.emit('deleteMessage', payload);
+      } else {
+        enqueueSocketEvent('deleteMessage', payload);
+      }
     }
   }, [socket, chatId, runnerId, setMessagesAndSync]);
 
@@ -716,7 +1019,13 @@ function RunnerChatScreen({
 
   const handleMessageReact = useCallback((messageId, emoji) => {
     setMessagesAndSync(prev => prev.map(msg => msg.id === messageId ? { ...msg, reaction: emoji } : msg));
-    if (socket) socket.emit("reactToMessage", { chatId, messageId, emoji, userId: runnerId });
+
+    const payload = { chatId, messageId, emoji, userId: runnerId };
+    if (socket?.connected) {
+      socket.emit('reactToMessage', payload);
+    } else {
+      enqueueSocketEvent('reactToMessage', payload);
+    }
   }, [socket, chatId, runnerId, setMessagesAndSync]);
 
   const handleMessageReply = useCallback((message) => {
@@ -793,16 +1102,24 @@ function RunnerChatScreen({
   // ── Item submission ────────────────────────────────────────────────────────
   const handleSubmitItems = useCallback(async (itemsData) => {
     try {
-      if (socket) {
-        socket.emit('submitItems', {
-          chatId, runnerId, userId: selectedUser?._id,
-          submissionId: `submission-${Date.now()}`,
-          escrowId: currentOrder?.escrowId || null,
-          items: itemsData.items,
-          receiptBase64: itemsData.receiptBase64,
-          totalAmount: itemsData.totalAmount,
-        });
+      const payload = {
+        chatId,
+        runnerId,
+        userId: selectedUser?._id,
+        submissionId: `submission-${Date.now()}`,
+        escrowId: currentOrder?.escrowId || null,
+        items: itemsData.items,
+        receiptBase64: itemsData.receiptBase64,
+        totalAmount: itemsData.totalAmount,
+      };
+
+      if (socket?.connected) {
+        socket.emit('submitItems', payload);
+      } else {
+        enqueueSocketEvent('submitItems', payload);
+        console.log('[socketQueue] submitItems queued — socket offline');
       }
+
       setMessagesAndSync(prev => [...prev, {
         id: `items-submitted-${Date.now()}`,
         from: 'system', type: 'system', messageType: 'system',
@@ -824,17 +1141,30 @@ function RunnerChatScreen({
 
   // ── Pickup item submission 
   const handleSubmitPickupItem = useCallback(async (itemData) => {
+    console.log('[submitPickupItem] called', {
+      chatId, runnerId,
+      userId: selectedUser?._id,
+      photoSize: itemData.photoBase64?.length,
+      socketConnected: socket?.connected
+    });
+
     try {
-      if (socket) {
-        socket.emit('submitPickupItem', {
-          chatId,
-          runnerId,
-          userId: selectedUser?._id,
-          submissionId: `pickup-${Date.now()}`,
-          itemName: itemData.itemName,
-          photoBase64: itemData.photoBase64,
-        });
+      const payload = {
+        chatId,
+        runnerId,
+        userId: selectedUser?._id,
+        submissionId: `pickup-${Date.now()}`,
+        itemName: itemData.itemName,
+        photoBase64: itemData.photoBase64,
+      };
+
+      if (socket?.connected) {
+        socket.emit('submitPickupItem', payload);
+      } else {
+        enqueueSocketEvent('submitPickupItem', payload);
+        console.log('[socketQueue] submitPickupItem queued — socket offline');
       }
+
       setMessagesAndSync(prev => [...prev, {
         id: `pickup-submitted-${Date.now()}`,
         from: 'system',
@@ -842,10 +1172,8 @@ function RunnerChatScreen({
         messageType: 'pickup_item_submission',
         text: `You submitted pickup item: "${itemData.itemName}". ${selectedUser?.firstName || 'User'} must approve before you can mark as collected.`,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-        senderId: 'system',
-        senderType: 'system',
-        style: 'info',
-        isPickupSubmission: true,
+        senderId: 'system', senderType: 'system',
+        style: 'info', isPickupSubmission: true,
         pickupItemName: itemData.itemName,
         pickupPhotoUrl: itemData.photoUrl,
         status: 'pending',
@@ -858,6 +1186,14 @@ function RunnerChatScreen({
   }, [socket, chatId, runnerId, selectedUser, setMessagesAndSync]);
 
   const openPickupItemForm = useCallback(() => {
+    console.log('[openPickupItemForm]', {
+      currentOrder: !!currentOrder,
+      isPickUp,
+      paymentStatus: currentOrder?.paymentStatus,
+      status: currentOrder?.status,
+      resolvedServiceType,
+    });
+
     if (!currentOrder) return alert('No active order. Wait for user to place an order.');
     console.log("selectedUser.currentRequest:", selectedUser?.currentRequest);
     console.log("selectedUser.serviceType:", selectedUser?.serviceType);
@@ -870,26 +1206,81 @@ function RunnerChatScreen({
   // ── Delivery ───────────────────────────────────────────────────────────────
   const handleMarkDeliveryComplete = useCallback(() => {
     return new Promise((resolve, reject) => {
-      if (!socket || !currentOrder || !chatId) return reject(new Error('Missing data'));
+      if (!currentOrder || !chatId) return reject(new Error('Missing data'));
+      if (!isPaid) return reject(new Error('Cannot mark delivery complete before payment'));
+      if (!currentOrder?.orderId) return reject(new Error('No active order'));
 
-      if (!isPaid) {  // ← add this guard
-        reject(new Error('Cannot mark delivery complete before payment'));
-        return;
+      if (isRunErrand) {
+        const storeMessages = useOrderStore.getState().getChat(chatId).messages ?? [];
+        const approved = storeMessages.some(m =>
+          (m.type === 'item_submission' || m.messageType === 'item_submission') && m.status === 'approved'
+        ) || storeMessages.some(m =>
+          m.type === 'system' && m.text?.toLowerCase().includes('approved the items')
+        );
+        if (!approved) return reject(new Error('Items must be approved before marking delivery complete.'));
       }
 
-      const onError = (err) => { socket.off('error', onError); socket.off('deliveryMarkedComplete', onSuccess); reject(new Error(err.message)); };
-      const onSuccess = () => { socket.off('error', onError); socket.off('deliveryMarkedComplete', onSuccess); setDeliveryMarked(true); resolve(); };
+      const payload = { chatId, orderId: currentOrder.orderId, runnerId, deliveryProof: null };
+      const optimisticMsgId = `delivery-marked-runner-${Date.now()}`;
+
+      setMarkingDelivery(true);
+      setDeliveryMarked(true);
+      setMessagesAndSync(prev => [...prev, {
+        id: optimisticMsgId,
+        from: 'system', type: 'system', messageType: 'system',
+        text: 'You marked delivery as complete. Waiting for the user to confirm.',
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        status: 'sent', senderId: 'system', senderType: 'system',
+      }]);
+
+      if (!socket?.connected) {
+        enqueueSocketEvent('markDeliveryComplete', payload);
+        setMarkingDelivery(false);
+        return resolve();
+      }
+
+      const revert = () => {
+        setDeliveryMarked(false);
+        setMarkingDelivery(false);
+        setMessagesAndSync(prev => prev.filter(m => m.id !== optimisticMsgId));
+      };
+
+      const onError = (err) => {
+        socket.off('error', onError);
+        socket.off('deliveryMarkedComplete', onSuccess);
+        revert();
+        reject(new Error(err.message));
+      };
+
+      const onSuccess = () => {
+        socket.off('error', onError);
+        socket.off('deliveryMarkedComplete', onSuccess);
+        deliveryDisputeTimerRef.current = setTimeout(() => {
+          useOrderStore.getState().setDeliveryDisputeWindowOpen(chatId, true);
+        }, 10 * 60 * 1000);
+        setMarkingDelivery(false);
+        setCurrentOrder(prev => prev ? { ...prev, status: 'item_delivered' } : prev);
+        useOrderStore.getState().mergeCurrentOrder(chatId, { status: 'item_delivered' });
+        resolve();
+      };
+
       socket.once('error', onError);
       socket.once('deliveryMarkedComplete', onSuccess);
-      if (!currentOrder?.orderId) return reject(new Error('No active order'));
-      socket.emit('markDeliveryComplete', { chatId, orderId: currentOrder.orderId, runnerId, deliveryProof: null });
-      setTimeout(() => { socket.off('error', onError); socket.off('deliveryMarkedComplete', onSuccess); reject(new Error('No response from server')); }, 10000);
+      socket.emit('markDeliveryComplete', payload);
+
+      setTimeout(() => {
+        socket.off('error', onError);
+        socket.off('deliveryMarkedComplete', onSuccess);
+        revert();
+        reject(new Error('No response from server'));
+      }, 10000);
     });
-  }, [socket, currentOrder, chatId, runnerId, isPaid]);
+  }, [socket, currentOrder, chatId, runnerId, isPaid, isRunErrand, setDeliveryMarked, setMessagesAndSync]);
 
   const handleStatusMessage = useCallback((systemMessage) => {
     setMessagesAndSync(prev => {
       if (prev.some(m => m.id === systemMessage.id)) return prev;
+      if (STATUS_LABELS.has(systemMessage.text) && prev.some(m => m.text === systemMessage.text)) return prev;
       return [...prev, systemMessage];
     });
   }, [setMessagesAndSync]);
@@ -922,6 +1313,15 @@ function RunnerChatScreen({
     </div>
   ), []);
 
+  if (awaitingNewOrder) return (
+    <div className="fixed inset-0 bg-black-100 z-50 flex flex-col items-center justify-center gap-4">
+      <BarLoader fullScreen />
+      <p className={`text-sm font-medium ${dark ? 'text-gray-400' : 'text-gray-500'}`}>
+        Preparing your order...
+      </p>
+    </div>
+  );
+
   return (
     <>
       {callState !== "idle" && callType === "voice" && (
@@ -931,6 +1331,8 @@ function RunnerChatScreen({
           remoteUsers={remoteUsers} localVideoTrack={localVideoTrack}
           onAccept={acceptCall} onDecline={declineCall} onEnd={endCall}
           onToggleMute={toggleMute} onToggleCamera={toggleCamera}
+          isConnecting={isConnecting}
+          callError={callError}
         />
       )}
 
@@ -943,6 +1345,8 @@ function RunnerChatScreen({
           onAccept={acceptCall} onDecline={declineCall} onEnd={endCall}
           onToggleMute={toggleMute} onToggleCamera={toggleCamera}
           onSwitchCamera={switchCamera} onToggleSpeaker={toggleSpeaker}
+          isConnecting={isConnecting}
+          callError={callError}
         />
       )}
 
@@ -1001,15 +1405,47 @@ function RunnerChatScreen({
         {/* Messages */}
         <div ref={listRef} className="flex-1 min-h-0 overflow-y-auto px-3 sm:px-6 py-4 bg-chat-pattern bg-gray-100 dark:bg-black-200">
           <div className="mx-auto max-w-3xl">
-            {messages.map((m) => (
-              <Message key={m.id} m={m} darkMode={dark} userType="runner"
+            {messages.map((m) => {
+              if (m.type === 'dispute_raised' || m.messageType === 'dispute_raised') {
+                return (
+                  <div key={m.id} className="my-4 flex justify-center">
+                    <div className="max-w-sm w-full rounded-2xl p-4 border border-red-500/20 bg-red-500/10">
+                      <div className="flex items-start gap-3">
+                        <div className="w-8 h-8 rounded-full bg-red-500/20 flex items-center justify-center flex-shrink-0 mt-0.5">
+
+                          <span className="text-red-500 text-sm"><AlertTriangle /></span>
+                        </div>
+                        <div>
+                          <p className="text-sm font-semibold dark:text-white text-black-200">
+                            Dispute raised
+                          </p>
+                          <p className="text-xs mt-1 text-gray-400">
+                            {m.text}
+                          </p>
+                          {m.disputeDetails?.reason && (
+                            <p className="text-xs mt-1 font-medium text-red-400">
+                              Reason: {m.disputeDetails.reason.replace(/_/g, ' ')}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="mt-3 pt-3 border-t border-red-500/10 text-xs text-gray-500">
+                        Escrow is locked until resolved
+                      </div>
+                    </div>
+                  </div>
+                );
+              }
+
+
+              return <Message key={m.id} m={m} darkMode={dark} userType="runner"
                 onMessageClick={() => { }} showCursor={false} isChatActive={isChatActive}
                 onDelete={handleDeleteMessage} onEdit={handleEditMessage}
                 onReact={handleMessageReact} onReply={handleMessageReply}
                 onCancelReply={handleCancelReply} messages={messages}
                 onScrollToMessage={handleScrollToMessage}
               />
-            ))}
+            })}
             {otherUserTyping && <TypingIndicator />}
           </div>
         </div>
@@ -1052,6 +1488,7 @@ function RunnerChatScreen({
             <ChatComposer
               isChatActive={isChatActive}
               text={text}
+              registrationComplete={true}
               handleKeyDown={handleKeyDown}
               setText={setText}
               selectedUser={selectedUser}
@@ -1099,21 +1536,27 @@ function RunnerChatScreen({
             <AttachmentOptionsFlow
               isOpen={isAttachFlowOpen}
               onClose={() => setIsAttachFlowOpen(false)}
-              isPaid={isPaid}
-              currentOrder={currentOrder}
-              deliveryMarked={deliveryMarked}
-              onMarkDelivery={() => { setIsAttachFlowOpen(false); handleMarkDeliveryComplete(); }}
+              chatId={chatId}
+              markingDelivery={markingDelivery}
+              canMarkDelivery={
+                completedOrderStatuses.includes('arrived_at_delivery_location') &&
+                (isRunErrand ? itemsApproved : isPickUp ? itemsApproved : true)
+              }
+              onMarkDelivery={() => {
+                // if (isRunErrand && !itemsApproved) return;
+                setIsAttachFlowOpen(false);
+                handleMarkDeliveryComplete();
+              }}
               darkMode={dark}
               onSelectCamera={() => { setIsAttachFlowOpen(false); openCamera(); }}
-              showSubmitItems={canSubmitItems}
+              showSubmitItems={isRunErrand}
               onSubmitItems={() => { setIsAttachFlowOpen(false); openItemSubmissionForm(); }}
-              showSubmitPickupItem={isPickUp && isPaid}
+              showSubmitPickupItem={isPickUp}
               onSubmitPickupItem={() => { setIsAttachFlowOpen(false); openPickupItemForm(); }}
               serviceType={resolvedServiceType}
               forceReset={attachFlowResetKey}
               messages={messages}
               socket={socket}
-              chatId={chatId}
               onSelectGallery={() => {
                 setIsAttachFlowOpen(false);
                 const input = document.createElement('input');

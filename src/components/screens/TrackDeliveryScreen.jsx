@@ -3,6 +3,41 @@ import React, { useState, useEffect } from "react";
 import { ArrowLeft, MapPin, Wifi, WifiOff, Clock } from "lucide-react";
 import useTracking from "../../hooks/useTracking";
 import { LiveTrackingMap } from "../tracking/LiveTrackingMap";
+import useUserOrderStore from '../../store/userOrderStore';
+
+const STATUS_TO_STAGE = {
+    // pick-up flow
+    'accepted': 0,
+    'active': 0,
+    'paid': 0,
+    'arrived_at_pickup_location': 1,
+    'item_collected': 1,
+    'en_route_to_delivery': 2,
+    'arrived_at_delivery_location': 3,
+    'item_delivered': 4,
+    'task_completed': 4,
+    // run-errand flow
+    'arrived_at_market': 1,
+    'purchase_in_progress': 1,
+    'purchase_completed': 1,
+    'delivered': 4,
+};
+
+const STATUS_TO_PROGRESS = {
+    'accepted': 5,
+    'active': 5,
+    'paid': 5,
+    'arrived_at_pickup_location': 25,
+    'arrived_at_market': 25,
+    'purchase_in_progress': 35,
+    'purchase_completed': 50,
+    'item_collected': 50,
+    'en_route_to_delivery': 60,
+    'arrived_at_delivery_location': 80,
+    'item_delivered': 95,
+    'task_completed': 100,
+    'delivered': 100,
+};
 
 export const TrackDeliveryScreen = ({
     darkMode,
@@ -11,11 +46,10 @@ export const TrackDeliveryScreen = ({
     socket,
     orderId,
     serviceType
-
 }) => {
     const [isFullScreen, setIsFullScreen] = useState(false);
     const [userLocation, setUserLocation] = useState(null);
-
+    const storeStatus = useUserOrderStore((s) => s.currentOrder?.status);
     const {
         runnerLocation,
         runnerName,
@@ -31,9 +65,18 @@ export const TrackDeliveryScreen = ({
         enabled: true,
     });
 
-    // Use live stage from hook; fall back to prop if hook hasn't caught up yet
-    const currentStage = liveStage || trackingData?.currentStage || 0;
-    
+    const orderStatus = storeStatus || trackingData?.orderStatus || trackingData?.status;
+
+    const statusStage = orderStatus ? (STATUS_TO_STAGE[orderStatus] ?? -1) : -1;
+    const propStage = trackingData?.currentStage ?? 0;
+    const currentStage = Math.max(
+        statusStage !== -1 ? statusStage : 0,
+        propStage,
+        liveStage ?? 0
+    );
+
+    console.log('[TRACKSCREEN] render — trackingData:', JSON.stringify(trackingData), 'liveStage:', liveStage, 'currentStage:', currentStage);
+
     const isPickup = serviceType === 'pick-up' || serviceType === 'pick_up';
     const stages = [
         { label: "Order Accepted", time: trackingData?.stageTimes?.[0] || null },
@@ -43,8 +86,13 @@ export const TrackDeliveryScreen = ({
         { label: isPickup ? "Item delivered" : "Delivered", time: trackingData?.stageTimes?.[4] || null },
     ];
 
-    const progressPercentage = currentStage === 0 ? (trackingData?.progressPercentage || 0)
-        : Math.round((currentStage / (stages.length - 1)) * 100);
+    const statusProgress = orderStatus ? (STATUS_TO_PROGRESS[orderStatus] ?? -1) : -1;
+    const propProgress = trackingData?.progressPercentage ?? 0;
+
+    const progressPercentage = Math.max(
+        statusProgress !== -1 ? statusProgress : 0,
+        propProgress,
+    );
 
     const handleOpen = () => setIsFullScreen(true);
     const handleClose = () => {

@@ -7,7 +7,7 @@ import { useDispatch, } from "react-redux";
 import { updateOrder } from '../../Redux/orderSlice';
 import { FaWalking, FaMotorcycle } from "react-icons/fa";
 import { useCameraHook } from "../../hooks/useCameraHook";
-
+import { calculateRouteDistance } from '../../utils/pricing';
 
 const initialMessages = [
   {
@@ -313,7 +313,7 @@ export default function VehicleSelectionScreen({
 
   const handleSelect = (type, label) => {
     setOrderSent(false);
-    const now = Date.now()
+    const now = Date.now();
 
     const newMsg = {
       id: now,
@@ -325,9 +325,38 @@ export default function VehicleSelectionScreen({
     };
 
     setMessages(prev => [...prev, newMsg]);
+
+    if (type === 'pedestrian') {
+      const origin = selectedService === 'run-errand'
+        ? service?.marketCoordinates
+        : service?.pickupCoordinates;
+      const dest = service?.deliveryCoordinates;
+
+      if (origin && dest) {
+        const { error } = calculateRouteDistance(selectedService, origin, dest, 'pedestrian');
+
+        if (error === 'PEDESTRIAN_TOO_FAR') {
+          setTimeout(() => {
+            setMessages(prev => {
+              const filtered = prev.filter(msg => msg.text !== "In progress...");
+              return [...filtered, {
+                id: Date.now(),
+                from: "them",
+                text: "⚠️ Pedestrian fleet cannot be used for distances more than 1km. Please select a different fleet type.",
+                time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                status: "delivered",
+              }];
+            });
+            setSelectedVehicle(null);
+            setShowConnectButton(false);
+          }, 800);
+          return;
+        }
+      }
+    }
+
     setSelectedVehicle(type);
 
-    // Show "In progress..." immediately
     const botResponse = {
       id: now + 1,
       from: "them",
@@ -336,7 +365,6 @@ export default function VehicleSelectionScreen({
     };
     setMessages(prev => [...prev, botResponse]);
 
-    // Single timeout of 800ms
     setTimeout(() => {
       if (selectedService === "pick-up" && !service?.pickupLocation) {
         console.error('Pickup location is missing for pickup service');
@@ -392,16 +420,13 @@ export default function VehicleSelectionScreen({
   };
 
   useEffect(() => {
-  console.log('serverUpdated CHANGED:', { serverUpdated, currentOrderSent: orderSent });
-  
-  if (serverUpdated) {
-    console.log('Setting orderSent to TRUE');
-    setOrderSent(true);
-  } else {
-    console.log('serverUpdated is FALSE - resetting orderSent to false');
-    setOrderSent(false);
-  }
-}, [serverUpdated, orderSent]);
+    console.log('serverUpdated CHANGED:', { serverUpdated, currentOrderSent: orderSent });
+
+    if (serverUpdated) {
+      console.log('Setting orderSent to TRUE');
+      setOrderSent(true);
+    }
+  }, [serverUpdated, orderSent]);
 
   const getFreshLocation = () => {
     return new Promise((resolve, reject) => {
@@ -458,15 +483,36 @@ export default function VehicleSelectionScreen({
     const orderData = {
       ...service,
       fleetType: selectedVehicle,
-      specialInstructions: specialInstructionsMedia.length > 0 || specialInstructions ? {
-        text: specialInstructions,
-        media: mediaWithValidPreviews
-      } : specialInstructions || null,
+      specialInstructions: (specialInstructionsMedia.length > 0 || specialInstructions) ? {
+        text: specialInstructions || null,
+        media: specialInstructionsMedia.map(m => ({
+          fileName: m.name,
+          fileType: m.type,
+          fileSize: m.size,
+          type: m.type,
+          preview: m.preview,
+          file: m.file,        // ← keep the File object
+        })),
+      } : null,
       serviceType: selectedService,
       userLocation: currentLocation
     };
 
-    dispatch(updateOrder(orderData));
+    const serializableOrderData = {
+      ...orderData,
+      specialInstructions: orderData.specialInstructions ? {
+        ...orderData.specialInstructions,
+        media: mediaWithValidPreviews.map(m => ({
+          fileName: m.name,
+          fileType: m.type,
+          fileSize: m.size,
+          preview: m.preview,
+          type: m.type,
+        })),
+      } : null,
+    };
+
+    dispatch(updateOrder(serializableOrderData));
 
     // Handle edit mode
     if (isEditing && onEditComplete) {
@@ -607,6 +653,7 @@ export default function VehicleSelectionScreen({
                   key={m.id}
                   m={m}
                   showCursor={false}
+                  showStatusIcons={false}
                   onConnectButtonClick={m.hasConnectRunnerButton ? handleConnectToRunner : undefined}
                   disableContextMenu={m.isFleetSelection || m.isConnectToRunner ? true : false}
                   alwaysAllowEdit={

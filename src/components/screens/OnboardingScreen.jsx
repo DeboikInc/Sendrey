@@ -19,7 +19,7 @@ export default function OnboardingScreen({
   needsOtpVerification, userPhone, userEmail, onResendOtp,
   registrationSuccess, serviceType, onTermsAccepted, showBack, onBack,
   returningUser, onReturningUserConfirm, onReturningUserDecline, isReturningUserSuccess,
-  returningUserName,
+  returningUserName, setReturningUserHasTerms
 }) {
   const [step, setStep] = useState(0);
   const [text, setText] = useState("");
@@ -36,9 +36,16 @@ export default function OnboardingScreen({
   const hasShownFirstQuestion = useRef(false);
   const [activeResendId, setActiveResendId] = useState(null);
   const [returningChoiceMade, setReturningChoiceMade] = useState(false);
+  const [isVerifyingOtp, setIsVerifyingOtp] = useState(false);
+  const [returningInProgress, setReturningInProgress] = useState(false);
+  const [inputKey, setInputKey] = useState(Date.now());
 
+  // showOtpStep being true means server responded — OTP input must show and block other inputs until OTP is verified
 
-  const isProcessing =
+  // Cleaner: block input only when truly waiting, not after server has responded
+  const shouldBlockInput =
+    isReturningUserSuccess ||
+    (returningInProgress && !showOtpStep && !isReturningUserSuccess) ||
     (messages.some(msg => msg.text === "In progress...") && !showOtpStep) ||
     registrationSuccess;
 
@@ -51,22 +58,25 @@ export default function OnboardingScreen({
       setShowTerms(false);
       onTermsAccepted(serviceType);
 
-      // Call onComplete to trigger navigation in parent
       const completeData = {
         ...userData,
         termsAccepted: true
       };
       onComplete(completeData);
-      // console.log('Terms accepted, user data:', completeData);
-
     } catch (error) {
       console.error('Failed to save terms acceptance:', error);
     }
   };
 
+  // Returning user — success
   useEffect(() => {
     if (!isReturningUserSuccess) return;
-    setMessages(prev => prev.filter(msg => msg.text !== "Verifying OTP..."));
+
+    setReturningInProgress(false);
+    setMessages(prev => prev.filter(
+      msg => msg.text !== "Verifying OTP..." && msg.text !== "In progress..."
+    ));
+    setIsVerifyingOtp(false);
 
     setMessages(prev => [...prev, {
       id: Date.now(),
@@ -76,8 +86,10 @@ export default function OnboardingScreen({
       status: "delivered",
     }]);
 
-    setTimeout(() => setShowTerms(true), 1000);
-  }, [isReturningUserSuccess, returningUserName]);
+    if (!setReturningUserHasTerms) {
+      setTimeout(() => setShowTerms(true), 1000);
+    }
+  }, [isReturningUserSuccess, returningUserName, setReturningUserHasTerms]);
 
   // Handle registration errors (name/phone/email step)
   useEffect(() => {
@@ -96,11 +108,10 @@ export default function OnboardingScreen({
           }]);
 
           if (index === errors.length - 1) {
-            // Detect which field the error is about
             const fieldHints = {
-              0: ['name', 'first', 'last'],        // name → step 0
-              1: ['phone', 'number', 'mobile'],     // phone → step 1
-              2: ['email', 'mail'],                 // email → step 2
+              0: ['name', 'first', 'last'],
+              1: ['phone', 'number', 'mobile'],
+              2: ['email', 'mail'],
             };
 
             const lowerError = errorText.toLowerCase();
@@ -113,13 +124,13 @@ export default function OnboardingScreen({
             }
 
             setTimeout(() => {
-              // Reset only the failed field and beyond
               setUserData(prev => {
                 const reset = { ...prev };
                 QUESTIONS.slice(failedStep).forEach(q => { reset[q.field] = ''; });
                 return reset;
               });
               setStep(failedStep);
+              setInputKey(Date.now());
               setIsRetrying(true);
               setMessages(prev => [...prev, {
                 id: Date.now() + errors.length + 1,
@@ -144,16 +155,16 @@ export default function OnboardingScreen({
   useEffect(() => {
     if (!returningUser) return;
 
-    // Clear any "In progress..." bubble
     setMessages(prev => prev.filter(msg => msg.text !== "In progress..."));
+    setReturningChoiceMade(false);
 
     const greetMsg = {
       id: Date.now(),
       from: "them",
-      text: `Hello! Looks like you already have a Sendrey account ${returningUser.name ? ` as ${returningUser.name}` : ""}. Would you like to continue?`,
+      text: `Hello! Looks like you already have a Sendrey account${returningUser.name ? ` as ${returningUser.name}` : ""}. Would you like to continue?`,
       time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       status: "delivered",
-      isReturningUserPrompt: true,   // flag for Message renderer
+      isReturningUserPrompt: true,
     };
 
     setMessages(prev => [...prev, greetMsg]);
@@ -162,35 +173,36 @@ export default function OnboardingScreen({
   // Handle OTP verification errors
   useEffect(() => {
     if (errors && errors.length > 0 && showOtpStep) {
-      setMessages(prev => prev.filter(msg => msg.text !== "Verifying OTP..."));
+      setMessages(prev => prev.filter(
+        msg => msg.text !== "Verifying OTP..." && msg.text !== "In progress..."
+      ));
+      setReturningInProgress(false);
 
       errors.forEach((errorText, index) => {
         setTimeout(() => {
           if (index === errors.length - 1) {
             const msgId = Date.now() + index;
 
-            const errorMessage = {
+            setMessages(prev => [...prev, {
               id: msgId,
               from: "them",
               text: errorText,
               time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
               status: "delivered",
               isError: true,
-              hasResendLink: index === errors.length - 1,
-            };
+              hasResendLink: true,
+            }]);
 
-            setMessages(prev => [...prev, errorMessage]);
             setActiveResendId(msgId);
           }
         }, index * 600);
       });
 
       setOtp("");
+      setIsVerifyingOtp(false);
 
       if (onErrorClose) {
-        setTimeout(() => {
-          onErrorClose();
-        }, errors.length * 600 + 500);
+        setTimeout(() => onErrorClose(), errors.length * 600 + 500);
       }
     }
   }, [errors, showOtpStep, onErrorClose]);
@@ -204,34 +216,29 @@ export default function OnboardingScreen({
         setMessages(prev => prev.filter(msg => msg.text !== "Verifying OTP..."));
       }, 400);
 
-      const successMessage = {
+      setMessages(prev => [...prev, {
         id: Date.now(),
         from: "them",
         text: "Registration successful, welcome to sendrey!",
         time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         status: "delivered",
-      };
+      }]);
 
-      setMessages(prev => [...prev, successMessage]);
-
-      setTimeout(() => {
-        setShowTerms(true);
-      }, 1000);
+      setTimeout(() => setShowTerms(true), 1000);
     }
   }, [registrationSuccess]);
 
   // Initialize conversation with first question ONLY ONCE
   useEffect(() => {
     if (!hasShownFirstQuestion.current && messages.length === 0 && !showOtpStep && !isRetrying) {
-      const firstMessage = {
+      setMessages([{
         id: Date.now(),
         from: "them",
         text: QUESTIONS[0].question,
         time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         status: "read",
         field: QUESTIONS[0].field
-      };
-      setMessages([firstMessage]);
+      }]);
       hasShownFirstQuestion.current = true;
     }
   }, [messages.length, showOtpStep, isRetrying]);
@@ -246,9 +253,7 @@ export default function OnboardingScreen({
   // Cleanup timeout on unmount
   useEffect(() => {
     return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
   }, []);
 
@@ -256,147 +261,135 @@ export default function OnboardingScreen({
     const field = QUESTIONS[step].field;
     const newData = { ...userData, [field]: value };
 
-    const userMessage = {
+    setMessages(prev => [...prev, {
       id: Date.now(),
       from: "me",
       text: value,
       time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       status: "sent",
-    };
-
-    setMessages(prev => [...prev, userMessage]);
+    }]);
     setText("");
-    setIsRetrying(false); // Clear retry flag after user responds
+    setIsRetrying(false);
 
     if (step < QUESTIONS.length - 1) {
       setUserData(newData);
-
       timeoutRef.current = setTimeout(() => {
         const nextStep = step + 1;
         setStep(nextStep);
-
-        const nextMessage = {
+        setMessages(prev => [...prev, {
           id: Date.now() + 1,
           from: "them",
           text: QUESTIONS[nextStep].question,
           time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
           status: "delivered",
           field: QUESTIONS[nextStep].field
-        };
-
-        setMessages(prev => [...prev, nextMessage]);
+        }]);
       }, 800);
     } else {
       setUserData(newData);
-
-      const progressMessage = {
+      setMessages(prev => [...prev, {
         id: Date.now() + 1,
         from: "them",
         text: "In progress...",
         time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         status: "delivered",
-      };
-
-      setMessages(prev => [...prev, progressMessage]);
-
+      }]);
       timeoutRef.current = setTimeout(() => {
-        const completeUserData = {
-          ...userData,
-          [field]: value
-        };
-
-        onComplete(completeUserData);
+        onComplete({ ...userData, [field]: value });
       }, 800);
     }
   };
 
   const showOtpVerification = (email, phone) => {
     setMessages(prev => prev.filter(msg => msg.text !== "In progress..."));
+    setReturningInProgress(false);
 
-    const firstOtpMessage = {
+    const secondOtpMsgId = Date.now() + 2;
+
+    setMessages(prev => [...prev,
+    {
       id: Date.now() + 1,
       from: "them",
-      // text: "We have sent you an OTP to confirm your phone number",
       text: "We have sent you an OTP to confirm your email",
       time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       status: "delivered",
-    };
-
-    const secondOtpMessage = {
-      id: Date.now() + 2,
-      from: "them",
-      // text: `Enter the OTP we sent to ${phone || userData.phone}, \n \nDidn't receive OTP? `,
-      text: `Enter the OTP we sent to ${email || userData.email}, \n \nDidn't receive OTP? `,
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      status: "delivered",
-      hasResendLink: true
-    };
-
-    setMessages(prev => [...prev, firstOtpMessage]);
+    }
+    ]);
 
     setTimeout(() => {
-      setMessages(prev => [...prev, secondOtpMessage]);
+      setMessages(prev => [...prev, {
+        id: secondOtpMsgId,
+        from: "them",
+        text: `Enter the OTP we sent to ${email || userData.email}, \n \nDidn't receive OTP? `,
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        status: "delivered",
+        hasResendLink: true
+      }]);
       setShowOtpStep(true);
     }, 2000);
 
     setTimeout(() => {
       setCanResendOtp(true);
+      setActiveResendId(secondOtpMsgId);
     }, 30000);
   };
 
   const handleOtpSubmit = () => {
     if (!otp.trim()) return;
 
-    const otpMessage = {
+    setMessages(prev => [...prev,
+    {
       id: Date.now(),
       from: "me",
       text: otp,
       time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       status: "sent",
-    };
-
-    setMessages(prev => [...prev, otpMessage]);
-
-    const verifyingMessage = {
+    },
+    {
       id: Date.now() + 1,
       from: "them",
       text: "Verifying OTP...",
       time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
       status: "delivered",
-    };
+    }
+    ]);
 
-    setMessages(prev => [...prev, verifyingMessage]);
-
-    const completeData = {
-      ...userData,
-      otp: otp.trim()
-    };
-
+    setIsVerifyingOtp(true);
+    const completeData = { ...userData, otp: otp.trim() };
     setOtp("");
     onComplete(completeData);
   };
 
   const handleResendOtp = () => {
     if (!canResendOtp) return;
+    if (onResendOtp) onResendOtp();
 
-    if (onResendOtp) {
-      onResendOtp();
-    }
+    const resendMsgId = Date.now() + 1;
 
-    const resendMessage = {
-      id: Date.now(),
-      from: "them",
-      // text: "OTP has been resent to your phone",
-      text: "OTP has been resent to your email",
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-      status: "delivered",
-    };
+    setMessages(prev => [
+      ...prev,
+      {
+        id: Date.now(),
+        from: "them",
+        text: "OTP has been resent to your email",
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        status: "delivered",
+      },
+      {
+        id: resendMsgId,
+        from: "them",
+        text: `Enter the new OTP we sent to ${userData.email}, \n \nDidn't receive OTP? Resend`,
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        status: "delivered",
+        hasResendLink: true,
+      }
+    ]);
 
-    setMessages(prev => [...prev, resendMessage]);
     setCanResendOtp(false);
-
+    setActiveResendId(null);
     setTimeout(() => {
       setCanResendOtp(true);
+      setActiveResendId(resendMsgId);
     }, 30000);
   };
 
@@ -408,32 +401,28 @@ export default function OnboardingScreen({
   }, [needsOtpVerification, userEmail, userPhone]);
 
   const handleMessageClick = (message) => {
-    if (message.hasResendLink && canResendOtp && message.id === activeResendId) {
-      handleResendOtp();
-    }
-  };
-
-  const send = (message = text) => {
-    if (!message.trim()) return;
-
-    if (showOtpStep) {
-      setOtp(message.trim());
-      handleOtpSubmit();
-    } else {
-      handleAnswer(message.trim());
-    }
+    if (message.hasResendLink && canResendOtp) handleResendOtp();
   };
 
   const handleSend = () => {
     const messageToSend = showOtpStep ? otp : text;
     if (!messageToSend.trim()) return;
 
-    send(messageToSend.trim());
+    if (showOtpStep) {
+      setOtp(messageToSend.trim());
+      handleOtpSubmit();
+    } else {
+      handleAnswer(messageToSend.trim());
+    }
   };
 
   const handleReturningYes = () => {
+    if (returningChoiceMade) return;
+    setReturningChoiceMade(true);
+    setReturningInProgress(true);
+
     setMessages(prev => [
-      ...prev.map(m => ({ ...m, isReturningUserPrompt: false })), // remove buttons
+      ...prev.map(m => ({ ...m, isReturningUserPrompt: false })),
       {
         id: Date.now(),
         from: "me",
@@ -441,11 +430,22 @@ export default function OnboardingScreen({
         time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         status: "sent",
       },
+      {
+        id: Date.now() + 1,
+        from: "them",
+        text: "In progress...",
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        status: "delivered",
+      },
     ]);
+
     onReturningUserConfirm();
   };
 
   const handleReturningNo = () => {
+    if (returningChoiceMade) return;
+    setReturningChoiceMade(true);
+
     setMessages(prev => [
       ...prev.map(m => ({ ...m, isReturningUserPrompt: false })),
       {
@@ -464,11 +464,15 @@ export default function OnboardingScreen({
         field: QUESTIONS[0].field,
       },
     ]);
+
     setStep(0);
     setUserData({ name: "", phone: "", email: "" });
     setIsRetrying(true);
+    setReturningChoiceMade(false);
     onReturningUserDecline();
   };
+
+  const hasReturningPrompt = messages.some(m => m.isReturningUserPrompt);
 
   return (
     <Onboarding darkMode={darkMode} toggleDarkMode={toggleDarkMode} showBack={showBack} onBack={onBack}>
@@ -481,35 +485,27 @@ export default function OnboardingScreen({
               canResendOtp={canResendOtp}
               onMessageClick={() => handleMessageClick(m)}
               showCursor={false}
+              showStatusIcons={false}
               isActiveResend={m.id === activeResendId}
             />
           ))}
         </div>
 
-
         <div className="h-3"></div>
 
-        {!isProcessing && (
+        {!shouldBlockInput && !isVerifyingOtp && (
           <div className="py-10 px-3 placeholder:text-sm">
-            {messages.some(m => m.isReturningUserPrompt) ? (
+            {hasReturningPrompt ? (
               <div className="grid grid-cols-2 gap-3">
                 <Button
-                  onClick={() => {
-                    if (returningChoiceMade) return;
-                    setReturningChoiceMade(true);
-                    handleReturningYes();
-                  }}
+                  onClick={handleReturningYes}
                   disabled={returningChoiceMade}
                   className="bg-secondary rounded-lg sm:text-sm flex items-center gap-3 justify-center"
                 >
                   Yes, that's me
                 </Button>
                 <Button
-                  onClick={() => {
-                    if (returningChoiceMade) return;
-                    setReturningChoiceMade(true);
-                    handleReturningNo();
-                  }}
+                  onClick={handleReturningNo}
                   disabled={returningChoiceMade}
                   variant="outlined"
                   className="bg-primary rounded-lg sm:text-sm text-white flex items-center gap-3 justify-center"
@@ -519,6 +515,7 @@ export default function OnboardingScreen({
               </div>
             ) : (
               <CustomInput
+                key={inputKey}
                 showMic={false}
                 showIcons={false}
                 showEmojis={false}

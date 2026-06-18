@@ -57,11 +57,13 @@ export default function PickupFlowScreen({
   const timeoutRef = useRef(null);
   const deliveryLocationRef = useRef(null);
   const pickupLocationRef = useRef(null);
-  const authState = useSelector(s => s.auth.user);
+  const currentUser = useSelector(s => s.auth.user);
   const prevStepRef = useRef(null);
+  const isSubmittingRef = useRef(false);
 
   const pickupCoordinatesRef = useRef(null);
   const deliveryCoordinatesRef = useRef(null);
+  const pickupPhoneMatchesUserPhone = useRef(false);
 
   // autoscroll
   useEffect(() => {
@@ -77,7 +79,6 @@ export default function PickupFlowScreen({
     }
   }, [messages, showCustomInput, showPhoneInput, currentStep, predictions.length]);
 
-  const currentUser = authState.user;
 
   const searchPlaces = useCallback((query, step) => {
     if (!query || query.length < 2 || !window.google) {
@@ -236,7 +237,7 @@ export default function PickupFlowScreen({
               text: "Kindly enter drop off phone number Use My Phone Number",
               time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
               status: "delivered",
-              hasUseMyNumberButton: true,
+              // hasUseMyNumberButton: true,
               phoneNumberType: "dropoff",
             }
           ]);
@@ -249,7 +250,9 @@ export default function PickupFlowScreen({
   }, [isEditing, editingField]);
 
   const handleSuggestionSelect = (prediction) => {
-    if (!window.google) return;
+    if (!window.google || isSubmittingRef.current) return;
+    isSubmittingRef.current = true;
+    setShowCustomInput(false);
 
     const service = new window.google.maps.places.PlacesService(
       document.createElement('div')
@@ -257,11 +260,15 @@ export default function PickupFlowScreen({
     service.getDetails(
       { placeId: prediction.place_id, fields: ['geometry', 'formatted_address', 'name'] },
       (result, status) => {
-        if (status !== window.google.maps.places.PlacesServiceStatus.OK) return;
+        if (status !== window.google.maps.places.PlacesServiceStatus.OK) {
+          isSubmittingRef.current = false;
+          setShowCustomInput(true);
+          return;
+        };
 
         const lat = result.geometry.location.lat();
         const lng = result.geometry.location.lng();
-        const locationText = result.formatted_address;
+        const locationText = prediction.description;
 
         if (currentStep === "pickup-location") {
           pickupCoordinatesRef.current = { lat, lng };
@@ -410,6 +417,7 @@ export default function PickupFlowScreen({
 
   const send = (text, source) => {
     if (!text || typeof text !== "string") return;
+    isSubmittingRef.current = false;
 
     // ── Field validation ──────────────────────────────────────
     const validationError = validateField(text, source);
@@ -623,6 +631,11 @@ export default function PickupFlowScreen({
           }
           setPickupPhoneNumber(formattedNumber);
 
+          // ← Check if pickup phone matches user's phone
+          const myNumber = currentUser?.phone || currentUser?.user?.phone;
+          const normalizedMyNumber = myNumber?.replace(/^\+2340/, '+234');
+          pickupPhoneMatchesUserPhone.current = formattedNumber === normalizedMyNumber;
+
           setMessages((p) => [
             ...p,
             {
@@ -633,6 +646,7 @@ export default function PickupFlowScreen({
               status: "delivered",
               hasChooseDeliveryButton: true,
               hasViewSavedLocations: true,
+              disableUseMyNumber: pickupPhoneMatchesUserPhone.current
             },
           ]);
           setCurrentStep("delivery-location");
@@ -649,6 +663,7 @@ export default function PickupFlowScreen({
               status: "delivered",
               hasUseMyNumberButton: true,
               phoneNumberType: "dropoff",
+              disableUseMyNumber: pickupPhoneMatchesUserPhone.current,
             },
           ]);
           setCurrentStep("dropoff-phone");
@@ -661,6 +676,30 @@ export default function PickupFlowScreen({
           } else if (!text.startsWith('+234') && text.replace(/\D/g, '').length === 11) {
             formattedNumber = `+234${text.substring(1)}`;
           }
+
+          const normalizedPickup = pickupPhoneNumber.startsWith('+234')
+            ? pickupPhoneNumber.replace(/^\+2340/, '+234')
+            : pickupPhoneNumber;
+
+          if (formattedNumber === normalizedPickup) {
+            // Show warning but proceed normally
+            setMessages((p) => [
+              ...p,
+              {
+                id: Date.now() + 2,
+                from: "them",
+                text: "Pickup phone and delivery phone cannot be the same. Kindly enter a valid delivery phone.",
+                time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                status: "delivered",
+              },
+            ]);
+            setDropoffPhoneNumber(formattedNumber);
+            setPhoneNumberInput("");
+            setShowPhoneInput(true);
+            return; // ← don't proceed to onSelectPickup, let them re-enter
+          }
+
+
           setDropoffPhoneNumber(formattedNumber);
 
           console.log('Final pickup location ref:', pickupLocationRef.current);
@@ -687,6 +726,9 @@ export default function PickupFlowScreen({
 
   const handleUseMyNumber = (phoneType) => {
     const myNumber = currentUser?.phone || currentUser?.user?.phone;
+
+    console.log('currentUser in handleUseMyNumber:', currentUser);
+    console.log('currentUser in handleUseMyNumber:', currentUser);
 
     if (!myNumber) {
       console.error("Phone number not found in user data");
@@ -750,7 +792,7 @@ export default function PickupFlowScreen({
   };
 
   const handleSearchAction = async () => {
-    if (!searchTerm.trim()) return;
+    if (!searchTerm.trim() || isSubmittingRef.current) return;
 
     const text = searchTerm.trim();
 
@@ -758,6 +800,7 @@ export default function PickupFlowScreen({
     if (currentStep === 'pickup-items') {
       send(text, 'pickup-items');
       setSearchTerm('');
+      isSubmittingRef.current = false;
       return;
     }
 
@@ -765,6 +808,9 @@ export default function PickupFlowScreen({
       setSearchError('Maps not ready yet. Please wait a moment and try again.');
       return;
     }
+
+    isSubmittingRef.current = true;
+    setShowCustomInput(false);
 
     const geocoder = new window.google.maps.Geocoder();
     geocoder.geocode(
@@ -794,6 +840,8 @@ export default function PickupFlowScreen({
           setSearchError(null);
         } else {
           setSearchError('Could not find that location. Try being more specific or use the map or suggestions.');
+          setShowCustomInput(true);
+          isSubmittingRef.current = false;
         }
       }
     );
@@ -897,6 +945,7 @@ export default function PickupFlowScreen({
                   <Message
                     m={m}
                     showCursor={false}
+                    showStatusIcons={false}
                     onChooseDeliveryClick={m.hasChooseDeliveryButton ? handleChooseDeliveryClick : undefined}
                     onUseMyNumberClick={m.hasUseMyNumberButton ? () => handleUseMyNumber(m.phoneNumberType) : undefined}
                     onViewSavedLocations={m.hasViewSavedLocations ? () => onOpenSavedLocations(  // ← ADD THIS
@@ -1014,7 +1063,28 @@ export default function PickupFlowScreen({
             <div className="max-w-3xl mx-auto">
               <CustomInput
                 value={phoneNumberInput}
-                onChange={(e) => setPhoneNumberInput(e.target.value)}
+                onChange={(e) => {
+                  setPhoneNumberInput(e.target.value);
+
+                  if (currentStep === "pickup-phone") {
+                    const myNumber = currentUser?.phone || currentUser?.user?.phone;
+                    const normalizedMyNumber = myNumber?.replace(/^\+2340/, '+234');
+                    const typed = e.target.value.trim();
+                    const digits = typed.replace(/\D/g, '');
+
+                    let formatted = typed;
+                    if (typed.startsWith('+234')) {
+                      formatted = typed.replace(/^\+2340/, '+234');
+                    } else if (digits.length === 11 && digits.startsWith('0')) {
+                      formatted = `+234${digits.substring(1)}`; // ← 0 prefix handled
+                    } else if (digits.length === 10) {
+                      formatted = `+234${digits}`; // ← no leading 0, just bare 10 digits
+                    }
+
+                    pickupPhoneMatchesUserPhone.current = formatted === normalizedMyNumber;
+                  }
+                }}
+
                 placeholder="Enter phone number"
                 showMic={false}
                 className="placeholder:dark:text-gray-300 placeholder:text-gray-800"

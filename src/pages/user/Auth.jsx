@@ -40,8 +40,10 @@ export const Auth = () => {
     const [registrationSuccess, setRegistrationSuccess] = useState(false);
     const [pendingServiceType, setPendingServiceType] = useState(null); // eslint-disable-line no-unused-vars
     const [returningUser, setReturningUser] = useState(null);
+    const [returningUserHasTerms, setReturningUserHasTerms] = useState(false);
 
     // Location state
+    // eslint-disable-next-line no-unused-vars
     const [userLocation, setUserLocation] = useState(null);
     const [locationError, setLocationError] = useState(null);
     const [isGettingLocation, setIsGettingLocation] = useState(false);
@@ -213,7 +215,14 @@ export const Auth = () => {
             errors.push(error);
         }
 
-        return errors;
+        // Replace raw network/technical errors with a friendly message
+        const networkPatterns = /ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|network|fetch|socket|SSL|certificate|ERR_|failed to fetch|load failed/i;
+
+        return errors.map(msg =>
+            networkPatterns.test(msg)
+                ? 'Something went wrong. Please check your internet connection and try again.'
+                : msg
+        );
     };
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -263,8 +272,9 @@ export const Auth = () => {
 
                 if (returningUser) {
                     setIsReturningUserSuccess(true);
+                    setReturningUserHasTerms(!!hasAcceptedTerms);
                     if (hasAcceptedTerms) {
-                        navigate("/welcome", { replace: true });
+                        setTimeout(() => navigate("/welcome", { replace: true }), 2500);
                     }
                     // terms modal will handle navigation for returning user without terms
                 } else {
@@ -286,12 +296,6 @@ export const Auth = () => {
             return;
         }
 
-        // Block registration until we have a location
-        if (!userLocation) {
-            setAllErrors(['Waiting for location access. Please allow location to continue.']);
-            return;
-        }
-
         const { name, phone, email } = data;
         const nameParts = name ? name.trim().split(" ") : [];
         const firstName = nameParts[0] || "";
@@ -301,8 +305,8 @@ export const Auth = () => {
             role: userType,
             phone,
             email,
-            latitude: userLocation.latitude,
-            longitude: userLocation.longitude,
+            // latitude: userLocation.latitude,
+            // longitude: userLocation.longitude,
             ...(firstName && { firstName }),
             ...(lastName && { lastName }),
             ...(data.password && { password: data.password }),
@@ -411,6 +415,7 @@ export const Auth = () => {
                     onReturningUserDecline={() => setReturningUser(null)}
                     isReturningUserSuccess={isReturningUserSuccess}
                     returningUserName={returningUser?.name}
+                    setReturningUserHasTerms={returningUserHasTerms}
                     showBack={true}
                     onBack={() => navigate("/")}
                     onTermsAccepted={(serviceType) => {

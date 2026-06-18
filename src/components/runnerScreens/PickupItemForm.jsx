@@ -81,9 +81,23 @@ const PickupItemForm = ({
   };
 
   const handleSubmit = async () => {
+    console.log('[PickupItemForm] handleSubmit fired', {
+      itemName,
+      hasPhoto: !!photoBase64,
+      photoLength: photoBase64?.length,
+    });
+
     if (!itemName.trim()) return alert('Please enter the item name');
     if (!photoBase64) return alert('Please take a photo of the item');
 
+    const MAX_SIZE = 5 * 1024 * 1024;
+    const approxBytes = photoBase64.length * 0.75;
+    if (approxBytes > MAX_SIZE) {
+      setSubmitError('Photo exceeds 5MB. Please retake with a smaller photo.');
+      return; // ← don't close
+    }
+
+    console.log('[PickupItemForm] calling onSubmit...');
     setIsSubmitting(true);
     setSubmitError('');
     try {
@@ -92,11 +106,14 @@ const PickupItemForm = ({
         photoBase64: photoBase64,
         photoUrl: photoUrl,
       });
+
+      console.log('[PickupItemForm] onSubmit resolved');
       resetForm();
       onClose();
     } catch (error) {
-      console.error('Error submitting pickup item:', error);
-      setSubmitError('Failed to submit item. Please try again.');
+      console.log('[PickupItemForm] Error submitting pickup item:', error);
+      setSubmitError('Failed to submit item. Please try again. +');
+      setSubmitError('Failed to submit item. Please try again.', 'error: ',error);
     } finally {
       setIsSubmitting(false);
     }
