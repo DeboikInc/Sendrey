@@ -163,7 +163,7 @@ const runnerSchema = new mongoose.Schema({
   },
 
   // Verification
-  runnerStatus: {
+  kycStatus: {
     type: String,
     enum: RUNNER_STATUS,
     default: 'pending_verification'
@@ -447,7 +447,7 @@ runnerSchema.index({ role: 1, isOnline: 1, isAvailable: 1 });
 runnerSchema.index({ fleetType: 1 });
 
 runnerSchema.index({
-  runnerStatus: 1,
+  kycStatus: 1,
   isOnline: 1,
   isAvailable: 1,
   'verificationDocuments.nin.status': 1,
@@ -655,7 +655,7 @@ runnerSchema.statics.findNearbyRunners = async function ({
 
   const results = await this.find(query)
     .select('firstName lastName phone currentRequest location latitude longitude avatar ' +
-      'runnerStatus verificationDocuments biometricVerification isOnline isAvailable ' +
+      'kycStatus verificationDocuments biometricVerification isOnline isAvailable ' +
       'fleetType isPhoneVerified isEmailVerified rating totalRatings totalRuns')
     .lean();
 

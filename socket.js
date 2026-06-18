@@ -151,6 +151,34 @@ connectWithRetry().then(async () => {
 
   try {
     await redis.connect();
+
+    const subscriber = redis.getSubscriber();
+    await subscriber.subscribe('kyc:events', (err, count) => {
+      if (err) {
+        console.error('Failed to subscribe to kyc:events:', err);
+      } else {
+        console.log(`✅ Subscribed to kyc:events (${count} channels)`);
+      }
+    });
+
+    subscriber.on('message', (channel, message) => {
+      if (channel === 'kyc:events') {
+        try {
+          const payload = JSON.parse(message);
+          console.log(`[Redis] Received on ${channel}:`, payload);
+
+          const { runnerId, data } = payload;
+          const room = `runner-${runnerId}`;
+
+          console.log(`[Redis] Emitting to room: ${room}`, data);
+          ioInstance.to(room).emit('verificationStatus', data);
+          console.log(`[Redis] Emitted to ${room}`);
+        } catch (error) {
+          console.error('[Redis] Failed to process KYC event:', error);
+        }
+      }
+    });
+
     console.log('✅ Redis connected (socket server)');
   } catch (err) {
     console.error('Redis unavailable in socket server:', err.message);

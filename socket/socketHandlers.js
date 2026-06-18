@@ -415,8 +415,10 @@ const handleJoinRunnerRoom = async (socket, { runnerId, serviceType, fleetType }
     socket.join(`runners-${serviceType}`);
     runnersByService[serviceType].add(socket.id);
   }
+  const room = `runner-${runnerId}`;
+  socket.join(room);
 
-  socket.join(`runner-${runnerId}`);
+  console.log(`[SOCKET SERVER] Runner ${runnerId} joined room ${room}`);
 
   await Runner.findByIdAndUpdate(runnerId, {
     activeServiceType: serviceType,
@@ -1333,7 +1335,7 @@ module.exports = {
   handleGetArchivedMessages,
   createOrder,
   requestSessionRefresh,
-  
+
   handleGetSpecialInstructions,
   handleDeleteMessage,
   handleSendMessage,
