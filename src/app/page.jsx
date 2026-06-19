@@ -1,8 +1,9 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { FiMail, FiInstagram, FiFacebook } from 'react-icons/fi'
+import { FaLinkedinIn, FaXTwitter } from 'react-icons/fa6'
 import { FaApple, FaGooglePlay } from 'react-icons/fa'
 import { motion } from 'framer-motion'
 import { Space_Grotesk, Inter, JetBrains_Mono } from 'next/font/google'
@@ -31,31 +32,104 @@ export default function HomePage() {
   const router = useRouter()
   const [timeLeft, setTimeLeft] = useState(null)
   const [mounted, setMounted] = useState(false)
+  const intervalRef = useRef(null)
 
-  // Fix: ensure component is mounted before rendering dynamic content
-  // This prevents hydration mismatch that causes blank page on back-navigation
+  // Ensure component mounts before any client-side rendering
   useEffect(() => {
     setMounted(true)
+    
+    // Cleanup on unmount
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+        intervalRef.current = null
+      }
+    }
   }, [])
 
+  // Only run timer after mount
   useEffect(() => {
     if (!mounted) return
+    
+    // Set initial time
     setTimeLeft(getTimeLeft(LAUNCH_DATE))
-    const t = setInterval(() => setTimeLeft(getTimeLeft(LAUNCH_DATE)), 1000)
-    return () => clearInterval(t)
+    
+    // Start interval
+    intervalRef.current = setInterval(() => {
+      setTimeLeft(getTimeLeft(LAUNCH_DATE))
+    }, 1000)
+    
+    return () => {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current)
+        intervalRef.current = null
+      }
+    }
   }, [mounted])
 
-  // Track page visit
+  // Track page view with proper cleanup
   useEffect(() => {
     if (!mounted) return
+    
+    let isMounted = true
+    
     fetch('/api/analytics/track', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ event: 'page_view', page: 'landing' }),
-    }).catch(() => {}) // silent fail — analytics should never break the page
+    }).catch(() => {})
+    
+    return () => {
+      isMounted = false
+    }
+  }, [mounted])
+
+  // Handle back/forward navigation - force re-render
+  useEffect(() => {
+    if (!mounted) return
+    
+    // Force a re-render when page becomes visible again (back/forward)
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        // Refresh the time when page becomes visible
+        setTimeLeft(getTimeLeft(LAUNCH_DATE))
+      }
+    }
+    
+    // Handle page show (when coming back from bfcache)
+    const handlePageShow = (event) => {
+      if (event.persisted) {
+        // Page was restored from bfcache
+        setTimeLeft(getTimeLeft(LAUNCH_DATE))
+        // Force re-render by toggling mounted
+        setMounted(false)
+        setTimeout(() => setMounted(true), 0)
+      }
+    }
+    
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    window.addEventListener('pageshow', handlePageShow)
+    
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      window.removeEventListener('pageshow', handlePageShow)
+    }
   }, [mounted])
 
   const goToWaitlist = () => router.push('/join-the-list')
+  const goToAbout = () => router.push('/about')
+
+  // Return null on server or before mount to prevent hydration mismatch
+  if (!mounted) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-primary to-black text-white">
+        {/* Skeleton or loading state */}
+        <div className="max-w-6xl mx-auto px-6 pt-8">
+          <div className="w-28 sm:w-32 h-10 bg-white/10 rounded animate-pulse" />
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div
@@ -96,7 +170,6 @@ export default function HomePage() {
             across town — so you don't have to leave your desk.
           </p>
 
-          {/* Countdown — only render after mount to avoid hydration mismatch */}
           <div className="mt-10">
             <div className="text-xs uppercase tracking-widest text-white/50 mb-3">
               Launching in
@@ -108,7 +181,7 @@ export default function HomePage() {
                     className="text-2xl font-semibold"
                     style={{ fontFamily: 'var(--font-mono)' }}
                   >
-                    {mounted && timeLeft ? formatTimeValue(timeLeft, i) : '00'}
+                    {timeLeft ? formatTimeValue(timeLeft, i) : '00'}
                   </div>
                   <div className="text-[10px] text-white/60 uppercase mt-1">{k}</div>
                 </div>
@@ -125,6 +198,7 @@ export default function HomePage() {
         </motion.div>
       </section>
 
+      {/* Rest of your sections... */}
       {/* HOW IT WORKS */}
       <section className="max-w-6xl mx-auto px-6 py-20 border-t border-white/10">
         <motion.div {...fadeUp}>
@@ -270,7 +344,13 @@ export default function HomePage() {
             </p>
           </div>
           <div className="text-sm">
-            <div className="text-white/50 text-xs uppercase tracking-wide mb-2">Contact</div>
+            <button
+              className="text-white/50 text-xs uppercase tracking-wide mb-2 hover:text-white transition"
+              onClick={goToAbout}
+            >
+              About
+            </button>
+            <div className="text-white/50 text-xs uppercase tracking-wide mb-2 mt-2">Contact</div>
             <a
               href="mailto:support@sendrey.com"
               className="flex items-center gap-2 text-white/80 hover:text-white transition"
@@ -278,11 +358,17 @@ export default function HomePage() {
               <FiMail /> support@sendrey.com
             </a>
             <div className="mt-4 flex items-center gap-3">
-              <a href="https://www.instagram.com/_sendrey?igsh=MWZwdnpqZG91c3JkdQ==" target="_blank" rel="noreferrer" className="bg-white/5 p-2 rounded-md hover:bg-white/10">
-                <FiInstagram />
+              <a href="" target="_blank" rel="noreferrer" className="bg-white/5 p-2 rounded-md hover:bg-white/10">
+                <FiInstagram size={18} />
               </a>
-              <a href="https://web.facebook.com/profile.php?id=61581630117870" target="_blank" rel="noreferrer" className="bg-white/5 p-2 rounded-md hover:bg-white/10">
-                <FiFacebook />
+              <a href="" target="_blank" rel="noreferrer" className="bg-white/5 p-2 rounded-md hover:bg-white/10">
+                <FiFacebook size={18} />
+              </a>
+              <a href="" target="_blank" rel="noreferrer" className="bg-white/5 p-2 rounded-md hover:bg-white/10">
+                <FaLinkedinIn size={18} />
+              </a>
+              <a href="" target="_blank" rel="noreferrer" className="bg-white/5 p-2 rounded-md hover:bg-white/10">
+                <FaXTwitter size={18} />
               </a>
             </div>
           </div>
