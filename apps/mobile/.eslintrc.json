@@ -1,0 +1,9 @@
+{
+  "extends": ["react-app"],
+  "settings": {
+    "react": {
+      "version": "detect"
+    },
+    "no-unused-vars": ["warn", { "varsIgnorePattern": "^_", "argsIgnorePattern": "^_" }]
+  }
+}
