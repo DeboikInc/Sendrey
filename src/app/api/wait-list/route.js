@@ -1,7 +1,7 @@
 // app/api/wait-list/route.js
 
 import { NextResponse } from 'next/server'
-import { dbConnect } from '@/lib/dbConnect'
+import { dbConnect } from '@/app/lib/dbConnect'
 import mongoose from 'mongoose'
 
 // Inline model — simple enough to not need its own file
