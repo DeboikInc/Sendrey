@@ -1,65 +1,54 @@
-import { NextResponse } from 'next/server';
-import { MongoClient } from 'mongodb';
+// app/api/wait-list/route.js
 
-async function getDb() {
-  const url = process.env.DATABASE_URL?.trim() || 'mongodb+srv://sendrey:sendrey@cluster0.6h2uo87.mongodb.net/sendrey_website?retryWrites=true&w=majority';
+import { NextResponse } from 'next/server'
+import { dbConnect } from '@/lib/dbConnect'
+import mongoose from 'mongoose'
 
-  if (!url || (!url.startsWith('mongodb://') && !url.startsWith('mongodb+srv://'))) {
-    throw new Error('DATABASE_URL is missing or invalid.');
-  }
+// Inline model — simple enough to not need its own file
+const WaitlistSchema = new mongoose.Schema({
+  email:     { type: String, required: true, unique: true },
+  source:    { type: String, default: 'notify_me_form' },
+  ip:        { type: String, default: 'not known' },
+  createdAt: { type: Date, default: Date.now },
+})
 
-  const client = new MongoClient(url);
-  await client.connect();
-  return { client, db: client.db('sendrey') };
-}
+const Waitlist = mongoose.models.Waitlist || mongoose.model('Waitlist', WaitlistSchema)
 
 export async function POST(request) {
-  let client;
   try {
-    const body = await request.json();
-    const email = body.email?.trim(); 
-    // field is email
+    const body = await request.json()
+    const email = body.email?.trim()
 
     if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      return NextResponse.json({ error: 'Enter a valid email address.' }, { status: 400 });
+      return NextResponse.json({ error: 'Enter a valid email address.' }, { status: 400 })
     }
 
-    const { client: dbClient, db } = await getDb();
-    client = dbClient;
+    await dbConnect()
 
-    const collection = db.collection('waitlist');
-
-    const existing = await collection.findOne({ email });
+    const existing = await Waitlist.findOne({ email })
     if (existing) {
-      return NextResponse.json({ message: 'Already on the waitlist!' }, { status: 200 });
+      return NextResponse.json({ message: 'Already on the waitlist!' }, { status: 200 })
     }
 
-    await collection.insertOne({
+    await Waitlist.create({
       email,
       source: 'notify_me_form',
-      createdAt: new Date(),
       ip: request.headers.get('x-forwarded-for') || 'not known',
-    });
+    })
 
-    return NextResponse.json({ message: 'Congrats! youve been added to the waitlist!' }, { status: 201 });
+    return NextResponse.json({ message: "Congrats! you've been added to the waitlist!" }, { status: 201 })
   } catch (err) {
-    console.error('[waitlist] error:', err.message);
-    return NextResponse.json({ error: 'Something went wrong. Try again.' }, { status: 500 });
-  } finally {
-    if (client) await client.close();
+    console.error('[waitlist] error:', err.message)
+    return NextResponse.json({ error: 'Something went wrong. Try again.' }, { status: 500 })
   }
 }
 
 export async function GET() {
-  let client;
   try {
-    const { client: dbClient, db } = await getDb();
-    client = dbClient;
-    const count = await db.collection('waitlist').countDocuments();
-    return NextResponse.json({ count });
+    await dbConnect()
+    const count = await Waitlist.countDocuments()
+    return NextResponse.json({ count })
   } catch (err) {
-    return NextResponse.json({ error: err.message }, { status: 500 });
-  } finally {
-    if (client) await client.close();
+    return NextResponse.json({ error: err.message }, { status: 500 })
   }
 }
