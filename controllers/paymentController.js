@@ -579,7 +579,6 @@ class PaymentController extends BaseController {
             console.error('Error verifying wallet funding:', error);
             if (error.statusCode === 400) return this.badRequest(res, error.message);
             this.error(res, error.message);
-            this.error(res, error.message);
         }
     }
 

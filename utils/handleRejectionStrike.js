@@ -34,7 +34,7 @@ const handleRejectionStrike = async (io, runnerId, chatId) => {
     console.log(`[rejectionStrike] Runner ${runner.firstName} has reached ${count} strikes — BANNING`);
 
     await Runner.findByIdAndUpdate(runnerId, {
-      runnerStatus: 'banned',
+      kycStatus: 'banned',
       isOnline: false,
       isAvailable: false,
       isActive: false,
