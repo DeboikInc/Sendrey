@@ -118,11 +118,10 @@ class RunnerController extends BaseController {
         fleetType,
       });
 
-
       const eligibleRunners = runners.filter(runner => {
         console.log('Runner KYC check:', {
           id: runner._id,
-          runnerStatus: runner.runnerStatus,
+          kycStatus: runner.kycStatus,
           isOnline: runner.isOnline,
           isAvailable: runner.isAvailable,
           // isPhoneVerified: runner.isPhoneVerified,
@@ -131,7 +130,7 @@ class RunnerController extends BaseController {
           ninStatus: runner.verificationDocuments?.nin?.status,
           licenseStatus: runner.verificationDocuments?.driverLicense?.status,
         })
-        if (runner.runnerStatus === 'suspended' || runner.runnerStatus === 'banned') {
+        if (runner.kycStatus === 'suspended' || runner.kycStatus === 'banned') {
           return false;
         }
 
@@ -143,7 +142,7 @@ class RunnerController extends BaseController {
           'submitted'
         ];
 
-        if (!allowedStatuses.includes(runner.runnerStatus)) {
+        if (!allowedStatuses.includes(runner.kycStatus)) {
           return false;
         }
 
@@ -356,7 +355,7 @@ class RunnerController extends BaseController {
         return this.badRequest(res, `Invalid status. Must be one of: ${validStatuses.join(', ')}`);
       }
 
-      const updatePayload = { runnerStatus: status };
+      const updatePayload = { kycStatus: status };
       if (typeof isActive === 'boolean') updatePayload.isActive = isActive;
       if (previousStatus !== undefined) updatePayload.previousStatus = previousStatus || null;
 
