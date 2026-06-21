@@ -5,7 +5,7 @@ const User = require("../models/User");
 const Runner = require("../models/Runner");
 const Order = require("../models/Order");
 const Escrow = require('../models/Escrows');
-const { notifyPaymentRequest, notifyPartnerOffline } = require('../services/notificationService');
+const { notifyPaymentRequest } = require('../services/notificationService');
 const { logMetric } = require('../utils/metricsLogger');
 const { computeDeliveryFeeFromDocs } = require('../config/pricing');
 const { canRunnerAcceptErrand, incrementErrandCount } = require('../utils/verificationCheck');
@@ -1403,8 +1403,6 @@ const handleDisconnect = async (socket, io) => {
   const partnerType = isRunner ? 'user' : 'runner';
 
   if (!partnerId || !chatId) return;
-
-  await notifyPartnerOffline(partnerId, partnerType, { chatId, name });
 };
 
 module.exports = {
