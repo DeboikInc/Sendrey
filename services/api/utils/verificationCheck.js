@@ -8,7 +8,7 @@ const Runner = require('../models/Runner');
 const canRunnerAcceptErrand = async (runnerId) => {
     try {
         const runner = await Runner.findById(runnerId).select(
-            'runnerStatus dailyErrandCount lastErrandResetDate verificationDocuments biometricVerification'
+            'kycStatus dailyErrandCount lastErrandResetDate verificationDocuments biometricVerification'
         );
 
         if (!runner) {
@@ -19,7 +19,7 @@ const canRunnerAcceptErrand = async (runnerId) => {
             };
         }
 
-        const status = runner.runnerStatus;
+        const status = runner.kycStatus;
 
         // Banned or suspended - hard stop
         if (status === 'banned' || status === 'suspended') {
@@ -175,9 +175,9 @@ const canRunnerAcceptErrand = async (runnerId) => {
  */
 const incrementErrandCount = async (runnerId) => {
     try {
-        const runner = await Runner.findById(runnerId).select('runnerStatus dailyErrandCount');
+        const runner = await Runner.findById(runnerId).select('kycStatus dailyErrandCount');
 
-        if (runner && runner.runnerStatus === 'approved_limited') {
+        if (runner && runner.kycStatus === 'approved_limited') {
             await Runner.findByIdAndUpdate(runnerId, {
                 $inc: { dailyErrandCount: 1 }
             });

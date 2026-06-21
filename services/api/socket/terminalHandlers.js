@@ -6,6 +6,12 @@ const { Chat } = require('../models/Chat');
 const { logSocketAudit } = require('../utils/socketAudit');
 const logger = require('../utils/logger');
 const { archiveCurrentSession } = require('./socketHandlers');
+const paymentService = require('../services/paymentServices');
+const locationStore = require('../services/locationTracking/locationStore');
+const { arrivedAtSourceSet, arrivedAtDeliverySet } = require('./trackingHandlers');
+const { stampMessage } = require('./messageHandlers');
+const { notifyAutoConfirmWarning } = require('../services/notificationService');
+const orderStateMachine = require('../services/orderStateMachine');
 
 // Remove runner from the in-memory service pool
 const { runnersByService } = require('./socketHandlers');
@@ -27,7 +33,7 @@ const handleCancelOrder = async (socket, io, data) => {
         const now = new Date().toISOString();
         const reasonSuffix = reason ? ` Reason: ${reason}` : '';
 
-        // What the runner sees
+        // to runner
         const runnerMessage = {
             id: `cancel-runner-${Date.now()}`,
             chatId,
@@ -39,7 +45,7 @@ const handleCancelOrder = async (socket, io, data) => {
             createdAt: now,
         };
 
-        // What the user sees — fetch runner name for a personal touch
+        // fetch runner name for a personal touch
         const runner = await Runner.findById(runnerId).select('firstName lastName').lean();
         const runnerName = runner
             ? `${runner.firstName}${runner.lastName ? ' ' + runner.lastName : ''}`
@@ -98,6 +104,19 @@ const handleCancelOrder = async (socket, io, data) => {
                 if (s) s.leave(chatId);
             }
         }
+
+        // clean up location tracking
+        try {
+            await locationStore.removeLocation(orderId);
+            arrivedAtSourceSet.delete(orderId);
+            arrivedAtDeliverySet.delete(orderId);
+
+            io.to(`tracking:${orderId}`).emit('runner:offline', { orderId });
+            logger.info(`[taskCompleted] Cleared tracking for order ${orderId}`);
+        } catch (error) {
+            logger.warn('[taskCompleted] Tracking cleanup failed:', err.message);
+        }
+
     } catch (error) {
         const msg = error.message === 'PAID_ORDER'
             ? 'This order has already been funded and cannot be cancelled.'
@@ -138,9 +157,14 @@ const handleTaskCompleted = async (io, data) => {
             }
         }
 
+        await Runner.findByIdAndUpdate(runnerId, {
+            itemRejectionCount: 0,
+            deliveryDenialCount: 0,
+        });
+        console.log(`[taskCompleted] Reset strikes for runner ${runnerId}`);
+
         if (escrowId) {
             try {
-                const paymentService = require('../services/paymentServices');
                 const result = await paymentService.payoutToRunner(escrowId);
                 logger.info(`✅ Runner paid | orderId=${orderId} | payout=₦${result.runnerPayout} | usedPayoutSystem=${result.usedPayoutSystem}`);
             } catch (err) {
@@ -232,6 +256,17 @@ const handleTaskCompleted = async (io, data) => {
 
         }).catch(err => console.warn('[taskCompleted] Runner fetch for notify failed:', err.message));
 
+        try {
+            await locationStore.removeLocation(orderId);
+            arrivedAtSourceSet.delete(orderId);
+            arrivedAtDeliverySet.delete(orderId);
+
+            io.to(`tracking:${orderId}`).emit('runner:offline', { orderId });
+            logger.info(`[taskCompleted] Cleared tracking for order ${orderId}`);
+        } catch (error) {
+            logger.warn('[taskCompleted] Tracking cleanup failed:', err.message);
+        }
+
     } catch (error) {
         logger.info('Order or chatId not found', { chatId, orderId, runnerId, });
         console.error('handleTaskCompleted error:', error);
@@ -277,4 +312,142 @@ const handleRunnerStartedNewOrder = async (socket, data) => {
     }
 };
 
-module.exports = { handleCancelOrder, handleTaskCompleted, handleRunnerStartedNewOrder };
+const scheduleAutoConfirm = (io, chatId, orderId, escrowId) => {
+    const AUTO_CONFIRM_DELAY = 4 * 60 * 60 * 1000;
+    const WARNING_BEFORE = 10 * 60 * 1000;
+    const WARNING_DELAY = AUTO_CONFIRM_DELAY - WARNING_BEFORE;
+
+    // 10-minute warning 
+    setTimeout(async () => {
+        try {
+            const order = await Order.findOne({ orderId }).sort({ createdAt: -1 });
+            if (!order || order.deliveryConfirmedAt || order.status !== 'delivered') return;
+
+            const warningMessage = stampMessage(chatId, {
+                id: `auto-confirm-warning-${Date.now()}`,
+                from: 'system', type: 'system', messageType: 'system',
+                text: 'Your order will be automatically marked as completed in 10 minutes if no action is taken.',
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                status: 'sent', senderId: 'system', senderType: 'system', style: 'warning',
+            });
+
+            io.to(`user-${order.userId.toString()}`).emit('message', warningMessage);
+            io.to(`user-${order.userId.toString()}`).emit('autoConfirmWarning', {
+                orderId,
+                minutesRemaining: 10,
+            });
+
+            Chat.findOneAndUpdate(
+                { chatId },
+                { $push: { messages: warningMessage } }
+            ).catch(err => console.error('[autoConfirm] Warning persist failed:', err));
+
+            notifyAutoConfirmWarning(order.userId, { orderId, minutesRemaining: 10 })
+                .catch(err => console.warn('[autoConfirm] Warning push notify failed:', err.message));
+
+        } catch (error) {
+            console.error('[autoConfirm] Warning phase failed:', error);
+        }
+    }, WARNING_DELAY);
+
+    // ── Full auto-confirm ────────────────────────────────────────────────────
+    setTimeout(async () => {
+        try {
+            const order = await Order.findOne({ orderId }).sort({ createdAt: -1 });
+            if (!order || order.deliveryConfirmedAt || order.status !== 'delivered') return;
+
+            await orderStateMachine.transition(orderId, 'completed', {
+                triggeredBy: 'system',
+                note: 'Auto-confirmed after 4 hours',
+            });
+
+            await Order.findByIdAndUpdate(order._id, {
+                $set: {
+                    deliveryConfirmedAt: new Date(),
+                    deliveryConfirmedBy: 'system',
+                },
+            });
+
+            if (escrowId) {
+                const escrow = await Escrow.findById(escrowId);
+                if (escrow && !escrow.deliveryFeeReleased) {
+                    await paymentService.payoutToRunner(escrow._id);
+                }
+            }
+
+            // Same resets as handleTaskCompleted
+            await Runner.findByIdAndUpdate(order.runnerId, {
+                isAvailable: true,
+                activeOrderId: null,
+                currentUserId: null,
+                itemRejectionCount: 0,
+                deliveryDenialCount: 0,
+                $inc: { completedOrders: 1, totalRuns: 1 },
+            });
+
+            await User.findByIdAndUpdate(order.userId, {
+                isAvailable: true,
+                activeOrderId: null,
+                currentRunnerId: null,
+                $unset: { currentRequest: '' },
+            });
+
+            await Chat.findOneAndUpdate(
+                { chatId },
+                { $set: { lastActivity: new Date() } }
+            );
+
+            await archiveCurrentSession(chatId, orderId, 'completed');
+
+            // Messages + emits
+            const autoCompleteMessage = stampMessage(chatId, {
+                id: `auto-confirm-${Date.now()}`,
+                from: 'system', type: 'task_completed', messageType: 'task_completed',
+                text: 'This order has been marked as completed because the user did not respond in time.',
+                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                status: 'sent', senderId: 'system', senderType: 'system',
+                orderId: order.orderId,
+            });
+
+            io.to(chatId).emit('message', autoCompleteMessage);
+            io.to(chatId).emit('taskCompleted', { orderId, triggeredBy: 'system' });
+            io.to(chatId).emit('deliveryAutoConfirmed', { orderId, status: 'completed' });
+
+            Chat.findOneAndUpdate(
+                { chatId },
+                { $push: { messages: autoCompleteMessage } }
+            ).catch(err => console.error('[autoConfirm] Chat persist failed:', err));
+
+            // Clear room
+            const room = io.sockets.adapter.rooms.get(chatId);
+            if (room) {
+                for (const socketId of [...room]) {
+                    const s = io.sockets.sockets.get(socketId);
+                    if (s) {
+                        if (s.runnerId && s.serviceType && runnersByService[s.serviceType]) {
+                            runnersByService[s.serviceType].delete(socketId);
+                        }
+                        s.leave(chatId);
+                    }
+                }
+            }
+
+            // Tracking cleanup
+            try {
+                await locationStore.removeLocation(orderId);
+                arrivedAtSourceSet.delete(orderId);
+                arrivedAtDeliverySet.delete(orderId);
+                io.to(`tracking:${orderId}`).emit('runner:offline', { orderId });
+            } catch (err) {
+                logger.warn('[autoConfirm] Tracking cleanup failed:', err.message);
+            }
+
+            logSocketAudit('ORDER_AUTO_CONFIRM_DELIVERED', { chatId, orderId });
+
+        } catch (error) {
+            console.error('[autoConfirm] Failed:', error);
+        }
+    }, AUTO_CONFIRM_DELAY);
+};
+
+module.exports = { handleCancelOrder, handleTaskCompleted, handleRunnerStartedNewOrder, scheduleAutoConfirm };

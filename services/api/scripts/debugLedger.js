@@ -5,34 +5,27 @@ const LedgerEntry = require('../models/LedgerEntry');
 async function run() {
     await mongoose.connect(process.env.DATABASE_URL);
 
-    // Check ALL ledger entries for this user around payment time
-    const entries = await LedgerEntry.find({
-        userId: '69df1fe656fa039dfc8f3f09',
-        userModel: 'User',
-        createdAt: {
-            $gte: new Date('2026-05-26T03:40:00Z'),
-            $lte: new Date('2026-05-26T04:00:00Z'),
+    console.log('Before:');
+    console.log(await LedgerEntry.collection.indexes());
+
+    try {
+        await LedgerEntry.collection.dropIndex('providerReference_1');
+        console.log('\nDropped providerReference_1');
+    } catch (err) {
+        if (err.codeName === 'IndexNotFound') {
+            console.log('\nproviderReference_1 not found, skipping drop');
+        } else {
+            throw err;
         }
-    }).lean();
+    }
 
-    console.log(`Found ${entries.length} user entries around payment time:`);
-    entries.forEach(e => console.log({
-        type: e.type,
-        grossAmount: e.grossAmount,
-        orderId: e.orderId,
-        provider: e.provider,
-        description: e.description,
-        createdAt: e.createdAt,
-    }));
+    // Rebuilds indexes to match the schema currently loaded in this file
+    // (make sure the partialFilterExpression change is already in LedgerEntry.js)
+    const result = await LedgerEntry.syncIndexes();
+    console.log('\nsyncIndexes result:', result);
 
-    // Also check if escrow paymentStatus is 'unpaid' — that's the smoking gun
-    const Escrow = require('../models/Escrows');
-    const escrow = await Escrow.findById('6a15185d84441d5daa068326').lean();
-    console.log('\nEscrow paymentStatus:', escrow?.paymentStatus);
-    console.log('Escrow provider/reference fields:', {
-        paystackReference: escrow?.paystackReference,
-        paymentMethod: escrow?.paymentMethod,
-    });
+    console.log('\nAfter:');
+    console.log(await LedgerEntry.collection.indexes());
 
     await mongoose.disconnect();
 }

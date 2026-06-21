@@ -191,4 +191,4 @@ const registerTrackingHandlers = (io, socket) => {
     });
 };
 
-module.exports = { registerTrackingHandlers };
+module.exports = { registerTrackingHandlers, arrivedAtSourceSet, arrivedAtDeliverySet };

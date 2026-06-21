@@ -5,7 +5,7 @@ const User = require("../models/User");
 const Runner = require("../models/Runner");
 const Order = require("../models/Order");
 const Escrow = require('../models/Escrows');
-const { notifyPaymentRequest, notifyPartnerOffline } = require('../services/notificationService');
+const { notifyPaymentRequest } = require('../services/notificationService');
 const { logMetric } = require('../utils/metricsLogger');
 const { computeDeliveryFeeFromDocs } = require('../config/pricing');
 const { canRunnerAcceptErrand, incrementErrandCount } = require('../utils/verificationCheck');
@@ -449,7 +449,10 @@ const handleAcceptRunnerRequest = async (socket, io, { runnerId, userId, chatId,
 
   try {
     const verificationCheck = await canRunnerAcceptErrand(runnerId);
+    console.log('[acceptRunnerRequest] verificationCheck:', verificationCheck);
+
     if (!verificationCheck.canAccept) {
+      console.log('[acceptRunnerRequest] BLOCKED — verification failed:', verificationCheck.reason)
       socket.emit('error', {
         message: verificationCheck.reason,
         code: 'VERIFICATION_FAILED',
@@ -459,80 +462,79 @@ const handleAcceptRunnerRequest = async (socket, io, { runnerId, userId, chatId,
       return;
     }
 
-    if (!preRoomState.has(chatId)) {
-      preRoomState.set(chatId, {
-        user: false, runner: false,
-        runnerId, userId, serviceType,
-        timestamp: Date.now(),
-      });
-    }
+    // Check if user already created pre-room state
+    let state = preRoomState.get(chatId);
 
-    const state = preRoomState.get(chatId);
+    // If state exists and user already joined, proceed immediately
+    if (state && state.user) {
+      console.log('[acceptRunnerRequest] User already in pre-room! Proceeding immediately.');
+      socket.join(`pre-${chatId}`);
+      state.runner = true;
+      state.runnerId = runnerId;
+      socket.runnerId = runnerId;
 
-    if (state.runner) {
-      console.warn('[acceptRunnerRequest] runner already in pre-room for chatId:', chatId);
-      return;
-    }
-
-    state.runner = true;
-    state.runnerId = runnerId;
-
-    socket.join(`pre-${chatId}`);
-    socket.runnerId = runnerId;
-    socket.userId = null;
-    console.log(`[acceptRunnerRequest] Runner ${runnerId} joined pre-${chatId}`);
-
-    await incrementErrandCount(runnerId);
-
-    console.log('[acceptRunnerRequest] emitting enterPreRoom to user socket, user room size:',
-      (await io.in(`user-${userId}`).allSockets()).size
-    );
-
-    // Tell the user to enter the pre-room
-    const emitEnterPreRoom = async () => {
-      const payload = { chatId, runnerId, userId, serviceType, message: 'Runner accepted! Preparing chat...' };
-
-      for (let attempt = 0; attempt < 5; attempt++) {
-        // Stop retrying if already locked
-        const currentState = preRoomState.get(chatId);
-        if (!currentState || currentState.locked) {
-          console.log('[enterPreRoom] state locked or gone, stopping retries');
-          break;
-        }
-
-        const roomSize = (await io.in(`user-${userId}`).allSockets()).size;
-        console.log(`[acceptRunnerRequest] enterPreRoom attempt ${attempt + 1}, user room size: ${roomSize}`);
-        io.to(`user-${userId}`).emit('enterPreRoom', payload);
-        if (roomSize > 0) break;
-
-        await new Promise(r => setTimeout(r, 1500));
+      if (state.globalTimer) {
+        clearTimeout(state.globalTimer);
+        state.globalTimer = null;
       }
-    };
 
-    await emitEnterPreRoom();
-
-    // If user is already waiting, go immediately
-    if (state.user) {
-      if (state.globalTimer) { clearTimeout(state.globalTimer); state.globalTimer = null; }
       await lockAndProceed(io, chatId, state);
       return;
     }
 
-    // Start global timeout — runner arrived first
+    // If no state exists, create one
+    if (!state) {
+      state = {
+        user: false,
+        runner: false,
+        runnerId,
+        userId,
+        serviceType,
+        timestamp: Date.now(),
+      };
+      preRoomState.set(chatId, state);
+      console.log('[acceptRunnerRequest] Created new pre-room state');
+    }
+
+    // Join pre-room
+    socket.join(`pre-${chatId}`);
+    state.runner = true;
+    state.runnerId = runnerId;
+    socket.runnerId = runnerId;
+
+    await incrementErrandCount(runnerId);
+
+    // Tell user to enter pre-room
+    const payload = {
+      chatId,
+      runnerId,
+      userId,
+      serviceType,
+      message: 'Runner accepted! Preparing chat...'
+    };
+    io.to(`user-${userId}`).emit('enterPreRoom', payload);
+
+    // Start timeout if not already started
     if (!state.globalTimer) {
-      state.globalTimer = setTimeout(() => {
+      state.globalTimer = setTimeout(async () => {
         const s = preRoomState.get(chatId);
         if (s && (!s.user || !s.runner)) {
           console.warn('[preRoom] timeout — both parties never arrived for chatId:', chatId);
           preRoomState.delete(chatId);
           io.to(`pre-${chatId}`).emit('preRoomTimeout', { chatId, message: 'Connection timed out.' });
+          io.to(`user-${userId}`).emit('preRoomTimeout', { chatId, message: 'Connection timed out.' });
         }
-      }, 30_000);
+      }, 60000);
     }
 
     logSocketAudit('RUNNER_ACCEPTED_REQUEST', { runnerId, serviceType, chatId, userId });
   } catch (error) {
     console.error('[acceptRunnerRequest] error:', error);
+    socket.emit('chatError', {
+      code: 'ACCEPT_FAILED',
+      message: 'Failed to accept request. Please try again.',
+      chatId,
+    });
   }
 };
 
@@ -551,6 +553,27 @@ const handleRequestRunner = async (socket, io, data) => {
   try {
     socket.join(`user-${userId}`);
 
+    // Check if runner already accepted before creating new state
+    const existingState = preRoomState.get(chatId);
+
+    // If runner already accepted and we have a state, check if we should proceed
+    if (existingState && existingState.runner && !existingState.locked) {
+      console.log('[requestRunner] Runner already in pre-room, checking if user should join...');
+
+      // User joins pre-room
+      socket.join(`pre-${chatId}`);
+      existingState.user = true;
+      existingState.userId = userId;
+      existingState.specialInstructions = specialInstructions || null;
+      existingState.attemptToken = attemptToken || null;
+
+      console.log('[requestRunner] User joined existing pre-room. Proceeding immediately.');
+      if (existingState.globalTimer) { clearTimeout(existingState.globalTimer); existingState.globalTimer = null; }
+      await lockAndProceed(io, chatId, existingState);
+      return;
+    }
+
+    // No existing state or runner hasn't accepted yet
     if (!preRoomState.has(chatId)) {
       preRoomState.set(chatId, {
         user: false, runner: false,
@@ -564,8 +587,14 @@ const handleRequestRunner = async (socket, io, data) => {
     if (state.user && !data.isReconnect) {
       console.warn('[requestRunner] user already in pre-room for chatId:', chatId);
 
-      if (state.runner && !state.locked) {
-        console.log('[requestRunner] runner already ready, calling lockAndProceed from guard');
+      const preRoomSockets = await io.in(`pre-${chatId}`).allSockets();
+      const runnerInPreRoom = [...preRoomSockets].some(sid => {
+        const s = io.sockets.sockets.get(sid);
+        return s?.runnerId === runnerId;
+      });
+
+      if (runnerInPreRoom && !state.locked) {
+        console.log('[requestRunner] runner is actually in pre-room, proceeding');
         if (state.globalTimer) { clearTimeout(state.globalTimer); state.globalTimer = null; }
         await lockAndProceed(io, chatId, state);
       }
@@ -578,9 +607,15 @@ const handleRequestRunner = async (socket, io, data) => {
     state.attemptToken = attemptToken || null;
     socket.join(`pre-${chatId}`);
 
-    console.log(`[requestRunner] user ${userId} in pre-room. runner present=${state.runner}`);
+    const preRoomSockets = await io.in(`pre-${chatId}`).allSockets();
+    const runnerInPreRoom = [...preRoomSockets].some(sid => {
+      const s = io.sockets.sockets.get(sid);
+      return s?.runnerId === runnerId;
+    });
 
-    if (state.runner) {
+    console.log(`[requestRunner] user ${userId} in pre-room. runner present=${runnerInPreRoom} (state.runner=${state.runner})`);
+
+    if (runnerInPreRoom) {
       if (state.globalTimer) { clearTimeout(state.globalTimer); state.globalTimer = null; }
       await lockAndProceed(io, chatId, state);
       return;
@@ -593,10 +628,9 @@ const handleRequestRunner = async (socket, io, data) => {
           console.warn('[preRoom] timeout — both parties never arrived for chatId:', chatId);
           preRoomState.delete(chatId);
           io.to(`pre-${chatId}`).emit('preRoomTimeout', { chatId, message: 'Connection timed out.' });
-          // ← emit to user room too in case they're not in pre-room yet
           io.to(`user-${userId}`).emit('preRoomTimeout', { chatId, message: 'Connection timed out.' });
         }
-      }, 30_000);
+      }, 60_000);
     }
 
     logSocketAudit('USER_REQUESTED_RUNNER', { runnerId, userId, chatId, serviceType });
@@ -1144,6 +1178,59 @@ const handleStartTrackRunner = (io, data) => {
   logSocketAudit('TRACK_RUNNER', { chatId, runnerId, userId });
 };
 
+
+const handleRunnerReconnect = async (socket, io) => {
+  if (!socket.runnerId) {
+    console.log('[handleRunnerReconnect] No runnerId on socket, skipping');
+    return;
+  }
+
+  const runnerId = socket.runnerId;
+  console.log(`[handleRunnerReconnect] Runner ${runnerId} reconnecting`);
+
+  // Find any active pre-room state for this runner
+  let foundChatId = null;
+  let foundState = null;
+
+  for (const [chatId, state] of preRoomState.entries()) {
+    if (state.runnerId === runnerId && !state.locked) {
+      foundChatId = chatId;
+      foundState = state;
+      break;
+    }
+  }
+
+  if (!foundChatId || !foundState) {
+    console.log(`[handleRunnerReconnect] No active pre-room found for runner ${runnerId}`);
+    return;
+  }
+
+  // Rejoin pre-room
+  socket.join(`pre-${foundChatId}`);
+  console.log(`[handleRunnerReconnect] Runner ${runnerId} re-joined pre-${foundChatId}`);
+
+  // If user is already waiting, proceed immediately
+  if (foundState.user) {
+    console.log(`[handleRunnerReconnect] User already waiting, proceeding to lock`);
+    if (foundState.globalTimer) {
+      clearTimeout(foundState.globalTimer);
+      foundState.globalTimer = null;
+    }
+    await lockAndProceed(io, foundChatId, foundState);
+  } else {
+    // Re-emit enterPreRoom to the user so they know runner is back
+    const payload = {
+      chatId: foundChatId,
+      runnerId: runnerId,
+      userId: foundState.userId,
+      serviceType: foundState.serviceType,
+      message: 'Runner reconnected! Preparing chat...',
+    };
+    io.to(`user-${foundState.userId}`).emit('enterPreRoom', payload);
+    console.log(`[handleRunnerReconnect] Re-emitted enterPreRoom to user ${foundState.userId}`);
+  }
+};
+
 const handleRejoinChat = async (socket, io, { chatId, userId, runnerId, userType }) => {
   if (!chatId) return;
 
@@ -1316,8 +1403,6 @@ const handleDisconnect = async (socket, io) => {
   const partnerType = isRunner ? 'user' : 'runner';
 
   if (!partnerId || !chatId) return;
-
-  await notifyPartnerOffline(partnerId, partnerType, { chatId, name });
 };
 
 module.exports = {
@@ -1329,6 +1414,7 @@ module.exports = {
   handleUserJoinChat,
   handleRunnerJoinChat,
   handleDisconnect,
+  handleRunnerReconnect,
   handleRejoinChat,
   archiveCurrentSession,
   handleGetOrderSession,
