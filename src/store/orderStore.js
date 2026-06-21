@@ -20,6 +20,7 @@ const useOrderStore = create(persist((set, get) => ({
   _hasHydrated: false,
   _chats: {},
   activeChatId: null,
+  deliveryDenied: false,
 
   setHasHydrated: () => set({ _hasHydrated: true }),
 
@@ -64,6 +65,17 @@ const useOrderStore = create(persist((set, get) => ({
   // ── Delivery ───────────────────────────────────────────────────────────────
   setDeliveryMarked: (chatId, val) => get()._patch(chatId, { deliveryMarked: val }),
   setUserConfirmedDelivery: (chatId, val) => get()._patch(chatId, { userConfirmedDelivery: val }),
+
+  setDeliveryDenied: (chatId, value) =>
+    set(state => ({
+      _chats: {
+        ...state._chats,
+        [chatId]: {
+          ...state._chats[chatId],
+          deliveryDenied: value
+        }
+      }
+    })),
 
   // ── Instructions ───────────────────────────────────────────────────────────
   setSpecialInstructions: (chatId, val) => get()._patch(chatId, { specialInstructions: val }),

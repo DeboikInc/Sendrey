@@ -411,11 +411,18 @@ function RunnerChatScreen({
   }, [completedOrderStatuses]);
 
   useEffect(() => {
-    const storeStatuses = useOrderStore.getState().getChat(chatId).completedStatuses;
-    if (storeStatuses.length > 0) {
-      setCompletedOrderStatuses(storeStatuses);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const tryRestore = () => {
+      const storeStatuses = useOrderStore.getState().getChat(chatId).completedStatuses;
+      if (storeStatuses?.length > 0) {
+        setCompletedOrderStatuses(storeStatuses);
+      }
+    };
+
+    tryRestore(); 
+
+    // Also try after hydration settles
+    const t = setTimeout(tryRestore, 100);
+    return () => clearTimeout(t);
   }, [chatId]);
 
   // Reset if no order
@@ -606,6 +613,9 @@ function RunnerChatScreen({
         setUserConfirmedDelivery(false);
         setDeliveryMarked(false);
         setMarkingDelivery(false);
+
+        useOrderStore.getState().setDeliveryDenied(chatId, true);
+        setItemsApproved(false);
       }
     };
     const onTaskCompleted = ({ orderId }) => {
@@ -808,8 +818,6 @@ function RunnerChatScreen({
           msg.type === 'pickup_item_submission' || msg.messageType === 'pickup_item_submission') &&
         msg.senderId === runnerId
       ) return;
-
-      if (msg.id?.startsWith('delivery-marked-runner-')) return;
 
       if (
         msg.type === 'system' &&
@@ -1259,6 +1267,7 @@ function RunnerChatScreen({
           useOrderStore.getState().setDeliveryDisputeWindowOpen(chatId, true);
         }, 10 * 60 * 1000);
         setMarkingDelivery(false);
+        useOrderStore.getState().setDeliveryDenied(chatId, false);
         setCurrentOrder(prev => prev ? { ...prev, status: 'item_delivered' } : prev);
         useOrderStore.getState().mergeCurrentOrder(chatId, { status: 'item_delivered' });
         resolve();

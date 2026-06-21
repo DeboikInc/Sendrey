@@ -15,12 +15,13 @@ const STATUS_TO_STAGE = {
     'en_route_to_delivery': 2,
     'arrived_at_delivery_location': 3,
     'item_delivered': 4,
-    'task_completed': 4,
     // run-errand flow
     'arrived_at_market': 1,
     'purchase_in_progress': 1,
     'purchase_completed': 1,
     'delivered': 4,
+    'task_completed': 5,
+    'completed': 5,
 };
 
 const STATUS_TO_PROGRESS = {
@@ -35,8 +36,9 @@ const STATUS_TO_PROGRESS = {
     'en_route_to_delivery': 60,
     'arrived_at_delivery_location': 80,
     'item_delivered': 95,
-    'task_completed': 100,
     'delivered': 100,
+    'task_completed': 100,
+    'completed': 100,
 };
 
 export const TrackDeliveryScreen = ({
@@ -84,6 +86,7 @@ export const TrackDeliveryScreen = ({
         { label: "On the way to you", time: trackingData?.stageTimes?.[2] || null },
         { label: "Runner arrived", time: trackingData?.stageTimes?.[3] || null },
         { label: isPickup ? "Item delivered" : "Delivered", time: trackingData?.stageTimes?.[4] || null },
+        { label: "Order Completed", time: trackingData?.stageTimes?.[5] || null },
     ];
 
     const statusProgress = orderStatus ? (STATUS_TO_PROGRESS[orderStatus] ?? -1) : -1;
@@ -176,7 +179,7 @@ export const TrackDeliveryScreen = ({
             </div>
 
             {/* Map */}
-            <div className="flex-1 relative">
+            <div className="relative flex-shrink-0" style={{ height: '45%' }}>
                 <LiveTrackingMap
                     runnerLocation={runnerLocation}
                     deliveryLocation={deliveryCoordinates}
