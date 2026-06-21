@@ -1,9 +1,12 @@
-  // config/cors.js
-const allowedOrigins = process.env.allowedOrigins
+// config/cors.js
+require("dotenv").config();
+const allowedOrigins = (process.env.allowedOrigins || '').split(',').map(o => o.trim());
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // console.log('Incoming request origin:', origin);
+    // console.log('Incoming origin:', JSON.stringify(origin));
+    // console.log('Allowed list:', allowedOrigins);
+
     // Allow requests with no origin (like mobile apps or curl)
     if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);

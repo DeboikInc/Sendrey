@@ -32,6 +32,7 @@ const swaggerDoc = require('./sendrey-documentation.json');
 const redis = require('./config/redis');
 const locationCleanup = require('./services/locationTracking/locationCleanup');
 const { startSocketServer, shutdownSocketServer } = require('./socket');
+require("dotenv").config();
 
 // Database connection
 const connectDb = require('./config/database');
