@@ -84,7 +84,7 @@ class RunnerService {
     const query = {
       isOnline: true,
       isAvailable: true,
-      runnerStatus: 'verified' // Only verified runners
+      kycStatus: 'verified' // Only verified runners
     };
 
     if (serviceType) query.serviceType = serviceType;
@@ -196,7 +196,7 @@ class RunnerService {
       Runner.countDocuments({ isOnline: true, isAvailable: true }),
       Runner.aggregate([{ $group: { _id: '$serviceType', count: { $sum: 1 } } }]),
       Runner.aggregate([{ $group: { _id: '$fleetType', count: { $sum: 1 } } }]),
-      Runner.aggregate([{ $group: { _id: '$runnerStatus', count: { $sum: 1 } } }]),
+      Runner.aggregate([{ $group: { _id: '$kycStatus', count: { $sum: 1 } } }]),
     ]);
 
     return { total, online, available, byService, byFleet, byStatus };
@@ -213,7 +213,7 @@ class RunnerService {
         search,
         serviceType,
         fleetType,
-        runnerStatus,
+        kycStatus,
         isOnline,
         isAvailable,
         sortBy = 'createdAt',
@@ -236,7 +236,7 @@ class RunnerService {
 
       if (serviceType) query.serviceType = serviceType;
       if (fleetType) query.fleetType = fleetType;
-      if (runnerStatus) query.runnerStatus = runnerStatus;
+      if (kycStatus) query.kycStatus = kycStatus;
       if (isOnline !== undefined) query.isOnline = isOnline;
       if (isAvailable !== undefined) query.isAvailable = isAvailable;
 
@@ -290,7 +290,7 @@ class RunnerService {
         query: searchQuery,
         serviceType,
         fleetType,
-        runnerStatus,
+        kycStatus,
         isOnline,
         isAvailable,
         dateFrom,
@@ -311,7 +311,7 @@ class RunnerService {
 
       if (serviceType) query.serviceType = serviceType;
       if (fleetType) query.fleetType = fleetType;
-      if (runnerStatus) query.runnerStatus = runnerStatus;
+      if (kycStatus) query.kycStatus = kycStatus;
       if (isOnline !== undefined) query.isOnline = isOnline;
       if (isAvailable !== undefined) query.isAvailable = isAvailable;
 

@@ -20,7 +20,6 @@ const { requestLogger, enhancedRequestLogger } = require('./middleware/logger');
 const { startAllConsumers } = require('./kafka/consumers');
 const { startExpenseReportJobs } = require('./jobs/expenseReports');
 
-
 const cron = require('node-cron');
 const { archiveOldOrders } = require('./services/orderStateMachine');
 
@@ -32,10 +31,15 @@ const swaggerUi = require('swagger-ui-express');
 const swaggerDoc = require('./sendrey-documentation.json');
 const redis = require('./config/redis');
 const locationCleanup = require('./services/locationTracking/locationCleanup');
-
+const { startSocketServer, shutdownSocketServer } = require('./socket');
+require("dotenv").config();
 
 // Database connection
 const connectDb = require('./config/database');
+
+const API_PORT = process.env.PORT;
+const SOCKET_PORT = process.env.SOCKET_PORT;
+
 const startServer = async () => {
 
   if (process.env.NODE_ENV === 'production') {
@@ -145,10 +149,19 @@ const startServer = async () => {
     app.use(notFound);
     app.use(errorHandler);
 
-    // 4. Start listening only after DB is ready
-    const PORT = process.env.PORT || 4000;
-    app.listen(PORT, () => {
-      console.log(`✅ Server is running on ${PORT}`);
+    app.listen(API_PORT, () => {
+      console.log(`✅ API server running on ${API_PORT}`);
+    });
+
+    const { io, server: socketServer } = await startSocketServer(SOCKET_PORT);
+
+    process.on('SIGTERM', async () => {
+      locationCleanup.stop();
+      await redis.disconnect();
+      io.close(() => console.log('Socket.IO closed'));
+      socketServer.close(async () => {
+        process.exit(0);
+      });
     });
 
   } catch (error) {
@@ -156,12 +169,6 @@ const startServer = async () => {
     process.exit(1);
   }
 
-  // Graceful shutdown
-  process.on('SIGTERM', async () => {
-    locationCleanup.stop();
-    await redis.disconnect();
-    process.exit(0);
-  });
 };
 
 startServer();

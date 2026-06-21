@@ -720,7 +720,7 @@ class PaymentService {
   // service
   async transferToVendor({ amount, bankName, accountNumber, accountName, vendorName, orderId, runnerId }) {
     
-    // ── DEV MOCK ───────────────────────────────────────────
+    // ── MOCK ── remove when real secrets are available
     if (process.env.NODE_ENV === 'development') {
       console.log('⚠️  transferToVendor: DEV mock — skipping real Paystack transfer');
       return {
@@ -733,7 +733,8 @@ class PaymentService {
         status: 'success',
       };
     }
-    // ── PRODUCTION ─────────────────────────────────────────
+
+    // ── PRODUCTION MAIN ─────────────────────────────────────────
 
     try {
       const verified = await this.verifyVendorAccount({ accountNumber, bankName });

@@ -14,7 +14,7 @@ const startDailyResetJob = () => {
       
       const result = await Runner.updateMany(
         { 
-          runnerStatus: 'approved_limited',
+          kycStatus: 'approved_limited',
           dailyErrandCount: { $gt: 0 }
         },
         {

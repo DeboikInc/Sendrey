@@ -12,6 +12,7 @@ const {
     notifyDeliveryConfirmationRequest,
     notifyAutoConfirmWarning,
 } = require('../services/notificationService');
+const { scheduleAutoConfirm } = require('./terminalHandlers');
 
 // ─── Helpers 
 
@@ -69,7 +70,7 @@ const handleMarkDeliveryComplete = async (io, socket, data) => {
             return socket.emit('error', { message: 'Payment required before marking delivery complete' });
         }
 
-        if (order.status === 'delivered') return socket.emit('error', { message: 'Delivery already marked as complete' });
+        if (order.deliveryConfirmedAt) return socket.emit('error', { message: 'Delivery already confirmed by user' });
     } catch (err) {
         console.error('[markDeliveryComplete] Order lookup failed:', err);
         return socket.emit('error', { message: 'Failed to find order. Please try again.' });
@@ -85,6 +86,7 @@ const handleMarkDeliveryComplete = async (io, socket, data) => {
             }
 
             const steps = {
+                'active': ['arrived_at_delivery', 'delivered'],
                 'pending_payment': ['paid', 'accepted', 'en_route_to_pickup', 'arrived_at_pickup', 'picked_up', 'en_route_to_delivery', 'arrived_at_delivery', 'delivered'],
                 'paid': ['accepted', 'en_route_to_pickup', 'arrived_at_pickup', 'picked_up', 'en_route_to_delivery', 'arrived_at_delivery', 'delivered'],
                 'accepted': ['en_route_to_pickup', 'arrived_at_pickup', 'picked_up', 'en_route_to_delivery', 'arrived_at_delivery', 'delivered'],
@@ -96,6 +98,7 @@ const handleMarkDeliveryComplete = async (io, socket, data) => {
                 'picked_up': ['en_route_to_delivery', 'arrived_at_delivery', 'delivered'],
                 'en_route_to_delivery': ['arrived_at_delivery', 'delivered'],
                 'arrived_at_delivery': ['delivered'],
+                'item_delivered': ['delivered'],
                 'in_progress': ['delivered'],
             };
 
@@ -160,7 +163,9 @@ const handleMarkDeliveryComplete = async (io, socket, data) => {
     io.to(`user-${order.userId.toString()}`).emit('message', confirmationMessage);
     io.to(`runner-${runnerId.toString()}`).emit('message', runnerAckMessage);
 
-    io.to(chatId).emit('deliveryMarkedComplete', { orderId: order.orderId, status: 'awaiting_confirmation' });
+    console.log('[markDeliveryComplete] about to emit deliveryMarkedComplete, order status:', order.status);
+    socket.emit('deliveryMarkedComplete', { orderId: order.orderId, status: 'awaiting_confirmation' });
+    socket.to(chatId).emit('deliveryMarkedComplete', { orderId: order.orderId, status: 'awaiting_confirmation' })
 
     // Persist to DB — recover on failure
     try {
@@ -274,6 +279,7 @@ const handleDenyDelivery = async (io, socket, data) => {
     // Validate
     let order;
     try {
+
         order = await Order.findOne({ orderId }).sort({ createdAt: -1 });
         if (!order) return socket.emit('error', { message: 'Order not found' });
         if (order.deliveryConfirmedAt) return socket.emit('error', { message: 'Delivery already confirmed' });
@@ -284,13 +290,11 @@ const handleDenyDelivery = async (io, socket, data) => {
 
     // State revert 
     try {
-        if (order.status !== 'delivered') {
-            await orderStateMachine.transition(orderId, 'delivered', {
-                triggeredBy: 'user',
-                triggeredById: userId,
-                note: 'Delivery denied by user',
-            });
-        }
+        await orderStateMachine.transition(orderId, 'in_progress', {
+            triggeredBy: 'user',
+            triggeredById: userId,
+            note: 'Delivery denied by user — reverted for runner retry',
+        });
 
         if (order.escrowId) {
             await Escrow.findByIdAndUpdate(order.escrowId, { status: 'funded' });
@@ -337,112 +341,20 @@ const handleDenyDelivery = async (io, socket, data) => {
         // No rollback needed — order already reverted above, messages already emitted
     }
 
-    // ban them
-    await handleRejectionStrike(io, order.runnerId.toString(), chatId);
+    // ban them after 3 tries
+    const updatedRunner = await Runner.findByIdAndUpdate(
+        order.runnerId,
+        { $inc: { deliveryDenialCount: 1 } },
+        { new: true }
+    ).select('deliveryDenialCount');
+
+    if (updatedRunner.deliveryDenialCount >= 3) {
+        await handleRejectionStrike(io, order.runnerId.toString(), chatId, 'deliveryDenialCount');
+    }
 
     logSocketAudit('USER_DENIED_ORDER_DELIVERED', { userId, chatId, orderId });
 };
 
-// ─── Auto-confirm after 4 hours ─────────────────────────────────────────────
-
-const scheduleAutoConfirm = (io, chatId, orderId, escrowId) => {
-    const AUTO_CONFIRM_DELAY = 4 * 60 * 60 * 1000;       // 4 hours
-    const WARNING_BEFORE = 10 * 60 * 1000;            // 10 min warning
-    const WARNING_DELAY = AUTO_CONFIRM_DELAY - WARNING_BEFORE;
-
-    // ── 10-minute warning ────────────────────────────────────────────────────
-    setTimeout(async () => {
-        try {
-            const order = await Order.findOne({ orderId }).sort({ createdAt: -1 });
-            // Only warn if still waiting for confirmation
-            if (!order || order.deliveryConfirmedAt || order.status !== 'delivered') return;
-
-            const warningMessage = stampMessage(chatId, {
-                id: `auto-confirm-warning-${Date.now()}`,
-                from: 'system', type: 'system', messageType: 'system',
-                text: 'Your order will be automatically marked as completed in 10 minutes if no action is taken.',
-                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                status: 'sent', senderId: 'system', senderType: 'system', style: 'warning',
-            });
-
-            // Send warning only to user (runner doesn't need it)
-            io.to(`user-${order.userId.toString()}`).emit('message', warningMessage);
-            io.to(`user-${order.userId.toString()}`).emit('autoConfirmWarning', {
-                orderId,
-                minutesRemaining: 10,
-            });
-
-            persistMessages(chatId, [warningMessage])
-                .catch(err => console.error('[autoConfirm] Warning persist failed:', err));
-
-            // Push notification warning
-            const { notifyAutoConfirmWarning } = require('../services/notificationService');
-            notifyAutoConfirmWarning(order.userId, { orderId, minutesRemaining: 10 })
-                .catch(err => console.warn('[autoConfirm] Warning push notify failed:', err.message));
-
-        } catch (error) {
-            console.error('[autoConfirm] Warning phase failed:', error);
-        }
-    }, WARNING_DELAY);
-
-    // ── Full auto-confirm ────────────────────────────────────────────────────
-    setTimeout(async () => {
-        try {
-            const order = await Order.findOne({ orderId }).sort({ createdAt: -1 });
-            if (!order || order.deliveryConfirmedAt || order.status !== 'delivered') return;
-
-            await orderStateMachine.transition(orderId, 'completed', {
-                triggeredBy: 'system',
-                note: 'Auto-confirmed after 4 hours',
-            });
-
-            await Order.findByIdAndUpdate(order._id, {
-                $set: {
-                    deliveryConfirmedAt: new Date(),
-                    deliveryConfirmedBy: 'system',
-                },
-            })
-
-            if (escrowId) {
-                const escrow = await Escrow.findById(escrowId);
-                if (escrow && !escrow.deliveryFeeReleased) {
-                    await paymentService.payoutToRunner(escrow._id);
-                }
-            }
-
-            await User.findByIdAndUpdate(order.userId, { activeOrderId: null, currentRunnerId: null });
-            await Runner.findByIdAndUpdate(order.runnerId, { activeOrderId: null, currentUserId: null });
-
-            // ── System message shown in chat ──────────────────────────────────
-            const autoCompleteMessage = stampMessage(chatId, {
-                id: `auto-confirm-${Date.now()}`,
-                from: 'system', type: 'task_completed', messageType: 'task_completed',
-                text: 'This order has been marked as completed because the user did not respond in time.',
-                time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-                status: 'sent', senderId: 'system', senderType: 'system',
-                orderId: order.orderId,
-            });
-
-            // Emit task_completed event so both sides trigger their completion UI
-            io.to(chatId).emit('message', autoCompleteMessage);
-            io.to(chatId).emit('taskCompleted', { orderId, triggeredBy: 'system' });
-
-            // Also keep the existing delivery events so tracking etc. resolves
-            io.to(chatId).emit('deliveryAutoConfirmed', { orderId, status: 'completed' });
-            io.to(`tracking:${orderId}`).emit('runner:delivered', { orderId });
-
-            persistMessages(chatId, [autoCompleteMessage])
-                .catch(err => console.error('[autoConfirm] Chat persist failed:', err));
-
-
-
-            logSocketAudit('ORDER_AUTO_CONFIRM_DELIVERED', { chatId, orderId });
-
-        } catch (error) {
-            console.error('[autoConfirm] Failed:', error);
-        }
-    }, AUTO_CONFIRM_DELAY);
-};
 
 module.exports = {
     handleMarkDeliveryComplete,
