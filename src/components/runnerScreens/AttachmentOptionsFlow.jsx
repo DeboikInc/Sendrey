@@ -31,6 +31,10 @@ export default function AttachmentOptionsFlow({
         useCallback(s => s.getChat(chatId).currentOrder, [chatId])
     );
 
+    const userConfirmedDelivery = useOrderStore(
+        useCallback(s => s.getChat(chatId).userConfirmedDelivery, [chatId])
+    );
+
     const deliveryMarked = useOrderStore(
         useCallback(s => s.getChat(chatId).deliveryMarked, [chatId])
     );
@@ -87,6 +91,7 @@ export default function AttachmentOptionsFlow({
             ? completedOrderStatuses.includes('arrived_at_pickup_location')
             : true;
 
+
     // ← pure derived value, no refs, re-renders whenever any selector above updates
     const canMarkDelivery =
         completedOrderStatuses.includes('arrived_at_delivery_location') &&
@@ -94,7 +99,7 @@ export default function AttachmentOptionsFlow({
             ? itemSubmissionApproved || currentOrder?.status === 'items_approved'
             : showSubmitPickupItem
                 ? pickupItemApproved || currentOrder?.status === 'items_approved'
-                : true);
+                : true)
 
     const msgs = useOrderStore(s => s.getChat(chatId).messages ?? []);
 
@@ -182,31 +187,33 @@ export default function AttachmentOptionsFlow({
 
                                 <button
                                     onClick={async () => {
-                                        if (!isPaid || deliveryMarked || !canMarkDelivery || markingDelivery) return;
+                                        if (!isPaid || userConfirmedDelivery || deliveryMarked || !canMarkDelivery || markingDelivery) return;
                                         try {
                                             await onMarkDelivery();
                                         } catch (e) { console.error('[MARK DELIVERY] error:', e); }
                                     }}
-                                    disabled={!isPaid || deliveryMarked || !canMarkDelivery || markingDelivery}
+                                    disabled={!isPaid || userConfirmedDelivery || deliveryMarked || !canMarkDelivery || markingDelivery}
                                     className={`w-full flex items-center justify-center gap-3 p-4 rounded-xl transition-colors
-    ${!isPaid || deliveryMarked || !canMarkDelivery || markingDelivery
+                                    ${!isPaid || userConfirmedDelivery || deliveryMarked || !canMarkDelivery || markingDelivery
                                             ? 'opacity-40 cursor-not-allowed bg-gray-100 dark:bg-black-200'
                                             : 'bg-gray-100 dark:bg-black-200 hover:opacity-80'
                                         }`}
                                 >
                                     <Truck className="h-6 w-6 text-green-500" />
                                     <p className={`text-lg font-medium ${darkMode ? 'text-white' : 'text-black-200'}`}>
-                                        {deliveryMarked
-                                            ? 'Marked as Delivered'
-                                            : markingDelivery
-                                                ? 'Sending…'
-                                                : !isPaid
-                                                    ? 'Mark as Delivered (awaiting payment)'
-                                                    : !completedOrderStatuses.includes('arrived_at_delivery_location')
-                                                        ? 'Mark as Delivered (get to delivery location first)'
-                                                        : !canMarkDelivery
-                                                            ? 'Mark as Delivered (waiting for item approval)'
-                                                            : 'Mark as Delivered'}
+                                        {userConfirmedDelivery
+                                            ? 'Marked as Delivered (user confirmed)'
+                                            : deliveryMarked
+                                                ? 'Marked as Delivered (awaiting user confirmation)'
+                                                : markingDelivery
+                                                    ? 'Sending…'
+                                                    : !isPaid
+                                                        ? 'Mark as Delivered (awaiting payment)'
+                                                        : !completedOrderStatuses.includes('arrived_at_delivery_location')
+                                                            ? 'Mark as Delivered (get to delivery location first)'
+                                                            : !canMarkDelivery
+                                                                ? 'Mark as Delivered (waiting for item approval)'
+                                                                : 'Mark as Delivered'}
                                     </p>
                                 </button>
                             </div>
