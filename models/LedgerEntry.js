@@ -44,8 +44,6 @@ const ledgerEntrySchema = new mongoose.Schema({
 
   providerReference: {
     type: String,
-    unique: true,
-    index: { unique: true, sparse: true }
   },
 
   orderId: { type: String, default: null },
@@ -84,7 +82,7 @@ ledgerEntrySchema.index({ runnerId: 1, createdAt: -1 });
 ledgerEntrySchema.index({ orderId: 1 });
 ledgerEntrySchema.index({ escrowId: 1 }, { sparse: true });
 ledgerEntrySchema.index({ type: 1, status: 1 });
-ledgerEntrySchema.index({ providerReference: 1 }, { unique: true, sparse: true });
+ledgerEntrySchema.index({ providerReference: 1 },  { unique: true, partialFilterExpression: { providerReference: { $type: 'string' }}});
 ledgerEntrySchema.index({ reversalOf: 1 }, { sparse: true });
 
 // ── Immutability guard 
