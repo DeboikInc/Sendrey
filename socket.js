@@ -235,6 +235,12 @@ connectWithRetry().then(async () => {
 
     );
 
+    socket.on("runnerReconnect", (data) =>
+      safeHandler(socketHandlers.handleRunnerReconnect, socket, io, data)
+
+    );
+
+
     socket.on('getOrderSession', (data) =>
       safeHandler(socketHandlers.handleGetOrderSession, socket, data)
     );
