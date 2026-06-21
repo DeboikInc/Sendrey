@@ -7,7 +7,6 @@ require("dotenv").config();
 const redis = require('./config/redis');
 
 const { database } = require("./config/index");
-const app = express();
 
 // handlers
 const socketHandlers = require("./socket/socketHandlers");
@@ -45,6 +44,7 @@ const { enqueue, dequeue, getAll, markAttempt, shouldRetry } = require('./utils/
 require('events').EventEmitter.defaultMaxListeners = 20;
 
 let ioInstance;
+let serverInstance;
 
 async function connectWithRetry(maxAttempts = 5) {
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -60,16 +60,7 @@ async function connectWithRetry(maxAttempts = 5) {
   }
 }
 
-// MongoDB connection
-connectWithRetry().then(async () => {
-
-  if (process.env.NODE_ENV === 'production') {
-    console.log = () => { };
-    console.error = () => { };
-    console.warn = () => { };
-    console.debug = () => { };
-  }
-
+async function startSocketServer(port) {
   console.log("MongoDB connected");
   console.log('ALL SOCKET HANDLERS:', Object.keys(socketHandlers));
 
@@ -77,34 +68,27 @@ connectWithRetry().then(async () => {
   const server = http.createServer(app);
 
   const io = new Server(server, {
-    cors: {
-      origin: "*",
-      methods: ["GET", "POST"],
-      credentials: true
-    },
+    cors: { origin: "*", methods: ["GET", "POST"], credentials: true },
     transports: ['websocket', 'polling'],
     allowEIO3: true,
     pingTimeout: 60000,
     pingInterval: 25000,
     maxHttpBufferSize: 5e6,
-
     perMessageDeflate: {
-      threshold: 512,              // compress anything over 512 bytes
+      threshold: 512,
       zlibDeflateOptions: { level: 6 },
       zlibInflateOptions: { chunkSize: 16 * 1024 },
     },
-
     connectTimeout: 45000,
     allowUpgrades: true,
     cookie: false,
     upgradeTimeout: 10000,
     destroyUpgrade: true,
-
-    // Buffer messages during reconnect
     httpCompression: true,
   });
 
   ioInstance = io;
+  serverInstance = server;
 
   setInterval(async () => {
     if (mongoose.connection.readyState !== 1) return;
@@ -141,9 +125,6 @@ connectWithRetry().then(async () => {
   app.set('io', io);
   startScheduler(io);
 
-
-
-  // Add connection middleware for logging
   io.use((socket, next) => {
     console.log(`Connection attempt from ${socket.id} with transport: ${socket.conn.transport.name}`);
     next();
@@ -166,10 +147,8 @@ connectWithRetry().then(async () => {
         try {
           const payload = JSON.parse(message);
           console.log(`[Redis] Received on ${channel}:`, payload);
-
           const { runnerId, data } = payload;
           const room = `runner-${runnerId}`;
-
           console.log(`[Redis] Emitting to room: ${room}`, data);
           ioInstance.to(room).emit('verificationStatus', data);
           console.log(`[Redis] Emitted to ${room}`);
@@ -455,40 +434,6 @@ connectWithRetry().then(async () => {
 
     socket.on('submitRating', (data) => safeHandler(handleSubmitRating, socket, io, data));
 
-    // mock
-    // socket.on('mockPayment', async ({ chatId, orderId }) => {
-    //   try {
-    //     console.log('Mock payment received | chatId:', chatId, '| orderId:', orderId);
-    //     const Order = require('./models/Order');
-    //     let order = null;
-    //     if (orderId) {
-    //       order = await Order.findOne({ orderId });
-    //     }
-    //     if (!order) {
-    //       order = await Order.findOne({ chatId });
-    //     }
-    //     if (!order) {
-    //       console.error('Mock payment: order not found for chatId:', chatId);
-    //       return;
-    //     }
-    //     console.log('Mock payment applied for order:', order.orderId);
-    //     await handlePaymentSuccess(socket, io, {
-    //       chatId,
-    //       orderId: order.orderId,
-    //       escrowId: null,
-    //       reference: `mock-${Date.now()}`,
-    //     });
-    //     io.to(chatId).emit('paymentSuccess', {
-    //       escrowId: null,
-    //       orderId: order.orderId,
-    //       chatId,
-    //       paymentStatus: 'paid',
-    //     });
-    //   } catch (error) {
-    //     console.error('MockPayment error:', error);
-    //   }
-    // });
-
     // Payment handler
     socket.on('paymentSuccess', (data) => safeHandler(handlePaymentSuccess, socket, io, data));
 
@@ -525,14 +470,13 @@ connectWithRetry().then(async () => {
     res.status(200).json({ status: 'OK', service: 'Sendrey Socket Server' });
   });
 
-  server.listen(4001, () => console.log("✅ Socket.IO server running on port 4001"));
-
+  server.listen(port, () => console.log(`✅ Socket.IO server running on port ${port}`));
 
   // Self-ping to prevent Render spin-down
   if (process.env.NODE_ENV === 'production') {
     setInterval(async () => {
       try {
-        await fetch('https://sendrey-server-socket.onrender.com/health');
+        await fetch(`${process.env.renderPingUrl}`);
         console.log('[keep-alive] socket server pinged');
       } catch (e) {
         console.error('[keep-alive] ping failed:', e.message);
@@ -540,30 +484,26 @@ connectWithRetry().then(async () => {
     }, 5 * 60 * 1000);
   }
 
-  // Graceful shutdown
-  process.on('SIGTERM', async () => {
-    const count = await flushPendingWrites();
-    console.log('[shutdown flush] done, flushed', count, 'chats');
-    await redis.disconnect();
-    io.close(() => console.log('Socket.IO closed'));
-    server.close(async () => {
-      await mongoose.connection.close();
-      process.exit(0);
-    });
-  });
+  return { io, server };
+}
 
-  process.on('SIGINT', async () => {
-    await flushPendingWrites();
-    process.exit(0);
-  });
+// Called by app.js during own SIGTERM/SIGINT handling.
+async function shutdownSocketServer() {
+  const count = await flushPendingWrites();
+  console.log('[shutdown flush] done, flushed', count, 'chats');
+  if (ioInstance) {
+    await new Promise((resolve) => ioInstance.close(() => {
+      console.log('Socket.IO closed');
+      resolve();
+    }));
+  }
+  if (serverInstance) {
+    await new Promise((resolve) => serverInstance.close(resolve));
+  }
+}
 
-})
-  .catch((err) => {
-    console.error("MongoDB connection error:", err);
-    process.exit(1);
-  });
-
-module.exports = app;
+module.exports.startSocketServer = startSocketServer;
+module.exports.shutdownSocketServer = shutdownSocketServer;
 module.exports.getIO = () => {
   if (!ioInstance) {
     console.warn('IO not initialized yet');
