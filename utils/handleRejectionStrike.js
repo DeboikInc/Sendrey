@@ -4,6 +4,8 @@ const { Chat } = require('../models/Chat');
 const Order = require('../models/Order');
 const Escrow = require('../models/Escrows');
 const paymentService = require('../services/paymentServices');
+const { sendPushNotification } = require('../services/notificationService');
+const logger = require('../utils/logger');
 
 const persistMessages = async (chatId, messages) => {
   await Chat.findOneAndUpdate(
@@ -14,24 +16,24 @@ const persistMessages = async (chatId, messages) => {
 };
 
 const handleRejectionStrike = async (io, runnerId, chatId) => {
-  console.log(`[rejectionStrike] Processing strike for runner ${runnerId} in chat ${chatId}`);
+  logger.info(`[rejectionStrike] Processing strike for runner ${runnerId} in chat ${chatId} | field: ${countField}`)
 
   const runner = await Runner.findByIdAndUpdate(
     runnerId,
-    { $inc: { itemRejectionCount: 1 } },
+    { $inc: { [countField]: 1 } },
     { new: true }
-  ).select('itemRejectionCount firstName');
+  ).select(`${countField} firstName`);
 
   if (!runner) {
     console.warn(`[rejectionStrike] Runner ${runnerId} not found`);
     return;
   }
 
-  const count = runner.itemRejectionCount;
-  console.log(`[rejectionStrike] Runner ${runner.firstName} (${runnerId}) now has ${count} strike(s)`);
+  const count = runner[countField];
+  logger.info(`[rejectionStrike] Runner ${runner.firstName} (${runnerId}) now has ${count} ${countField} strike(s)`);
 
   if (count >= 3) {
-    console.log(`[rejectionStrike] Runner ${runner.firstName} has reached ${count} strikes — BANNING`);
+    logger.info(`[rejectionStrike] Runner ${runner.firstName} has reached ${count} ${countField} strikes — BANNING`);
 
     await Runner.findByIdAndUpdate(runnerId, {
       kycStatus: 'banned',
@@ -72,10 +74,10 @@ const handleRejectionStrike = async (io, runnerId, chatId) => {
               orderId: activeOrder.orderId,
             });
 
-            console.log(`[rejectionStrike] Refunded NGN ${refundAmount} to user for order ${activeOrder.orderId}`);
+            logger.info(`[rejectionStrike] Refunded NGN ${refundAmount} to user for order ${activeOrder.orderId}`);
           }
         } catch (err) {
-          console.error('[rejectionStrike] Refund failed:', err.message);
+          logger.error('[rejectionStrike] Refund failed:', err.message);
         }
       }
 
@@ -92,7 +94,7 @@ const handleRejectionStrike = async (io, runnerId, chatId) => {
       const runnerMsg = {
         id: `runner-banned-runner-${Date.now() + 1}`,
         from: 'system', type: 'system', messageType: 'system',
-        text: `Your account has been banned. This order has been cancelled.`,
+        text: `Your account has been banned after ${count} violations. This order has been cancelled.`,
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         status: 'sent', senderId: 'system', senderType: 'system', style: 'error',
       };
@@ -119,12 +121,13 @@ const handleRejectionStrike = async (io, runnerId, chatId) => {
         sendPushNotification({
           recipientId: activeOrder.userId,
           recipientType: 'user',
-          title: 'Refund Processed 💰',
+          title: 'Refund Processed',
           body: refundAmount > 0
             ? `NGN ${refundAmount.toLocaleString()} has been refunded to your wallet. We apologise for the inconvenience.`
             : 'Your order has been cancelled. We apologise for the inconvenience.',
           data: { type: 'refund_processed', orderId: activeOrder.orderId },
         }),
+
         sendPushNotification({
           recipientId: runnerId,
           recipientType: 'runner',
@@ -134,7 +137,7 @@ const handleRejectionStrike = async (io, runnerId, chatId) => {
         }),
       ]);
 
-      console.log(`[rejectionStrike] Order ${activeOrder.orderId} cancelled, user notified`);
+      logger.info(`[rejectionStrike] Order ${activeOrder.orderId} cancelled, user notified`);
     }
 
     // emit ban event regardless of whether there was an active order

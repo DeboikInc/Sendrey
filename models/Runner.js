@@ -218,6 +218,11 @@ const runnerSchema = new mongoose.Schema({
     default: 0,
   },
 
+  deliveryDenialCount: {
+    type:Number,
+    default: 0
+  },
+
   // Account Status
   role: {
     type: String,

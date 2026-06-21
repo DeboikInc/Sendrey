@@ -177,6 +177,16 @@ const notifyOrderCancelled = async (userId, { orderId, cancelledBy, runnerName, 
   });
 };
 
+const notifyPartnerOffline = async (partnerId, partnerType, { chatId, name }) => {
+  return sendPushNotification({
+    recipientId: partnerId,
+    recipientType: partnerType,
+    title: partnerType === 'user' ? 'Runner Offline' : 'User Offline',
+    body: `${name} has gone offline.`,
+    data: { type: 'partner_offline', chatId },
+  });
+};
+
 const notifyDisputeRaised = async ({ userId, runnerId, orderId, raisedBy }) => {
   const notifyId = raisedBy === 'user' ? runnerId : userId;
   const notifyType = raisedBy === 'user' ? 'runner' : 'user';
@@ -261,4 +271,5 @@ module.exports = {
   notifyEscrowReleased,
   notifyIncomingCall,
   notifyOrderCancelled,
+  notifyPartnerOffline,
 };
