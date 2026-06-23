@@ -176,7 +176,7 @@ export default function AnalyticsPage() {
 
   return (
     <div
-      className={`${display.variable} ${body.variable} ${mono.variable} min-h-screen bg-gradient-to-b from-[#0d1f2d] to-[#07151a] text-white`}
+      className={`${display.variable} ${body.variable} ${mono.variable} min-h-screen bg-primary text-white`}
       style={{ fontFamily: 'var(--font-body)' }}
     >
       <header className="max-w-5xl mx-auto px-6 pt-8 pb-6 flex items-center justify-between border-b border-white/10">
