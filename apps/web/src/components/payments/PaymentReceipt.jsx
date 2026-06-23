@@ -20,7 +20,7 @@ export default function PaymentReceipt({ paymentData, darkMode }) {
             Payment Complete
           </h3>
           <p className={`text-sm mt-1 ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>
-            Your task is funded and active
+            Your task is funded, secure in escrow and active
           </p>
         </div>
 
