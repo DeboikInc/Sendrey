@@ -3,7 +3,7 @@ import { Card, CardBody } from "@material-tailwind/react";
 import { MapPin, ShoppingBag, Package, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import BarLoader from "../common/BarLoader";
-import { computeDeliveryFee, formatNaira, RUNNER_SHARE } from "../../utils/pricing";
+import { computeDeliveryFee, formatNaira } from "../../utils/pricing";
 import useOrderStore from "../../store/orderStore";
 
 function RunnerNotifications({
@@ -27,6 +27,7 @@ function RunnerNotifications({
   const [swipeDirection, setSwipeDirection] = useState('left');
   const [localRequests, setLocalRequests] = useState([]);
   const [errorMessage, setErrorMessage] = useState(null);
+  const [runnerFee, setRunnerFee] = useState(null);
 
   const isAcceptingRef = useRef(false);
   const hasOpenedRef = useRef(false);
@@ -70,7 +71,6 @@ function RunnerNotifications({
 
     const handleChatError = (data) => {
       console.error('[RN] chatError:', data);
-      // Reset accepting state so runner can retry or decline
       setProcessingUserId(null);
       processingRef.current = false;
       if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
@@ -83,7 +83,6 @@ function RunnerNotifications({
       setProcessingUserId(null);
       processingRef.current = false;
       if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
-      // Put the request back so runner can retry
       setErrorMessage('Connection timed out — the user may have left.');
     };
 
@@ -203,18 +202,14 @@ function RunnerNotifications({
   }, [socket, runnerId, onClose]);
 
   const handleClose = useCallback(() => {
-
     hasOpenedRef.current = false;
     setProcessingUserId(null);
     if (onClose) onClose();
   }, [onClose]);
 
-  if (!isOpen || localRequests.length === 0) return null;
-
+  // Derived values, computed before any hook that depends on them,
   const user = localRequests[currentIndex];
-  if (!user) return null;
-
-  const req = user.currentRequest || {};
+  const req = user?.currentRequest || {};
   const isRunErrand = req.serviceType === 'run-errand';
   const fleetType = req.fleetType;
   const midCoords = isRunErrand ? req.marketCoordinates : req.pickupCoordinates;
@@ -223,8 +218,26 @@ function RunnerNotifications({
     ?? req.deliveryLocation?.coords
     ?? (req.deliveryLocation?.lat ? req.deliveryLocation : null);
 
-  const { deliveryFee } = computeDeliveryFee(req.serviceType, midCoords, deliveryCoords, fleetType);
-  const runnerFee = Math.round(deliveryFee * RUNNER_SHARE);
+  // Fetch the runner's fee for the currently-shown request. 
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+
+    computeDeliveryFee(req.serviceType, midCoords, deliveryCoords, fleetType)
+      .then(({ runnerEarnings }) => {
+        if (!cancelled) setRunnerFee(runnerEarnings);
+      })
+      .catch((err) => {
+        console.error('[RN] Failed to compute delivery fee:', err);
+        if (!cancelled) setRunnerFee(null);
+      });
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?._id, req.serviceType, fleetType, midCoords?.lat, midCoords?.lng, deliveryCoords?.lat, deliveryCoords?.lng]);
+
+  if (!isOpen || localRequests.length === 0 || !user) return null;
+
   const itemBudget = req.itemBudget ?? req.budget ?? null;
   const marketLocation = req.marketLocation?.address ?? req.marketLocation ?? null;
   const deliveryAddress = req.deliveryLocation?.address ?? req.deliveryLocation ?? null;

@@ -1,10 +1,28 @@
-export const BASE_FEE = 1000;
 
-export const PLATFORM_FEE_PERCENTAGE = 0.40; // 45 
-export const RUNNER_SHARE = 1 - PLATFORM_FEE_PERCENTAGE;
+let cachedConfig = null;
+let fetchPromise = null;
 
-export const PLATFORM_FEE_PERCENTAGE_FOR_PEDESTRIAN = 0.30
-export const RUNNER_SHARE_PEDESTRIAN = 1 - PLATFORM_FEE_PERCENTAGE_FOR_PEDESTRIAN;
+const PRICING_CONFIG_URL = `${process.env.REACT_APP_API_URL}/pricing/pricing-config`;
+
+export async function getPricingConfig({ forceRefresh = false } = {}) {
+  if (cachedConfig && !forceRefresh) return cachedConfig;
+
+  if (!fetchPromise) {
+    fetchPromise = fetch(PRICING_CONFIG_URL)
+      .then((res) => {
+        if (!res.ok) throw new Error(`Pricing config fetch failed: ${res.status}`);
+        return res.json();
+      })
+      .then((data) => {
+        cachedConfig = data;
+        return data;
+      })
+      .finally(() => {
+        fetchPromise = null;
+      });
+  }
+  return fetchPromise;
+}
 
 export const haversineDistance = (a, b) => {
   const toRad = (deg) => (deg * Math.PI) / 180;
@@ -17,29 +35,17 @@ export const haversineDistance = (a, b) => {
   return R * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 };
 
-/**
- * car, van  — ₦1,000 base + ₦500/km
- * bike/cycling — ₦1,000 base + ₦300/km
- * pedestrian  — ₦2000 flat for ≤1 km
- *               ₦1000 for ≤500 m
- */
-const calculateDeliveryFee = (distanceInMeters, fleetType) => {
+const calculateDeliveryFee = (distanceInMeters, fleetType, config) => {
   const fleet = fleetType?.toLowerCase();
 
   if (fleet === 'pedestrian') {
-    return distanceInMeters <= 500 ? 1000 : 2000;
+    const tier = config.pedestrianTiers.find((t) => distanceInMeters <= t.maxDistanceMeters);
+    if (!tier) return null;
+    return tier.fee;
   }
 
-  if (fleet === 'bike' || fleet === 'cycling') {
-    return Math.round(BASE_FEE + 200 * (distanceInMeters / 1000));
-  }
-
-  if (fleet === 'car' || fleet === 'van') {
-    return Math.round(BASE_FEE + 400 * (distanceInMeters / 1000));
-  }
-
-  // fallback — unknown fleet type defaults to car rate
-  return Math.round(BASE_FEE + 400 * (distanceInMeters / 1000));
+  const rule = config.fleetRules[fleet] || config.fleetRules.default;
+  return Math.round(rule.baseFee + rule.ratePerKm * (distanceInMeters / 1000));
 };
 
 export const calculateRouteDistance = (serviceType, midCoords, deliveryCoords, fleetType) => {
@@ -72,23 +78,27 @@ export const calculateRouteDistance = (serviceType, midCoords, deliveryCoords, f
   };
 };
 
-export const computeDeliveryFee = (serviceType, midCoords, deliveryCoords, fleetType) => {
+// Now async — must be awaited since it needs the fetched config
+export const computeDeliveryFee = async (serviceType, midCoords, deliveryCoords, fleetType) => {
   const { distanceInMeters, legs, error } = calculateRouteDistance(
     serviceType, midCoords, deliveryCoords, fleetType
   );
 
   if (error) return { distanceInMeters: 0, deliveryFee: 0, legs, error };
 
+  const config = await getPricingConfig();
   const fleet = fleetType?.toLowerCase();
-  const fee = calculateDeliveryFee(distanceInMeters, fleet);
+  const fee = calculateDeliveryFee(distanceInMeters, fleet, config);
+
+  if (fee === null) {
+    return { distanceInMeters: 0, deliveryFee: 0, legs, error: 'PEDESTRIAN_TOO_FAR' };
+  }
 
   const platformFeePercentage = fleet === 'pedestrian'
-    ? PLATFORM_FEE_PERCENTAGE_FOR_PEDESTRIAN
-    : PLATFORM_FEE_PERCENTAGE;
+    ? config.platformFeePercentagePedestrian
+    : config.platformFeePercentage;
 
-  const runnerShare = fleet === 'pedestrian'
-    ? RUNNER_SHARE_PEDESTRIAN
-    : RUNNER_SHARE;
+  const runnerShare = 1 - platformFeePercentage;
 
   const platformCut = Math.round(fee * platformFeePercentage);
   const runnerCut = Math.round(fee * runnerShare);
@@ -105,7 +115,3 @@ export const computeDeliveryFee = (serviceType, midCoords, deliveryCoords, fleet
 
 export const formatNaira = (amount) =>
   `₦${Math.round(amount).toLocaleString('en-NG')}`;
-
-// car, van - 1000 base + 500 per km
-//  bike, cycling - 1000 + 300 per km
-// pedestrian, 1500 for whole del(1km), half price for half distance, 750 naira for 500m below 
