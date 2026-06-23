@@ -83,7 +83,6 @@ const useUserOrderStore = create(
       partialize: (state) => ({
         // Don't persist taskCompleted / orderCancelled — rehydrated from chat history
         currentOrder: state.currentOrder,
-        isPaid: state.isPaid,
       }),
     }
   )

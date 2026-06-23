@@ -14,3 +14,10 @@ git add apps/<APP_NAME>
 git commit
 
 <!-- mostly use chore: sync apps/app_name with repo -->
+
+git rm -r --cached apps/mobile
+Remove-Item -Recurse -Force apps/mobile
+git read-tree --prefix=apps/mobile -u sendrey-frontend/main
+git status
+git commit -m "Sync apps/mobile with sendrey-frontend/main"
+git push
