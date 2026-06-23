@@ -37,7 +37,7 @@ export default function HomePage() {
   // Ensure component mounts before any client-side rendering
   useEffect(() => {
     setMounted(true)
-    
+
     // Cleanup on unmount
     return () => {
       if (intervalRef.current) {
@@ -50,15 +50,15 @@ export default function HomePage() {
   // Only run timer after mount
   useEffect(() => {
     if (!mounted) return
-    
+
     // Set initial time
     setTimeLeft(getTimeLeft(LAUNCH_DATE))
-    
+
     // Start interval
     intervalRef.current = setInterval(() => {
       setTimeLeft(getTimeLeft(LAUNCH_DATE))
     }, 1000)
-    
+
     return () => {
       if (intervalRef.current) {
         clearInterval(intervalRef.current)
@@ -70,15 +70,15 @@ export default function HomePage() {
   // Track page view with proper cleanup
   useEffect(() => {
     if (!mounted) return
-    
+
     let isMounted = true
-    
+
     fetch('/api/analytics/track', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ event: 'page_view', page: 'landing' }),
-    }).catch(() => {})
-    
+    }).catch(() => { })
+
     return () => {
       isMounted = false
     }
@@ -87,7 +87,7 @@ export default function HomePage() {
   // Handle back/forward navigation - force re-render
   useEffect(() => {
     if (!mounted) return
-    
+
     // Force a re-render when page becomes visible again (back/forward)
     const handleVisibilityChange = () => {
       if (document.visibilityState === 'visible') {
@@ -95,7 +95,7 @@ export default function HomePage() {
         setTimeLeft(getTimeLeft(LAUNCH_DATE))
       }
     }
-    
+
     // Handle page show (when coming back from bfcache)
     const handlePageShow = (event) => {
       if (event.persisted) {
@@ -106,10 +106,10 @@ export default function HomePage() {
         setTimeout(() => setMounted(true), 0)
       }
     }
-    
+
     document.addEventListener('visibilitychange', handleVisibilityChange)
     window.addEventListener('pageshow', handlePageShow)
-    
+
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange)
       window.removeEventListener('pageshow', handlePageShow)
@@ -122,7 +122,7 @@ export default function HomePage() {
   // Return null on server or before mount to prevent hydration mismatch
   if (!mounted) {
     return (
-      <div className="min-h-screen bg-gradient-to-b from-primary to-black text-white">
+      <div className="min-h-screen bg-primary text-white">
         {/* Skeleton or loading state */}
         <div className="max-w-6xl mx-auto px-6 pt-8">
           <div className="w-28 sm:w-32 h-10 bg-white/10 rounded animate-pulse" />
@@ -133,7 +133,7 @@ export default function HomePage() {
 
   return (
     <div
-      className={`${display.variable} ${body.variable} ${mono.variable} min-h-screen bg-gradient-to-b from-primary to-black text-white`}
+      className={`${display.variable} ${body.variable} ${mono.variable} min-h-screen bg-primary text-white`}
       style={{ fontFamily: 'var(--font-body)' }}
     >
       {/* HEADER */}
@@ -141,13 +141,20 @@ export default function HomePage() {
         <img src={Logo} alt="Sendrey" className="w-28 sm:w-32 object-contain" />
         <div className="flex items-center gap-4">
           <button
+            onClick={goToAbout}
+            className="hidden sm:inline-block text-sm font-semibold bg-secondary text-primary px-4 py-2 rounded-full hover:opacity-90 transition"
+          >
+            About
+          </button>
+
+          <button
             onClick={goToWaitlist}
             className="hidden sm:inline-block text-sm font-semibold bg-secondary text-primary px-4 py-2 rounded-full hover:opacity-90 transition"
           >
             Join Waitlist
           </button>
           <a
-            href="#get-the-app"
+            href=""
             className="hidden sm:inline text-sm text-white/70 hover:text-white transition"
           >
             Get the app →
@@ -189,12 +196,21 @@ export default function HomePage() {
             </div>
           </div>
 
-          <button
-            onClick={goToWaitlist}
-            className="mt-8 px-8 py-3 rounded-full font-semibold text-primary bg-secondary hover:opacity-90 transition"
-          >
-            Join the Waitlist
-          </button>
+          <div className='flex gap-2'>
+            <button
+              onClick={goToWaitlist}
+              className="mt-8 px-8 py-3 rounded-full font-semibold text-primary bg-secondary hover:opacity-90 transition"
+            >
+              Join the Waitlist
+            </button>
+
+            <button
+              onClick={goToAbout}
+              className="lg:hidden mt-8 px-8 py-3 rounded-full font-semibold text-primary bg-secondary hover:opacity-90 transition"
+            >
+              About
+            </button>
+          </div>
         </motion.div>
       </section>
 
@@ -358,17 +374,17 @@ export default function HomePage() {
               <FiMail /> support@sendrey.com
             </a>
             <div className="mt-4 flex items-center gap-3">
-              <a href="" target="_blank" rel="noreferrer" className="bg-white/5 p-2 rounded-md hover:bg-white/10">
+              <a href="https://www.instagram.com/sendrey.africa?igsh=NDNrNnplaW1oaXA=" target="_blank" rel="noreferrer" className="bg-white/5 p-2 rounded-md hover:bg-white/10">
                 <FiInstagram size={18} />
               </a>
-              <a href="" target="_blank" rel="noreferrer" className="bg-white/5 p-2 rounded-md hover:bg-white/10">
+              <a href="https://www.facebook.com/sendrey.africa" target="_blank" rel="noreferrer" className="bg-white/5 p-2 rounded-md hover:bg-white/10">
                 <FiFacebook size={18} />
+              </a>
+              <a href="https://x.com/sendreyafrica" target="_blank" rel="noreferrer" className="bg-white/5 p-2 rounded-md hover:bg-white/10">
+                <FaXTwitter size={18} />
               </a>
               <a href="" target="_blank" rel="noreferrer" className="bg-white/5 p-2 rounded-md hover:bg-white/10">
                 <FaLinkedinIn size={18} />
-              </a>
-              <a href="" target="_blank" rel="noreferrer" className="bg-white/5 p-2 rounded-md hover:bg-white/10">
-                <FaXTwitter size={18} />
               </a>
             </div>
           </div>
