@@ -71,6 +71,10 @@ export const usePushNotifications = ({
           onIncomingCall(data);
         }
 
+        if (data?.type === 'message') {
+          onNotificationTap(data);
+        }
+
         // all user
         if ((data?.type === 'team_invite' || data?.type === 'team_notify') && onNotificationTap) {
           onNotificationTap(data);
@@ -91,6 +95,10 @@ export const usePushNotifications = ({
           onNotificationTap(data);
         }
 
+        if (data?.type === 'user_offline') {
+          onNotificationTap(data);
+        }
+
         // all runner
         if ((data?.type === 'withdrawal_requested' || data?.type === 'withdrawal_released') && onNotificationTap) {
           onNotificationTap(data);
@@ -99,6 +107,17 @@ export const usePushNotifications = ({
         if ((data?.type === 'kyc_nin_submitted' || data?.type === 'kyc_license_submitted' || data?.type === 'kyc_selfie_submitted' || data?.type === 'kyc_document_approved' || data?.type === 'kyc_document_rejected' || data?.type === 'kyc_selfie_approved') && onNotificationTap) {
           onNotificationTap(data);
         }
+
+        // account_banned
+        if (data?.type === 'account_banned') {
+          onNotificationTap(data);
+        }
+
+        if (data?.type === 'runner_offline') {
+          onNotificationTap(data);
+        }
+
+
 
       });
 
@@ -110,6 +129,10 @@ export const usePushNotifications = ({
         // common
         if (data?.type === 'incoming_call' && onIncomingCall) {
           onIncomingCall(data);
+        }
+
+        if (data?.type === 'message') {
+          onNotificationTap(data);
         }
 
         // errand
@@ -136,6 +159,10 @@ export const usePushNotifications = ({
           onNotificationTap(data);
         }
 
+        if (data?.type === 'user_offline') {
+          onNotificationTap(data);
+        }
+
 
         // all runner
         if ((data?.type === 'withdrawal_requested' || data?.type === 'withdrawal_released') && onNotificationTap) {
@@ -143,6 +170,14 @@ export const usePushNotifications = ({
         }
 
         if ((data?.type === 'kyc_nin_submitted' || data?.type === 'kyc_license_submitted' || data?.type === 'kyc_selfie_submitted' || data?.type === 'kyc_document_approved' || data?.type === 'kyc_document_rejected' || data?.type === 'kyc_selfie_approved') && onNotificationTap) {
+          onNotificationTap(data);
+        }
+
+        if (data?.type === 'account_banned') {
+          onNotificationTap(data);
+        }
+
+        if (data?.type === 'runner_offline') {
           onNotificationTap(data);
         }
       });
@@ -214,6 +249,10 @@ export const usePushNotifications = ({
           return;
         }
 
+        if (data?.type === 'message') {
+          onNotificationTap(data);
+        }
+
         //  all user
         if (data?.type === 'new_request_nearby' && onNotificationTap) {
           onNotificationTap(data);
@@ -240,6 +279,10 @@ export const usePushNotifications = ({
           onNotificationTap(data);
         }
 
+        if (data?.type === 'user_offline') {
+          onNotificationTap(data);
+        }
+
 
         // all runners
         if ((data?.type === 'withdrawal_requested' || data?.type === 'withdrawal_released') && onNotificationTap) {
@@ -249,6 +292,15 @@ export const usePushNotifications = ({
         if ((data?.type === 'kyc_nin_submitted' || data?.type === 'kyc_license_submitted' || data?.type === 'kyc_selfie_submitted' || data?.type === 'kyc_document_approved' || data?.type === 'kyc_document_rejected' || data?.type === 'kyc_selfie_approved') && onNotificationTap) {
           onNotificationTap(data);
         }
+
+        if (data?.type === 'account_banned') {
+          onNotificationTap(data);
+        }
+
+        if (data?.type === 'runner_offline') {
+          onNotificationTap(data);
+        }
+
       });
 
       // Handle SW postMessage (notification tapped while app open)

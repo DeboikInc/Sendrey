@@ -761,6 +761,7 @@ export const Welcome = () => {
                         chatSessionIdRef: chatSessionIdRef.current,
                     });
 
+                    clearOrder();
                     setSelectedRunner(runner);
                     chatStorage.saveRunnerData(runner);
                     setChatSessionCounter(c => {

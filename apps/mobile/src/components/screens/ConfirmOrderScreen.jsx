@@ -22,7 +22,7 @@ export default function ConfirmOrderScreen({
   const currentUser = useSelector(s => s.auth?.user || s.auth?.userData || s.auth);
   const dispatch = useDispatch();
   const [isConnecting, setIsConnecting] = useState(false);
-
+  const [deliveryFee, setDeliveryFee] = useState(null);
 
   const {
     serviceType,
@@ -41,6 +41,27 @@ export default function ConfirmOrderScreen({
     marketCoordinates, // eslint-disable-line no-unused-vars
     deliveryCoordinates  // eslint-disable-line no-unused-vars
   } = orderData || {};
+
+  const midOrPickupCoords = serviceType === "run-errand"
+    ? orderData?.marketCoordinates
+    : orderData?.pickupCoordinates;
+
+  useEffect(() => {
+    let cancelled = false;
+
+    computeDeliveryFee(serviceType, midOrPickupCoords, orderData?.deliveryCoordinates, fleetType)
+      .then(({ deliveryFee }) => {
+        if (!cancelled) setDeliveryFee(deliveryFee);
+      })
+      .catch((err) => {
+        console.error('[ConfirmOrder] Failed to compute delivery fee:', err);
+        if (!cancelled) setDeliveryFee(null);
+      });
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [serviceType, fleetType, midOrPickupCoords?.lat, midOrPickupCoords?.lng, orderData?.deliveryCoordinates?.lat, orderData?.deliveryCoordinates?.lng]);
+
 
   const handleEdit = (field) => {
     onEdit(field);
@@ -212,12 +233,7 @@ export default function ConfirmOrderScreen({
           <div className="p-4 bg-primary/10 rounded-lg">
             <p className="text-xs font-medium opacity-60 mb-1">Delivery Fee</p>
             <p className="text-lg font-bold text-primary">
-              {formatNaira(computeDeliveryFee(
-                serviceType,
-                serviceType === "run-errand" ? orderData?.marketCoordinates : orderData?.pickupCoordinates,
-                orderData?.deliveryCoordinates,
-                fleetType
-              ).deliveryFee)}
+              {deliveryFee != null ? formatNaira(deliveryFee) : "Calculating..."}
             </p>
           </div>
 
@@ -315,7 +331,7 @@ export default function ConfirmOrderScreen({
                   <p className="text-xs opacity-60 mt-1">
                     {budgetFlexibility === "stay within budget" ? "Strict budget" : "Flexible budget"}
                   </p>
-                  {canAdjustSlightly && (                                         
+                  {canAdjustSlightly && (
                     <div className="flex items-center gap-2 mt-2">
                       <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse flex-shrink-0" />
                       <p className="text-xs text-amber-400 font-medium">

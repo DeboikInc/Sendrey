@@ -162,7 +162,7 @@ export const Payout = ({ darkMode, onBack, socket, runnerId, chatId, currentOrde
   const isSubmittingRef = useRef(false);
   const payoutFetchedRef = useRef(null); // stores the orderId it fetched for, not just a bool
   const mountedAtRef = useRef(Date.now());
-
+  const [verifying, setVerifying] = useState(false);
   const storeOrder = useOrderStore(s => s.getChat(chatId).currentOrder);
 
   // Prefer store over prop — store updates faster than prop drill
@@ -321,6 +321,8 @@ export const Payout = ({ darkMode, onBack, socket, runnerId, chatId, currentOrde
     setAccountNumber(value);
     setAccountName('');
     setError(null);
+    setVerifying(false);
+
     if (value.length === 10 && bankCode) {
       try {
         const result = await dispatch(verifyVendorAccount({ accountNumber: value, bankCode })).unwrap();
@@ -397,7 +399,7 @@ export const Payout = ({ darkMode, onBack, socket, runnerId, chatId, currentOrde
       const message =
         typeof err === 'string' ? err
           : err?.message || err?.error || err?.data?.message || 'Transfer failed. Please try again.';
-          
+
       setError(message);
       setSubmitting(false);
       setShowConfirm(false);
@@ -703,15 +705,18 @@ export const Payout = ({ darkMode, onBack, socket, runnerId, chatId, currentOrde
                               ? dark ? 'bg-black-100 border-green-500/40 text-white' : 'bg-gray-50 border-green-500/40 text-black-200'
                               : dark ? 'bg-black-100 border-black-100 text-gray-500' : 'bg-gray-50 border-gray-200 text-black-100/80'
                               }`}>
-                              {accountName
-                                ? <span className="flex items-center gap-2">
+                              {verifying ? (
+                                <span className="text-xs animate-pulse">Verifying account...</span>
+                              ) : accountName ? (
+                                <span className="flex items-center gap-2">
                                   <CheckCircle className="w-3.5 h-3.5 text-green-500 flex-shrink-0" />
                                   {accountName}
                                 </span>
-                                : accountNumber.length === 10 && bankCode
-                                  ? <span className="text-xs animate-pulse">Verifying account...</span>
-                                  : <span className="text-xs">Enter account number to auto-verify</span>
-                              }
+                              ) : accountNumber.length === 10 && bankCode && !error ? (
+                                <span className="text-xs">Verifying account...</span>
+                              ) : (
+                                <span className="text-xs">Enter account number to auto-verify</span>
+                              )}
                             </div>
                           </FormField>
 

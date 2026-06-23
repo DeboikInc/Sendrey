@@ -3,7 +3,7 @@ import { Card, CardBody } from "@material-tailwind/react";
 import { MapPin, ShoppingBag, Package, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import BarLoader from "../common/BarLoader";
-import { computeDeliveryFee, formatNaira, RUNNER_SHARE } from "../../utils/pricing";
+import { computeDeliveryFee, formatNaira } from "../../utils/pricing";
 import useOrderStore from "../../store/orderStore";
 
 function RunnerNotifications({
@@ -17,15 +17,17 @@ function RunnerNotifications({
   currentOrder,
   runnerLocation,
   onFindMore,
-  reconnect
+  reconnect,
+  isOpen: isOpenProp,
 }) {
-  const [isOpen, setIsOpen] = useState(false);
+  const isOpen = isOpenProp;
   const [processingUserId, setProcessingUserId] = useState(null);
   const [, setSocketError] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [swipeDirection, setSwipeDirection] = useState('left');
   const [localRequests, setLocalRequests] = useState([]);
   const [errorMessage, setErrorMessage] = useState(null);
+  const [runnerFee, setRunnerFee] = useState(null);
 
   const isAcceptingRef = useRef(false);
   const hasOpenedRef = useRef(false);
@@ -45,32 +47,30 @@ function RunnerNotifications({
   }, [requests]);
 
   useEffect(() => {
-    if (requests && requests.length > 0 && !hasOpenedRef.current) {
-      hasOpenedRef.current = true;
+    if (requests && requests.length > 0) {
       setLocalRequests(requests);
       setCurrentIndex(0);
-      setIsOpen(true);
       setSocketError(false);
-    } else if ((!requests || requests.length === 0) && hasOpenedRef.current) {
-      hasOpenedRef.current = false;
-      setIsOpen(false);
     }
   }, [requests]);
 
   useEffect(() => {
-    if (!socket || !isConnected) return;
+    if (!socket || !socket.connected) return;
     const handleReconnect = () => {
       setProcessingUserId(null);
       setSocketError(false);
+
+      if (socket.emit) {
+        socket.emit('runnerReconnect', { runnerId });
+      }
+
       if (requestsRef.current?.length > 0 && !hasOpenedRef.current) {
         hasOpenedRef.current = true;
-        setIsOpen(true);
       }
     };
 
     const handleChatError = (data) => {
       console.error('[RN] chatError:', data);
-      // Reset accepting state so runner can retry or decline
       setProcessingUserId(null);
       processingRef.current = false;
       if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
@@ -83,7 +83,6 @@ function RunnerNotifications({
       setProcessingUserId(null);
       processingRef.current = false;
       if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
-      // Put the request back so runner can retry
       setErrorMessage('Connection timed out — the user may have left.');
     };
 
@@ -96,12 +95,12 @@ function RunnerNotifications({
       socket.off('chatError', handleChatError);
       socket.off('preRoomTimeout', handlePreRoomTimeout);
     };
-  }, [socket, isConnected]);
+  }, [socket, runnerId]);
 
   useEffect(() => {
-    if (!isOpen || isConnected) return;
+    if (!isOpen || socket?.connected) return;
     if (reconnect) reconnect();
-  }, [isOpen, isConnected, reconnect]);
+  }, [isOpen, socket, reconnect]);
 
   const goNext = () => {
     if (currentIndex < localRequests.length - 1) {
@@ -154,7 +153,6 @@ function RunnerNotifications({
       if (data.chatId === chatId && data.chatReady && mountedRef.current) {
         socket.off("proceedToChat", handleProceedToChat);
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
-        setIsOpen(false);
         setProcessingUserId(null);
         processingRef.current = false;
         if (onPickService) onPickService(user, data.specialInstructions, currentOrder);
@@ -188,35 +186,30 @@ function RunnerNotifications({
   const handleDecline = useCallback((user) => {
     setErrorMessage(null);
     if (isAcceptingRef.current) return;
-    if (socket && isConnected) {
+    if (socket && socket.connected) {
       socket.emit("declineRunnerRequest", { runnerId, userId: user._id });
     }
     setLocalRequests(prev => {
       const updated = prev.filter(r => r._id !== user._id);
       if (updated.length === 0) {
         hasOpenedRef.current = false;
-        setIsOpen(false);
         if (onClose) onClose();
       } else {
         setCurrentIndex(i => Math.min(i, updated.length - 1));
       }
       return updated;
     });
-  }, [socket, isConnected, runnerId, onClose]);
+  }, [socket, runnerId, onClose]);
 
   const handleClose = useCallback(() => {
-    setIsOpen(false);
     hasOpenedRef.current = false;
     setProcessingUserId(null);
     if (onClose) onClose();
   }, [onClose]);
 
-  if (!isOpen || localRequests.length === 0) return null;
-
+  // Derived values, computed before any hook that depends on them,
   const user = localRequests[currentIndex];
-  if (!user) return null;
-
-  const req = user.currentRequest || {};
+  const req = user?.currentRequest || {};
   const isRunErrand = req.serviceType === 'run-errand';
   const fleetType = req.fleetType;
   const midCoords = isRunErrand ? req.marketCoordinates : req.pickupCoordinates;
@@ -225,8 +218,26 @@ function RunnerNotifications({
     ?? req.deliveryLocation?.coords
     ?? (req.deliveryLocation?.lat ? req.deliveryLocation : null);
 
-  const { deliveryFee } = computeDeliveryFee(req.serviceType, midCoords, deliveryCoords, fleetType);
-  const runnerFee = Math.round(deliveryFee * RUNNER_SHARE);
+  // Fetch the runner's fee for the currently-shown request. 
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+
+    computeDeliveryFee(req.serviceType, midCoords, deliveryCoords, fleetType)
+      .then(({ runnerEarnings }) => {
+        if (!cancelled) setRunnerFee(runnerEarnings);
+      })
+      .catch((err) => {
+        console.error('[RN] Failed to compute delivery fee:', err);
+        if (!cancelled) setRunnerFee(null);
+      });
+
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?._id, req.serviceType, fleetType, midCoords?.lat, midCoords?.lng, deliveryCoords?.lat, deliveryCoords?.lng]);
+
+  if (!isOpen || localRequests.length === 0 || !user) return null;
+
   const itemBudget = req.itemBudget ?? req.budget ?? null;
   const marketLocation = req.marketLocation?.address ?? req.marketLocation ?? null;
   const deliveryAddress = req.deliveryLocation?.address ?? req.deliveryLocation ?? null;
