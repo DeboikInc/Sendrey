@@ -12,3 +12,5 @@ git push
 git checkout --theirs apps/<APP_NAME>
 git add apps/<APP_NAME>
 git commit
+
+<!-- mostly use chore: sync apps/app_name with repo -->
