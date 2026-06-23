@@ -110,6 +110,8 @@ export const Wallet = ({ darkMode, onBack, runnerId }) => {
       return;
     }
 
+    setShowPinPad(true);
+
   };
 
 

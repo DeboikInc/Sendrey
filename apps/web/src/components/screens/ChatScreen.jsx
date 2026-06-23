@@ -13,7 +13,10 @@ import { TrackDeliveryScreen } from "./TrackDeliveryScreen";
 import ProfileCardMessage from "../runnerScreens/ProfileCardMessage";
 import ItemSubmissionMessage from "./ItemSubmissionMessage";
 import PickupItemSubmissionMessage from './PickupItemSubmissionMessage';
+
 import DeliveryConfirmationMessage from './DeliveryConfirmationMessage';
+import DeliveryDeniedMessage from './DeliveryDeniedMessage';
+import DeliveryConfirmedMessage from './DeliveryConfirmedMessage';
 
 import PaymentRequestMessage from "../payments/PaymentRequestMessage";
 import PaymentReceipt from '../payments/PaymentReceipt';
@@ -78,7 +81,6 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
   const [localIsPaid, setLocalIsPaid] = useState(false);
 
   const [cancelledByName, setCancelledByName] = useState(null);
-  const [deliveryConfirmations, setDeliveryConfirmations] = useState({});
 
   const [ratingOrderId, setRatingOrderId] = useState(null);
   const [showOrderDetails, setShowOrderDetails] = useState(false);
@@ -184,19 +186,6 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
       ? `user-${userData._id}-runner-${runner._id}`
       : null;
   }, [userData?._id, runner?._id]);
-
-  useEffect(() => {
-    if (!chatId) return;
-    chatStorage.getDeliveryConfirmations(chatId).then(saved => {
-      if (saved) setDeliveryConfirmations(saved);
-    });
-  }, [chatId]);
-
-  // Persist on change
-  useEffect(() => {
-    if (!chatId || !Object.keys(deliveryConfirmations).length) return;
-    chatStorage.saveDeliveryConfirmations(chatId, deliveryConfirmations);
-  }, [deliveryConfirmations, chatId]);
 
   // Restore paid chats on mount
   useEffect(() => {
@@ -613,7 +602,8 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
       'Purchase completed': { stage: 1, progress: 50 },
       'En route to delivery': { stage: 2, progress: 60 },
       'Arrived at delivery location': { stage: 3, progress: 80 },
-      'Task completed': { stage: 4, progress: 100 },
+      'Item delivered': { stage: 4, progress: 95 },
+      'Task completed': { stage: 5, progress: 100 },
       'Arrived at pickup location': { stage: 1, progress: 25 },
       'Item collected': { stage: 5, progress: 50 },
     };
@@ -743,7 +733,15 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
         setPaidChatIds(prev => new Set(prev).add(chatId));
       }
 
-      const filteredServerMessages = serverMessages;
+      const hasDenied = msgs.some(m => m.type === 'delivery_denied' || m.messageType === 'delivery_denied');
+      const hasConfirmed = msgs.some(m => m.type === 'delivery_confirmation' || m.messageType === 'delivery_confirmation');
+
+      const filteredServerMessages = (hasDenied || hasConfirmed)
+        ? serverMessages.filter(m =>
+          m.type !== 'delivery_confirmation_request' &&
+          m.messageType !== 'delivery_confirmation_request'
+        )
+        : serverMessages;
 
       // Check if this is a new session
       const firstMsg = msgs[0];
@@ -778,6 +776,8 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
         chatStorage.clearMessages(chatId);
         setMessages(filteredServerMessages);
         initialHistoryProcessedRef.current = true;
+
+
 
         // Save to storage
         const stableMessages = filteredServerMessages.filter(m => !m.isUploading && !m.tempId);
@@ -912,10 +912,27 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
     };
 
     const handleMessage = (msg) => {
+
       if (msg.text?.toLowerCase().includes('item delivered') ||
         msg.type === 'item_delivered' ||
         msg.messageType === 'item_delivered') {
-        console.log('[ITEM_DELIVERED] 🔵 raw message received:', JSON.stringify(msg, null, 2));
+        console.log('[ITEM_DELIVERED] raw message received:', JSON.stringify(msg, null, 2));
+      }
+
+      // When delivery is denied, remove the pending confirmation request
+      if (msg.type === 'delivery_denied' || msg.messageType === 'delivery_denied') {
+        setMessages(prev => prev.filter(m =>
+          m.type !== 'delivery_confirmation_request' &&
+          m.messageType !== 'delivery_confirmation_request'
+        ));
+      }
+
+      // When delivery is confirmed, remove the pending confirmation request
+      if (msg.type === 'delivery_confirmation' || msg.messageType === 'delivery_confirmation') {
+        setMessages(prev => prev.filter(m =>
+          m.type !== 'delivery_confirmation_request' &&
+          m.messageType !== 'delivery_confirmation_request'
+        ));
       }
 
       const isSystem =
@@ -997,7 +1014,6 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
 
         setPaidChatIds(prev => new Set(prev).add(chatId));
         updateCurrentOrder({ paymentStatus: "paid", status: "paid" });
-        return;
       }
 
       if (isSystem && msg.text?.toLowerCase().includes("cancelled this order")) {
@@ -1215,70 +1231,6 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [socket, chatId]);
-
-
-  useEffect(() => {
-    if (!socket) return;
-
-    const onDeliveryConfirmed = ({ orderId }) => {
-      setDeliveryConfirmations(prev => ({ ...prev, [orderId]: 'confirmed' }));
-
-      setMessages(prev => prev.map(m =>
-        m.type === 'delivery_confirmation_request' && m.orderId === orderId
-          ? { ...m, confirmationStatus: 'confirmed' }
-          : m
-      ));
-
-      setMessages(prev => prev.map(m =>
-        m.type === 'tracking'
-          ? {
-            ...m, trackingData:
-            {
-              ...m.trackingData,
-              currentStage: 4,
-              progressPercentage: 100
-            }
-          }
-          : m
-      ));
-    };
-
-    const onDeliveryDenied = ({ orderId }) => {
-      setDeliveryConfirmations(prev => ({ ...prev, [orderId]: 'denied' }));
-
-      setMessages(prev => prev.map(m =>
-        m.type === 'delivery_confirmation_request' && m.orderId === orderId
-          ? { ...m, confirmationStatus: 'denied' }
-          : m
-      ));
-    };
-
-    const onDeliveryMarkedComplete = () => {
-      setMessages(prev => prev.map(m =>
-        m.type === 'tracking'
-          ? {
-            ...m, trackingData:
-            {
-              ...m.trackingData,
-              currentStage: 4,
-              progressPercentage: 95
-            }
-          }
-          : m
-      ));
-    };
-
-    socket.on('deliveryConfirmed', onDeliveryConfirmed);
-    socket.on('deliveryDenied', onDeliveryDenied);
-    socket.on('deliveryMarkedComplete', onDeliveryMarkedComplete);
-
-    return () => {
-      socket.off('deliveryConfirmed', onDeliveryConfirmed);
-      socket.off('deliveryDenied', onDeliveryDenied);
-      socket.off('deliveryMarkedComplete', onDeliveryMarkedComplete);
-    };
-  }, [socket, setMessages]);
-
 
   useEffect(() => {
     if (!socket) return;
@@ -2183,18 +2135,34 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
                 );
               }
 
+              // delivery_denied — its own message type from server
+              if (m.type === 'delivery_denied' || m.messageType === 'delivery_denied') {
+                return (
+                  <div key={m.id} className="my-4">
+                    <DeliveryDeniedMessage message={m} darkMode={darkMode} />
+                  </div>
+                );
+              }
+
+              // delivery_confirmation — confirmed by user or auto
+              if (m.type === 'delivery_confirmation' || m.messageType === 'delivery_confirmation') {
+                return (
+                  <div key={m.id} className="my-4">
+                    <DeliveryConfirmedMessage
+                      message={m}
+                      darkMode={darkMode}
+                      isAutoConfirmed={m.id?.startsWith('auto-confirm-')}
+                    />
+                  </div>
+                );
+              }
+
+              // delivery_confirmation_request — pending, actionable
               if (m.type === 'delivery_confirmation_request' || m.messageType === 'delivery_confirmation_request') {
-
-                // Get persisted confirmation status from deliveryConfirmations state
-                const persistedStatus = deliveryConfirmations?.[m.orderId];
-
-                // Use persisted status if available, otherwise use message's confirmationStatus
-                const confirmationStatus = persistedStatus || m.confirmationStatus;
-
                 return (
                   <div key={m.id} className="my-4">
                     <DeliveryConfirmationMessage
-                      message={{ ...m, confirmationStatus }}
+                      message={m}
                       darkMode={darkMode}
                       onConfirm={handleConfirmDelivery}
                       onDeny={handleDenyDelivery}
