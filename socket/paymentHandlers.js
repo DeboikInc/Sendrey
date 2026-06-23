@@ -1,7 +1,6 @@
 /**
  * paymentHandlers.js - Socket handlers for payment flow
  */
-
 const { Chat } = require('../models/Chat');
 const Order = require('../models/Order');
 const RunnerPayout = require('../models/RunnerPayout');
@@ -12,6 +11,7 @@ const paymentService = require('../services/paymentServices');
 const Escrow = require('../models/Escrows');
 const LedgerEntry = require('../models/LedgerEntry');
 const { calculateFeeSplit } = require('../config/pricing');
+const { getPricingConfig } = require('../services/pricingService');
 
 const handlePaymentSuccess = async (socket, io, data) => {
   try {
@@ -27,11 +27,10 @@ const handlePaymentSuccess = async (socket, io, data) => {
         }
       } catch (err) {
         logger.error('verifyPayment via socket failed:', err.message);
-        // Don't block — continue with rest of handler
       }
     }
 
-    logger.info('💰 Payment success received:', { chatId, escrowId, reference, orderId });
+    logger.info('Payment success received:', { chatId, escrowId, reference, orderId });
 
     const chat = await Chat.findOne({ chatId });
     if (!chat) {
@@ -140,7 +139,8 @@ const handlePaymentSuccess = async (socket, io, data) => {
         });
 
         if (!existingLock) {
-          const feeSplit = calculateFeeSplit(order.deliveryFee);
+          const pricingConfig = await getPricingConfig();
+          const feeSplit = calculateFeeSplit(order.deliveryFee, order.fleetType, pricingConfig);
           await LedgerEntry.create({
             userId: chat.userId,
             userModel: 'User',
