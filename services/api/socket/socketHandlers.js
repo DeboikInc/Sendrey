@@ -7,10 +7,11 @@ const Order = require("../models/Order");
 const Escrow = require('../models/Escrows');
 const { notifyPaymentRequest } = require('../services/notificationService');
 const { logMetric } = require('../utils/metricsLogger');
-const { computeDeliveryFeeFromDocs } = require('../config/pricing');
 const { canRunnerAcceptErrand, incrementErrandCount } = require('../utils/verificationCheck');
 const { logSocketAudit } = require('../utils/socketAudit');
 
+const { computeDeliveryFeeFromDocs, calculateFeeSplit } = require('../config/pricing');
+const { getPricingConfig } = require('../services/pricingService');
 
 const {
   socketMessageSnapshot,
@@ -233,13 +234,16 @@ const createOrder = async (io, { chatId, userId, runnerId, serviceType }) => {
   }
 
 
-  const { deliveryFee, distanceInMeters, legs } = computeDeliveryFeeFromDocs(resolvedServiceType, userDoc, fleetType);
+  const { deliveryFee, distanceInMeters, legs } = await computeDeliveryFeeFromDocs(resolvedServiceType, userDoc, fleetType);
+
   const isErrand = resolvedServiceType === 'run-errand';
   const itemBudget = isErrand
     ? Number(userDoc?.currentRequest?.itemBudget || userDoc?.currentRequest?.budget) || 0
     : 0;
   const totalAmount = itemBudget + deliveryFee;
-  const { platformFee, runnerPayout, providerFee, netPlatformFee } = Escrow.calculateFees(deliveryFee);
+
+  const pricingConfig = await getPricingConfig();
+  const { platformFee, runnerPayout, providerFee, netPlatformFee } = calculateFeeSplit(deliveryFee, fleetType, pricingConfig);
 
   const request = userDoc?.currentRequest || {};
   const orderId = Order.generateOrderId();

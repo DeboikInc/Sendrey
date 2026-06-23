@@ -32,6 +32,7 @@ const swaggerDoc = require('./sendrey-documentation.json');
 const redis = require('./config/redis');
 const locationCleanup = require('./services/locationTracking/locationCleanup');
 const { startSocketServer, shutdownSocketServer } = require('./socket');
+const { initPricingConfigSubscriber } = require('./services/pricingService');
 require("dotenv").config();
 
 // Database connection
@@ -110,6 +111,8 @@ const startServer = async () => {
     // start redis
     try {
       await redis.connect();
+
+      await initPricingConfigSubscriber();
       locationCleanup.start();
     } catch (err) {
       console.error('Redis unavailable — skipping location cleanup:', err.message);

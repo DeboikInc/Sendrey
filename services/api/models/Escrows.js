@@ -1,6 +1,5 @@
 const mongoose = require('mongoose');
-const { TASK_TYPES, } = require('../config/constants');
-const { PLATFORM_FEE_PERCENTAGE } = require('../config/pricing');
+const { TASK_TYPES } = require('../config/constants');
 
 const escrowSchema = new mongoose.Schema({
     taskId: {
@@ -27,7 +26,7 @@ const escrowSchema = new mongoose.Schema({
     // Amounts
     itemBudget: {
         type: Number,
-        default: 0, 
+        default: 0,
         min: 0
     },
     deliveryFee: {
@@ -140,18 +139,6 @@ escrowSchema.virtual('isFullyReleased').get(function () {
     }
     return this.deliveryFeeReleased;
 });
-
-// Calculate platform fee (57% of delivery fee)
-escrowSchema.statics.calculateFees = function (deliveryFee) {
-    const platformFee = Math.round(deliveryFee * PLATFORM_FEE_PERCENTAGE);
-    const runnerPayout = deliveryFee - platformFee;
-
-    return {
-        platformFee,
-        runnerPayout,
-        platformFeePercentage: PLATFORM_FEE_PERCENTAGE * 100
-    };
-};
 
 const Escrow = mongoose.model('Escrow', escrowSchema);
 

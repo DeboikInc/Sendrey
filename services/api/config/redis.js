@@ -21,6 +21,7 @@ class RedisClient {
   constructor() {
     this.client = null;
     this.subscriber = null;
+    this.publisher = null;
     this.isConnected = false;
   }
 
@@ -39,6 +40,7 @@ class RedisClient {
       try {
         this.client = new Redis(redisConfig);
         this.subscriber = new Redis(redisConfig);
+        this.publisher = new Redis(redisConfig);
 
         // Handle connection events
         this.client.on('connect', () => {
@@ -68,10 +70,11 @@ class RedisClient {
         console.error('Failed to connect to Redis:', error.message);
         this.client = null;
         this.subscriber = null;
+        this.publisher = null;
         throw error;
       }
     }
-    ) ();
+    )();
   }
 
   getClient() {
@@ -88,6 +91,13 @@ class RedisClient {
     return this.subscriber;
   }
 
+  getPublisher() {
+    if (!this.client) {
+      throw new Error('Redis not connected. Call connect() first.');
+    }
+    return this.client;
+  }
+
   async disconnect() {
     if (this.client) {
       await this.client.quit();
@@ -96,6 +106,10 @@ class RedisClient {
     if (this.subscriber) {
       await this.subscriber.quit();
       this.subscriber = null;
+    }
+    if (this.publisher) { 
+      await this.publisher.quit();
+      this.publisher = null;
     }
     this.isConnected = false;
     console.warn('Redis disconnected');
