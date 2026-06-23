@@ -17,6 +17,7 @@ const waitlistRoutes = require('./waitlistRoutes')
 const pinRoutes = require('./pinRoutes')
 const uploadRoutes = require('./upload');
 const sessionRoutes = require('./sessionRoutes');
+const pricingRoutes = require('./pricingRoutes')
 
 // Use route modules
 router.use('/auth', authRoutes);
@@ -34,6 +35,7 @@ router.use('/orders', orderRoutes);
 router.use('/business', businessRoutes);
 router.use('/pin', pinRoutes)
 router.use('/upload', uploadRoutes);
+router.use('/pricing', pricingRoutes);
 
 // Export the router
 module.exports = router;

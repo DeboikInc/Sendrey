@@ -1,14 +1,4 @@
-const PLATFORM_FEE_PERCENTAGE = 0.40 || parseFloat(process.env.PLATFORM_FEE_PERCENTAGE);
-const RUNNER_SHARE = 1 - PLATFORM_FEE_PERCENTAGE;
-const RUNNER_DEFAULT_METERS = 1000;
-
-const BASE_FEE = 1000;
-
-const PLATFORM_FEE_PERCENTAGE_FOR_PEDESTRIAN = 0.30
-const RUNNER_SHARE_PEDESTRIAN = 1 - PLATFORM_FEE_PERCENTAGE_FOR_PEDESTRIAN;
-
-const PAYSTACK_FEE_PERCENT = 0.01;
-const PAYSTACK_FEE_CAP = 300;
+const { getPricingConfig } = require('../services/pricingService');
 
 const haversineDistance = (a, b) => {
   const toRad = (deg) => (deg * Math.PI) / 180;
@@ -21,39 +11,35 @@ const haversineDistance = (a, b) => {
   return R * 2 * Math.atan2(Math.sqrt(h), Math.sqrt(1 - h));
 };
 
-const calculateDeliveryFee = (distanceInMeters, fleetType) => {
+const calculateDeliveryFee = (distanceInMeters, fleetType, config) => {
   const fleet = fleetType?.toLowerCase();
 
   if (fleet === 'pedestrian') {
-    return distanceInMeters <= 500 ? 750 : 1500;
+    // pedestrianTiers must be sorted ascending by maxDistanceMeters
+    const tier = config.pedestrianTiers.find((t) => distanceInMeters <= t.maxDistanceMeters);
+    if (!tier) return null; // caller treats null as PEDESTRIAN_TOO_FAR
+    return tier.fee;
   }
 
-  if (fleet === 'bike' || fleet === 'cycling') {
-    return Math.round(BASE_FEE + 200 * (distanceInMeters / 1000));
-  }
-
-  if (fleet === 'car' || fleet === 'van') {
-    return Math.round(BASE_FEE + 400 * (distanceInMeters / 1000));
-  }
-
-  // fallback
-  return Math.round(BASE_FEE + 400 * (distanceInMeters / 1000));
+  const rule = config.fleetRules[fleet] || config.fleetRules.default;
+  return Math.round(rule.baseFee + rule.ratePerKm * (distanceInMeters / 1000));
 };
 
-const calculateFeeSplit = (deliveryFee, fleetType) => {
+const calculateFeeSplit = (deliveryFee, fleetType, config) => {
   const fleet = fleetType?.toLowerCase();
 
   const platformFeePercentage = fleet === 'pedestrian'
-    ? PLATFORM_FEE_PERCENTAGE_FOR_PEDESTRIAN
-    : PLATFORM_FEE_PERCENTAGE;
+    ? config.platformFeePercentagePedestrian
+    : config.platformFeePercentage;
 
-  const runnerSharePercentage = fleet === 'pedestrian'
-    ? RUNNER_SHARE_PEDESTRIAN
-    : RUNNER_SHARE;
+  const runnerSharePercentage = 1 - platformFeePercentage;
 
   const platformFee = Math.round(deliveryFee * platformFeePercentage);
   const runnerPayout = Math.round(deliveryFee * runnerSharePercentage);
-  const providerFee = Math.min(Math.round(deliveryFee * PAYSTACK_FEE_PERCENT), PAYSTACK_FEE_CAP);
+  const providerFee = Math.min(
+    Math.round(deliveryFee * config.paystackFeePercent),
+    config.paystackFeeCap
+  );
   const netPlatformFee = platformFee - providerFee;
 
   return { deliveryFee, platformFee, runnerPayout, providerFee, netPlatformFee };
@@ -118,7 +104,7 @@ const calculateRouteDistance = (serviceType, user, fleetType) => {
   };
 };
 
-const computeDeliveryFeeFromDocs = (serviceType, user, fleetType) => {
+const computeDeliveryFeeFromDocs = async (serviceType, user, fleetType) => {
   const { distanceInMeters, legs, error } = calculateRouteDistance(serviceType, user, fleetType);
 
   if (error) {
@@ -126,8 +112,15 @@ const computeDeliveryFeeFromDocs = (serviceType, user, fleetType) => {
     return { distanceInMeters: 0, deliveryFee: 0, platformFee: 0, runnerPayout: 0, legs: legs || {}, error };
   }
 
-  const deliveryFee = calculateDeliveryFee(distanceInMeters, fleetType);
-  const split = calculateFeeSplit(deliveryFee, fleetType);
+  const config = await getPricingConfig();
+  const deliveryFee = calculateDeliveryFee(distanceInMeters, fleetType, config);
+
+  if (deliveryFee === null) {
+    console.warn('[pricing] computeDeliveryFeeFromDocs — PEDESTRIAN_TOO_FAR. Delivery fee defaulting to 0.');
+    return { distanceInMeters: 0, deliveryFee: 0, platformFee: 0, runnerPayout: 0, legs: legs || {}, error: 'PEDESTRIAN_TOO_FAR' };
+  }
+
+  const split = calculateFeeSplit(deliveryFee, fleetType, config);
 
   return {
     distanceInMeters: Math.round(distanceInMeters),
@@ -138,12 +131,6 @@ const computeDeliveryFeeFromDocs = (serviceType, user, fleetType) => {
 };
 
 module.exports = {
-  PLATFORM_FEE_PERCENTAGE,
-  RUNNER_SHARE,
-  PAYSTACK_FEE_PERCENT,
-  PAYSTACK_FEE_CAP,
-  BASE_FEE,
-
   haversineDistance,
   calculateDeliveryFee,
   calculateFeeSplit,
