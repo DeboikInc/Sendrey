@@ -3,6 +3,7 @@ const orderStateMachine = require('../services/orderStateMachine');
 const { notifyEscrowReleased } = require('./notificationService');
 const { withTransaction } = require('../utils/withTransaction');
 const { calculateFeeSplit } = require('../config/pricing');
+const { getPricingConfig } = require('../services/pricingService');
 
 const Wallet = require('../models/Wallet');
 const Escrow = require('../models/Escrows');
@@ -81,7 +82,8 @@ class PaymentService {
     if (!order) throw new Error('Order not found');
     if (order.paymentStatus === 'paid') throw new Error('Order already paid');
 
-    const feeSplit = calculateFeeSplit(order.deliveryFee);
+    const pricingConfig = await getPricingConfig();
+    const feeSplit = calculateFeeSplit(order.deliveryFee, order.fleetType, pricingConfig);
 
     if (paymentMethod === 'wallet') {
       console.log('[payForOrder] Starting wallet payment', {
@@ -163,7 +165,6 @@ class PaymentService {
           userId: order.userId,
           type: 'escrow_lock',
           amount: order.totalAmount,
-          // ledgerEntryId: order?._id,
           timestamp: new Date().toISOString()
         });
 
@@ -195,7 +196,6 @@ class PaymentService {
 
   async verifyPayment(reference) {
     const verification = await paystack.verifyTransaction(reference);
-    // console.log('[verifyWalletFunding] raw verification:', JSON.stringify(verification, null, 2));
 
     if (!verification.status) {
       throw new Error('Payment verification failed');
@@ -218,6 +218,8 @@ class PaymentService {
 
     const { orderId } = verification.data.metadata;
 
+    const pricingConfig = await getPricingConfig();
+
     const result = await withTransaction(async (session) => {
       const order = await Order.findOneAndUpdate(
         { orderId, paymentStatus: { $ne: 'paid' } },
@@ -226,7 +228,7 @@ class PaymentService {
       );
       if (!order) return { alreadyPaid: true };
 
-      const feeSplit = calculateFeeSplit(order.deliveryFee);
+      const feeSplit = calculateFeeSplit(order.deliveryFee, order.fleetType, pricingConfig);
 
       console.log('[verifyPayment] Starting ledger creation', {
         orderId,
@@ -259,7 +261,6 @@ class PaymentService {
         userId: order.userId,
         type: 'escrow_lock',
         amount: order.totalAmount,
-        ledgerEntryId: result?._id,
         reference,
         timestamp: new Date().toISOString()
       });
@@ -328,7 +329,6 @@ class PaymentService {
 
   async verifyWalletFunding(reference) {
     const verification = await paystack.verifyTransaction(reference);
-    // console.log('[verifyWalletFunding] raw verification:', JSON.stringify(verification, null, 2));
 
     if (!verification.status) {
       throw new Error('Payment verification failed');
@@ -441,7 +441,6 @@ class PaymentService {
       return { alreadyReleased: true };
     }
 
-
     return withTransaction(async (session) => {
       const escrow = await Escrow.findById(escrowId).session(session);
       if (!escrow) throw new Error('Escrow not found');
@@ -511,9 +510,18 @@ class PaymentService {
         usedPayoutSystem = true;
       }
 
-      // Use stored fee split from escrow; recalculate only as fallback
-      const providerFee = escrow.providerFee ?? calculateFeeSplit(escrow.deliveryFee).providerFee;
-      const platformFee = escrow.platformFee ?? calculateFeeSplit(escrow.deliveryFee).platformFee;
+      // Use stored fee split from escrow; recalculate only as fallback.
+      // Fallback now needs the config fetched + awaited before use.
+      let providerFee = escrow.providerFee;
+      let platformFee = escrow.platformFee;
+
+      if (providerFee == null || platformFee == null) {
+        const pricingConfig = await getPricingConfig();
+        const fallbackSplit = calculateFeeSplit(escrow.deliveryFee, order?.fleetType, pricingConfig);
+        providerFee = providerFee ?? fallbackSplit.providerFee;
+        platformFee = platformFee ?? fallbackSplit.platformFee;
+      }
+
       const netPlatformFee = platformFee - providerFee;
 
 
@@ -719,7 +727,7 @@ class PaymentService {
 
   // service
   async transferToVendor({ amount, bankName, accountNumber, accountName, vendorName, orderId, runnerId }) {
-    
+
     // ── MOCK ── remove when real secrets are available
     if (process.env.NODE_ENV === 'development') {
       console.log('⚠️  transferToVendor: DEV mock — skipping real Paystack transfer');
@@ -848,7 +856,6 @@ class PaymentService {
     console.log('[getTransactionHistory] entries found:', entries.length);
     console.log('[getTransactionHistory] sample:', entries[0]);
     console.log('[getTransactionHistory] hiddenTypes:', hiddenTypes);
-    // console.log('[txHistory] raw entries:', entries.map(e => ({ type: e.type, userModel: e.userModel, userId: e.userId, amount: e.grossAmount })));
 
     const providerLabel = (provider) =>
       provider === 'paystack' ? 'Card' : provider === 'wallet' ? 'Wallet' : 'System';
@@ -863,7 +870,7 @@ class PaymentService {
           ? 'credit'
           : 'debit',
         label: this.getTransactionLabel(e),
-        description: e.description || null,  // pass through to UI
+        description: e.description || null,
       })),
       pagination: {
         page,
@@ -992,6 +999,7 @@ class PaymentService {
   }
 
   async withdrawFromWallet(runnerId, amount, bankDetails, options = {}) {
+
     return withTransaction(async (session) => {
       const wallet = await Wallet.findOne({ userId: runnerId, userType: 'runner' }).session(session);
       if (!wallet) throw new Error('Wallet not found');
@@ -1009,7 +1017,8 @@ class PaymentService {
         }
       }
 
-      // Verify bank account before deducting
+      // Verify bank account before deducting — kept REAL even in dev, so account
+      // number / bank code validation can actually be tested locally.
       const verification = await paystack.verifyAccountNumber({
         account_number: bankDetails.accountNumber,
         bank_code: bankDetails.bankCode,
@@ -1027,21 +1036,37 @@ class PaymentService {
         { bankDetails, type: 'withdrawal' }
       );
 
-      // Create transfer recipient
-      const recipient = await paystack.createTransferRecipient({
-        name: verification.data.account_name,
-        account_number: bankDetails.accountNumber,
-        bank_code: bankDetails.bankCode,
-      });
-      if (!recipient.status || !recipient.data) throw new Error('Failed to create transfer recipient');
+      let transferReference;
+      let transferCode;
+      let transferStatus;
 
-      // Initiate transfer
-      const transfer = await paystack.initiateTransfer({
-        recipient_code: recipient.data.recipient_code,
-        amount,
-        reason: `Sendrey runner withdrawal`,
-      });
-      if (!transfer.status || !transfer.data) throw new Error('Transfer initiation failed');
+      if (process.env.NODE_ENV === 'development') {
+        // ── MOCK ── only the transfer leg (recipient creation + payout)
+        console.log(' withdrawFromWallet: DEV mock — skipping real Paystack transfer');
+        transferReference = `mock-ref-${Date.now()}`;
+        transferCode = `mock-code-${Date.now()}`;
+        transferStatus = 'success';
+      } else {
+        // Create transfer recipient
+        const recipient = await paystack.createTransferRecipient({
+          name: verification.data.account_name,
+          account_number: bankDetails.accountNumber,
+          bank_code: bankDetails.bankCode,
+        });
+        if (!recipient.status || !recipient.data) throw new Error('Failed to create transfer recipient');
+
+        // Initiate transfer
+        const transfer = await paystack.initiateTransfer({
+          recipient_code: recipient.data.recipient_code,
+          amount,
+          reason: `Sendrey runner withdrawal`,
+        });
+        if (!transfer.status || !transfer.data) throw new Error('Transfer initiation failed');
+
+        transferReference = transfer.data.reference;
+        transferCode = transfer.data.transfer_code;
+        transferStatus = transfer.data.status;
+      }
 
       // Ledger entry
       await LedgerEntry.create([{
@@ -1057,18 +1082,18 @@ class PaymentService {
         balanceBefore: wallet._balance + amount,
         balanceAfter: wallet._balance,
         provider: 'paystack',
-        providerReference: transfer.data.reference,
+        providerReference: transferReference,
         description: `Withdrawal to ${bankDetails.accountName || verification.data.account_name} - NGN ${amount.toString()}`,
         status: 'completed',
       }], { session });
 
-      console.log(`✅ Runner ${runnerId} withdrawal: NGN ${amount.toString()} | ref: ${transfer.data.reference} - ${bankDetails.bankCode}`);
+      console.log(`Runner ${runnerId} withdrawal: NGN ${amount.toString()} | ref: ${transferReference} - ${bankDetails.bankCode}`);
 
       return {
-        reference: transfer.data.reference,
-        transferCode: transfer.data.transfer_code,
+        reference: transferReference,
+        transferCode,
         amount,
-        status: transfer.data.status,
+        status: transferStatus,
       };
     });
   }
