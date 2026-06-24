@@ -36,7 +36,7 @@ export default function RunnerRow({ runner, view, onReview }) {
         )}
       </td>
       <td className="px-5 py-3.5">
-        <StatusIndicator status={runner.runnerStatus} />
+        <StatusIndicator status={runner.kycStatus} />
       </td>
       <td className="px-5 py-3.5 text-right">
         <Button
