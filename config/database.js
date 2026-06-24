@@ -4,7 +4,6 @@ const { database } = require('./index')
 const User = require('../models/User');
 const Runner = require('../models/Runner')
 
-
 //  $env:DATABASE_URL = ""
 // npm run seed:admin
 
