@@ -1,18 +1,10 @@
-// Run once: node scripts/seedPricingConfig.js
-require('dotenv').config();
-const mongoose = require('mongoose');
 const PricingConfig = require('../models/PricingConfig');
-const { database } = require('../config/index');
 
-async function seed() {
-  await mongoose.connect(database.url, database.options);
-  console.log('Connected to DB');
-
+async function seedPricingConfig() {
   const existing = await PricingConfig.findOne({ key: 'active' });
   if (existing) {
-    console.log('Active pricing config already exists. Aborting seed to avoid overwriting live data.');
-    console.log(existing);
-    process.exit(0);
+    console.log('[seed] pricing config already exists, skipping');
+    return existing;
   }
 
   const doc = await PricingConfig.create({
@@ -35,11 +27,23 @@ async function seed() {
     },
   });
 
-  console.log('✅ Seeded pricing config:', doc);
-  process.exit(0);
+  console.log('[seed] pricing config created');
+  return doc;
 }
 
-seed().catch((err) => {
-  console.error('Seed failed:', err);
-  process.exit(1);
-});
+module.exports = seedPricingConfig;
+
+// Standalone usage still works: node scripts/seedPricingConfig.js
+if (require.main === module) {
+  require('dotenv').config();
+  const mongoose = require('mongoose');
+  const { database } = require('../config/index');
+
+  mongoose.connect(database.url, database.options)
+    .then(seedPricingConfig)
+    .then(() => process.exit(0))
+    .catch((err) => {
+      console.error('Seed failed:', err);
+      process.exit(1);
+    });
+}

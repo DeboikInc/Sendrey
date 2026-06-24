@@ -1,6 +1,8 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
-const { GENDER, ROLE, SERVICE_TYPE, FLEET_TYPE, TOTAL_MAX_DISTANCE } = require('../config/constants');
+const { GENDER, ROLE, SERVICE_TYPE, FLEET_TYPE } = require('../config/constants');
+const { getMatchingConfig } = require('../services/distanceConfigService');
+
 
 const userSchema = new mongoose.Schema({
   // Authentication & Basic Info
@@ -272,7 +274,7 @@ const userSchema = new mongoose.Schema({
   }],
 
   activeOrderId: { type: String, default: null, index: true },
-  
+
   currentRequest: {
     serviceType: { type: String, enum: SERVICE_TYPE },
     fleetType: { type: String, enum: FLEET_TYPE },
@@ -304,7 +306,7 @@ const userSchema = new mongoose.Schema({
       lat: { type: Number },
       lng: { type: Number }
     },
-    
+
     canAdjustSlightly: { type: Boolean, default: false },
 
     // PICKUP-SPECIFIC FIELDS
@@ -558,7 +560,8 @@ function haversineDistance(lat1, lng1, lat2, lng2) {
 }
 
 userSchema.statics.findNearbyUsers = async function ({ latitude, longitude, fleetType }) {
-  const TOTAL_MAX = TOTAL_MAX_DISTANCE;
+  const matchingConfig = await getMatchingConfig();
+  const TOTAL_MAX = matchingConfig.totalMaxDistance;
 
   const query = {
     role: 'user',
@@ -588,7 +591,6 @@ userSchema.statics.findNearbyUsers = async function ({ latitude, longitude, flee
       deliveryCoords: req?.deliveryCoordinates,
     });
   });
-
 
 
   return results.filter((user) => {
