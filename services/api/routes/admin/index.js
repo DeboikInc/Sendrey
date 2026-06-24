@@ -21,6 +21,7 @@ router.use('/disputes', require('./disputeAdminRoutes'));
 router.use('/orders', require('./orderAdminRoutes'));
 router.use('/escrows', require('./escrowAdminRoutes'));
 router.use('/pricing',  require('./priceConfigRoutes'));
+router.use('/distance', require('./distanceAdminRoutes'))
 
 
 module.exports = router;

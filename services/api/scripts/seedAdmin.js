@@ -1,40 +1,40 @@
-// scripts/seedAdmin.js
-require('dotenv').config();
-const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
-const { database } = require('../config/index');
 const User = require('../models/User');
 
-const seedAdmin = async () => {
-    try {
-        await mongoose.connect(database.url);
-        console.log('Connected to DB');
+async function seedAdmin() {
+  const existing = await User.findOne({ email: process.env.SEED_ADMIN_EMAIL });
+  if (existing) {
+    console.log('[seed] admin already exists, skipping');
+    return existing;
+  }
 
-        const existing = await User.findOne({ email: process.env.SEED_ADMIN_EMAIL });
-        if (existing) {
-            console.log('Admin already exists, skipping.');
-            process.exit(0);
-        }
+  const doc = await User.create({
+    firstName: 'Super',
+    lastName: 'Admin',
+    email: process.env.SEED_ADMIN_EMAIL,
+    password: process.env.SEED_ADMIN_PASSWORD,
+    role: 'super-admin',
+    isVerified: true,
+    isEmailVerified: true,
+    isPhoneVerified: true,
+    isActive: true,
+  });
 
+  console.log(`[seed] super-admin created: ${process.env.SEED_ADMIN_EMAIL}`);
+  return doc;
+}
 
-        await User.create({
-            firstName: 'Super',
-            lastName: 'Admin',
-            email: process.env.SEED_ADMIN_EMAIL,
-            password: process.env.SEED_ADMIN_PASSWORD,
-            role: 'super-admin',
-            isVerified: true, 
-            isEmailVerified: true,
-            isPhoneVerified: true,
-            isActive: true,
-        });
+module.exports = seedAdmin;
 
-        console.log(`Super-admin created: ${process.env.SEED_ADMIN_EMAIL}`);
-        process.exit(0);
-    } catch (err) {
-        console.error('Seed failed:', err);
-        process.exit(1);
-    }
-};
+if (require.main === module) {
+  require('dotenv').config();
+  const mongoose = require('mongoose');
+  const { database } = require('../config/index');
 
-seedAdmin();
+  mongoose.connect(database.url, database.options)
+    .then(seedAdmin)
+    .then(() => process.exit(0))
+    .catch((err) => {
+      console.error('Seed failed:', err);
+      process.exit(1);
+    });
+}
