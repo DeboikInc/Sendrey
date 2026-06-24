@@ -192,7 +192,7 @@ export default function RunnerModal({
             </div>
           </div>
           <div className="flex items-center gap-2 sm:gap-3">
-            <StatusIndicator status={runner.runnerStatus} />
+            <StatusIndicator status={runner.kycStatus} />
             <Button
               onClick={onClose}
               variant="ghost"
