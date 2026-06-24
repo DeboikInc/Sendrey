@@ -10,6 +10,7 @@ import RunnersTab from './RunnersTab';
 import UsersTab from './UsersTab';
 import OrdersTab from './OrdersTab';
 import PayoutTab from './PayoutTab';
+import ConfigTab from './ConfigTab';
 
 const PAGES = {
   'dashboard':      <KycTab />,
@@ -19,6 +20,7 @@ const PAGES = {
   'users':          <UsersTab />,
   'orders':         <OrdersTab />,
   'payout':         <PayoutTab />,
+  'config':         <ConfigTab />,
 };
 
 export default function Home() {

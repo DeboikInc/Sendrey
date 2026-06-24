@@ -109,7 +109,7 @@ export const getVerifiedRunners = createAsyncThunk(
 const updateRunner = (runners, runnerId, patch) =>
     runners.map(r => (r._id === runnerId || r.id === runnerId) ? { ...r, ...patch } : r);
 
-// ✅ Deep-update a specific document's status inside selectedRunner.documents
+// Deep-update a specific document's status inside selectedRunner.documents
 const updateDocumentStatus = (selectedRunner, documentType, status) => {
     if (!selectedRunner) return selectedRunner;
     return {

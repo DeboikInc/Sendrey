@@ -20,7 +20,7 @@ export default function RunnerCard({ runner, view, onReview }) {
             <p className="text-[9px] text-white/30 font-mono mt-0.5">{runner._id?.slice(-10)}</p>
           </div>
         </div>
-        <StatusIndicator status={runner.runnerStatus} />
+        <StatusIndicator status={runner.kycStatus} />
       </div>
 
       {/* Contact */}
