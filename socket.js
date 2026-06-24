@@ -61,8 +61,7 @@ async function connectWithRetry(maxAttempts = 5) {
 }
 
 async function startSocketServer(port) {
-  console.log("MongoDB connected");
-  console.log('ALL SOCKET HANDLERS:', Object.keys(socketHandlers));
+  console.log("✅ MongoDB connected, Socket");
 
   const app = express();
   const server = http.createServer(app);

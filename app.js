@@ -33,6 +33,10 @@ const redis = require('./config/redis');
 const locationCleanup = require('./services/locationTracking/locationCleanup');
 const { startSocketServer, shutdownSocketServer } = require('./socket');
 const { initPricingConfigSubscriber } = require('./services/pricingService');
+const { initMatchingConfigSubscriber } = require('./services/distanceConfigService');
+
+const runSeeds = require('./utils/runSeeds');
+
 require("dotenv").config();
 
 // Database connection
@@ -55,6 +59,8 @@ const startServer = async () => {
     // 1. Await the database connection first
     await connectDb();
     console.log(' Database connected');
+
+    await runSeeds();
 
     // restore any scheduled cron jobs that were active before the server restarted
     await startExpenseReportJobs();
@@ -113,10 +119,10 @@ const startServer = async () => {
       await redis.connect();
 
       await initPricingConfigSubscriber();
+      await initMatchingConfigSubscriber();
       locationCleanup.start();
     } catch (err) {
       console.error('Redis unavailable — skipping location cleanup:', err.message);
-
     }
 
     // 3. Routes
