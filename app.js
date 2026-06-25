@@ -43,9 +43,6 @@ require("dotenv").config();
 // Database connection
 const connectDb = require('./config/database');
 
-const API_PORT = process.env.PORT;
-const SOCKET_PORT = process.env.SOCKET_PORT;
-
 const startServer = async () => {
 
   if (process.env.NODE_ENV === 'production') {
@@ -159,11 +156,7 @@ const startServer = async () => {
     app.use(notFound);
     app.use(errorHandler);
 
-    app.listen(API_PORT, () => {
-      console.log(`✅ API server running on ${API_PORT}`);
-    });
-
-    const { io, server: socketServer } = await startSocketServer(SOCKET_PORT);
+    const { io, server: socketServer } = await startSocketServer(app);
 
     process.on('SIGTERM', async () => {
       locationCleanup.stop();
