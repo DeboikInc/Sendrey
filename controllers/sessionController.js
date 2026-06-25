@@ -8,6 +8,24 @@ const TERMINAL_STATUSES = ['cancelled', 'task_completed'];
 
 class SessionController extends BaseController {
 
+  setAuthCookies = (res, accessToken, refreshToken) => {
+    const isProd = process.env.NODE_ENV === 'production';
+
+    res.cookie('token', accessToken, {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
+      maxAge: 15 * 60 * 1000,
+    });
+
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: isProd,
+      sameSite: isProd ? 'none' : 'lax',
+      maxAge: 30 * 24 * 60 * 60 * 1000,
+    });
+  };
+
   async validateSession(req, res) {
     try {
       const { chatId } = req.body;
@@ -48,7 +66,7 @@ class SessionController extends BaseController {
         });
       }
 
-      const tokenExpired = req.tokenExpired === true || !userId; // userId null = token was expired
+      const tokenExpired = req.tokenExpired === true || !userId;
 
       return res.status(200).json({
         success: true,
@@ -104,28 +122,28 @@ class SessionController extends BaseController {
         });
       }
 
-      const sessionToken = jwt.sign(
-        {
-          id: resolvedUserId,  // ← was userId (could be undefined)
-          type: 'session',
-          orderId: activeOrder.orderId,
-          exp: Math.floor(Date.now() / 1000) + (24 * 60 * 60)
-        },
-        process.env.JWT_SECRET
-      );
+      // Active order confirmed — now do a REAL refresh using the actual
+      // refresh token, same mechanism as /auth/refresh-token.
+      const refreshToken = req.cookies.refreshToken || req.body.refreshToken;
+      const { accessToken, refreshToken: newRefresh } = await authService.refreshTokens(refreshToken);
+
+      this.setAuthCookies(res, accessToken, newRefresh);
 
       return res.status(200).json({
         success: true,
         data: {
-          sessionToken,
+          accessToken,
+          refreshToken: newRefresh,
           orderId: activeOrder.orderId,
           orderStatus: activeOrder.status,
-          expiresIn: 24 * 60 * 60
         }
       });
     } catch (error) {
       console.error('Session refresh error:', error.message);
-      return res.status(500).json({ success: false, message: 'Internal server error' });
+      return res.status(error.statusCode || 500).json({
+        success: false,
+        message: error.message || 'Internal server error'
+      });
     }
   }
 

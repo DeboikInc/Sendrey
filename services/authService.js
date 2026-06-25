@@ -230,6 +230,50 @@ class AuthService {
   }
 
   /**
+ * Verify a refresh token and rotate it.
+ */
+  async refreshTokens(refreshToken) {
+    if (!refreshToken) {
+      const err = new Error('Refresh token required');
+      err.statusCode = 401;
+      throw err;
+    }
+
+    let decoded;
+    try {
+      decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
+    } catch (err) {
+      const e = new Error('Invalid or expired refresh token');
+      e.statusCode = 401;
+      throw e;
+    }
+
+    let user = await User.findById(decoded.id).select('+refreshToken');
+    let isRunner = false;
+
+    if (!user) {
+      user = await Runner.findById(decoded.id).select('+refreshToken');
+      isRunner = true;
+    }
+
+    if (!user || (user.refreshToken !== refreshToken && user.previousRefreshToken !== refreshToken)) {
+      const err = new Error('Invalid refresh token');
+      err.statusCode = 401;
+      throw err;
+    }
+
+    const { accessToken, refreshToken: newRefresh } = this.generateTokens(user);
+
+    const Model = isRunner ? Runner : User;
+    await Model.findByIdAndUpdate(user._id, {
+      previousRefreshToken: user.refreshToken,
+      refreshToken: newRefresh,
+    });
+
+    return { user, isRunner, accessToken, refreshToken: newRefresh };
+  }
+
+  /**
    * Verify email with token
    */
   async verifyEmail(token, userType = 'user') {
@@ -300,7 +344,7 @@ class AuthService {
     if (!user) throw new Error('Invalid or expired OTP');
 
     console.log('[verifyEmailOTP] otp:', otp, 'userType:', userType);
-    
+
     await Model.findByIdAndUpdate(user._id, {
       $set: { isVerified: true, isEmailVerified: true },
       $unset: { emailVerificationOTP: 1, emailVerificationExpires: 1 }

@@ -191,6 +191,7 @@ class PaymentController extends BaseController {
             case 'charge.success': {
                 const { reference, metadata } = event.data;
 
+                try {
                 if (metadata.type === 'wallet_funding') {
                     const result = await paymentService.verifyWalletFunding(reference);
                     sendPaymentEvent('wallet.funded', {
@@ -217,8 +218,10 @@ class PaymentController extends BaseController {
                         });
                     }
                 }
+                } catch (err) {
+                    console.error(`Webhook charge.success failed for ref ${reference}:`, err.message);
+                }
 
-                // console.log(' Payment successful:', reference);
                 break;
             }
             case 'transfer.success':
