@@ -28,6 +28,7 @@ const PAYMENT_TOPICS = [
   'payments.withdrawal',
   'payments.item_budget.released',
   'payments.timeout.checked',
+  'payments.order.paid',
 ];
 
 // ─── Handlers ─────────────────────────────────────────────────────────────────
@@ -140,6 +141,34 @@ const handlers = {
     // Push → user: runner marked delivery done, needs confirmation
     await notifyDeliveryConfirmationRequest(data.userId, {
       orderId: data.orderId,
+    });
+  },
+
+  'order.paid': async (data) => {
+    await sendPushNotification({
+      recipientId: data.userId,
+      recipientType: 'user',
+      title: 'Payment Confirmed',
+      body: `Your payment of ₦${data.amount?.toLocaleString()} for order #${data.orderId} was successful.`,
+      data: { type: 'order_paid', orderId: data.orderId },
+    });
+
+    // Email → user
+    await sendEmailEvent({
+      type: 'order-payment-confirmed',
+      to: data.userEmail,
+      subject: 'Payment Confirmed',
+      template: 'orderPaymentConfirmed',
+      data: {
+        firstName: data.userName?.split(' ')[0] || 'there',
+        orderId: data.orderId,
+        amount: Number(data.amount).toLocaleString(),
+        paymentMethod: data.paymentMethod === 'wallet' ? 'Wallet' : 'Card',
+        reference: data.reference || '—',
+        date: new Date().toLocaleDateString('en-NG', {
+          day: 'numeric', month: 'long', year: 'numeric',
+        }),
+      },
     });
   },
 
@@ -306,4 +335,4 @@ const startPaymentConsumer = async () => {
   }
 };
 
-module.exports = { startPaymentConsumer };
+module.exports = { startPaymentConsumer, handlers };
