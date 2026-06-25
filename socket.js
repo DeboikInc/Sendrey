@@ -46,20 +46,6 @@ require('events').EventEmitter.defaultMaxListeners = 20;
 let ioInstance;
 let serverInstance;
 
-async function connectWithRetry(maxAttempts = 5) {
-  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    try {
-      await mongoose.connect(database.url, database.options);
-      return;
-    } catch (err) {
-      const delay = Math.min(1000 * 2 ** attempt, 30000);
-      console.error(`MongoDB attempt ${attempt}/${maxAttempts} failed. Retrying in ${delay}ms...`);
-      if (attempt === maxAttempts) { console.error("MongoDB connection failed permanently."); process.exit(1); }
-      await new Promise(r => setTimeout(r, delay));
-    }
-  }
-}
-
 async function startSocketServer(port) {
   console.log("✅ MongoDB connected, Socket");
 
@@ -130,8 +116,6 @@ async function startSocketServer(port) {
   });
 
   try {
-    await redis.connect();
-
     const subscriber = redis.getSubscriber();
     await subscriber.subscribe('kyc:events', (err, count) => {
       if (err) {
@@ -459,14 +443,6 @@ async function startSocketServer(port) {
       if (typeof handleUserDisconnect === 'function') safeHandler(handleUserDisconnect, socket, io);
       if (typeof socketHandlers.handleDisconnect === 'function') safeHandler(socketHandlers.handleDisconnect, socket, io);
     });
-  });
-
-  app.get('/health', (req, res) => {
-    res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
-  });
-
-  app.get('/', (req, res) => {
-    res.status(200).json({ status: 'OK', service: 'Sendrey Socket Server' });
   });
 
   server.listen(port, () => console.log(`✅ Socket.IO server running on port ${port}`));
