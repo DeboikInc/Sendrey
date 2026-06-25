@@ -5,12 +5,13 @@ const producer = KAFKA_ENABLED ? kafka.producer() : null;
 let isConnected = false;
 
 const topicMap = {
-  'escrow.created':       'payments.escrow.created',
-  'escrow.released':      'payments.escrow.released',
-  'wallet.funded':        'payments.wallet.funded',
-  'withdrawal':           'payments.withdrawal',
+  'escrow.created':  'payments.escrow.created',
+  'escrow.released': 'payments.escrow.released',
+  'wallet.funded': 'payments.wallet.funded',
+  'withdrawal': 'payments.withdrawal',
   'item_budget.released': 'payments.item_budget.released',
-  'timeout.checked':      'payments.timeout.checked',
+  'timeout.checked': 'payments.timeout.checked',
+  'order.paid': 'payments.order.paid',
 };
 
 const connectProducer = async () => {
