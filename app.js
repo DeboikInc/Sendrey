@@ -35,6 +35,7 @@ const locationCleanup = require('./services/locationTracking/locationCleanup');
 const { startSocketServer, shutdownSocketServer } = require('./socket');
 const { initPricingConfigSubscriber } = require('./services/pricingService');
 const { initMatchingConfigSubscriber } = require('./services/distanceConfigService');
+const logger = require('./utils/logger');
 
 const runSeeds = require('./utils/runSeeds');
 
@@ -56,8 +57,10 @@ const startServer = async () => {
 
     // 1. Await the database connection first
     await connectDb();
-    console.log(' Database connected');
 
+    logger.info('app started successfully')
+
+    console.log(' Database connected');
     await runSeeds();
 
     // restore any scheduled cron jobs that were active before the server restarted

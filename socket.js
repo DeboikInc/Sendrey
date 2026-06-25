@@ -31,6 +31,7 @@ const { handleCancelOrder, handleTaskCompleted, handleRunnerStartedNewOrder } = 
 const { handleGetOrderByChatId } = require('./socket/orderByChatIdHandlers');
 const { registerPresenceHandlers, handleUserDisconnect } = require('./socket/presenceHandlers');
 const { flushPendingWrites, handleGetLastSeq, handleGetMissedMessages } = require('./socket/messageHandlers');
+const logger = require('./utils/logger');
 
 // Import models
 const { Chat } = require("./models/Chat");
@@ -48,7 +49,8 @@ let serverInstance;
 
 
 async function startSocketServer(app) {
-  console.log("✅ MongoDB connected, Socket");
+  logger.info('socket started successfully')
+
   const server = http.createServer(app);
 
   const io = new Server(server, {
@@ -443,18 +445,6 @@ async function startSocketServer(app) {
   });
 
   server.listen(process.env.PORT, () => console.log(`✅ Server running on port ${process.env.PORT}`));
-
-  // Self-ping to prevent Render spin-down
-  if (process.env.NODE_ENV === 'production') {
-    setInterval(async () => {
-      try {
-        await fetch(`${process.env.renderPingUrl}`);
-        console.log('[keep-alive] socket server pinged');
-      } catch (e) {
-        console.error('[keep-alive] ping failed:', e.message);
-      }
-    }, 5 * 60 * 1000);
-  }
 
   return { io, server };
 }
