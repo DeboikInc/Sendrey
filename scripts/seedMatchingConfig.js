@@ -1,4 +1,4 @@
-const MatchingConfig = require('../models/MatchingConfig');
+const MatchingConfig = require('../models/MatchConfig');
 
 async function seedMatchingConfig() {
   const existing = await MatchingConfig.findOne({ key: 'active' });

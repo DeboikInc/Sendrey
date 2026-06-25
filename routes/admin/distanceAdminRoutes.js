@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const MatchingConfig = require('../../models/MatchingConfig');
+const MatchingConfig = require('../../models/MatchConfig');
 const redis = require('../../config/redis');
 
 // GET current matching config
