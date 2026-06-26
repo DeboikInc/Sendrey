@@ -190,10 +190,9 @@ export const sendReturningUserEmailOTP = createAsyncThunk("auth/send-returning-u
 
 export const fetchRunnerMe = createAsyncThunk('auth/fetchRunnerMe', async (_, { rejectWithValue }) => {
     try {
-        const res = await api.get('/auth/runner/me', { _skipInterceptor: true });
+        const res = await api.get('/auth/runner/me');
         return res.data;
     } catch (err) {
-        // pass the full response so we can check status in the reducer
         return rejectWithValue({
             ...(err.response?.data ?? {}),
             status: err.response?.status,
@@ -203,7 +202,7 @@ export const fetchRunnerMe = createAsyncThunk('auth/fetchRunnerMe', async (_, { 
 
 export const fetchUserMe = createAsyncThunk('auth/fetchUserMe', async (_, { rejectWithValue }) => {
     try {
-        const res = await api.get('/auth/user/me', { _skipInterceptor: true });
+        const res = await api.get('/auth/user/me');
         return res.data;
     } catch (err) {
         return rejectWithValue({
