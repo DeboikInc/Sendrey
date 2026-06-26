@@ -4,6 +4,10 @@ git fetch <REPO_NAME> <BRANCH>
 
 git merge -X subtree=apps/<APP_NAME> --allow-unrelated-histories --no-edit <REPO_NAME>/<BRANCH>
 
+## Server branch name is production
+## Web branch is web-app
+## Mobile branch is main/staging, main 
+
 git status
 
 git push
