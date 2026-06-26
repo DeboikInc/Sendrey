@@ -7,6 +7,8 @@ git merge -X subtree=apps/<APP_NAME> --allow-unrelated-histories --no-edit <REPO
 ## Server branch name is production
 ## Web branch is web-app
 ## Mobile branch is main/staging, main 
+## admin-dashboard - main
+## landing page - main
 
 git status
 
