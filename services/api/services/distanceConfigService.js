@@ -1,4 +1,4 @@
-const MatchingConfig = require('../models/MatchingConfig');
+const MatchingConfig = require('../models/MatchConfig');
 const redis = require('../config/redis');
 
 let cachedConfig = null;
