@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { authStorage } from '../utils/authStorage';
-import { isCapacitor, useTokenAuth, isMobileBrowser } from '../utils/api';
+import { useTokenAuth } from '../utils/api';
 import { clearCredentials, fetchRunnerMe, fetchUserMe, wipeRunnerLocalStorage } from '../Redux/authSlice';
 import { setActiveChat } from '../Redux/orderSlice';
 import chatStorage from '../utils/chatStorage';
@@ -12,10 +12,10 @@ import useOrderStore from '../store/orderStore';
 
 const RETRY_DELAYS = [4000, 8000, 12000];
 
-if (!isCapacitor && !isMobileBrowser) {
-  localStorage.removeItem('accessToken');
-  localStorage.removeItem('refreshToken');
-}
+// if (!isCapacitor) {
+//   localStorage.removeItem('accessToken');
+//   localStorage.removeItem('refreshToken');
+// }
 
 // Helper function with retry logic
 const fetchWithRetry = async (fetchFn, type, retryDelays = RETRY_DELAYS) => {
@@ -143,12 +143,11 @@ export const useAuthBootstrap = () => {
           await persistor.purge();
 
           // Clear cookies
-          if (!isCapacitor) {
+
             document.cookie = 'token=; Max-Age=0; path=/';
             document.cookie = 'refreshToken=; Max-Age=0; path=/';
             document.cookie = 'refreshToken=; Max-Age=0; path=/api/v1/auth/refresh-token';
-          }
-
+          
           await authStorage.clearTokens();
 
           // Prevent reload loop
