@@ -46,12 +46,12 @@ const connectDb = require('./config/database');
 
 const startServer = async () => {
 
-  if (process.env.NODE_ENV === 'production') {
-    console.log = () => { };
-    console.error = () => { };
-    console.warn = () => { };
-    console.debug = () => { };
-  };
+  // if (process.env.NODE_ENV === 'production') {
+  //   console.log = () => { };
+  //   console.error = () => { };
+  //   console.warn = () => { };
+  //   console.debug = () => { };
+  // };
 
   try {
 

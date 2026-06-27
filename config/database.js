@@ -25,7 +25,7 @@ const connectDb = async () => {
 
     // await User.deleteMany({ role: { $nin: ['super-admin', 'admin'] } });
     // await Runner.deleteMany({});
-    // await Runner.findOneAndUpdate({ email:'timivictor565@gmail.com' }, { $set: { kycStatus: 'approved_full' } });
+    // await Runner.findOneAndUpdate({ email:'tinukareem17@gmail.com' }, { $set: { fleetType: 'cycling' } });
     // await Runner.deleteOne({ email: 'timivictor565@gmail.com' });
 
   } catch (error) {
