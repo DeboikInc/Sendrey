@@ -31,6 +31,7 @@ const swaggerUi = require('swagger-ui-express');
 const swaggerDoc = require('./sendrey-documentation.json');
 const redis = require('./config/redis');
 const locationCleanup = require('./services/locationTracking/locationCleanup');
+
 const { startSocketServer, shutdownSocketServer } = require('./socket');
 const { initPricingConfigSubscriber } = require('./services/pricingService');
 const { initMatchingConfigSubscriber } = require('./services/distanceConfigService');

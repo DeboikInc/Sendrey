@@ -12,6 +12,7 @@ const Escrow = require('../models/Escrows');
 const LedgerEntry = require('../models/LedgerEntry');
 const { calculateFeeSplit } = require('../config/pricing');
 const { getPricingConfig } = require('../services/pricingService');
+const { sendPaymentEvent } = require('../kafka/producers/paymentProducer');
 
 const handlePaymentSuccess = async (socket, io, data) => {
   try {
@@ -24,6 +25,17 @@ const handlePaymentSuccess = async (socket, io, data) => {
           logger.info(`Payment already verified for ref ${reference}`);
         } else {
           logger.info(`Payment verified via socket for ref ${reference}`);
+
+          const user = await User.findById(verification.order.userId).select('firstName lastName email').lean();
+          sendPaymentEvent('order.paid', {
+            orderId: verification.order.orderId,
+            userId: verification.order.userId,
+            userEmail: user?.email,
+            userName: user ? `${user.firstName} ${user.lastName}` : undefined,
+            amount: verification.order.totalAmount,
+            paymentMethod: 'card',
+            reference,
+          });
         }
       } catch (err) {
         logger.error('verifyPayment via socket failed:', err.message);
