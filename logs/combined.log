@@ -6765,3 +6765,7 @@
 {"environment":"development","ip":"::1","level":"error","message":"Server error: POST /wallet/virtual-account - 500","method":"POST","service":"sendrey-server","statusCode":500,"timestamp":"2026-06-27 08:16:28","url":"/wallet/virtual-account","userId":"6a342c2f76830b6d86c34f95"}
 {"duration":1172,"environment":"development","level":"warn","message":"Slow request: GET /wallet/transactions?page=1&limit=20 took 1172ms","method":"GET","service":"sendrey-server","threshold":1000,"timestamp":"2026-06-27 08:16:28","url":"/wallet/transactions?page=1&limit=20"}
 {"environment":"development","level":"info","message":"User authenticated: timivictor565@gmail.com - GET /user/me","service":"sendrey-server","timestamp":"2026-06-27 08:16:43"}
+{"environment":"development","level":"info","logLevel":"info","message":"Logger Service started successfully","nodeVersion":"v22.13.0","service":"Logger Service","timestamp":"2026-06-27 08:17:35","type":"startup"}
+{"environment":"development","level":"info","message":"Twilio SMS service initialized successfully","service":"sendrey-server","timestamp":"2026-06-27 08:17:40"}
+{"environment":"development","level":"info","message":"app started successfully","service":"sendrey-server","timestamp":"2026-06-27 08:18:04"}
+{"environment":"development","level":"info","message":"socket started successfully","service":"sendrey-server","timestamp":"2026-06-27 08:18:09"}
