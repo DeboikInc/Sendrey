@@ -84,6 +84,12 @@ export const useAuthBootstrap = () => {
           ? 'runner'
           : 'user';
 
+        // Desktop browser — cookie auth. If no stored user, skip fetch entirely.
+        if (!useTokenAuth && !storedUser) {
+          setIsReady(true);
+          return;
+        }
+
         // Check tokens first
         if (useTokenAuth) {
           const { accessToken, refreshToken } = await authStorage.getTokens();
