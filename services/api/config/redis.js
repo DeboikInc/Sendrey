@@ -27,16 +27,11 @@ class RedisClient {
 
 
   async connect() {
-    // console.log('Connecting to Redis:', {
-    //   host: process.env.REDIS_HOST,
-    //   port: process.env.REDIS_PORT,
-    //   hasPassword: !!process.env.REDIS_PASSWORD,
-    // });
-
     if (this.client) return this.client;
     if (this._connecting) return this._connecting;
 
     this._connecting = (async () => {
+      
       try {
         this.client = new Redis(redisConfig);
         this.subscriber = new Redis(redisConfig);
@@ -58,6 +53,10 @@ class RedisClient {
           this.isConnected = false;
         });
 
+        this.subscriber.on('error', (err) => {
+          console.error('❌ Redis subscriber error:', err.message);
+        });
+
         // Wait for ready state
         await new Promise((resolve, reject) => {
           this.client.once('ready', resolve);
@@ -75,6 +74,7 @@ class RedisClient {
       }
     }
     )();
+    return this._connecting;
   }
 
   getClient() {
@@ -95,7 +95,7 @@ class RedisClient {
     if (!this.client) {
       throw new Error('Redis not connected. Call connect() first.');
     }
-    return this.client;
+    return this.publisher;
   }
 
   async disconnect() {
@@ -107,7 +107,7 @@ class RedisClient {
       await this.subscriber.quit();
       this.subscriber = null;
     }
-    if (this.publisher) { 
+    if (this.publisher) {
       await this.publisher.quit();
       this.publisher = null;
     }

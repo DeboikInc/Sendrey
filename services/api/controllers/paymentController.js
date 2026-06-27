@@ -4,6 +4,7 @@ const BaseController = require('./baseController');
 const paystack = require('../config/paystack');
 const Escrow = require('../models/Escrows');
 const Order = require('../models/Order');
+const User = require('../models/User');
 const { sendPaymentEvent } = require('../kafka/producers/paymentProducer');
 
 const {
@@ -91,6 +92,16 @@ class PaymentController extends BaseController {
                 });
             }
 
+            sendPaymentEvent('order.paid', {
+                orderId: resolvedOrderId,
+                userId,
+                userEmail,
+                userName: `${req.user.firstName} ${req.user.lastName}`,
+                amount: result.totalAmount,
+                paymentMethod: 'wallet',
+                reference: result.escrowId.toString(),
+            });
+
             this.success(res, result);
         } catch (error) {
             console.error('Error creating payment:', error);
@@ -105,6 +116,19 @@ class PaymentController extends BaseController {
         try {
             const { reference } = req.body;
             const result = await paymentService.verifyPayment(reference);
+
+            if (!result.alreadyPaid) {
+                sendPaymentEvent('order.paid', {
+                    orderId: result.order.orderId,
+                    userId: result.order.userId,
+                    userEmail: req.user?.email,
+                    userName: req.user ? `${req.user.firstName} ${req.user.lastName}` : 'user',
+                    amount: result.order.totalAmount,
+                    paymentMethod: 'card',
+                    reference,
+                });
+            }
+
             this.success(res, { message: 'Payment verified successfully', ...result });
         } catch (error) {
             console.error('Error verifying payment:', error);
@@ -161,18 +185,13 @@ class PaymentController extends BaseController {
             return res.status(400).send('Invalid signature');
         }
 
-        // const event = typeof req.body === 'string'
-        //     ? JSON.parse(req.body)
-        //     : req.body instanceof Buffer
-        //         ? JSON.parse(req.body.toString())
-        //         : req.body;
-
         const event = req.body;
 
         switch (event.event) {
             case 'charge.success': {
                 const { reference, metadata } = event.data;
 
+                try {
                 if (metadata.type === 'wallet_funding') {
                     const result = await paymentService.verifyWalletFunding(reference);
                     sendPaymentEvent('wallet.funded', {
@@ -180,14 +199,29 @@ class PaymentController extends BaseController {
                         userEmail: metadata.userEmail,
                         userName: metadata.userName,
                         amount: result?.amount,
-                        newBalance: result?.newBalance,
+                        newBalance: result?.balance,
                         reference,
                     });
                 } else if (metadata.orderId) {
                     await paymentService.verifyPayment(reference);
+                    if (!result.alreadyPaid) {
+                        const user = await User.findById(result.order.userId).select('firstName lastName email').lean();
+
+                        sendPaymentEvent('order.paid', {
+                            orderId: result.order.orderId,
+                            userId: result.order.userId,
+                            userEmail: user?.email,
+                            userName: user ? `${user.firstName} ${user.lastName}` : 'user',
+                            amount: result.order.totalAmount,
+                            paymentMethod: 'card',
+                            reference,
+                        });
+                    }
+                }
+                } catch (err) {
+                    console.error(`Webhook charge.success failed for ref ${reference}:`, err.message);
                 }
 
-                // console.log(' Payment successful:', reference);
                 break;
             }
             case 'transfer.success':

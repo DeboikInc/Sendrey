@@ -33,7 +33,7 @@ class AuthController extends BaseController {
       httpOnly: true,
       secure: isProd,
       sameSite: isProd ? 'none' : 'lax', // lax for local dev (http)
-      maxAge: 30 * 60 * 1000 // 15 mins
+      maxAge: 15 * 60 * 1000 // 15 mins
     });
 
     res.cookie('refreshToken', refreshToken, {
@@ -392,34 +392,9 @@ class AuthController extends BaseController {
 
   refreshToken = async (req, res, next) => {
     try {
-      // read from cookie, not req.body
       const refreshToken = req.cookies.refreshToken || req.body.refreshToken;
-      if (!refreshToken) return this.error(res, 'Refresh token required', 401);
+      const { accessToken, refreshToken: newRefresh } = await authService.refreshTokens(refreshToken);
 
-      const decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
-
-      // check both User and Runner since either could be refreshing
-      let user = await User.findById(decoded.id).select('+refreshToken');
-      let isRunner = false;
-
-      if (!user) {
-        user = await Runner.findById(decoded.id).select('+refreshToken');
-        isRunner = true;
-      }
-
-      if (!user || (user.refreshToken !== refreshToken && user.previousRefreshToken !== refreshToken)) {
-        return this.error(res, 'Invalid refresh token', 401);
-      }
-
-      const { accessToken, refreshToken: newRefresh } = this.service.generateTokens(user);
-
-      const Model = isRunner ? Runner : User;
-      await Model.findByIdAndUpdate(user._id, {
-        previousRefreshToken: user.refreshToken, // ← keep old one briefly
-        refreshToken: newRefresh
-      });
-
-      // set new cookies
       this.setAuthCookies(res, accessToken, newRefresh);
 
       return this.success(res, {
@@ -428,7 +403,7 @@ class AuthController extends BaseController {
         refreshToken: newRefresh,
       });
     } catch (err) {
-      return this.error(res, 'Invalid or expired refresh token', 401);
+      return this.error(res, err.message || 'Invalid or expired refresh token', err.statusCode || 401);
     }
   }
 

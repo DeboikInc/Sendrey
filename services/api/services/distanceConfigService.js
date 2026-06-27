@@ -35,7 +35,7 @@ function invalidateMatchingConfig() {
 
 // Call once at server startup, after redis.connect()
 async function initMatchingConfigSubscriber() {
-  await getMatchingConfig(); 
+  await getMatchingConfig();
 
   const subscriber = redis.getSubscriber();
   await subscriber.subscribe('matchingConfig:updated', (err, count) => {

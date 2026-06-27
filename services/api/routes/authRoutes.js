@@ -52,7 +52,7 @@ router.post(
 
 router.post(
   '/refresh-token',
-  ipRateLimit({ windowMs: 15 * 60 * 1000, maxRequests: 10 }),
+  ipRateLimit({ windowMs: 15 * 60 * 1000, maxRequests: 60 }),
   authController.refreshToken
 );
 

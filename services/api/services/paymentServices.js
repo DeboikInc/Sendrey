@@ -730,7 +730,7 @@ class PaymentService {
 
     // ── MOCK ── remove when real secrets are available
     if (process.env.NODE_ENV === 'development') {
-      console.log('⚠️  transferToVendor: DEV mock — skipping real Paystack transfer');
+      console.log('⚠️ transferToVendor: DEV mock — skipping real Paystack transfer');
       return {
         success: true,
         reference: `mock-ref-${Date.now()}`,
