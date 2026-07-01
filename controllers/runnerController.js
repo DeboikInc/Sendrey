@@ -16,7 +16,6 @@ class RunnerController extends BaseController {
     this.updateProfile = this.updateProfile.bind(this);
     this.getNearbyRunners = this.getNearbyRunners.bind(this);
     this.getRunners = this.getRunners.bind(this);
-    this.getRunnersByServiceType = this.getRunnersByServiceType.bind(this);
     this.getOnlineRunners = this.getOnlineRunners.bind(this);
     this.updateRunnerLocation = this.updateRunnerLocation.bind(this);
     this.setRunnerOnlineStatus = this.setRunnerOnlineStatus.bind(this);
@@ -77,103 +76,43 @@ class RunnerController extends BaseController {
   async getNearbyRunners(req, res, next) {
     try {
       const {
-        pickupLat, pickupLng, latitude,
-        longitude, fleetType, sortBy,
-        // serviceType,
+        pickupLat, pickupLng, latitude, longitude,
+        deliveryLat, deliveryLng,
+        fleetType, sortBy,
       } = req.query;
 
       const lat = parseFloat(pickupLat || latitude);
       const lng = parseFloat(pickupLng || longitude);
 
-
-      if (!lat || !lng) {  // guard 
-        return this.badRequest(res, 'Location coordinates are required');
-      }
-
-      if (isNaN(lat) || isNaN(lng)) {
-        return this.badRequest(res, 'Invalid pickupLat or pickupLng');
-      }
-
-      if (lat < -90 || lat > 90) {
-        return this.badRequest(res, 'pickupLat must be between -90 and 90');
-      }
-      if (lng < -180 || lng > 180) {
-        return this.badRequest(res, 'pickupLng must be between -180 and 180');
-      }
-
-      // const validServiceTypes = ['pick-up', 'run-errand'];
-      // if (serviceType && !validServiceTypes.includes(serviceType)) {
-      //   return this.badRequest(res, `Invalid service type. Must be one of: ${validServiceTypes.join(', ')}`);
-      // }
+      if (!lat || !lng) return this.badRequest(res, 'Location coordinates are required');
+      if (isNaN(lat) || isNaN(lng)) return this.badRequest(res, 'Invalid pickupLat or pickupLng');
+      if (lat < -90 || lat > 90) return this.badRequest(res, 'pickupLat must be between -90 and 90');
+      if (lng < -180 || lng > 180) return this.badRequest(res, 'pickupLng must be between -180 and 180');
 
       const validFleetTypes = ['cycling', 'bike', 'car', 'van', 'pedestrian'];
       if (fleetType && !validFleetTypes.includes(fleetType)) {
         return this.badRequest(res, `Invalid fleet type. Must be one of: ${validFleetTypes.join(', ')}`);
       }
 
-      const runners = await this.service.findNearbyRunners({
+      const parsedDeliveryLat = deliveryLat ? parseFloat(deliveryLat) : null;
+      const parsedDeliveryLng = deliveryLng ? parseFloat(deliveryLng) : null;
+
+      if (fleetType === 'pedestrian' && (!parsedDeliveryLat || !parsedDeliveryLng)) {
+        return this.badRequest(res, 'deliveryLat and deliveryLng are required for pedestrian fleet');
+      }
+
+      const eligibleRunners = await this.service.findNearbyRunners({
         pickupLat: lat,
         pickupLng: lng,
-        // serviceType,
+        deliveryLat: parsedDeliveryLat,
+        deliveryLng: parsedDeliveryLng,
         fleetType,
+        sortBy,
       });
-
-      const eligibleRunners = runners.filter(runner => {
-        console.log('Runner KYC check:', {
-          id: runner._id,
-          kycStatus: runner.kycStatus,
-          isOnline: runner.isOnline,
-          isAvailable: runner.isAvailable,
-          // isPhoneVerified: runner.isPhoneVerified,
-          isEmailVerified: runner.isEmailVerified,
-          selfieStatus: runner.verificationDocuments?.selfie?.status,
-          ninStatus: runner.verificationDocuments?.nin?.status,
-          licenseStatus: runner.verificationDocuments?.driverLicense?.status,
-        })
-        if (runner.kycStatus === 'suspended' || runner.kycStatus === 'banned') {
-          return false;
-        }
-
-        const allowedStatuses = [
-          'pending_verification',
-          'approved_limited',
-          'approved_full',
-          'pending_review',
-          'submitted'
-        ];
-
-        if (!allowedStatuses.includes(runner.kycStatus)) {
-          return false;
-        }
-
-        // Check ID doc — must have at least one approved/pending (not rejected/not_submitted)
-        const blockedDocStatuses = ['not_submitted', 'rejected'];
-        const ninBlocked = blockedDocStatuses.includes(runner.verificationDocuments?.nin?.status);
-        const licenseBlocked = blockedDocStatuses.includes(runner.verificationDocuments?.driverLicense?.status);
-        const hasValidIdDoc = !ninBlocked || !licenseBlocked;
-
-        if (!hasValidIdDoc) return false;
-
-        // Check selfie — must be submitted or approved
-        const selfieStatus = runner.biometricVerification?.status;
-        const validSelfieStatuses = ['submitted', 'approved', 'pending_review'];
-        if (!validSelfieStatuses.includes(selfieStatus)) return false;
-
-        // Check phone verified
-        // if (!runner.isPhoneVerified) return false;
-
-        if (!runner.isEmailVerified) return false;
-
-        return runner.isOnline && runner.isAvailable;
-      });
-
-      if (sortBy === 'rating') {
-        eligibleRunners.sort((a, b) => (b.rating || 0) - (a.rating || 0));
-      }
 
       return this.success(res, {
         count: eligibleRunners.length,
-        runners: eligibleRunners
+        runners: eligibleRunners,
       }, `Found ${eligibleRunners.length} nearby runner${eligibleRunners.length !== 1 ? 's' : ''}`);
     } catch (error) {
       logger.error('Error finding nearby runners:', error);
@@ -190,7 +129,6 @@ class RunnerController extends BaseController {
 
       const result = await this.service.listRunners({
         fleetType,
-        serviceType,
         page,
         limit
       });
@@ -206,31 +144,13 @@ class RunnerController extends BaseController {
   }
 
   /**
-   * Get runners by service type
-   */
-  async getRunnersByServiceType(req, res, next) {
-    try {
-      const { serviceType } = req.params;
-      const runners = await this.service.findRunnersByServiceType(serviceType);
-
-      return this.success(res, {
-        count: runners.length,
-        runners
-      });
-    } catch (error) {
-      logger.error('Error fetching runners by service type:', error);
-      next(error);
-    }
-  }
-
-  /**
    * Get online runners
    */
   async getOnlineRunners(req, res, next) {
     try {
-      const { serviceType, fleetType } = req.query;
+      const { fleetType } = req.query;
 
-      const runners = await this.service.getOnlineRunners(serviceType, fleetType);
+      const runners = await this.service.getOnlineRunners(fleetType);
 
       return this.success(res, {
         count: runners.length,
