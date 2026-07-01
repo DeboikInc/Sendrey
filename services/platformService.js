@@ -1,7 +1,7 @@
 const { resolveBankCode } = require('../utils/platformBankResolver');
 const PlatformSettings = require('../models/PlatformSettings');
 
-class PlatformFeeService {
+class PlatformService {
   async getActive() {
     return PlatformSettings.findOne({ key: 'active' }).lean();
   }
@@ -17,4 +17,4 @@ class PlatformFeeService {
   }
 }
 
-module.exports = new PlatformFeeService();
+module.exports = new PlatformService();

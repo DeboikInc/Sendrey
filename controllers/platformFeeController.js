@@ -1,16 +1,16 @@
 const BaseController = require('./baseController');
-const platformFeeService = require('../services/platformFeeService');
+const platformService = require('../services/platformService');
 const { invalidatePlatformRecipientCache } = require('../utils/platformBankResolver');
 
 class PlatformFeeController extends BaseController {
-  constructor(platformFeeService) {
-    super(platformFeeService);
-    this.platformFeeService = platformFeeService;
+  constructor(platformService) {
+    super(platformService);
+    this.platformService = platformService;
   }
 
   getSettings = async (req, res, next) => {
     try {
-      const settings = await this.platformFeeService.getActive();
+      const settings = await this.platformService.getActive();
       if (!settings) return this.notFound(res, 'Platform settings not found');
       return this.success(res, settings);
     } catch (err) {
@@ -29,7 +29,7 @@ class PlatformFeeController extends BaseController {
 
       let settings;
       try {
-        settings = await this.platformFeeService.updateBankAccount(platformBankAccount);
+        settings = await this.platformService.updateBankAccount(platformBankAccount);
       } catch (resolveErr) {
 
         return this.badRequest(res, resolveErr.message);
@@ -46,4 +46,4 @@ class PlatformFeeController extends BaseController {
   };
 }
 
-module.exports = new PlatformFeeController(platformFeeService);
+module.exports = new PlatformFeeController(platformService);
