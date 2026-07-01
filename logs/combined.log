@@ -8415,3 +8415,26 @@
 {"environment":"development","level":"info","message":"Twilio SMS service initialized successfully","service":"sendrey-server","timestamp":"2026-07-01 04:48:14"}
 {"environment":"development","level":"info","message":"app started successfully","service":"sendrey-server","timestamp":"2026-07-01 04:48:24"}
 {"environment":"development","level":"info","message":"socket started successfully","service":"sendrey-server","timestamp":"2026-07-01 04:48:26"}
+{"environment":"development","level":"info","logLevel":"info","message":"Logger Service started successfully","nodeVersion":"v22.13.0","service":"Logger Service","timestamp":"2026-07-01 04:56:14","type":"startup"}
+{"environment":"development","level":"info","message":"Twilio SMS service initialized successfully","service":"sendrey-server","timestamp":"2026-07-01 04:56:16"}
+{"environment":"development","level":"info","message":"app started successfully","service":"sendrey-server","timestamp":"2026-07-01 04:56:29"}
+{"environment":"development","level":"info","message":"socket started successfully","service":"sendrey-server","timestamp":"2026-07-01 04:56:38"}
+{"environment":"development","level":"info","message":"User authenticated: testadmin@gmail.com - GET /distance/get-matching-config","service":"sendrey-server","timestamp":"2026-07-01 04:56:54"}
+{"environment":"development","level":"info","message":"User authenticated: testadmin@gmail.com - GET /platform/get-platform-fee-setting","service":"sendrey-server","timestamp":"2026-07-01 04:56:54"}
+{"environment":"development","level":"info","message":"User authenticated: testadmin@gmail.com - GET /pricing/pricing-config","service":"sendrey-server","timestamp":"2026-07-01 04:56:54"}
+{"environment":"development","level":"info","message":"User authenticated: testadmin@gmail.com - GET /pedestrian/get-pedestrian-config","service":"sendrey-server","timestamp":"2026-07-01 04:56:54"}
+{"environment":"development","level":"info","message":"User authenticated: testadmin@gmail.com - PUT /pedestrian/update-pedestrian-config","service":"sendrey-server","timestamp":"2026-07-01 05:06:39"}
+{"environment":"development","level":"info","message":"User authenticated: testadmin@gmail.com - PUT /distance/put-matching-config","service":"sendrey-server","timestamp":"2026-07-01 05:06:39"}
+{"environment":"development","level":"warn","message":"Client error: PUT /put-matching-config - 400","method":"PUT","service":"sendrey-server","statusCode":400,"timestamp":"2026-07-01 05:06:39","url":"/put-matching-config","userId":"69b4c7d4807455c48286097b"}
+{"environment":"development","level":"info","message":"User authenticated: testadmin@gmail.com - GET /pricing/pricing-config","service":"sendrey-server","timestamp":"2026-07-01 05:07:29"}
+{"environment":"development","level":"info","message":"User authenticated: testadmin@gmail.com - GET /distance/get-matching-config","service":"sendrey-server","timestamp":"2026-07-01 05:07:29"}
+{"environment":"development","level":"info","message":"User authenticated: testadmin@gmail.com - GET /platform/get-platform-fee-setting","service":"sendrey-server","timestamp":"2026-07-01 05:07:29"}
+{"environment":"development","level":"info","message":"User authenticated: testadmin@gmail.com - GET /pedestrian/get-pedestrian-config","service":"sendrey-server","timestamp":"2026-07-01 05:07:29"}
+{"environment":"development","level":"info","message":"User authenticated: testadmin@gmail.com - GET /distance/get-matching-config","service":"sendrey-server","timestamp":"2026-07-01 05:07:34"}
+{"environment":"development","level":"info","message":"User authenticated: testadmin@gmail.com - GET /pedestrian/get-pedestrian-config","service":"sendrey-server","timestamp":"2026-07-01 05:07:34"}
+{"environment":"development","level":"info","message":"User authenticated: testadmin@gmail.com - GET /platform/get-platform-fee-setting","service":"sendrey-server","timestamp":"2026-07-01 05:07:34"}
+{"environment":"development","level":"info","message":"User authenticated: testadmin@gmail.com - GET /pricing/pricing-config","service":"sendrey-server","timestamp":"2026-07-01 05:07:34"}
+{"environment":"development","level":"info","logLevel":"info","message":"Logger Service started successfully","nodeVersion":"v22.13.0","service":"Logger Service","timestamp":"2026-07-01 05:10:34","type":"startup"}
+{"environment":"development","level":"info","message":"Twilio SMS service initialized successfully","service":"sendrey-server","timestamp":"2026-07-01 05:10:36"}
+{"environment":"development","level":"info","message":"app started successfully","service":"sendrey-server","timestamp":"2026-07-01 05:10:51"}
+{"environment":"development","level":"info","message":"socket started successfully","service":"sendrey-server","timestamp":"2026-07-01 05:11:01"}
