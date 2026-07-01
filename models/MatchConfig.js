@@ -1,19 +1,18 @@
 const mongoose = require('mongoose');
 
 const matchingConfigSchema = new mongoose.Schema({
-  // Singleton doc — always look up by a fixed key, never by arbitrary _id
   key: { type: String, required: true, unique: true, default: 'active' },
-
   version: { type: Number, required: true, default: 1 },
   updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin' },
 
-  // All distances in meters.
-  // PICKUP_MAX_DISTANCE: max runner→pickup/market leg distance (used by findNearbyRunners)
+  // General
   pickupMaxDistance: { type: Number, required: true, min: 0 },
-
-  // TOTAL_MAX_DISTANCE: for pedestrian fleet, caps runner→pickup + pickup→delivery COMBINED
-  // (used inside findNearbyUsers' pedestrian branch)
   totalMaxDistance: { type: Number, required: true, min: 0 },
+
+  // Pedestrian-specific
+  pedestrianMaxRunnerLeg: { type: Number, required: true, min: 0, default: 200 },  // runner → pickup
+  pedestrianMaxDeliveryLeg: { type: Number, required: true, min: 0, default: 800 }, // pickup → delivery
+  pedestrianTotalMax: { type: Number, required: true, min: 0, default: 1000 },      // combined cap
 }, { timestamps: true });
 
 module.exports = mongoose.model('MatchingConfig', matchingConfigSchema);

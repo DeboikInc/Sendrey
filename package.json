@@ -4,8 +4,7 @@
   "main": "app.js",
   "scripts": {
     "dev": "nodemon app.js",
-    "admin": "nodemon adminServer.js",
-    "dev:all": "concurrently \"npm run dev\" \"npm run admin\"",
+    "dev:all": "concurrently \"npm run dev\"",
     "seed:admin": "node scripts/seedAdmin.js"
   },
   "keywords": [],
