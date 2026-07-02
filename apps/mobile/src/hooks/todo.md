@@ -22,10 +22,4 @@ MongoDB Atlas — make sure it's not on free tier either (512MB storage limit)
 
 "runner misconduct costs us X in Paystack fees per ban, do we absorb or pass to user?
 
-
-
-
-i need to prevent this multiple calls, 2026-06-16 21:56:28 [warn]: Client error: GET /user/me - 401
-
-
-connection 5 to 65.62.43.22:27017 closed
+when user clicks no maybe by mistake, the server already saves the prev data, how do i prevent this? e.g i picked wrong fleetType and later picked correct one but initial one already saved

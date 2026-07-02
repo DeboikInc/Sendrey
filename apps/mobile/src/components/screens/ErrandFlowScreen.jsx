@@ -1,3 +1,4 @@
+/* global google */
 // components/screens/ErrandFlow.jsx
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Button } from "@material-tailwind/react";
@@ -56,6 +57,7 @@ export default function ErrandFlowScreen({
     const [isSearching, setIsSearching] = useState(false);
     const [predictions, setPredictions] = useState([]);
     const [searchError, setSearchError] = useState(null);
+    const [showConversionFlow, setShowConversionFlow] = useState(false);
 
     const dispatch = useDispatch();
     const listRef = useRef(null);
@@ -66,11 +68,11 @@ export default function ErrandFlowScreen({
     const prevStepRef = useRef(null);
     const isSubmittingRef = useRef(false);
 
-    const [showConversionFlow, setShowConversionFlow] = useState(false);
-
     // location coordinates
     const marketCoordinatesRef = useRef(null);
     const deliveryCoordinatesRef = useRef(null);
+    const searchRequestIdRef = useRef(0);
+    const sessionTokenRef = useRef(null);
 
     const currentUser = authState?.user ?? authState;
 
@@ -87,7 +89,14 @@ export default function ErrandFlowScreen({
         }
     }, [messages, showCustomInput, currentStep, predictions.length]);
 
-    const searchPlaces = useCallback((query, step) => {
+    const getSessionToken = () => {
+        if (!sessionTokenRef.current && window.google) {
+            sessionTokenRef.current = new window.google.maps.places.AutocompleteSessionToken();
+        }
+        return sessionTokenRef.current;
+    };
+
+    const searchPlaces = useCallback(async (query, step) => {
         if (!query || query.length < 2 || !window.google) {
             setPredictions([]);
             return;
@@ -99,39 +108,50 @@ export default function ErrandFlowScreen({
 
         setIsSearching(true);
         setSearchError(null);
+        const requestId = ++searchRequestIdRef.current;
 
-        const service = new window.google.maps.places.AutocompleteService();
-        service.getPlacePredictions(
-            {
+        try {
+            const suggestion = new google.maps.places.AutocompleteSuggestion({
                 input: query,
-                componentRestrictions: { country: 'ng' },
                 locationBias: {
-                    center: new window.google.maps.LatLng(6.5244, 3.3792),
+                    center: new google.maps.LatLng(6.5244, 3.3792),
                     radius: 50000,
                 },
-            },
-            (results, status) => {
-                if (status !== window.google.maps.places.PlacesServiceStatus.OK || !results) {
-                    setPredictions([]);
-                    setIsSearching(false);
-                    return;
-                }
-                setPredictions(results.map((p) => ({
-                    place_id: p.place_id,
-                    description: p.description,
+                region: 'ng',
+                sessionToken: getSessionToken(),
+            });
+
+            const response = await suggestion.fetch();
+
+            if (requestId !== searchRequestIdRef.current) return;
+
+            const formattedPredictions = (response.suggestions || []).map((s) => {
+                const p = s.placePrediction;
+                return {
+                    place_id: p.placeId,
+                    description: p.text.text,
                     structured_formatting: {
-                        main_text: p.structured_formatting.main_text,
-                        secondary_text: p.structured_formatting.secondary_text,
+                        main_text: p.mainText.text,
+                        secondary_text: p.secondaryText?.text || '',
                     },
-                    lat: null, // resolved on select via getDetails
-                    lng: null,
-                })));
-                setIsSearching(false);
-            }
-        );
+                    lat: p.location?.lat || null,
+                    lng: p.location?.lng || null,
+                    _place: p.place,
+                };
+            });
+
+            setPredictions(formattedPredictions);
+            setIsSearching(false);
+
+        } catch (error) {
+            if (requestId !== searchRequestIdRef.current) return;
+            console.error('AutocompleteSuggestion failed:', error);
+            setSearchError('Location search failed. Please try again.');
+            setPredictions([]);
+            setIsSearching(false);
+        }
     }, []);
 
-    // Fixed debounce using useCallback (like PickupFlow)
     // eslint-disable-next-line react-hooks/exhaustive-deps
     const debouncedSearch = useCallback(
         debounce(async (query, step) => {
@@ -322,40 +342,86 @@ export default function ErrandFlowScreen({
         }
     };
 
+    const handleLocationResult = (result, prediction) => {
+        const { lat, lng, address, name } = result;
+        const locationText = prediction.description;
+
+        if (currentStep === "market-location") {
+            marketCoordinatesRef.current = { lat, lng };
+            send(locationText, "market-location");
+        } else if (currentStep === "delivery-location") {
+            deliveryCoordinatesRef.current = { lat, lng };
+            send(locationText, "delivery");
+        }
+
+        setSelectedPlace({ name, address, lat, lng });
+        setSearchTerm(name);
+        setPredictions([]);
+        isSubmittingRef.current = false;
+    };
+
+    const fallbackToGeocoder = (placeId, description, prediction) => {
+        const geocoder = new google.maps.Geocoder();
+        geocoder.geocode({ placeId: placeId }, (results, status) => {
+            if (status === 'OK' && results[0]) {
+                handleLocationResult({
+                    lat: results[0].geometry.location.lat(),
+                    lng: results[0].geometry.location.lng(),
+                    address: results[0].formatted_address || description,
+                    name: results[0].formatted_address || description,
+                }, prediction);
+            } else {
+                isSubmittingRef.current = false;
+                setShowCustomInput(true);
+                setSearchError('Could not find this location. Please try again.');
+            }
+        });
+    };
+
     const handleSuggestionSelect = (prediction) => {
         if (!window.google || isSubmittingRef.current) return;
+
+        if (!prediction.place_id || typeof prediction.place_id !== 'string' || !prediction.place_id.startsWith('ChIJ')) {
+            console.error('Invalid place_id:', prediction.place_id);
+            setSearchError('Invalid location. Please try again.');
+            setShowCustomInput(true);
+            isSubmittingRef.current = false;
+            return;
+        }
+
         isSubmittingRef.current = true;
         setShowCustomInput(false);
 
-        const service = new window.google.maps.places.PlacesService(
-            document.createElement('div')
-        );
-        service.getDetails(
-            { placeId: prediction.place_id, fields: ['geometry', 'formatted_address', 'name'] },
-            (result, status) => {
-                if (status !== window.google.maps.places.PlacesServiceStatus.OK) {
-                    isSubmittingRef.current = false;
-                    setShowCustomInput(true);
-                    return;
-                };
+        if (prediction.lat && prediction.lng) {
+            handleLocationResult({
+                lat: prediction.lat,
+                lng: prediction.lng,
+                address: prediction.description,
+                name: prediction.structured_formatting?.main_text || prediction.description,
+            }, prediction);
+            return;
+        }
 
-                const lat = result.geometry.location.lat();
-                const lng = result.geometry.location.lng();
-                const locationText = prediction.description;
+        const place = new google.maps.places.Place({
+            id: prediction.place_id,
+            requestedLanguage: 'en',
+        });
 
-                if (currentStep === "market-location") {
-                    marketCoordinatesRef.current = { lat, lng };
-                    send(locationText, "market-location");
-                } else if (currentStep === "delivery-location") {
-                    deliveryCoordinatesRef.current = { lat, lng };
-                    send(locationText, "delivery");
-                }
-
-                setSelectedPlace({ name: result.name, address: result.formatted_address, lat, lng });
-                setSearchTerm(result.name);
-                setPredictions([]);
-            }
-        );
+        place.fetchFields({
+            fields: ['geometry', 'formattedAddress', 'displayName'],
+        })
+            .then((result) => {
+                handleLocationResult({
+                    lat: result.geometry.location.lat(),
+                    lng: result.geometry.location.lng(),
+                    address: result.formattedAddress || prediction.description,
+                    name: result.displayName || prediction.structured_formatting?.main_text || prediction.description,
+                }, prediction);
+            })
+            .catch((error) => {
+                console.error('Place fetch failed:', error);
+                fallbackToGeocoder(prediction.place_id, prediction.description, prediction);
+            });
     };
 
     const handleSearchAction = async () => {
