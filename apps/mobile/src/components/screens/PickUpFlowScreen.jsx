@@ -1,3 +1,4 @@
+/* global google */
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Button } from "@material-tailwind/react";
 import { MapPin, X, Bookmark, Check, } from "lucide-react";
@@ -64,6 +65,9 @@ export default function PickupFlowScreen({
   const pickupCoordinatesRef = useRef(null);
   const deliveryCoordinatesRef = useRef(null);
   const pickupPhoneMatchesUserPhone = useRef(false);
+  const sessionTokenRef = useRef(null);
+  const searchRequestIdRef = useRef(0);
+
 
   // autoscroll
   useEffect(() => {
@@ -79,8 +83,14 @@ export default function PickupFlowScreen({
     }
   }, [messages, showCustomInput, showPhoneInput, currentStep, predictions.length]);
 
+  const getSessionToken = () => {
+    if (!sessionTokenRef.current && window.google) {
+      sessionTokenRef.current = new window.google.maps.places.AutocompleteSessionToken();
+    }
+    return sessionTokenRef.current;
+  };
 
-  const searchPlaces = useCallback((query, step) => {
+  const searchPlaces = useCallback(async (query, step) => {
     if (!query || query.length < 2 || !window.google) {
       setPredictions([]);
       return;
@@ -92,36 +102,50 @@ export default function PickupFlowScreen({
 
     setIsSearching(true);
     setSearchError(null);
+    const requestId = ++searchRequestIdRef.current;
 
-    const service = new window.google.maps.places.AutocompleteService();
-    service.getPlacePredictions(
-      {
+    try {
+      const suggestion = new google.maps.places.AutocompleteSuggestion({
         input: query,
-        componentRestrictions: { country: 'ng' },
         locationBias: {
-          center: new window.google.maps.LatLng(6.5244, 3.3792),
+          center: new google.maps.LatLng(6.5244, 3.3792),
           radius: 50000,
         },
-      },
-      (results, status) => {
-        if (status !== window.google.maps.places.PlacesServiceStatus.OK || !results) {
-          setPredictions([]);
-          setIsSearching(false);
-          return;
-        }
-        setPredictions(results.map((p) => ({
-          place_id: p.place_id,
-          description: p.description,
+        region: 'ng',
+        sessionToken: getSessionToken(),
+      });
+
+      const response = await suggestion.fetch();
+
+      if (requestId !== searchRequestIdRef.current) return;
+
+      const formattedPredictions = (response.suggestions || []).map((s) => {
+        const p = s.placePrediction;
+        return {
+          place_id: p.placeId,
+          description: p.text.text,
           structured_formatting: {
-            main_text: p.structured_formatting.main_text,
-            secondary_text: p.structured_formatting.secondary_text,
+            main_text: p.mainText.text,
+            secondary_text: p.secondaryText?.text || '',
           },
-          lat: null, // resolved on select via getDetails
-          lng: null,
-        })));
-        setIsSearching(false);
-      }
-    );
+
+          lat: p.location?.lat || null,
+          lng: p.location?.lng || null,
+          // store the place object for later use
+          _place: p.place,
+        };
+      });
+
+      setPredictions(formattedPredictions);
+      setIsSearching(false);
+
+    } catch (error) {
+      if (requestId !== searchRequestIdRef.current) return;
+      console.error('AutocompleteSuggestion failed:', error);
+      setSearchError('Location search failed. Please try again.');
+      setPredictions([]);
+      setIsSearching(false);
+    }
   }, []);
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -152,6 +176,7 @@ export default function PickupFlowScreen({
       setSearchTerm("");
       setPredictions([]);
       setIsSearching(false);
+      sessionTokenRef.current = null;
       prevStepRef.current = currentStep;
     }
   }, [currentStep]);
@@ -251,38 +276,87 @@ export default function PickupFlowScreen({
 
   const handleSuggestionSelect = (prediction) => {
     if (!window.google || isSubmittingRef.current) return;
+
+    if (!prediction.place_id || typeof prediction.place_id !== 'string' || !prediction.place_id.startsWith('ChIJ')) {
+      console.error('Invalid place_id:', prediction.place_id);
+      setSearchError('Invalid location. Please try again.');
+      setShowCustomInput(true);
+      isSubmittingRef.current = false;
+      return;
+    }
+
     isSubmittingRef.current = true;
     setShowCustomInput(false);
+    console.log('[selected prediction]', prediction.place_id, prediction.description);
 
-    const service = new window.google.maps.places.PlacesService(
-      document.createElement('div')
-    );
-    service.getDetails(
-      { placeId: prediction.place_id, fields: ['geometry', 'formatted_address', 'name'] },
-      (result, status) => {
-        if (status !== window.google.maps.places.PlacesServiceStatus.OK) {
+    const handleLocationResult = (result) => {
+      const { lat, lng, address, name } = result;
+      const locationText = prediction.description;
+
+      if (currentStep === "pickup-location") {
+        pickupCoordinatesRef.current = { lat, lng };
+        send(locationText, "pickup-location");
+      } else if (currentStep === "delivery-location") {
+        deliveryCoordinatesRef.current = { lat, lng };
+        send(locationText, "delivery");
+      }
+
+      setSelectedPlace({ name, address, lat, lng });
+      setSearchTerm(name);
+      setPredictions([]);
+      isSubmittingRef.current = false;
+    };
+
+    if (prediction.lat && prediction.lng) {
+      handleLocationResult({
+        lat: prediction.lat,
+        lng: prediction.lng,
+        address: prediction.description,
+        name: prediction.structured_formatting?.main_text || prediction.description,
+      });
+      return;
+    }
+
+    const place = new google.maps.places.Place({
+      id: prediction.place_id,
+      requestedLanguage: 'en',
+    });
+
+
+    place.fetchFields({
+      fields: ['geometry', 'formattedAddress', 'displayName'],
+    })
+      .then((result) => {
+        handleLocationResult({
+          lat: result.geometry.location.lat(),
+          lng: result.geometry.location.lng(),
+          address: result.formattedAddress || prediction.description,
+          name: result.displayName || prediction.structured_formatting?.main_text || prediction.description,
+        });
+      })
+      .catch((error) => {
+        console.error('Place fetch failed:', error);
+        fallbackToGeocoder(prediction.place_id, prediction.description);
+      });
+
+    // final fallback
+    const fallbackToGeocoder = (placeId, description) => {
+      const geocoder = new google.maps.Geocoder();
+      geocoder.geocode({ placeId: placeId }, (results, status) => {
+        if (status === 'OK' && results[0]) {
+          handleLocationResult({
+            lat: results[0].geometry.location.lat(),
+            lng: results[0].geometry.location.lng(),
+            address: results[0].formatted_address || description,
+            name: results[0].formatted_address || description,
+          });
+        } else {
           isSubmittingRef.current = false;
           setShowCustomInput(true);
-          return;
-        };
-
-        const lat = result.geometry.location.lat();
-        const lng = result.geometry.location.lng();
-        const locationText = prediction.description;
-
-        if (currentStep === "pickup-location") {
-          pickupCoordinatesRef.current = { lat, lng };
-          send(locationText, "pickup-location");
-        } else if (currentStep === "delivery-location") {
-          deliveryCoordinatesRef.current = { lat, lng };
-          send(locationText, "delivery");
+          setSearchError('Could not find this location. Please try again.');
         }
-
-        setSelectedPlace({ name: result.name, address: result.formatted_address, lat, lng });
-        setSearchTerm(result.name);
-        setPredictions([]);
-      }
-    );
+      });
+    };
   };
 
 
@@ -345,20 +419,55 @@ export default function PickupFlowScreen({
     setPredictions([]);
   };
 
+  const geocodeAddress = (address, type) => {
+    if (!window.google) return;
+
+    const geocoder = new window.google.maps.Geocoder();
+    geocoder.geocode(
+      { address: address + ', Lagos, Nigeria', componentRestrictions: { country: 'ng' } },
+      (results, status) => {
+        if (status === 'OK' && results[0]) {
+          const lat = results[0].geometry.location.lat();
+          const lng = results[0].geometry.location.lng();
+
+          if (type === "pickup-location") {
+            pickupCoordinatesRef.current = { lat, lng };
+            send(address, "pickup-location");
+          } else {
+            deliveryCoordinatesRef.current = { lat, lng };
+            send(address, "delivery");
+          }
+        }
+      }
+    );
+  };
+
   const handleLocationSelectedFromSaved = (location, type) => {
     const locationText = location.address || location.name;
+
+    // use the lat/lng directly
     if (currentStep === "pickup-location") {
-      if (location.lat && location.lng) pickupCoordinatesRef.current = { lat: location.lat, lng: location.lng };
-      setPickupLocation(locationText);
-      pickupLocationRef.current = locationText;
-      send(locationText, "pickup-location");
+      if (location.lat && location.lng) {
+        pickupCoordinatesRef.current = { lat: location.lat, lng: location.lng };
+        setPickupLocation(locationText);
+        pickupLocationRef.current = locationText;
+        send(locationText, "pickup-location");
+      } else {
+        // If no coordinates, geocode the address
+        geocodeAddress(locationText, "pickup-location");
+      }
     } else if (currentStep === "delivery-location") {
-      if (location.lat && location.lng) deliveryCoordinatesRef.current = { lat: location.lat, lng: location.lng };
-      setDeliveryLocation(locationText);
-      deliveryLocationRef.current = locationText;
-      send(locationText, "delivery");
+      if (location.lat && location.lng) {
+        deliveryCoordinatesRef.current = { lat: location.lat, lng: location.lng };
+        setDeliveryLocation(locationText);
+        deliveryLocationRef.current = locationText;
+        send(locationText, "delivery");
+      } else {
+        geocodeAddress(locationText, "delivery");
+      }
     }
   };
+
 
 
   const checkAndShowSuggestion = async () => {
@@ -1030,23 +1139,26 @@ export default function PickupFlowScreen({
                       ) : predictions.length === 0 ? (
                         <div className="p-3 text-center text-sm text-gray-900 dark:text-white">No locations found</div>
                       ) : (
-                        predictions.map((p) => (
-                          <button
-                            key={p.place_id}
-                            onClick={() => handleSuggestionSelect(p)}
-                            className="w-full flex items-start gap-3 p-3 text-left hover:bg-gray-200 dark:hover:bg-black-100 border-b border-gray-300 dark:border-gray-700 last:border-0 transition-colors"
-                          >
-                            <MapPin className="h-5 w-5 text-gray-600 dark:text-gray-400 mt-1 flex-shrink-0" />
-                            <div className="flex-1 min-w-0">
-                              <p className="font-medium text-sm text-gray-900 dark:text-white truncate">
-                                {p.structured_formatting?.main_text || p.description}
-                              </p>
-                              <p className="text-xs text-gray-700 dark:text-gray-300 truncate">
-                                {p.structured_formatting?.secondary_text || p.description}
-                              </p>
-                            </div>
-                          </button>
-                        ))
+                        predictions.map((p) => {
+                          console.log('Rendering prediction:', p.place_id, p.description);
+                          return (
+                            <button
+                              key={p.place_id}
+                              onClick={() => handleSuggestionSelect(p)}
+                              className="w-full flex items-start gap-3 p-3 text-left hover:bg-gray-200 dark:hover:bg-black-100 border-b border-gray-300 dark:border-gray-700 last:border-0 transition-colors"
+                            >
+                              <MapPin className="h-5 w-5 text-gray-600 dark:text-gray-400 mt-1 flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-sm text-gray-900 dark:text-white truncate">
+                                  {p.structured_formatting?.main_text || p.description}
+                                </p>
+                                <p className="text-xs text-gray-700 dark:text-gray-300 truncate">
+                                  {p.structured_formatting?.secondary_text || p.description}
+                                </p>
+                              </div>
+                            </button>
+                          )
+                        })
                       )}
                     </div>
                   )}
