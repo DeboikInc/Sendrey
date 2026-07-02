@@ -207,7 +207,6 @@ export default function OnboardingScreen({
     }
   }, [errors, showOtpStep, onErrorClose]);
 
-  // Handle registration success
   useEffect(() => {
     if (registrationSuccess) {
       setMessages(prev => prev.filter(msg => msg.text !== "In progress..."));
@@ -228,7 +227,7 @@ export default function OnboardingScreen({
     }
   }, [registrationSuccess]);
 
-  // Initialize conversation with first question ONLY ONCE
+  // Initialize conversation with first question once
   useEffect(() => {
     if (!hasShownFirstQuestion.current && messages.length === 0 && !showOtpStep && !isRetrying) {
       setMessages([{
@@ -439,7 +438,7 @@ export default function OnboardingScreen({
       },
     ]);
 
-    onReturningUserConfirm();
+    onReturningUserConfirm(returningUser?.userType || 'user');
   };
 
   const handleReturningNo = () => {

@@ -11,17 +11,18 @@ import {
     resendEmailVerification,
     sendReturningUserEmailOTP,
     // verifyReturningUserPhone,
+    checkExistingUser
 } from "../../Redux/authSlice";
 import { authStorage } from '../../utils/authStorage';
 
-// ─── Geolocation config
+// Geolocation config
 const GEO_OPTIONS = {
     enableHighAccuracy: false,
     timeout: 8000,
     maximumAge: 60000,
 };
 
-const MAX_WATCH_DURATION = 20000; // ms — hard cap on total watch time
+const MAX_WATCH_DURATION = 20000;
 
 export const Auth = () => {
     const [dark, setDark] = useDarkMode();
@@ -41,7 +42,6 @@ export const Auth = () => {
     const [returningUser, setReturningUser] = useState(null);
     const [returningUserHasTerms, setReturningUserHasTerms] = useState(false);
 
-    // Location state
     // eslint-disable-next-line no-unused-vars
     const [userLocation, setUserLocation] = useState(null);
     const [locationError, setLocationError] = useState(null);
@@ -49,14 +49,12 @@ export const Auth = () => {
     const [locationPermissionDenied, setLocationPermissionDenied] = useState(false);
     const [isReturningUserSuccess, setIsReturningUserSuccess] = useState(false);
 
-    // Internal refs — survive re-renders, no stale closure issues
-    const bestPositionRef = useRef(null); // { latitude, longitude, accuracy }
+    const bestPositionRef = useRef(null);
     const watchIdRef = useRef(null);
     const watchTimerRef = useRef(null);
     const attemptCountRef = useRef(0);
     const resolvedRef = useRef(false);
 
-    // ── Finalise: commit the best fix we have and clean up ────────────────
     const finaliseLocation = useCallback((errorCode = null) => {
         if (resolvedRef.current) return;
         resolvedRef.current = true;
@@ -73,22 +71,21 @@ export const Auth = () => {
         setIsGettingLocation(false);
 
         if (errorCode !== null) {
-            // Explicit permission / unavailability error
             switch (errorCode) {
-                case 1: // PERMISSION_DENIED
+                case 1:
                     setLocationError(
                         'Sendrey needs your location to connect you with nearby runners. ' +
                         'Please enable location access in your browser settings and try again.'
                     );
                     setLocationPermissionDenied(true);
                     break;
-                case 2: // POSITION_UNAVAILABLE
+                case 2: 
                     setLocationError(
                         'Location information is unavailable. ' +
                         'Please check your device settings and try again.'
                     );
                     break;
-                case 3: // TIMEOUT (per-attempt) — we may still have a best fix
+                case 3: 
                     if (!bestPositionRef.current) {
                         setLocationError(
                             'Location request timed out. ' +
@@ -116,7 +113,6 @@ export const Auth = () => {
                 `[geo] Settled — accuracy: ${bestPositionRef.current.accuracy?.toFixed(1)}m`
             );
         } else if (errorCode === null) {
-            // Timed out with no fix and no specific error code
             setLocationError(
                 'Could not determine your location. ' +
                 'Please check your device settings and try again.'
@@ -124,7 +120,6 @@ export const Auth = () => {
         }
     }, []);
 
-    // ── Start acquisition ─────────────────────────────────────────────────
     const requestLocation = useCallback(() => {
         if (!('geolocation' in navigator)) {
             setLocationError('Geolocation is not supported by your browser. Please use a different browser.');
@@ -132,7 +127,6 @@ export const Auth = () => {
             return;
         }
 
-        // Reset everything for a fresh attempt
         resolvedRef.current = false;
         bestPositionRef.current = null;
         attemptCountRef.current = 0;
@@ -166,7 +160,6 @@ export const Auth = () => {
         }, MAX_WATCH_DURATION);
     }, [finaliseLocation]);
 
-    // ── Run on mount; clean up on unmount ─────────────────────────────────
     useEffect(() => {
         requestLocation();
 
@@ -182,15 +175,11 @@ export const Auth = () => {
         };
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    // ── Retry (called from UI button) ─────────────────────────────────────
     const handleRetryLocation = () => {
         requestLocation();
     };
 
-    // ─────────────────────────────────────────────────────────────────────────
     // Error helpers
-    // ─────────────────────────────────────────────────────────────────────────
-
     const extractAllErrors = (error) => {
         const errors = [];
 
@@ -224,35 +213,10 @@ export const Auth = () => {
         );
     };
 
-    // ─────────────────────────────────────────────────────────────────────────
     // Registration / OTP handlers
-    // ─────────────────────────────────────────────────────────────────────────
-
     const handleOnboardingComplete = async (data) => {
-        // Returning user — confirmed "yes, that's me", send OTP
-        if (data.returningUserConfirmed && returningUser) {
-            try {
-                await dispatch(sendReturningUserEmailOTP({
-                    email: returningUser.email,
-                    userType: 'user'
-                }
-
-                )).unwrap();
-                // await dispatch(sendReturningUserPhoneOTP({ phone: returningUser.phone })).unwrap(); // phone path
-                setTempUserData({ email: returningUser.email, phone: returningUser.phone, name: returningUser.name });
-                setNeedsOtpVerification(true);
-                setAllErrors([]);
-            } catch (error) {
-                setAllErrors(extractAllErrors(error));
-            }
-            return;
-        }
-
-
-        // OTP verification step
         if (data.otp && tempUserData) {
             try {
-                // const result = await dispatch(verifyPhone({ phone: tempUserData.phone, otp: data.otp })).unwrap();
                 const result = await dispatch(verifyEmailOTP({
                     email: tempUserData.email,
                     otp: data.otp,
@@ -269,15 +233,13 @@ export const Auth = () => {
                     if (hasAcceptedTerms) {
                         setTimeout(() => navigate("/welcome", { replace: true }), 2500);
                     }
-                    // terms modal will handle navigation for returning user without terms
                 } else {
                     if (hasAcceptedTerms) {
                         navigate("/welcome", { replace: true });
                     } else {
-                        setRegistrationSuccess(true); // triggers terms modal
+                        setRegistrationSuccess(true);
                     }
                 }
-
 
                 setNeedsOtpVerification(false);
                 setAllErrors([]);
@@ -289,35 +251,72 @@ export const Auth = () => {
             return;
         }
 
+        if (data.returningUserConfirmed && returningUser) {
+            try {
+                await dispatch(sendReturningUserEmailOTP({
+                    email: returningUser.email,
+                    userType: returningUser.userType || 'user'
+                })).unwrap();
+                setTempUserData({
+                    email: returningUser.email,
+                    phone: returningUser.phone,
+                    name: returningUser.name
+                });
+                setNeedsOtpVerification(true);
+                setAllErrors([]);
+            } catch (error) {
+                setAllErrors(extractAllErrors(error));
+            }
+            return;
+        }
+
+        // New user registration
         const { name, phone, email } = data;
         const nameParts = name ? name.trim().split(" ") : [];
         const firstName = nameParts[0] || "";
         const lastName = nameParts.slice(1).join(" ");
 
         const payload = {
-            role: userType,
+            role: userType || 'user',
             phone,
             email,
-            // latitude: userLocation.latitude,
-            // longitude: userLocation.longitude,
             ...(firstName && { firstName }),
             ...(lastName && { lastName }),
             ...(data.password && { password: data.password }),
-            ...(data.email && { email: data.email }),
         };
 
-        console.log("Registration payload with location:", payload);
+        console.log("Registration payload:", payload);
 
+        try {
+            const checkResult = await dispatch(checkExistingUser({
+                email: payload.email,
+                userType: userType || 'user'
+            })).unwrap();
+
+            if (checkResult.exists) {
+                setReturningUser({
+                    name: checkResult.firstName,
+                    email: payload.email,
+                    phone: payload.phone,
+                    userType: userType || 'user',
+                    kycStatus: checkResult.kycStatus
+                });
+                setAllErrors([]);
+                return; 
+            }
+        } catch (error) {
+            console.warn('User check failed, proceeding with registration:', error);
+        }
+
+        // proceed with reg
         try {
             const result = await dispatch(register(payload)).unwrap();
 
-            // set token
             const token = result.token;
             const refreshToken = result.refreshToken;
             if (token) await authStorage.setTokens(token, refreshToken);
 
             console.log('register result:', result);
-            console.log('token:', result.token);
 
             setTempUserData({ phone, name, email });
             setNeedsOtpVerification(true);
@@ -332,12 +331,13 @@ export const Auth = () => {
                 /already exist|already registered/i.test(raw);
 
             if (isAlreadyExists) {
-                // Extract name from error payload if server returns it, else fall back to what user typed
+                // Race condition — user was created between check and register
                 const existingName = error?.data?.userName || error?.userName || "";
                 setReturningUser({
                     name: existingName,
                     email: payload.email,
                     phone: payload.phone,
+                    userType: userType || 'user',
                 });
                 setAllErrors([]);
             } else {

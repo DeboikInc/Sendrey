@@ -212,6 +212,19 @@ export const fetchUserMe = createAsyncThunk('auth/fetchUserMe', async (_, { reje
     }
 });
 
+export const checkExistingUser = createAsyncThunk('auth/check-existing-user', async ({ email, userType = 'user' }, { rejectWithValue }) => {
+    try {
+        const res = await api.post('/auth/check-existing-user', { email, userType });
+        return res.data;
+    } catch (err) {
+        return rejectWithValue({
+            ...(err.response?.data ?? {}),
+            status: err.response?.status,
+        });
+    }
+});
+
+
 export const wipeRunnerLocalStorage = (runnerId) => {
     console.log('[WIPE] called with runnerId:', runnerId);
     console.log('[WIPE] localStorage BEFORE wipe:', {
@@ -476,7 +489,11 @@ const authSlice = createSlice({
 
             .addCase(resendPhoneVerification.pending, (state) => { state.status = "loading"; state.error = null; })
             .addCase(resendPhoneVerification.fulfilled, (state) => { state.status = "succeeded"; })
-            .addCase(resendPhoneVerification.rejected, (state, action) => { state.status = "failed"; state.error = action.payload; });
+            .addCase(resendPhoneVerification.rejected, (state, action) => { state.status = "failed"; state.error = action.payload; })
+
+            .addCase(checkExistingUser.pending, (state) => { state.status = "loading"; state.error = null; })
+            .addCase(checkExistingUser.fulfilled, (state) => { state.status = "succeeded"; })
+            .addCase(checkExistingUser.rejected, (state, action) => { state.status = "failed"; state.error = action.payload; });
     },
 });
 
