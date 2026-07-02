@@ -8,7 +8,7 @@ import { updateOrder } from '../../Redux/orderSlice';
 import { FaWalking, FaMotorcycle } from "react-icons/fa";
 import { useCameraHook } from "../../hooks/useCameraHook";
 import { getPedestrianConfig } from '../../utils/pedestrianConfig';
-import { calculateRouteDistance } from '../../utils/pricing';
+import { calculateRouteDistance, haversineDistance } from '../../utils/pricing';
 
 const initialMessages = [
   {
@@ -336,6 +336,7 @@ export default function VehicleSelectionScreen({
       if (origin && dest) {
         try {
           const pedestrianConfig = await getPedestrianConfig();
+          console.log('[pedestrian check]', { origin, dest, leg2: haversineDistance(origin, dest) });
           const { error } = calculateRouteDistance(
             selectedService, origin, dest, 'pedestrian',
             pedestrianConfig.pedestrianMaxDeliveryLeg
