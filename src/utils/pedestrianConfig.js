@@ -11,13 +11,12 @@ export async function getPedestrianConfig({ forceRefresh = false } = {}) {
             .then((res) => {
                 console.log('[pedestrianConfig] status:', res.status, 'url:', res.url);
                 if (!res.ok) throw new Error(`Pedestrian config fetch failed: ${res.status}`);
-                if (!res.ok) throw new Error(`Pedestrian config fetch failed: ${res.status}`);
                 return res.json();
             })
             .then((data) => {
                 console.log('[pedestrianConfig] raw response:', data);
                 cachedConfig = data.data || data;
-                return data;
+                return cachedConfig;
             })
             .finally(() => {
                 fetchPromise = null;
