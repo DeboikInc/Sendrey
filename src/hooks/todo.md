@@ -22,4 +22,4 @@ MongoDB Atlas — make sure it's not on free tier either (512MB storage limit)
 
 "runner misconduct costs us X in Paystack fees per ban, do we absorb or pass to user?
 
-when user clicks no, maybe by mistake, the server already saves the prev data, how do i prevent this? e.g i picked wrong fleetType and later picked correct one but initial one already saved
+from lasu to iyana iba is under 1km - works!
