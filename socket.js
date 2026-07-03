@@ -466,6 +466,7 @@ async function shutdownSocketServer() {
 
 module.exports.startSocketServer = startSocketServer;
 module.exports.shutdownSocketServer = shutdownSocketServer;
+
 module.exports.getIO = () => {
   if (!ioInstance) {
     console.warn('IO not initialized yet');

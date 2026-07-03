@@ -17,24 +17,7 @@ const { Chat } = require('../models/Chat');
 
 const mongoose = require('mongoose');
 
-let ioInstance;
-const getSocketIO = () => {
-  if (ioInstance) return ioInstance;
-  try {
-    const socketModule = require('../socket');
-    if (socketModule && typeof socketModule.getIO === 'function') {
-      ioInstance = socketModule.getIO();
-    } else {
-      console.warn('socketModule.getIO is not a function yet');
-      return null;
-    }
-  } catch (err) {
-    console.warn('Socket module not ready yet:', err.message);
-    return null;
-  }
-  return ioInstance;
-};
-
+const { getSocketIO } = require('./socketAccessor');
 class PaymentService {
 
   async createVirtualAccount(userId, email, fullName) {

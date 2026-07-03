@@ -5,6 +5,7 @@ const cloudinary = require('../config/cloudinary');
 const paystackService = require('./paystackService');
 const logger = require('../utils/logger');
 const { withTransaction } = require('../utils/withTransaction');
+const { getSocketIO } = require('./socketAccessor');
 
 const uploadReceipt = (base64String) =>
   new Promise((resolve, reject) => {
@@ -164,7 +165,7 @@ const submitReceipt = async ({
 };
 
 const notifyUserOfReceipt = async ({ chatId, userId, orderId, vendorName, amountSpent, receiptUrl }) => {
-  const io = require('../socket').getIO();
+  const io = getSocketIO();
 
   const submissionId = `payout-receipt-${Date.now()}`;
   const message = {
