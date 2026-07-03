@@ -47,16 +47,6 @@ class AuthService {
           selfieStatus: existingUser.biometricVerification?.status || 'not_submitted',
           overallVerified: existingUser.isVerifiedKyc || false,
         };
-
-        console.log('Existing user found during registration:', {
-          isVerified: existingUser.isVerified,
-          isEmailVerified: existingUser.isEmailVerified,
-          ninStatus: existingUser.verificationDocuments?.nin?.status || 'not_submitted',
-          driverLicenseStatus: existingUser.verificationDocuments?.driverLicense?.status || 'not_submitted',
-          selfieVerified: existingUser.biometricVerification?.selfieVerified || false,
-          selfieStatus: existingUser.biometricVerification?.status || 'not_submitted',
-          overallVerified: existingUser.isVerifiedKyc || false,
-        });
         throw err;
       }
 
@@ -129,6 +119,31 @@ class AuthService {
       logger.error(`AuthService - ${userType} Register error:`, error);
       throw error;
     }
+  }
+
+  async checkExistingUser(email, userType = 'user') {
+    const Model = userType === 'runner' ? Runner : User;
+    const user = await Model.findOne({ email });
+
+    console.log("Existing user being checked", user?.firstName, "userType:",userType,);
+
+    if (!user) return null;
+
+    return {
+      exists: true,
+      firstName: user.firstName,
+      kycStatus: userType === 'runner' ? {
+        isVerified: user.isVerified,
+        isEmailVerified: user.isEmailVerified,
+        ninStatus: user.verificationDocuments?.nin?.status || 'not_submitted',
+        driverLicenseStatus: user.verificationDocuments?.driverLicense?.status || 'not_submitted',
+        selfieVerified: user.biometricVerification?.selfieVerified || false,
+        overallVerified: user.isVerifiedKyc || false,
+      } : {
+        isVerified: user.isVerified,
+        isEmailVerified: user.isEmailVerified,
+      }
+    };
   }
 
   /**
