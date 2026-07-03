@@ -9,6 +9,7 @@ import Map from "../common/Map";
 import { useDispatch, useSelector } from "react-redux";
 import { addLocation } from "../../Redux/userSlice";
 import debounce from "lodash/debounce";
+import { useGoogleMaps } from "../../hooks/useGoogleMaps";
 
 import { getSuggestionStatus } from "../../Redux/businessSlice";
 import BusinessConversionFlow from "./BusinessConversionFlow";
@@ -45,7 +46,7 @@ export default function PickupFlowScreen({
   const [showCustomInput, setShowCustomInput] = useState(true);
   const [showPhoneInput, setShowPhoneInput] = useState(false);
   const [pickupItems, setPickupItems] = useState("");
-
+  const [placesLibrary, setPlacesLibrary] = useState(null);
   const [showConversionFlow, setShowConversionFlow] = useState(false);
 
   // Search states
@@ -61,13 +62,14 @@ export default function PickupFlowScreen({
   const currentUser = useSelector(s => s.auth.user);
   const prevStepRef = useRef(null);
   const isSubmittingRef = useRef(false);
+  const usedButtonIdsRef = useRef(new Set());
 
   const pickupCoordinatesRef = useRef(null);
   const deliveryCoordinatesRef = useRef(null);
   const pickupPhoneMatchesUserPhone = useRef(false);
   const sessionTokenRef = useRef(null);
   const searchRequestIdRef = useRef(0);
-
+  const { isLoaded } = useGoogleMaps();
 
   // autoscroll
   useEffect(() => {
@@ -83,6 +85,22 @@ export default function PickupFlowScreen({
     }
   }, [messages, showCustomInput, showPhoneInput, currentStep, predictions.length]);
 
+  useEffect(() => {
+    if (!window.google) return;
+
+    const initPlaces = async () => {
+      try {
+        const { AutocompleteSuggestion, Place } = await google.maps.importLibrary("places");
+        setPlacesLibrary({ AutocompleteSuggestion, Place });
+      } catch (error) {
+        console.error('Failed to load Places library:', error);
+      }
+    };
+
+    initPlaces();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [window.google]);
+
   const getSessionToken = () => {
     if (!sessionTokenRef.current && window.google) {
       sessionTokenRef.current = new window.google.maps.places.AutocompleteSessionToken();
@@ -91,7 +109,7 @@ export default function PickupFlowScreen({
   };
 
   const searchPlaces = useCallback(async (query, step) => {
-    if (!query || query.length < 2 || !window.google) {
+    if (!query || query.length < 2 || !window.google || !placesLibrary) {
       setPredictions([]);
       return;
     }
@@ -105,34 +123,33 @@ export default function PickupFlowScreen({
     const requestId = ++searchRequestIdRef.current;
 
     try {
-      const suggestion = new google.maps.places.AutocompleteSuggestion({
+      const { AutocompleteSuggestion } = placesLibrary;
+
+      const request = {
         input: query,
         locationBias: {
-          center: new google.maps.LatLng(6.5244, 3.3792),
           radius: 50000,
+          center: { lat: 6.5244, lng: 3.3792 },
         },
-        region: 'ng',
+        includedRegionCodes: ['ng'],
+        includedPrimaryTypes: ['street_address', 'premise', 'subpremise', 'establishment'],
         sessionToken: getSessionToken(),
-      });
+      };
 
-      const response = await suggestion.fetch();
+      const { suggestions } = await AutocompleteSuggestion.fetchAutocompleteSuggestions(request);
 
       if (requestId !== searchRequestIdRef.current) return;
 
-      const formattedPredictions = (response.suggestions || []).map((s) => {
+      const formattedPredictions = (suggestions || []).map((s) => {
         const p = s.placePrediction;
         return {
           place_id: p.placeId,
           description: p.text.text,
           structured_formatting: {
-            main_text: p.mainText.text,
+            main_text: p.mainText?.text || p.text.text,
             secondary_text: p.secondaryText?.text || '',
           },
-
-          lat: p.location?.lat || null,
-          lng: p.location?.lng || null,
-          // store the place object for later use
-          _place: p.place,
+          _placePrediction: p, // keep the original for toPlace()
         };
       });
 
@@ -146,29 +163,30 @@ export default function PickupFlowScreen({
       setPredictions([]);
       setIsSearching(false);
     }
-  }, []);
+  }, [placesLibrary]);
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const debouncedSearch = useCallback(
-    debounce(async (query, step) => {
-      // Only search for locations, not items
+  const searchPlacesRef = useRef(searchPlaces);
+  useEffect(() => {
+    searchPlacesRef.current = searchPlaces;
+  }, [searchPlaces]);
+
+  const debouncedSearch = useRef(
+    debounce((query, step) => {
       if (step !== "pickup-location" && step !== "delivery-location") {
         setPredictions([]);
         setIsSearching(false);
         return;
       }
-
-      searchPlaces(query, step);
-    }, 400),
-    []
-  );
+      searchPlacesRef.current(query, step);
+    }, 400)
+  ).current;
 
   useEffect(() => {
     debouncedSearch(searchTerm, currentStep);
     return () => {
       debouncedSearch.cancel();
     };
-  }, [searchTerm, debouncedSearch, currentStep]);
+  }, [searchTerm, currentStep, debouncedSearch]);
 
   useEffect(() => {
     // Clear search whenever step changes, regardless of what it changes to
@@ -277,7 +295,7 @@ export default function PickupFlowScreen({
   const handleSuggestionSelect = (prediction) => {
     if (!window.google || isSubmittingRef.current) return;
 
-    if (!prediction.place_id || typeof prediction.place_id !== 'string' || !prediction.place_id.startsWith('ChIJ')) {
+    if (!prediction.place_id || typeof prediction.place_id !== 'string') {
       console.error('Invalid place_id:', prediction.place_id);
       setSearchError('Invalid location. Please try again.');
       setShowCustomInput(true);
@@ -317,21 +335,17 @@ export default function PickupFlowScreen({
       return;
     }
 
-    const place = new google.maps.places.Place({
-      id: prediction.place_id,
-      requestedLanguage: 'en',
-    });
-
+    const place = prediction._placePrediction.toPlace();
 
     place.fetchFields({
       fields: ['geometry', 'formattedAddress', 'displayName'],
     })
       .then((result) => {
         handleLocationResult({
-          lat: result.geometry.location.lat(),
-          lng: result.geometry.location.lng(),
-          address: result.formattedAddress || prediction.description,
-          name: result.displayName || prediction.structured_formatting?.main_text || prediction.description,
+          lat: result.place.location.lat(),
+          lng: result.place.location.lng(),
+          address: result.place.formattedAddress || prediction.description,
+          name: result.place.displayName || prediction.structured_formatting?.main_text || prediction.description,
         });
       })
       .catch((error) => {
@@ -833,7 +847,9 @@ export default function PickupFlowScreen({
     }, 1200);
   };
 
-  const handleUseMyNumber = (phoneType) => {
+  const handleUseMyNumber = (messageId, phoneType) => {
+    if (usedButtonIdsRef.current.has(messageId)) return;
+    usedButtonIdsRef.current.add(messageId);
     const myNumber = currentUser?.phone || currentUser?.user?.phone;
 
     console.log('currentUser in handleUseMyNumber:', currentUser);
@@ -854,6 +870,10 @@ export default function PickupFlowScreen({
       return;
     }
 
+    setMessages((prev) => prev.map((msg) =>
+      msg.id === messageId ? { ...msg, hasUseMyNumberButton: false } : msg
+    ));
+
     if (phoneType === "pickup") {
       send(myNumber, "pickup-phone");
     } else {
@@ -861,7 +881,14 @@ export default function PickupFlowScreen({
     }
   };
 
-  const handleChooseDeliveryClick = () => {
+  const handleChooseDeliveryClick = (messageId) => {
+    if (usedButtonIdsRef.current.has(messageId)) return;
+    usedButtonIdsRef.current.add(messageId);
+
+    setMessages((prev) => prev.map((msg) =>
+      msg.id === messageId ? { ...msg, hasChooseDeliveryButton: false } : msg
+    ));
+
     setSelectedPlace(null);
     setShowMap(true);
     setShowLocationButtons(true);
@@ -913,8 +940,8 @@ export default function PickupFlowScreen({
       return;
     }
 
-    if (!window.google) {
-      setSearchError('Maps not ready yet. Please wait a moment and try again.');
+    if (!isLoaded || !window.google) {
+      setSearchError('Google Maps is still loading. Please wait a moment and try again.');
       return;
     }
 
@@ -1055,13 +1082,22 @@ export default function PickupFlowScreen({
                     m={m}
                     showCursor={false}
                     showStatusIcons={false}
-                    onChooseDeliveryClick={m.hasChooseDeliveryButton ? handleChooseDeliveryClick : undefined}
-                    onUseMyNumberClick={m.hasUseMyNumberButton ? () => handleUseMyNumber(m.phoneNumberType) : undefined}
-                    onViewSavedLocations={m.hasViewSavedLocations ? () => onOpenSavedLocations(  // ← ADD THIS
-                      true,
-                      handleLocationSelectedFromSaved,
-                      () => setShowLocationButtons(true)
-                    ) : undefined}
+                    onChooseDeliveryClick={m.hasChooseDeliveryButton ? handleChooseDeliveryClick(m.id) : undefined}
+                    onUseMyNumberClick={m.hasUseMyNumberButton ? () => handleUseMyNumber(m.id, m.phoneNumberType) : undefined}
+                    onViewSavedLocations={m.hasViewSavedLocations ? () => {
+                      if (usedButtonIdsRef.current.has(m.id)) return;
+                      usedButtonIdsRef.current.add(m.id);
+
+                      setMessages((prev) => prev.map((msg) =>
+                        msg.id === m.id ? { ...msg, hasViewSavedLocations: false } : msg
+                      ));
+
+                      onOpenSavedLocations(
+                        true,
+                        handleLocationSelectedFromSaved,
+                        () => setShowLocationButtons(true)
+                      );
+                    } : undefined}
                     disableContextMenu={true}
                   />
                 </p>
