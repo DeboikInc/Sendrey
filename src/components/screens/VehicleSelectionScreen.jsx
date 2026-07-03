@@ -356,6 +356,7 @@ export default function VehicleSelectionScreen({
                   text: `⚠️ Pedestrian fleet cannot be used when the delivery distance exceeds ${pedestrianConfig.pedestrianMaxDeliveryLeg} meters. Please select a different fleet type.`,
                   time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
                   status: "delivered",
+                  isSystemPrompt: true,
                 }];
               });
               setSelectedVehicle(null);
@@ -376,6 +377,7 @@ export default function VehicleSelectionScreen({
       from: "them",
       text: "In progress...",
       status: "delivered",
+      isSystemPrompt: true,
     };
     setMessages(prev => [...prev, botResponse]);
 
