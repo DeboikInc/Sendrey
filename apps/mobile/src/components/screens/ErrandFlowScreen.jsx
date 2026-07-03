@@ -73,6 +73,7 @@ export default function ErrandFlowScreen({
     const deliveryCoordinatesRef = useRef(null);
     const searchRequestIdRef = useRef(0);
     const sessionTokenRef = useRef(null);
+    const usedButtonIdsRef = useRef(new Set());
 
     const currentUser = authState?.user ?? authState;
 
@@ -111,32 +112,31 @@ export default function ErrandFlowScreen({
         const requestId = ++searchRequestIdRef.current;
 
         try {
-            const suggestion = new google.maps.places.AutocompleteSuggestion({
+            const { AutocompleteSuggestion } = await google.maps.importLibrary("places");
+
+            const { suggestions } = await AutocompleteSuggestion.fetchAutocompleteSuggestions({
                 input: query,
                 locationBias: {
-                    center: new google.maps.LatLng(6.5244, 3.3792),
                     radius: 50000,
+                    center: { lat: 6.5244, lng: 3.3792 },
                 },
-                region: 'ng',
+                includedRegionCodes: ['ng'],
+                includedPrimaryTypes: ['street_address', 'premise', 'subpremise', 'establishment'],
                 sessionToken: getSessionToken(),
             });
 
-            const response = await suggestion.fetch();
-
             if (requestId !== searchRequestIdRef.current) return;
 
-            const formattedPredictions = (response.suggestions || []).map((s) => {
+            const formattedPredictions = (suggestions || []).map((s) => {
                 const p = s.placePrediction;
                 return {
                     place_id: p.placeId,
                     description: p.text.text,
                     structured_formatting: {
-                        main_text: p.mainText.text,
+                        main_text: p.mainText?.text || p.text.text,
                         secondary_text: p.secondaryText?.text || '',
                     },
-                    lat: p.location?.lat || null,
-                    lng: p.location?.lng || null,
-                    _place: p.place,
+                    _placePrediction: p,
                 };
             });
 
@@ -152,19 +152,21 @@ export default function ErrandFlowScreen({
         }
     }, []);
 
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    const debouncedSearch = useCallback(
-        debounce(async (query, step) => {
-            // Only search during location steps
+    const searchPlacesRef = useRef(searchPlaces);
+    useEffect(() => {
+        searchPlacesRef.current = searchPlaces;
+    }, [searchPlaces]);
+
+    const debouncedSearch = useRef(
+        debounce((query, step) => {
             if (step !== "market-location" && step !== "delivery-location") {
                 setPredictions([]);
                 setIsSearching(false);
                 return;
             }
-            searchPlaces(query, step)
-        }, 400),
-        []
-    );
+            searchPlacesRef.current(query, step);
+        }, 400)
+    ).current;
 
     // budget parsing and formatting
     const parseBudgetInput = (text) => {
@@ -206,6 +208,7 @@ export default function ErrandFlowScreen({
             setSearchTerm("");
             setPredictions([]);
             setIsSearching(false);
+            sessionTokenRef.current = null;
             prevStepRef.current = currentStep;
         }
     }, [currentStep]);
@@ -381,7 +384,7 @@ export default function ErrandFlowScreen({
     const handleSuggestionSelect = (prediction) => {
         if (!window.google || isSubmittingRef.current) return;
 
-        if (!prediction.place_id || typeof prediction.place_id !== 'string' || !prediction.place_id.startsWith('ChIJ')) {
+        if (!prediction.place_id || typeof prediction.place_id !== 'string') {
             console.error('Invalid place_id:', prediction.place_id);
             setSearchError('Invalid location. Please try again.');
             setShowCustomInput(true);
@@ -392,33 +395,22 @@ export default function ErrandFlowScreen({
         isSubmittingRef.current = true;
         setShowCustomInput(false);
 
-        if (prediction.lat && prediction.lng) {
-            handleLocationResult({
-                lat: prediction.lat,
-                lng: prediction.lng,
-                address: prediction.description,
-                name: prediction.structured_formatting?.main_text || prediction.description,
-            }, prediction);
-            return;
-        }
-
-        const place = new google.maps.places.Place({
-            id: prediction.place_id,
-            requestedLanguage: 'en',
-        });
+        const place = prediction._placePrediction.toPlace();
 
         place.fetchFields({
-            fields: ['geometry', 'formattedAddress', 'displayName'],
+            fields: ['location', 'formattedAddress', 'displayName'],
         })
             .then((result) => {
+                sessionTokenRef.current = null;
                 handleLocationResult({
-                    lat: result.geometry.location.lat(),
-                    lng: result.geometry.location.lng(),
-                    address: result.formattedAddress || prediction.description,
-                    name: result.displayName || prediction.structured_formatting?.main_text || prediction.description,
+                    lat: result.place.location.lat(),
+                    lng: result.place.location.lng(),
+                    address: result.place.formattedAddress || prediction.description,
+                    name: result.place.displayName || prediction.structured_formatting?.main_text || prediction.description,
                 }, prediction);
             })
             .catch((error) => {
+                sessionTokenRef.current = null;
                 console.error('Place fetch failed:', error);
                 fallbackToGeocoder(prediction.place_id, prediction.description, prediction);
             });
@@ -764,18 +756,39 @@ export default function ErrandFlowScreen({
         }, 1200);
     };
 
-    const handleChooseDeliveryClick = () => {
-        setSelectedPlace(null); // Clear before opening map
+    const handleChooseDeliveryClick = (messageId) => {
+        if (usedButtonIdsRef.current.has(messageId)) return;
+        usedButtonIdsRef.current.add(messageId);
+
+        setMessages((prev) => prev.map((msg) =>
+            msg.id === messageId ? { ...msg, hasChooseDeliveryButton: false } : msg
+        ));
+
+        setSelectedPlace(null);
         setShowMap(true);
         setShowLocationButtons(true);
     };
 
-    const handleBudgetFlexibility = (choice) => {
+    const handleBudgetFlexibility = (messageId, choice) => {
+        if (usedButtonIdsRef.current.has(messageId)) return;
+        usedButtonIdsRef.current.add(messageId);
+
+        setMessages((prev) => prev.map((msg) =>
+            msg.id === messageId ? { ...msg, hasBudgetFlexibilityButtons: false } : msg
+        ));
+
         send(choice, "budget-flexibility");
     };
 
 
-    const handleBudgetConfirm = (confirmed, confirmedBudget) => {
+    const handleBudgetConfirm = (messageId, confirmed, confirmedBudget) => {
+        if (usedButtonIdsRef.current.has(messageId)) return;
+        usedButtonIdsRef.current.add(messageId);
+
+        setMessages((prev) => prev.map((msg) =>
+            msg.id === messageId ? { ...msg, hasBudgetConfirmButtons: false } : msg
+        ));
+
         if (confirmed) {
             setMessages(prev => [...prev, {
                 id: Date.now(),
@@ -913,14 +926,23 @@ export default function ErrandFlowScreen({
                                         m={m}
                                         showCursor={false}
                                         showStatusIcons={false}
-                                        onChooseDeliveryClick={m.hasChooseDeliveryButton ? handleChooseDeliveryClick : undefined}
-                                        onBudgetFlexibilityClick={m.hasBudgetFlexibilityButtons ? handleBudgetFlexibility : undefined}
-                                        onBudgetConfirmClick={m.hasBudgetConfirmButtons ? handleBudgetConfirm : undefined}
-                                        onViewSavedLocations={m.hasViewSavedLocations ? () => onOpenSavedLocations(
-                                            true,
-                                            handleLocationSelectedFromSaved,
-                                            () => setShowLocationButtons(true)
-                                        ) : undefined}
+                                        onChooseDeliveryClick={m.hasChooseDeliveryButton ? () => handleChooseDeliveryClick(m.id) : undefined}
+                                        onBudgetFlexibilityClick={m.hasBudgetFlexibilityButtons ? (choice) => handleBudgetFlexibility(m.id, choice) : undefined}
+                                        onBudgetConfirmClick={m.hasBudgetConfirmButtons ? (confirmed, confirmedBudget) => handleBudgetConfirm(m.id, confirmed, confirmedBudget) : undefined}
+                                        onViewSavedLocations={m.hasViewSavedLocations ? () => {
+                                            if (usedButtonIdsRef.current.has(m.id)) return;
+                                            usedButtonIdsRef.current.add(m.id);
+
+                                            setMessages((prev) => prev.map((msg) =>
+                                                msg.id === m.id ? { ...msg, hasViewSavedLocations: false } : msg
+                                            ));
+
+                                            onOpenSavedLocations(
+                                                true,
+                                                handleLocationSelectedFromSaved,
+                                                () => setShowLocationButtons(true)
+                                            );
+                                        } : undefined}
                                     />
                                 </p>
                             ))}
