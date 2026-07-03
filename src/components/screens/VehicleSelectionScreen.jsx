@@ -16,7 +16,8 @@ const initialMessages = [
     from: "them",
     text: "What kind of fleet can handle this errand? Select from the options below:",
     time: "12:26 PM",
-    status: "delivered"
+    status: "delivered",
+    isSystemPrompt: true,
   },
   {
     id: 2,
@@ -24,6 +25,7 @@ const initialMessages = [
     text: "⚠️ Note: Bikes, bicycles and pedestrians are only suitable for items weighing 5kg or less.",
     time: "12:26 PM",
     status: "delivered",
+    isSystemPrompt: true,
   }
 ];
 
@@ -104,6 +106,7 @@ export default function VehicleSelectionScreen({
           text: "What kind of fleet can handle this errand? Select from the options below:",
           time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
           status: "delivered",
+          isSystemPrompt: true,
         },
         {
           id: baseId + 1,
@@ -111,6 +114,7 @@ export default function VehicleSelectionScreen({
           text: "⚠️ Note: Bikes and bicycles are only suitable for items weighing 5kg or less.",
           time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
           status: "delivered",
+          isSystemPrompt: true,
         }
       ]);
       setShowConnectButton(false);
@@ -349,7 +353,7 @@ export default function VehicleSelectionScreen({
                 return [...filtered, {
                   id: Date.now(),
                   from: "them",
-                  text: `⚠️ Pedestrian fleet cannot be used when the delivery distance exceeds ${pedestrianConfig.pedestrianMaxDeliveryLeg}m. Please select a different fleet type.`,
+                  text: `⚠️ Pedestrian fleet cannot be used when the delivery distance exceeds ${pedestrianConfig.pedestrianMaxDeliveryLeg} meters. Please select a different fleet type.`,
                   time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
                   status: "delivered",
                 }];
@@ -665,7 +669,7 @@ export default function VehicleSelectionScreen({
                   showCursor={false}
                   showStatusIcons={false}
                   onConnectButtonClick={m.hasConnectRunnerButton ? handleConnectToRunner : undefined}
-                  disableContextMenu={m.isFleetSelection || m.isConnectToRunner ? true : false}
+                  disableContextMenu={m.isFleetSelection || m.isConnectToRunner || m.isSystemPrompt ? true : false}
                   alwaysAllowEdit={
                     m.from === "me" &&
                     !m.hasConnectRunnerButton &&
