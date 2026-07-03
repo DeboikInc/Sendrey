@@ -1,11 +1,13 @@
 const seedPricingConfig = require('../scripts/seedPricingConfig');
 const seedMatchingConfig = require('../scripts/seedMatchingConfig');
 const seedAdmin = require('../scripts/seedAdmin');
+const seedPlatformSettings = require('../scripts/seedPlatformSettings');
 
 const SEEDS = [
   ['pricingConfig', seedPricingConfig],
   ['matchingConfig', seedMatchingConfig],
   ['admin', seedAdmin],
+  ['platform account setting', seedPlatformSettings],
 ];
 
 async function runSeeds() {

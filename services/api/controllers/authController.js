@@ -268,6 +268,26 @@ class AuthController extends BaseController {
     }
   }
 
+  checkExistingUser = async (req, res, next) => {
+    try {
+      const { email, userType = 'user' } = req.body;
+
+      if (!email) {
+        return this.error(res, 'Email is required', 400);
+      }
+
+      const result = await authService.checkExistingUser(email, userType);
+
+      if (!result) {
+        return this.success(res, { exists: false });
+      }
+
+      return this.success(res, result);
+    } catch (error) {
+      logger.error('Check existing user error:', error);
+      next(error);
+    }
+  }
 
   // ─────────────────────────────────────────────
   // LOGIN

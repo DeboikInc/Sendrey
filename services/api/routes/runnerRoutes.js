@@ -69,11 +69,7 @@ router.get('/online',
   runnerController.getOnlineRunners
 );
 
-router.get('/service/:serviceType',
-  validate(userParamsValidation.serviceType, 'params'),
-  authorize(['user', 'runner']),
-  runnerController.getRunnersByServiceType
-);
+
 
 router.patch(
     '/:runnerId/avatar',

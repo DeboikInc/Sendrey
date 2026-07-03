@@ -18,6 +18,7 @@ const pinRoutes = require('./pinRoutes')
 const uploadRoutes = require('./upload');
 const sessionRoutes = require('./sessionRoutes');
 const pricingRoutes = require('./pricingRoutes')
+const pedestrianRoutes = require('./pedestrianRoutes')
 
 // Use route modules
 router.use('/auth', authRoutes);
@@ -36,6 +37,7 @@ router.use('/business', businessRoutes);
 router.use('/pin', pinRoutes)
 router.use('/upload', uploadRoutes);
 router.use('/pricing', pricingRoutes);
+router.use('/pedestrian', pedestrianRoutes);
 
 // Export the router
 module.exports = router;

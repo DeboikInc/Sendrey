@@ -6,12 +6,15 @@ async function seedMatchingConfig() {
     console.log('[seed] matching config already exists, skipping');
     return existing;
   }
-
+  // used by server to fetch nearby runners/users
   const doc = await MatchingConfig.create({
     key: 'active',
     version: 1,
     pickupMaxDistance: 99999999,
     totalMaxDistance: 99999999,
+    pedestrianMaxRunnerLeg: 200,
+    pedestrianMaxDeliveryLeg: 800,
+    pedestrianTotalMax: 1000
   });
 
   console.log('[seed] matching config created');

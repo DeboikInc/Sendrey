@@ -634,31 +634,71 @@ function haversineDistance(lat1, lng1, lat2, lng2) {
 runnerSchema.statics.findNearbyRunners = async function ({
   pickupLat,
   pickupLng,
+  deliveryLat,
+  deliveryLng,
   fleetType,
 }) {
   const matchingConfig = await getMatchingConfig();
   const PICKUP_MAX = matchingConfig.pickupMaxDistance;
+  const isPedestrian = fleetType?.toLowerCase() === 'pedestrian';
 
+  if (isPedestrian) {
+    const RUNNER_LEG_MAX = matchingConfig.pedestrianMaxRunnerLeg; 
+    const DELIVERY_LEG_MAX = matchingConfig.pedestrianMaxDeliveryLeg; 
+    const TOTAL_MAX = matchingConfig.pedestrianTotalMax;            
+
+    // Guard: pickup → delivery must be ≤ pedestrianMaxDeliveryLeg
+    if (deliveryLat && deliveryLng) {
+      const pickupToDelivery = haversineDistance(pickupLat, pickupLng, deliveryLat, deliveryLng);
+      if (pickupToDelivery > DELIVERY_LEG_MAX) {
+        console.log('[findNearbyRunners] pedestrian: pickup→delivery too far:', pickupToDelivery);
+        return [];
+      }
+    }
+
+    const results = await this.find({
+      role: 'runner',
+      isActive: true,
+      isAvailable: true,
+      fleetType: 'pedestrian',
+    })
+      .select('firstName lastName phone currentRequest location latitude longitude avatar ' +
+        'kycStatus verificationDocuments biometricVerification isOnline isAvailable ' +
+        'fleetType isPhoneVerified isEmailVerified rating totalRatings totalRuns')
+      .lean();
+
+    return results.filter((runner) => {
+      if (!runner.latitude || !runner.longitude) return false;
+
+      const runnerToPickup = haversineDistance(
+        runner.latitude, runner.longitude, pickupLat, pickupLng
+      );
+
+      if (runnerToPickup > RUNNER_LEG_MAX) return false;
+
+      // Dynamic delivery leg budget
+      const deliveryLegBudget = TOTAL_MAX - runnerToPickup;
+
+      if (deliveryLat && deliveryLng) {
+        const pickupToDelivery = haversineDistance(pickupLat, pickupLng, deliveryLat, deliveryLng);
+        if (pickupToDelivery > deliveryLegBudget) return false;
+      }
+
+      // Attach computed distances for use in matching/sorting
+      runner._runnerToPickup = Math.round(runnerToPickup);
+      runner._deliveryLegBudget = Math.round(deliveryLegBudget);
+
+      return true;
+    });
+  }
+
+  // ── Non-pedestrian ────────────────────────────────────────────────────────
   const query = {
     role: 'runner',
     isActive: true,
     isAvailable: true,
-    fleetType: fleetType,
+    fleetType,
   };
-
-  const allOnline = await this.find({ role: 'runner', isOnline: true }).select('serviceType fleetType firstName lastName').lean();
-  console.log('[findNearbyRunners] All online runners:', allOnline.map(r => ({
-    name: `${r.firstName} ${r.lastName}`,
-    fleetType: r.fleetType,
-
-  })));
-
-  console.log('[findNearbyRunners] query:', JSON.stringify(query));
-  const total = await this.countDocuments({ role: 'runner', isOnline: true });
-  console.log('[findNearbyRunners] total online runners:', total);
-
-  const withFleet = await this.countDocuments({ role: 'runner', fleetType });
-  console.log('[findNearbyRunners] runners with fleetType', fleetType, ':', withFleet);
 
   const results = await this.find(query)
     .select('firstName lastName phone currentRequest location latitude longitude avatar ' +
@@ -666,21 +706,11 @@ runnerSchema.statics.findNearbyRunners = async function ({
       'fleetType isPhoneVerified isEmailVerified rating totalRatings totalRuns')
     .lean();
 
-  console.log('[findNearbyRunners] Results from exact match:', results.length);
-  results.forEach((runner, i) => {
-    console.log(`[findNearbyRunners] Runner ${i + 1}:`, {
-      name: `${runner.firstName} ${runner.lastName}`,
-      latitude: runner.latitude,
-      longitude: runner.longitude,
-      pickupLat,
-      pickupLng
-    });
-  });
-
   return results.filter((runner) => {
     if (!runner.latitude || !runner.longitude) return false;
-
-    const runnerToPickup = haversineDistance(runner.latitude, runner.longitude, pickupLat, pickupLng);
+    const runnerToPickup = haversineDistance(
+      runner.latitude, runner.longitude, pickupLat, pickupLng
+    );
     return runnerToPickup <= PICKUP_MAX;
   });
 };
