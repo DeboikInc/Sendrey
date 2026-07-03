@@ -67,6 +67,7 @@ export default function ErrandFlowScreen({
     const authState = useSelector(s => s.auth.user);
     const prevStepRef = useRef(null);
     const isSubmittingRef = useRef(false);
+    const pendingDeliveryButtonIdRef = useRef(null);
 
     // location coordinates
     const marketCoordinatesRef = useRef(null);
@@ -319,11 +320,20 @@ export default function ErrandFlowScreen({
             setDeliveryLocation(locationText);
             deliveryLocationRef.current = locationText;
             send(locationText, "delivery");
+
+            // disable the button that opened this map
+            if (pendingDeliveryButtonIdRef.current) {
+                const usedId = pendingDeliveryButtonIdRef.current;
+                setMessages((prev) => prev.map((msg) =>
+                    msg.id === usedId ? { ...msg, hasChooseDeliveryButton: false } : msg
+                ));
+                usedButtonIdsRef.current.add(usedId);
+                pendingDeliveryButtonIdRef.current = null;
+            }
         }
 
         setShowSaveConfirm(false);
         setShowMap(false);
-        // Clear selected place after each map use
         setSelectedPlace(null);
         setPendingPlace(null);
         setSearchTerm("");
@@ -757,13 +767,7 @@ export default function ErrandFlowScreen({
     };
 
     const handleChooseDeliveryClick = (messageId) => {
-        if (usedButtonIdsRef.current.has(messageId)) return;
-        usedButtonIdsRef.current.add(messageId);
-
-        setMessages((prev) => prev.map((msg) =>
-            msg.id === messageId ? { ...msg, hasChooseDeliveryButton: false } : msg
-        ));
-
+        pendingDeliveryButtonIdRef.current = messageId;
         setSelectedPlace(null);
         setShowMap(true);
         setShowLocationButtons(true);
@@ -837,7 +841,8 @@ export default function ErrandFlowScreen({
                             onClick={() => {
                                 setShowMap(false);
                                 setShowLocationButtons(true);
-                                setSelectedPlace(null); // Clear on close
+                                setSelectedPlace(null);
+                                pendingDeliveryButtonIdRef.current = null;
                             }}
                             className="flex items-center"
                         >
