@@ -41,15 +41,45 @@ class RunnerService {
    */
   async findNearbyRunners({
     pickupLat, pickupLng,
-    // serviceType, 
-    fleetType
+    deliveryLat, deliveryLng,
+    fleetType, sortBy,
   }) {
-    return await Runner.findNearbyRunners({
+    const runners = await Runner.findNearbyRunners({
       pickupLat,
       pickupLng,
-      // serviceType,
+      deliveryLat,
+      deliveryLng,
       fleetType,
     });
+
+    const eligibleRunners = runners.filter(runner => {
+      if (runner.kycStatus === 'suspended' || runner.kycStatus === 'banned') return false;
+
+      const allowedStatuses = [
+        'pending_verification', 'approved_limited', 'approved_full',
+        'pending_review', 'submitted'
+      ];
+      if (!allowedStatuses.includes(runner.kycStatus)) return false;
+
+      const blockedDocStatuses = ['not_submitted', 'rejected'];
+      const ninBlocked = blockedDocStatuses.includes(runner.verificationDocuments?.nin?.status);
+      const licenseBlocked = blockedDocStatuses.includes(runner.verificationDocuments?.driverLicense?.status);
+      if (!(!ninBlocked || !licenseBlocked)) return false;
+
+      const selfieStatus = runner.biometricVerification?.status;
+      const validSelfieStatuses = ['submitted', 'approved', 'pending_review'];
+      if (!validSelfieStatuses.includes(selfieStatus)) return false;
+
+      if (!runner.isEmailVerified) return false;
+
+      return runner.isOnline && runner.isAvailable;
+    });
+
+    if (sortBy === 'rating') {
+      eligibleRunners.sort((a, b) => (b.rating || 0) - (a.rating || 0));
+    }
+
+    return eligibleRunners;
   }
 
   /**

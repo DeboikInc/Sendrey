@@ -39,6 +39,12 @@ router.post('/login',
   authController.login
 );
 
+router.post('/check-existing-user',
+  ipRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 5 }),
+  auditLog('CHECK-EXISTING-USER'),
+  authController.checkExistingUser
+);
+
 
 router.post('/verify-email',
   validate(authValidation.verifyEmail),
