@@ -69,6 +69,7 @@ export default function PickupFlowScreen({
   const pickupPhoneMatchesUserPhone = useRef(false);
   const sessionTokenRef = useRef(null);
   const searchRequestIdRef = useRef(0);
+  const pendingDeliveryButtonIdRef = useRef(null);
   const { isLoaded } = useGoogleMaps();
 
   // autoscroll
@@ -423,6 +424,16 @@ export default function PickupFlowScreen({
       setDeliveryLocation(locationText);
       deliveryLocationRef.current = locationText;
       send(locationText, "delivery");
+
+      // disable the button that opened this map
+      if (pendingDeliveryButtonIdRef.current) {
+        const usedId = pendingDeliveryButtonIdRef.current;
+        setMessages((prev) => prev.map((msg) =>
+          msg.id === usedId ? { ...msg, hasChooseDeliveryButton: false } : msg
+        ));
+        usedButtonIdsRef.current.add(usedId);
+        pendingDeliveryButtonIdRef.current = null;
+      }
     }
 
     setShowSaveConfirm(false);
@@ -882,13 +893,7 @@ export default function PickupFlowScreen({
   };
 
   const handleChooseDeliveryClick = (messageId) => {
-    if (usedButtonIdsRef.current.has(messageId)) return;
-    usedButtonIdsRef.current.add(messageId);
-
-    setMessages((prev) => prev.map((msg) =>
-      msg.id === messageId ? { ...msg, hasChooseDeliveryButton: false } : msg
-    ));
-
+    pendingDeliveryButtonIdRef.current = messageId;
     setSelectedPlace(null);
     setShowMap(true);
     setShowLocationButtons(true);
@@ -994,6 +999,7 @@ export default function PickupFlowScreen({
                 setShowMap(false);
                 setShowLocationButtons(true);
                 setSelectedPlace(null);
+                pendingDeliveryButtonIdRef.current = null;
               }}
               className="flex items-center"
             >
@@ -1082,7 +1088,7 @@ export default function PickupFlowScreen({
                     m={m}
                     showCursor={false}
                     showStatusIcons={false}
-                    onChooseDeliveryClick={m.hasChooseDeliveryButton ? handleChooseDeliveryClick(m.id) : undefined}
+                    onChooseDeliveryClick={m.hasChooseDeliveryButton ? () => handleChooseDeliveryClick(m.id) : undefined}
                     onUseMyNumberClick={m.hasUseMyNumberButton ? () => handleUseMyNumber(m.id, m.phoneNumberType) : undefined}
                     onViewSavedLocations={m.hasViewSavedLocations ? () => {
                       if (usedButtonIdsRef.current.has(m.id)) return;
