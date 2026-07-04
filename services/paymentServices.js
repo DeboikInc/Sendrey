@@ -789,9 +789,9 @@ class PaymentService {
       'escrow_lock': `Order Payment for ${entry.orderId}`,
       'deposit': 'Wallet Funding',
       'escrow_release': `Earnings from order ${entry.orderId}`,
-      'escrow_refund': 'Dispute Refund',
+      'escrow_refund': 'Dispute Refund for order ' + entry.orderId,
       'withdrawal': entry.description || 'Withdrawal',
-      'item_budget': 'Item Budget (Held)',
+      'item_budget': 'Item Budget (shopping in progress) for order ' + entry.orderId,
     };
 
     const label = labels[entry.type];
@@ -815,17 +815,11 @@ class PaymentService {
       ? new mongoose.Types.ObjectId(userId.toString())
       : null;
 
-
-
     const query = {
       userId: userObjectId ? { $in: [userObjectId, userId.toString()] } : userId.toString(),
       userModel,
       type: { $nin: hiddenTypes }
     };
-
-    console.log('[txHistory] userId:', userId, 'userType:', userType, 'userModel:', userModel);
-    console.log('[txHistory] query:', JSON.stringify(query));
-
 
     const [entries, total] = await Promise.all([
       LedgerEntry.find(query)
@@ -836,12 +830,23 @@ class PaymentService {
       LedgerEntry.countDocuments(query),
     ]);
 
-    console.log('[getTransactionHistory] entries found:', entries.length);
-    console.log('[getTransactionHistory] sample:', entries[0]);
-    console.log('[getTransactionHistory] hiddenTypes:', hiddenTypes);
+    // Look up payout status for any item_budget entries on this page,
+    // so the label can reflect whether shopping is still pending or done.
+    const itemBudgetOrderIds = entries
+      .filter(e => e.type === 'item_budget' && e.orderId)
+      .map(e => e.orderId);
 
-    const providerLabel = (provider) =>
-      provider === 'paystack' ? 'Card' : provider === 'wallet' ? 'Wallet' : 'System';
+    let payoutStatusByOrderId = {};
+    if (itemBudgetOrderIds.length > 0) {
+      const payouts = await RunnerPayout.find(
+        { orderId: { $in: itemBudgetOrderIds } },
+        { orderId: 1, status: 1 }
+      ).lean();
+      payoutStatusByOrderId = payouts.reduce((acc, p) => {
+        acc[p.orderId] = p.status;
+        return acc;
+      }, {});
+    }
 
     return {
       transactions: entries.map(e => ({
@@ -852,7 +857,7 @@ class PaymentService {
         type: ['deposit', 'escrow_release', 'escrow_refund'].includes(e.type)
           ? 'credit'
           : 'debit',
-        label: this.getTransactionLabel(e),
+        label: this.getTransactionLabel(e, payoutStatusByOrderId[e.orderId]),
         description: e.description || null,
       })),
       pagination: {
@@ -862,6 +867,32 @@ class PaymentService {
         pages: Math.ceil(total / limit),
       }
     };
+  }
+
+  // helper
+  getTransactionLabel(entry, payoutStatus) {
+    if (entry.type === 'item_budget') {
+      if (payoutStatus === 'submitted' || payoutStatus === 'approved') {
+        return `Item Budget (Shopping Completed) - ${entry.orderId}`;
+      }
+      return `Item Budget (shopping In progress) - ${entry.orderId}`;
+    }
+
+    const labels = {
+      'escrow_lock': `Order Payment for ${entry.orderId}`,
+      // 'escrow_cancel_hold': `Order Cancelled - (${entry.orderId})`,
+      'deposit': 'Wallet Funding',
+      'escrow_release': `Earnings from order ${entry.orderId}`,
+      'escrow_refund': `Dispute Refund for order ${entry.orderId}`,
+      'withdrawal': entry.description || 'Withdrawal',
+    };
+
+    const label = labels[entry.type];
+    if (label) return label;
+
+    if (entry.type === 'item_budget_spent') return null;
+
+    return entry.description || entry.type;
   }
 
   async submitPayoutReceipt({

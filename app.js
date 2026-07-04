@@ -31,6 +31,7 @@ const swaggerUi = require('swagger-ui-express');
 const swaggerDoc = require('./sendrey-documentation.json');
 const redis = require('./config/redis');
 const locationCleanup = require('./services/locationTracking/locationCleanup');
+const { startRetryLoop } = require('./utils/paymentRetryQueue');
 
 const { startSocketServer, shutdownSocketServer } = require('./socket');
 const { initPricingConfigSubscriber } = require('./services/pricingService');
@@ -153,7 +154,7 @@ const startServer = async () => {
     });
 
     startDailyResetJob();
-
+    startRetryLoop();
     startPlatformSettlementCron();
 
     app.use(notFound);
