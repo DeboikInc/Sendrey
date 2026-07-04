@@ -39,7 +39,7 @@ export default function Message({
   alwaysAllowEdit = false,
   showDelete,
   showReply,
-
+  showRelativeTime=false,
   onApproveItems,
   onRejectItems,
   onConfirmDelivery,
