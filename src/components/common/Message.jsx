@@ -15,6 +15,7 @@ import DisputeRaisedMessage from './DisputeRaisedMessage';
 import DisputeResolvedMessage from './DisputeResolvedMessage';
 
 import RatingSubmittedMessage from './RatingSubmittedMessage';
+import TimeDate from "./TimeDate";
 
 export default function Message({
   m,
@@ -39,6 +40,7 @@ export default function Message({
   alwaysAllowEdit = false,
   showDelete,
   showReply,
+  showRelativeTime=false,
 
   onApproveItems,
   onRejectItems,
@@ -447,7 +449,11 @@ export default function Message({
               </span>
             </div>
           </div>
-          <span className="text-gray-800 dark:text-gray-400 text-xs font-medium">{m.time}</span>
+          <TimeDate
+            timestamp={m.time}
+            format={showRelativeTime ? "relative" : "absolute"}
+            className="text-gray-800 dark:text-gray-400 text-xs font-medium"
+          />
         </div>
       </motion.div>
     );
