@@ -93,6 +93,19 @@ const disputeSchema = new mongoose.Schema({
     type: Number,
   },
 
+  isPostCompletion: {
+    type: Boolean,
+    default: false
+  },
+  lockRequiredButFailed: {
+    type: Boolean,
+    default: false
+  },
+  lockFailureReason: {
+    type: String,
+    default: null
+  },
+
   resolution: {
     type: {
       outcome: {
@@ -139,6 +152,13 @@ disputeSchema.index({ userId: 1, status: 1 });
 disputeSchema.index({ runnerId: 1, status: 1 });
 disputeSchema.index({ status: 1, createdAt: -1 });
 disputeSchema.index({ flaggedAsFraud: 1 });
+disputeSchema.index(
+  { orderId: 1 },
+  {
+    unique: true,
+    partialFilterExpression: { status: { $in: ['open', 'under_review'] } },
+  }
+);
 
 const Dispute = mongoose.model('Dispute', disputeSchema);
 

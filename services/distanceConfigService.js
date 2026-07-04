@@ -1,3 +1,4 @@
+// services/distanceConfigService.js
 const MatchingConfig = require('../models/MatchConfig');
 const redis = require('../config/redis');
 
@@ -54,8 +55,85 @@ async function initMatchingConfigSubscriber() {
   });
 }
 
+const ALLOWED_FIELDS = [
+  'pickupMaxDistance',
+  'totalMaxDistance',
+  'pedestrianMaxRunnerLeg',
+  'pedestrianMaxDeliveryLeg',
+  'pedestrianTotalMax',
+];
+
+// Used by the pedestrian-config route — full field set, cached read path
+async function updateMatchingConfig(updates, userId) {
+  const set = {};
+  for (const field of ALLOWED_FIELDS) {
+    if (updates[field] !== undefined) set[field] = updates[field];
+  }
+  if (userId) set.updatedBy = userId;
+
+  const pedestrianFields = ['pedestrianMaxRunnerLeg', 'pedestrianMaxDeliveryLeg', 'pedestrianTotalMax'];
+  const touchesPedestrianFields = pedestrianFields.some((f) => set[f] !== undefined);
+
+  if (touchesPedestrianFields) {
+    const current = await MatchingConfig.findOne({ key: 'active' }).lean();
+    if (!current) return null;
+
+    const runnerLeg = set.pedestrianMaxRunnerLeg ?? current.pedestrianMaxRunnerLeg;
+    const deliveryLeg = set.pedestrianMaxDeliveryLeg ?? current.pedestrianMaxDeliveryLeg;
+    const totalMax = set.pedestrianTotalMax ?? current.pedestrianTotalMax;
+
+    if (runnerLeg + deliveryLeg !== totalMax) {
+      const err = new Error(
+        `pedestrianMaxRunnerLeg (${runnerLeg}) + pedestrianMaxDeliveryLeg (${deliveryLeg}) must equal pedestrianTotalMax (${totalMax})`
+      );
+      err.statusCode = 400;
+      throw err;
+    }
+  }
+
+  const config = await MatchingConfig.findOneAndUpdate(
+    { key: 'active' },
+    { $set: set, $inc: { version: 1 } },
+    { new: true, runValidators: true }
+  );
+
+  if (!config) return null;
+
+  invalidateMatchingConfig();
+  const pub = redis.getPublisher();
+  await pub.publish('matchingConfig:updated', JSON.stringify({ updatedAt: new Date() }));
+
+  return config;
+}
+
+// Used by the matching-config (distance caps) route — direct DB read, bypasses cache
+async function getRawMatchingConfig() {
+  return MatchingConfig.findOne({ key: 'active' }).lean();
+}
+
+// Used by the matching-config (distance caps) route — only pickupMaxDistance/totalMaxDistance
+async function updateMatchingDistanceCaps(pickupMaxDistance, totalMaxDistance, userId) {
+  const existing = await MatchingConfig.findOne({ key: 'active' });
+  if (!existing) return null;
+
+  existing.pickupMaxDistance = pickupMaxDistance;
+  existing.totalMaxDistance = totalMaxDistance;
+  existing.version += 1;
+  if (userId) existing.updatedBy = userId;
+
+  await existing.save();
+
+  invalidateMatchingConfig();
+  await redis.getClient().publish('matchingConfig:updated', JSON.stringify({ version: existing.version }));
+
+  return existing;
+}
+
 module.exports = {
   getMatchingConfig,
   invalidateMatchingConfig,
   initMatchingConfigSubscriber,
+  updateMatchingConfig,
+  getRawMatchingConfig,
+  updateMatchingDistanceCaps,
 };

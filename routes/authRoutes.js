@@ -10,6 +10,9 @@ const {
   auditLog
 } = require('../middleware/auth');
 
+const refreshTokenLimiter = ipRateLimit({ windowMs: 60 * 1000, maxRequests: 5 });
+const meEndpointLimiter = ipRateLimit({ windowMs: 60 * 1000, maxRequests: 8 });
+
 
 // router.get('/check-runner', authController.checkExistingUserOrRunner);
 
@@ -39,6 +42,12 @@ router.post('/login',
   authController.login
 );
 
+router.post('/check-existing-user',
+  ipRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 5 }),
+  auditLog('CHECK-EXISTING-USER'),
+  authController.checkExistingUser
+);
+
 
 router.post('/verify-email',
   validate(authValidation.verifyEmail),
@@ -52,14 +61,14 @@ router.post(
 
 router.post(
   '/refresh-token',
-  ipRateLimit({ windowMs: 15 * 60 * 1000, maxRequests: 60 }),
+  refreshTokenLimiter,
   authController.refreshToken
 );
 
 router.get('/me', authenticate, authController.me);
 
-router.get('/runner/me', authenticate, authController.runnerMe);
-router.get('/user/me', authenticate, authController.userMe);
+router.get('/runner/me', authenticate, meEndpointLimiter, authController.runnerMe);
+router.get('/user/me', authenticate, meEndpointLimiter, authController.userMe);
 
 router.post('/verify-email-otp',
   validate(authValidation.verifyEmailOTP),
