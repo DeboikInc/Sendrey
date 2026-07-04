@@ -1,16 +1,24 @@
-// src/components/Map.jsx 
+// src/components/Map.jsx
+/* global google */
 import { Search } from "lucide-react";
-import { useEffect, useRef, useCallback } from "react";
-import { useGoogleMaps } from "../../hooks/useGoogleMaps"; // eslint-disable-line no-unused-vars
+import { useEffect, useRef, useCallback, useState } from "react";
+
+const DEFAULT_CENTER = { lat: 6.5244, lng: 3.3792 };
+
 export default function Map({
     onLocationSelect,
-    initialCenter = { lat: 6.5244, lng: 3.3792 }, // Lagos as default center, NOT a fallback
+    initialCenter = DEFAULT_CENTER,
     initialZoom = 12
 }) {
     const mapRef = useRef(null);
     const mapInstanceRef = useRef(null);
     const markerRef = useRef(null);
-    // const { isLoaded, error } = useGoogleMaps();
+    const sessionTokenRef = useRef(null);
+    const searchRequestIdRef = useRef(0);
+
+    const [searchTerm, setSearchTerm] = useState("");
+    const [predictions, setPredictions] = useState([]);
+    const [placesLibrary, setPlacesLibrary] = useState(null);
 
     const geocodeLocation = useCallback(async (latLng) => {
         return new Promise((resolve) => {
@@ -37,8 +45,8 @@ export default function Map({
                     resolve({
                         lat: latLng.lat,
                         lng: latLng.lng,
-                        address: results[0].formatted_address,
-                        name: results[0].formatted_address,
+                        address: `Location (${latLng.lat.toFixed(6)}, ${latLng.lng.toFixed(6)})`,
+                        name: `Location (${latLng.lat.toFixed(6)}, ${latLng.lng.toFixed(6)})`,
                     });
                 }
             });
@@ -49,16 +57,18 @@ export default function Map({
         onLocationSelect(place);
     }, [onLocationSelect]);
 
+    // Load the places library once
+    useEffect(() => {
+        if (!window.google) return;
+        google.maps.importLibrary("places").then(({ AutocompleteSuggestion }) => {
+            setPlacesLibrary({ AutocompleteSuggestion });
+        });
+    }, []);
+
+    // Init map + click-to-select (unrelated to search, unchanged)
     useEffect(() => {
         const initializeMap = () => {
-            if (!mapRef.current || !window.google) {
-                console.log("Map ref or Google Maps not ready yet");
-                return;
-            };
-            if (mapInstanceRef.current) {
-                console.log("Map already initialized");
-                return;
-            };
+            if (!mapRef.current || !window.google || mapInstanceRef.current) return;
 
             const map = new window.google.maps.Map(mapRef.current, {
                 center: initialCenter,
@@ -68,73 +78,20 @@ export default function Map({
             mapInstanceRef.current = map;
 
             map.addListener("click", async (e) => {
-                const clickedLocation = {
-                    lat: e.latLng.lat(),
-                    lng: e.latLng.lng(),
-                };
+                const clickedLocation = { lat: e.latLng.lat(), lng: e.latLng.lng() };
+                const place = await geocodeLocation(clickedLocation);
+                handleLocationSelect(place);
 
-                try {
-                    const place = await geocodeLocation(clickedLocation);
-                    handleLocationSelect(place);
-
-                    if (markerRef.current) markerRef.current.setMap(null);
-                    markerRef.current = new window.google.maps.Marker({
-                        position: clickedLocation,
-                        map: map,
-                        title: "Selected Location",
-                    });
-                } catch (error) {
-                    console.error("Error geocoding location:", error);
-                    const fallbackPlace = {
-                        lat: clickedLocation.lat,
-                        lng: clickedLocation.lng,
-                        address: `Location (${clickedLocation.lat.toFixed(6)}, ${clickedLocation.lng.toFixed(6)})`,
-                        name: `Location (${clickedLocation.lat.toFixed(6)}, ${clickedLocation.lng.toFixed(6)})`,
-                    };
-                    handleLocationSelect(fallbackPlace);
-
-                    if (markerRef.current) markerRef.current.setMap(null);
-                    markerRef.current = new window.google.maps.Marker({
-                        position: clickedLocation,
-                        map: map,
-                        title: "Selected Location",
-                    });
-                }
+                if (markerRef.current) markerRef.current.setMap(null);
+                markerRef.current = new window.google.maps.Marker({
+                    position: clickedLocation,
+                    map,
+                    title: "Selected Location",
+                });
             });
-
-            const input = document.getElementById("map-search");
-            if (input) {
-                const autocomplete = new window.google.maps.places.Autocomplete(input, {
-                    componentRestrictions: { country: 'ng' },
-                    fields: ['geometry', 'formatted_address', 'name'],
-                });
-
-                autocomplete.addListener("place_changed", () => {
-                    const place = autocomplete.getPlace();
-                    if (!place.geometry) return;
-
-                    const selectedPlace = {
-                        name: place.name,
-                        address: place.formatted_address,
-                        lat: place.geometry.location.lat(),
-                        lng: place.geometry.location.lng(),
-                    };
-
-                    handleLocationSelect(selectedPlace);
-                    map.setCenter(place.geometry.location);
-                    map.setZoom(16);
-
-                    if (markerRef.current) markerRef.current.setMap(null);
-                    markerRef.current = new window.google.maps.Marker({
-                        position: place.geometry.location,
-                        map: map,
-                        title: place.name,
-                    });
-                });
-            }
         };
 
-        if (window.google && mapRef.current ) {
+        if (window.google && mapRef.current) {
             initializeMap();
             return;
         }
@@ -146,25 +103,111 @@ export default function Map({
             }
         }, 100);
 
-        return () => {
-            clearInterval(interval);
-            if (markerRef.current) markerRef.current.setMap(null);
-            mapInstanceRef.current = null;
+        return () => clearInterval(interval);
+        // no more initialCenter/initialZoom in deps — map should init once, not on every render
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [geocodeLocation, handleLocationSelect]);
+
+    const getSessionToken = () => {
+        if (!sessionTokenRef.current && window.google) {
+            sessionTokenRef.current = new window.google.maps.places.AutocompleteSessionToken();
+        }
+        return sessionTokenRef.current;
+    };
+
+    const handleSearchChange = async (e) => {
+        const query = e.target.value;
+        setSearchTerm(query);
+
+        if (!query || query.length < 2 || !placesLibrary) {
+            setPredictions([]);
+            return;
+        }
+
+        const requestId = ++searchRequestIdRef.current;
+
+        try {
+            const { suggestions } = await placesLibrary.AutocompleteSuggestion.fetchAutocompleteSuggestions({
+                input: query,
+                locationBias: { radius: 50000, center: initialCenter },
+                includedRegionCodes: ['ng'],
+                sessionToken: getSessionToken(),
+            });
+
+            if (requestId !== searchRequestIdRef.current) return;
+
+            setPredictions((suggestions || []).map((s) => ({
+                placePrediction: s.placePrediction,
+                description: s.placePrediction.text.text,
+            })));
+        } catch (err) {
+            console.error("Map search failed:", err);
+            setPredictions([]);
+        }
+    };
+
+    const handlePredictionSelect = async (prediction) => {
+        setPredictions([]);
+        setSearchTerm(prediction.description);
+
+        const place = prediction.placePrediction.toPlace();
+        const result = await place.fetchFields({ fields: ['location', 'formattedAddress', 'displayName'] });
+
+        const lat = result.place.location.lat();
+        const lng = result.place.location.lng();
+
+        sessionTokenRef.current = null; // session terminated
+
+        const selectedPlace = {
+            name: result.place.displayName,
+            address: result.place.formattedAddress,
+            lat,
+            lng,
         };
-    }, [geocodeLocation, handleLocationSelect, initialCenter, initialZoom]);
+
+        handleLocationSelect(selectedPlace);
+
+        const map = mapInstanceRef.current;
+        if (map) {
+            map.setCenter({ lat, lng });
+            map.setZoom(16);
+            if (markerRef.current) markerRef.current.setMap(null);
+            markerRef.current = new window.google.maps.Marker({
+                position: { lat, lng },
+                map,
+                title: result.place.displayName,
+            });
+        }
+    };
 
     return (
         <>
-            <div className="p-4 bg-white dark:bg-gray-800 border-b">
+            <div className="p-4 bg-white dark:bg-gray-800 border-b relative">
                 <div className="relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                     <input
                         id="map-search"
                         type="text"
+                        value={searchTerm}
+                        onChange={handleSearchChange}
                         placeholder="Search for a location..."
                         className="w-full pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-black dark:text-white"
                     />
                 </div>
+
+                {predictions.length > 0 && (
+                    <div className="absolute left-4 right-4 mt-1 bg-white dark:bg-gray-700 rounded-lg shadow-lg max-h-60 overflow-y-auto z-50">
+                        {predictions.map((p) => (
+                            <button
+                                key={p.placePrediction.placeId}
+                                onClick={() => handlePredictionSelect(p)}
+                                className="w-full text-left p-3 hover:bg-gray-100 dark:hover:bg-gray-600 border-b border-gray-200 dark:border-gray-600 last:border-0"
+                            >
+                                {p.description}
+                            </button>
+                        ))}
+                    </div>
+                )}
             </div>
 
             <div ref={mapRef} className="flex-1 h-full w-full" />
