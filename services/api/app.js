@@ -35,8 +35,7 @@ const locationCleanup = require('./services/locationTracking/locationCleanup');
 const { startSocketServer, shutdownSocketServer } = require('./socket');
 const { initPricingConfigSubscriber } = require('./services/pricingService');
 const { initMatchingConfigSubscriber } = require('./services/distanceConfigService');
-const logger = require('./utils/logger');
-
+const { startRetryLoop } = require('./utils/paymentRetryQueue');
 const runSeeds = require('./utils/runSeeds');
 
 require("dotenv").config();
@@ -57,10 +56,8 @@ const startServer = async () => {
 
     // 1. Await the database connection first
     await connectDb();
-
-    logger.info('app started successfully')
-
     console.log(' Database connected');
+
     await runSeeds();
 
     // restore any scheduled cron jobs that were active before the server restarted

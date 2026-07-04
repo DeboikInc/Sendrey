@@ -8,6 +8,7 @@ const paymentService = require('../services/paymentServices');
 const { withTransaction } = require('../utils/withTransaction');
 const Wallet = require('../models/Wallet');
 const LedgerEntry = require('../models/LedgerEntry');
+const { enqueue } = require('../utils/paymentRetryQueue');
 
 const uploadToCloudinary = (base64String, folder = 'payout-receipts') =>
   new Promise((resolve, reject) => {
@@ -324,45 +325,53 @@ class PayoutController extends BaseController {
       const unspentAmount = claimed.itemBudget - spent;
 
       if (unspentAmount > 0) {
-        await withTransaction(async (session) => {
-          const userWallet = await Wallet.findOne({ userId: order.userId }).session(session);
-          if (userWallet) {
-            const walletDoc = await Wallet.findOne({ userId: order.userId }).session(session);
-            const safeDeduct = Math.min(unspentAmount, walletDoc?.lockedBalance ?? 0);
+        try {
+          await withTransaction(async (session) => {
+            const userWallet = await Wallet.findOne({ userId: order.userId }).session(session);
+            if (userWallet) {
+              const walletDoc = await Wallet.findOne({ userId: order.userId }).session(session);
+              const safeDeduct = Math.min(unspentAmount, walletDoc?.lockedBalance ?? 0);
 
-            await Wallet.findOneAndUpdate(
-              { userId: order.userId },
-              { $inc: { lockedBalance: -safeDeduct } },
-              { session }
-            );
+              await Wallet.findOneAndUpdate(
+                { userId: order.userId },
+                { $inc: { lockedBalance: -safeDeduct } },
+                { session }
+              );
 
-            // credit() handles the _balance atomic increment
-            await walletDoc.credit(
-              unspentAmount,
-              `unspent-refund-${orderId}-${Date.now()}`,
-              { reason: 'unspent_item_budget', orderId }
-            );
+              // credit() handles the _balance atomic increment
+              await walletDoc.credit(
+                unspentAmount,
+                `unspent-refund-${orderId}-${Date.now()}`,
+                { reason: 'unspent_item_budget', orderId }
+              );
 
-            await LedgerEntry.create([{
-              userId: order.userId,
-              userModel: 'User',
-              runnerId: order.runnerId,
-              type: 'escrow_refund',
-              grossAmount: unspentAmount,
-              netAmount: unspentAmount,
-              providerFee: 0,
-              balanceBefore: walletDoc?.lockedBalance ?? 0,
-              balanceAfter: (walletDoc?.lockedBalance ?? 0) - spent,
-              platformFee: 0,
-              netPlatformFee: 0,
-              runnerFee: 0,
-              provider: 'system',
-              orderId,
-              description: `Unspent item budget refunded for order ${orderId} (budget: NGN ${claimed.itemBudget.toString()}, spent: NGN ${spent.toString()})`,
-              status: 'completed',
-            }], { session });
-          }
-        });
+              await LedgerEntry.create([{
+                userId: order.userId,
+                userModel: 'User',
+                runnerId: order.runnerId,
+                type: 'escrow_refund',
+                grossAmount: unspentAmount,
+                netAmount: unspentAmount,
+                providerFee: 0,
+                balanceBefore: walletDoc?.lockedBalance ?? 0,
+                balanceAfter: (walletDoc?.lockedBalance ?? 0) - spent,
+                platformFee: 0,
+                netPlatformFee: 0,
+                runnerFee: 0,
+                provider: 'system',
+                orderId,
+                description: `Unspent item budget refunded for order ${orderId} (budget: NGN ${claimed.itemBudget.toString()}, spent: NGN ${spent.toString()})`,
+                status: 'completed',
+              }], { session });
+            }
+          });
+        } catch (refundErr) {
+          logger.error(
+            `transferToVendor: unspent refund of NGN${unspentAmount} FAILED for order ${orderId} ` +
+            `after vendor transfer already succeeded — needs manual fix:`,
+            refundErr
+          );
+        }
       }
 
       // Persist to RunnerPayout
@@ -442,7 +451,7 @@ class PayoutController extends BaseController {
 
       const receipts = payouts.flatMap(p =>
         p.receiptHistory.map(r => ({
-          payoutId: p._id,  
+          payoutId: p._id,
           receiptId: r.submissionId || r._id,
           receiptUrl: r.receiptUrl,
           vendorName: r.vendorName || p.vendorName,
