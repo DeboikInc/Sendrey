@@ -15,8 +15,17 @@ import debounce from "lodash/debounce";
 import { getSuggestionStatus } from "../../Redux/businessSlice";
 import BusinessConversionFlow from "./BusinessConversionFlow";
 
+const getCurrentTime = () => {
+    return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+};
+
 const initialMessages = [
-    { id: 1, from: "them", text: "Which market would you like us to go to?", time: "12:25 PM", status: "delivered" },
+    {
+        id: 1, from: "them",
+        text: "Which market would you like us to go to?",
+        time: getCurrentTime(),
+        status: "delivered"
+    },
 ];
 
 export default function ErrandFlowScreen({
@@ -226,7 +235,7 @@ export default function ErrandFlowScreen({
                         id: Date.now(),
                         from: "them",
                         text: "Which market would you like us to go to?",
-                        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                        time: getCurrentTime(),
                         status: "delivered"
                     }]);
                     break;
@@ -238,7 +247,7 @@ export default function ErrandFlowScreen({
                         id: Date.now(),
                         from: "them",
                         text: "What items do you need from the market?",
-                        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                        time: getCurrentTime(),
                         status: "delivered"
                     }]);
                     break;
@@ -250,7 +259,7 @@ export default function ErrandFlowScreen({
                         id: Date.now(),
                         from: "them",
                         text: "What's your total budget for these items?",
-                        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                        time: getCurrentTime(),
                         status: "delivered"
                     }]);
                     break;
@@ -262,7 +271,7 @@ export default function ErrandFlowScreen({
                         id: Date.now(),
                         from: "them",
                         text: "Set your delivery location. Choose Delivery Location",
-                        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                        time: getCurrentTime(),
                         status: "delivered",
                         hasChooseDeliveryButton: true,
                     }]);
@@ -502,7 +511,7 @@ export default function ErrandFlowScreen({
                         id: Date.now() + 10,
                         from: "them",
                         text: `🚀 You've used Sendrey ${suggestionResult.monthlyTaskCount} times this month! Upgrade to a Business Account to unlock team access, expense reports & scheduled deliveries.`,
-                        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                        time: getCurrentTime(),
                         status: "delivered",
                         isBusinessSuggestion: true,
                         onBusinessSuggestionAccept: () => setShowConversionFlow(true),
@@ -566,7 +575,7 @@ export default function ErrandFlowScreen({
                 id: Date.now(),
                 from: "me",
                 text: text.trim(),
-                time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                time: getCurrentTime(),
                 status: "sent",
             };
             setMessages((prev) => [...prev, newMsg]);
@@ -582,7 +591,7 @@ export default function ErrandFlowScreen({
                         id: Date.now() + 2,
                         from: "them",
                         text: validationError,
-                        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                        time: getCurrentTime(),
                         status: "delivered",
                     },
                 ]);
@@ -616,7 +625,7 @@ export default function ErrandFlowScreen({
             id: Date.now(),
             from: "me",
             text: msgText,
-            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            time: getCurrentTime(),
             status: "sent",
         };
 
@@ -673,7 +682,7 @@ export default function ErrandFlowScreen({
                         id: Date.now() + 2,
                         from: "them",
                         text: "What items do you need from the market?",
-                        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                        time: getCurrentTime(),
                         status: "delivered",
                     }]);
                     setCurrentStep("market-items");
@@ -686,7 +695,7 @@ export default function ErrandFlowScreen({
                         id: Date.now() + 2,
                         from: "them",
                         text: "What's your total budget for these items?",
-                        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                        time: getCurrentTime(),
                         status: "delivered",
                     }]);
                     setCurrentStep("market-budget");
@@ -707,7 +716,7 @@ export default function ErrandFlowScreen({
                                 id: Date.now() + 2,
                                 from: "them",
                                 text: confirmText,
-                                time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                                time: getCurrentTime(),
                                 status: "delivered",
                                 hasBudgetConfirmButtons: true,
                                 confirmedBudget: parsedBudget,
@@ -719,7 +728,7 @@ export default function ErrandFlowScreen({
                                 id: Date.now() + 2,
                                 from: "them",
                                 text: `Should the runner stay strictly within ${formatBudgetDisplay(parsedBudget)}, or can they adjust slightly if needed?`,
-                                time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                                time: getCurrentTime(),
                                 status: "delivered",
                                 hasBudgetFlexibilityButtons: true,
                             }]);
@@ -735,7 +744,7 @@ export default function ErrandFlowScreen({
                         id: Date.now() + 2,
                         from: "them",
                         text: "Set your delivery location. Choose Delivery Location",
-                        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                        time: getCurrentTime(),
                         status: "delivered",
                         hasChooseDeliveryButton: true,
                     }]);
@@ -798,14 +807,14 @@ export default function ErrandFlowScreen({
                 id: Date.now(),
                 from: "me",
                 text: "Yes, that's correct",
-                time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                time: getCurrentTime(),
                 status: "sent",
             }]);
             setMessages(prev => [...prev, {
                 id: Date.now() + 1,
                 from: "them",
                 text: `Should the runner stay strictly within ${formatBudgetDisplay(confirmedBudget)}, or can they adjust slightly if needed?`,
-                time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                time: getCurrentTime(),
                 status: "delivered",
                 hasBudgetFlexibilityButtons: true,
             }]);
@@ -815,14 +824,14 @@ export default function ErrandFlowScreen({
                 id: Date.now(),
                 from: "me",
                 text: "No, let me re-enter",
-                time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                time: getCurrentTime(),
                 status: "sent",
             }]);
             setMessages(prev => [...prev, {
                 id: Date.now() + 1,
                 from: "them",
                 text: "What's your total budget for these items?",
-                time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                time: getCurrentTime(),
                 status: "delivered",
             }]);
             setCurrentStep("market-budget");

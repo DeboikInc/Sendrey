@@ -10,24 +10,31 @@ import { useCameraHook } from "../../hooks/useCameraHook";
 import { getPedestrianConfig } from '../../utils/pedestrianConfig';
 import { calculateRouteDistance, haversineDistance } from '../../utils/pricing';
 
-const initialMessages = [
-  {
-    id: 1,
-    from: "them",
-    text: "What kind of fleet can handle this errand? Select from the options below:",
-    time: "12:26 PM",
-    status: "delivered",
-    isSystemPrompt: true,
-  },
-  {
-    id: 2,
-    from: "them",
-    text: "⚠️ Note: Bikes, bicycles and pedestrians are only suitable for items weighing 5kg or less.",
-    time: "12:26 PM",
-    status: "delivered",
-    isSystemPrompt: true,
-  }
-];
+const getCurrentTime = () => {
+  return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+};
+
+const getInitialMessages = () => {
+  const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return [
+    {
+      id: 1,
+      from: "them",
+      text: "What kind of fleet can handle this errand? Select from the options below:",
+      time: now,
+      status: "delivered",
+      isSystemPrompt: true,
+    },
+    {
+      id: 2,
+      from: "them",
+      text: "⚠️ Note: Bikes, bicycles and pedestrians are only suitable for items weighing 5kg or less.",
+      time: now,
+      status: "delivered",
+      isSystemPrompt: true,
+    }
+  ];
+};
 
 const HeaderIcon = ({ children, tooltip, onClick }) => (
   <Tooltip content={tooltip} placement="bottom" className="text-xs">
@@ -53,7 +60,7 @@ export default function VehicleSelectionScreen({
   showBack,
   onBack,
 }) {
-  const [messages, setMessages] = useState(initialMessages);
+  const [messages, setMessages] = useState(getInitialMessages);
   const dispatch = useDispatch();
   const [showConnectButton, setShowConnectButton] = useState(false);
   const [selectedVehicle, setSelectedVehicle] = useState(null);
@@ -104,7 +111,7 @@ export default function VehicleSelectionScreen({
           id: baseId,
           from: "them",
           text: "What kind of fleet can handle this errand? Select from the options below:",
-          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          time: getCurrentTime(),
           status: "delivered",
           isSystemPrompt: true,
         },
@@ -112,7 +119,7 @@ export default function VehicleSelectionScreen({
           id: baseId + 1,
           from: "them",
           text: "⚠️ Note: Bikes and bicycles are only suitable for items weighing 5kg or less.",
-          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          time: getCurrentTime(),
           status: "delivered",
           isSystemPrompt: true,
         }
@@ -130,7 +137,7 @@ export default function VehicleSelectionScreen({
           id: baseId + 2,
           from: "them",
           text: "Make your request detailed enough for your runner to understand (Type a message, snap a picture or record a voice note). Press the Connect To Runner button when you are done. Connect To Runner",
-          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          time: getCurrentTime(),
           status: "delivered",
           hasConnectRunnerButton: true,
           isConnectToRunner: true,
@@ -306,7 +313,7 @@ export default function VehicleSelectionScreen({
         id: Date.now(),
         from: "them",
         text: `Make your request detailed enough for your runner to understand (Type a message, snap a picture or record a voice note). Press the Connect To Runner button when you are done. Connect To Runner`,
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        time: getCurrentTime(),
         status: "delivered",
         hasConnectRunnerButton: true,
         isConnectToRunner: true
@@ -324,7 +331,7 @@ export default function VehicleSelectionScreen({
       id: now,
       from: "me",
       text: label,
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      time: getCurrentTime(),
       status: "sent",
       isFleetSelection: true,
     };
@@ -354,7 +361,7 @@ export default function VehicleSelectionScreen({
                   id: Date.now(),
                   from: "them",
                   text: `⚠️ Pedestrian fleet cannot be used when the delivery distance exceeds ${pedestrianConfig.pedestrianMaxDeliveryLeg} meters. Please select a different fleet type.`,
-                  time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                  time: getCurrentTime(),
                   status: "delivered",
                   isSystemPrompt: true,
                 }];
@@ -398,7 +405,7 @@ export default function VehicleSelectionScreen({
         id: Date.now(),
         from: "me",
         text: text.trim(),
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        time: getCurrentTime(),
         status: "sent",
       };
 
@@ -420,7 +427,7 @@ export default function VehicleSelectionScreen({
           fileName: fileData.name,
           fileUrl: messageFileUrl,
           fileSize: `${(fileData.size / 1024).toFixed(1)} KB`,
-          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          time: getCurrentTime(),
           status: "sent",
           isUploading: false,
         };

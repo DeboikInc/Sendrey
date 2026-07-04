@@ -8,6 +8,10 @@ import TermsAcceptanceModal from '../common/TermsAcceptanceModal';
 import { USER_TERMS } from '../../constants/terms';
 import api from '../../utils/api';
 
+const getCurrentTime = () => {
+  return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+};
+
 const QUESTIONS = [
   { question: "What's your name?", field: "name" },
   { question: "What's your phone number?", field: "phone" },
@@ -82,7 +86,7 @@ export default function OnboardingScreen({
       id: Date.now(),
       from: "them",
       text: `Welcome back ${returningUserName || ''}! I'm glad to have you back onboard.`,
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      time: getCurrentTime(),
       status: "delivered",
     }]);
 
@@ -102,7 +106,7 @@ export default function OnboardingScreen({
             id: Date.now() + index,
             from: "them",
             text: errorText,
-            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            time: getCurrentTime(),
             status: "delivered",
             isError: true
           }]);
@@ -138,7 +142,7 @@ export default function OnboardingScreen({
                 text: failedStep === 0
                   ? `Let's try again. ${QUESTIONS[0].question}`
                   : `Let's fix that. ${QUESTIONS[failedStep].question}`,
-                time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                time: getCurrentTime(),
                 status: "delivered",
                 field: QUESTIONS[failedStep].field
               }]);
@@ -162,7 +166,7 @@ export default function OnboardingScreen({
       id: Date.now(),
       from: "them",
       text: `Hello! Looks like you already have a Sendrey account${returningUser.name ? ` as ${returningUser.name}` : ""}. Would you like to continue?`,
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      time: getCurrentTime(),
       status: "delivered",
       isReturningUserPrompt: true,
     };
@@ -187,7 +191,7 @@ export default function OnboardingScreen({
               id: msgId,
               from: "them",
               text: errorText,
-              time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              time: getCurrentTime(),
               status: "delivered",
               isError: true,
               hasResendLink: true,
@@ -219,7 +223,7 @@ export default function OnboardingScreen({
         id: Date.now(),
         from: "them",
         text: "Registration successful, welcome to sendrey!",
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        time: getCurrentTime(),
         status: "delivered",
       }]);
 
@@ -234,7 +238,7 @@ export default function OnboardingScreen({
         id: Date.now(),
         from: "them",
         text: QUESTIONS[0].question,
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        time: getCurrentTime(),
         status: "read",
         field: QUESTIONS[0].field
       }]);
@@ -264,7 +268,7 @@ export default function OnboardingScreen({
       id: Date.now(),
       from: "me",
       text: value,
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      time: getCurrentTime(),
       status: "sent",
     }]);
     setText("");
@@ -279,7 +283,7 @@ export default function OnboardingScreen({
           id: Date.now() + 1,
           from: "them",
           text: QUESTIONS[nextStep].question,
-          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          time: getCurrentTime(),
           status: "delivered",
           field: QUESTIONS[nextStep].field
         }]);
@@ -290,7 +294,7 @@ export default function OnboardingScreen({
         id: Date.now() + 1,
         from: "them",
         text: "In progress...",
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        time: getCurrentTime(),
         status: "delivered",
       }]);
       timeoutRef.current = setTimeout(() => {
@@ -310,7 +314,7 @@ export default function OnboardingScreen({
       id: Date.now() + 1,
       from: "them",
       text: "We have sent you an OTP to confirm your email",
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      time: getCurrentTime(),
       status: "delivered",
     }
     ]);
@@ -320,7 +324,7 @@ export default function OnboardingScreen({
         id: secondOtpMsgId,
         from: "them",
         text: `Enter the OTP we sent to ${email || userData.email}, \n \nDidn't receive OTP? `,
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        time: getCurrentTime(),
         status: "delivered",
         hasResendLink: true
       }]);
@@ -341,14 +345,14 @@ export default function OnboardingScreen({
       id: Date.now(),
       from: "me",
       text: otp,
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      time: getCurrentTime(),
       status: "sent",
     },
     {
       id: Date.now() + 1,
       from: "them",
       text: "Verifying OTP...",
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      time: getCurrentTime(),
       status: "delivered",
     }
     ]);
@@ -371,14 +375,14 @@ export default function OnboardingScreen({
         id: Date.now(),
         from: "them",
         text: "OTP has been resent to your email",
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        time: getCurrentTime(),
         status: "delivered",
       },
       {
         id: resendMsgId,
         from: "them",
         text: `Enter the new OTP we sent to ${userData.email}, \n \nDidn't receive OTP? Resend`,
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        time: getCurrentTime(),
         status: "delivered",
         hasResendLink: true,
       }
@@ -426,14 +430,14 @@ export default function OnboardingScreen({
         id: Date.now(),
         from: "me",
         text: "Yes",
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        time: getCurrentTime(),
         status: "sent",
       },
       {
         id: Date.now() + 1,
         from: "them",
         text: "In progress...",
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        time: getCurrentTime(),
         status: "delivered",
       },
     ]);
@@ -451,14 +455,14 @@ export default function OnboardingScreen({
         id: Date.now(),
         from: "me",
         text: "No",
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        time: getCurrentTime(),
         status: "sent",
       },
       {
         id: Date.now() + 1,
         from: "them",
         text: `Alright, let's start fresh. ${QUESTIONS[0].question}`,
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        time: getCurrentTime(),
         status: "delivered",
         field: QUESTIONS[0].field,
       },
