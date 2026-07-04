@@ -29,16 +29,13 @@ class DisputeController extends BaseController {
       const userId = req.user._id;
       const userType = req.user.userType || 'user';
 
-      // ── Fetch order ────────────────────────────────────────────────────────
       const order = await Order.findOne({ orderId }).sort({ createdAt: -1 });
       if (!order) return this.error(res, 'Order not found.');
 
-      // ── Terminal / already-disputed orders ─────────────────────────────────
       if (['cancelled', 'disputed', 'dispute_resolved', 'archived'].includes(order.status)) {
         return this.error(res, `Cannot raise a dispute on an order with status: ${order.status}.`);
       }
 
-      // ── Normalise service type ─────────────────────────────────────────────
       const normalisedType = normaliseServiceType(order.serviceType);
       if (!normalisedType) {
         return this.error(res, `Unsupported service type for disputes: ${order.serviceType}`);
@@ -56,7 +53,6 @@ class DisputeController extends BaseController {
         isValid = isReasonValid(order.serviceType, reason);
       }
 
-      // ── Validate reason exists for this service type ───────────────────────
       if (!reason || !allowedReasons.includes(reason)) {
         return this.error(
           res,
@@ -65,7 +61,6 @@ class DisputeController extends BaseController {
         );
       }
 
-      // ── Validate reason window is still open ───────────────────────────────
       if (!isValid) {
         return this.error(
           res,
@@ -73,8 +68,6 @@ class DisputeController extends BaseController {
         );
       }
 
-      // ── usedPayoutSystem only blocks item-level reasons for USERS ──────────
-      // Runners can still raise item-level reasons (like wrong_item_given_by_sender)
       if (userType !== 'runner' && order.usedPayoutSystem && isItemLevelReason(reason)) {
         return this.error(
           res,
@@ -82,13 +75,11 @@ class DisputeController extends BaseController {
         );
       }
 
-      // ── Check if user already has an active dispute for this order ─────────
       const existingDispute = await disputeService.getDisputeByOrderId(orderId);
-      if (existingDispute && existingDispute.status === 'open') {
+      if (existingDispute && ['open', 'under_review'].includes(existingDispute.status)) {
         return this.error(res, 'An active dispute already exists for this order.');
       }
 
-      // ── Raise dispute ──────────────────────────────────────────────────────
       const dispute = await disputeService.raiseDispute({
         orderId,
         chatId,
@@ -111,6 +102,17 @@ class DisputeController extends BaseController {
       const { disputeId } = req.params;
       const { outcome, releasePercentage, adminNote } = req.body;
       const resolvedBy = req.user._id;
+
+      if (req.user.role !== 'admin') {
+        return this.error(res, 'Only admins can resolve disputes.', 403);
+      }
+
+      if (
+        (outcome === 'partial_release' || outcome === 'partial_refund') &&
+        (releasePercentage == null || typeof releasePercentage !== 'number' || releasePercentage < 0 || releasePercentage > 100)
+      ) {
+        return this.error(res, 'releasePercentage must be a number between 0 and 100 for partial outcomes.');
+      }
 
       const result = await disputeService.resolveDispute({
         disputeId,
