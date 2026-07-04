@@ -50,6 +50,10 @@ import { enqueueSocketEvent, flushSocketQueue } from '../../utils/socketQueue';
 
 import useUserOrderStore from '../../store/userOrderStore';
 
+const getCurrentTime = () => {
+  return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+};
+
 const HeaderIcon = ({ children, tooltip, onClick }) => (
   <Tooltip content={tooltip} placement="bottom" className="text-xs">
     <IconButton variant="text" size="sm" className="rounded-full" onClick={onClick}>
@@ -527,7 +531,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
       setMessages(prev => [...prev, {
         id: `track-${Date.now()}`, from: "them", type: "tracking",
         trackingData: data.trackingData,
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        time: getCurrentTime(),
         status: "sent",
       }]);
     });
@@ -966,7 +970,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
             id: `tracking-auto-${normalizedMsg.id}`,
             type: "tracking", messageType: "tracking",
             from: "system",
-            time: normalizedMsg.time || new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            time: normalizedMsg.time || getCurrentTime(),
             senderId: "system", senderType: "system", status: "sent",
             trackingData: { orderId: currentOrderRef.current?.orderId, runnerId: null, status: "en_route_to_delivery" },
           }];
@@ -1008,7 +1012,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
               itemBudget: order?.itemBudget,
               serviceType: order?.serviceType || order?.taskType,
             },
-            time: normalizedMsg.time,
+            time: normalizedMsg.time || getCurrentTime(),
           }];
         });
 
@@ -1175,7 +1179,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
         return [...prev, {
           id: `tracking-${Date.now()}`,
           type: "tracking", from: "system", messageType: "tracking",
-          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          time: getCurrentTime(),
           senderId: "system", senderType: "system", status: "sent",
           trackingData: {
             orderId: data.orderId || currentOrderRef.current?.orderId,
@@ -1465,7 +1469,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
     const pendingMsg = {
       id: `payment-pending-${Date.now()}`, from: 'system', type: 'payment_pending',
       text: 'Processing payment...',
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      time: getCurrentTime(),
     };
     setMessages(prev => [...prev, pendingMsg]);
 
@@ -1533,7 +1537,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
         from: 'system',
         type: 'payment_failed',
         text: 'Payment failed. Please try again.',
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        time: getCurrentTime(),
         paymentData: paymentData,
       }]);
 
@@ -1557,7 +1561,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
       type: 'payment_request',
       messageType: 'payment_request',
       paymentData,
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      time: getCurrentTime(),
     }]);
   };
 
@@ -1669,7 +1673,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
       const messageId = Date.now().toString();
       const newMsg = {
         id: messageId, from: "me", text: text.trim(),
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        time: getCurrentTime(),
         createdAt: new Date().toISOString(),
         status: socket?.connected ? "pending" : "queued",
         senderId: userData?._id, senderType: "user",
@@ -1711,7 +1715,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
         const localMsg = {
           id: tempId, from: "me", type: messageType, fileName: name,
           fileUrl: preview, fileSize, text: "",
-          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          time: getCurrentTime(),
           status: "uploading", senderId: userData?._id, senderType: "user",
           fileType: type, isUploading: true, tempId,
           createdAt: new Date().toISOString(),
@@ -2194,6 +2198,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
                 <Message
                   key={m.id}
                   m={m}
+                  showRelativeTime={true}
                   darkMode={darkMode}
                   userType="user"
                   onDelete={handleDeleteMessage}
@@ -2297,7 +2302,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
                     fileName: 'voice-message.webm',
                     fileUrl: url,
                     fileSize: `${(blob.size / 1024).toFixed(1)} KB`,
-                    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    time: getCurrentTime(),
                     mimeType: mimeType,
                     status: 'uploading',
                     senderId: userData?._id,
