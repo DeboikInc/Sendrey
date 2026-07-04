@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { getPricingConfig } = require('../services/pricingService');
 
-router.get('/pricing-config', async (req, res) => {
+router.get('/config', async (req, res) => {
   try {
     const config = await getPricingConfig();
     // Strip internal/admin-only fields before sending to client

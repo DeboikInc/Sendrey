@@ -46,10 +46,8 @@ require('events').EventEmitter.defaultMaxListeners = 20;
 let ioInstance;
 let serverInstance;
 
-async function startSocketServer(port) {
+async function startSocketServer(app) {
   console.log("✅ MongoDB connected, Socket");
-
-  const app = express();
   const server = http.createServer(app);
 
   const io = new Server(server, {
@@ -105,8 +103,6 @@ async function startSocketServer(port) {
     }
   });
 
-  app.use(cors());
-  app.use(express.json());
   app.set('io', io);
   startScheduler(io);
 
@@ -116,6 +112,8 @@ async function startSocketServer(port) {
   });
 
   try {
+    await redis.connect();
+
     const subscriber = redis.getSubscriber();
     await subscriber.subscribe('kyc:events', (err, count) => {
       if (err) {
@@ -445,7 +443,7 @@ async function startSocketServer(port) {
     });
   });
 
-  server.listen(port, () => console.log(`✅ Socket.IO server running on port ${port}`));
+  server.listen(process.env.PORT, () => console.log(`✅ Socket.IO and API server running on port ${process.env.PORT}`));
 
   // Self-ping to prevent Render spin-down
   if (process.env.NODE_ENV === 'production') {

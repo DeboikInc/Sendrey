@@ -1,7 +1,7 @@
 const StatusUpdate = require('../models/StatusUpdate');
 const { Chat } = require('../models/Chat');
 const { TASK_TYPES, STATUS_FLOWS } = require('../config/constants');
-const { getIO } = require('../socket');
+const { getSocketIO } = require('./socketAccessor');
 
 class StatusEngine {
   static isValidMove(taskType, fromStatus, toStatus) {
@@ -40,7 +40,7 @@ class StatusEngine {
       throw new Error(`Invalid move: ${currentStatus} → ${newStatus}`);
     }
 
-    const io = getIO();
+    const io = getSocketIO();
     if (io) {
       const systemMessage = {
         from: 'System',

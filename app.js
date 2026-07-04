@@ -35,16 +35,13 @@ const locationCleanup = require('./services/locationTracking/locationCleanup');
 const { startSocketServer, shutdownSocketServer } = require('./socket');
 const { initPricingConfigSubscriber } = require('./services/pricingService');
 const { initMatchingConfigSubscriber } = require('./services/distanceConfigService');
-
+const { startRetryLoop } = require('./utils/paymentRetryQueue');
 const runSeeds = require('./utils/runSeeds');
 
 require("dotenv").config();
 
 // Database connection
 const connectDb = require('./config/database');
-
-const API_PORT = process.env.PORT;
-const SOCKET_PORT = process.env.SOCKET_PORT;
 
 const startServer = async () => {
 
@@ -159,11 +156,7 @@ const startServer = async () => {
     app.use(notFound);
     app.use(errorHandler);
 
-    app.listen(API_PORT, () => {
-      console.log(`✅ API server running on ${API_PORT}`);
-    });
-
-    const { io, server: socketServer } = await startSocketServer(SOCKET_PORT);
+    const { io, server: socketServer } = await startSocketServer(app);
 
     process.on('SIGTERM', async () => {
       locationCleanup.stop();

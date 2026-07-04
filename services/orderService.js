@@ -15,64 +15,8 @@ const cancelOrder = async ({ orderId, chatId, runnerId, userId, reason, cancelle
 
   if (!order) throw new Error('Order not found');
 
-  let escrowFlagged = false;
-
-  // Handle paid orders — return funds to escrow for admin review
   if (order.paymentStatus === 'paid') {
-    const escrow = await Escrow.findOne({ taskId: order.orderId });
-
-    if (escrow && escrow.status === 'funded') {
-      // If wallet payment, unlock the locked balance back to available
-      const userWallet = await Wallet.findOne({ userId: order.userId, userType: 'user' });
-      if (userWallet && userWallet.lockedBalance >= escrow.totalAmount) {
-        // Deduct from lockedBalance directly (it's not a balance field, it's a lock tracker)
-        await Wallet.findByIdAndUpdate(userWallet._id, {
-          $inc: { lockedBalance: -escrow.totalAmount },
-        });
-
-        // Credit the unlocked amount back to available balance
-        await userWallet.credit(
-          escrow.totalAmount,
-          `unlock-cancel-${order.orderId}-${Date.now()}`,
-          { reason: 'order_cancelled', orderId: order.orderId, cancelledBy }
-        );
-      }
-
-      await Escrow.findByIdAndUpdate(order.escrowId, {
-        status: 'disputed',
-        metadata: {
-          ...escrow.metadata,
-          adminReview: true,
-          cancelledBy,
-          cancellationReason: reason || `Cancelled by ${cancelledBy}`,
-          cancelledAt: new Date(),
-          awaitingAdminRefund: true,
-        }
-      });
-
-      await LedgerEntry.create({
-        userId: order.userId,
-        userModel: 'User',
-        runnerId: order.runnerId,
-        type: 'escrow_lock',
-        grossAmount: escrow.totalAmount,
-        netAmount: escrow.totalAmount,
-        providerFee: 0,
-        platformFee: 0,
-        netPlatformFee: 0,
-        runnerFee: 0,
-        provider: 'system',
-        orderId: order.orderId,
-        escrowId: escrow._id,
-        description: `Order ${order.orderId} cancelled by ${cancelledBy} — held in escrow pending admin review`,
-        status: 'pending',
-        balanceBefore: userWallet?._balance ?? 0,
-        balanceAfter: userWallet?._balance ?? 0,
-      });
-
-      escrowFlagged = true;
-      console.log(`Escrow ${escrow._id} flagged for admin review after cancellation of paid order ${order.orderId}`);
-    }
+    throw new Error('Paid orders cannot be cancelled. Please raise a dispute instead.');
   }
 
   await order.updateStatus('cancelled', cancelledBy, {
