@@ -41,7 +41,6 @@ export default function Message({
   showDelete,
   showReply,
   showRelativeTime=false,
-
   onApproveItems,
   onRejectItems,
   onConfirmDelivery,
