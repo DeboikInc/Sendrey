@@ -1,111 +1,147 @@
-// utils/api.js
+// hooks/useAuthBootstrapApp.js
+import { useEffect, useRef, useState } from 'react';
+import { useDispatch } from 'react-redux';
+import { authStorage } from '../utils/authStorage';
+import { clearCredentials, fetchRunnerMe, fetchUserMe, wipeRunnerLocalStorage } from '../Redux/authSlice';
+import { setActiveChat } from '../Redux/orderSlice';
+import chatStorage from '../utils/chatStorage';
+import { persistor } from '../store/store';
+import useOrderStore from '../store/orderStore';
 
-import axios from "axios";
-import { clearCredentials, setToken } from "../Redux/authSlice";
+const RETRY_DELAYS = [4000, 8000, 12000];
 
-const BASE_URL = process.env.REACT_APP_API_URL;
+const fetchWithRetry = async (fetchFn, type, retryDelays = RETRY_DELAYS) => {
+  for (let i = 0; i <= retryDelays.length; i++) {
+    try {
+      const result = await fetchFn();
+      return { status: 'ok', data: result };
+    } catch (error) {
+      const status = error?.response?.status ?? error?.status;
+      const isAuthError = status === 401;
 
-const api = axios.create({
-  baseURL: BASE_URL,
-  headers: {
-    "Content-Type": "application/json",
-    "Accept": "application/json",
-  },
-  withCredentials: true,
-});
-
-
-const clearSession = async () => {
-  document.cookie = 'token=; Max-Age=0; path=/';
-  document.cookie = 'refreshToken=; Max-Age=0; path=/';
-
-  if (store) {
-    store.dispatch(clearCredentials());
-  }
-};
-
-api.interceptors.request.use(
-  (config) => {
-    if (config.data instanceof FormData) {
-      delete config.headers['Content-Type'];
-    }
-    return config;
-  },
-  (error) => Promise.reject(error)
-);
-
-let isRefreshing = false;
-let refreshQueue = [];
-
-const processQueue = (error) => {
-  refreshQueue.forEach(({ resolve, reject }) => {
-    if (error) reject(error);
-    else resolve();
-  });
-  refreshQueue = [];
-};
-
-
-api.interceptors.response.use(
-  (response) => {
-    if (response.data && response.data.data !== undefined) {
-      response.data = response.data.data;
-    }
-    return response;
-  },
-  async (error) => {
-    const original = error.config;
-
-    if (original._skipInterceptor) return Promise.reject(error);
-
-    // Refresh call itself failed — session is genuinely gone (revoked or truly expired)
-    if (error.response?.status === 401 && original.url?.includes('refresh-token')) {
-      await clearSession();
-      return Promise.reject(error);
-    }
-
-    if (error.response?.status === 401 && !original._retry) {
-      original._retry = true;
-
-      if (isRefreshing) {
-        return new Promise((resolve, reject) => {
-          refreshQueue.push({ resolve, reject });
-        }).then(() => api(original))
-          .catch(err => Promise.reject(err));
+      if (isAuthError) {
+        return { status: 'auth_failed', data: error };
       }
 
-      isRefreshing = true;
+      if (i < retryDelays.length) {
+        console.log(`[Bootstrap] ${type} request failed (non-401), retrying in ${retryDelays[i]}ms...`, error?.message);
+        await new Promise(resolve => setTimeout(resolve, retryDelays[i]));
+        continue;
+      }
+
+      return { status: 'network_error', data: error };
+    }
+  }
+
+  return { status: 'network_error' };
+};
+
+export const useAuthBootstrapApp = () => {
+  const dispatch = useDispatch();
+  const [isReady, setIsReady] = useState(false);
+  const hasBootstrapped = useRef(false);
+
+  useEffect(() => {
+    const bootstrap = async () => {
+      if (hasBootstrapped.current) {
+        setIsReady(true);
+        return;
+      }
+      hasBootstrapped.current = true;
 
       try {
-        await axios.post(
-          `${BASE_URL}/auth/refresh-token`,
-          {},
-          { withCredentials: true }
-        );
+        const storedUser = (() => {
+          try {
+            const persisted = JSON.parse(localStorage.getItem('persist:auth') || '{}');
+            const runner = JSON.parse(persisted.runner || 'null');
+            const user = JSON.parse(persisted.user || 'null');
+            return runner || user;
+          } catch {
+            return null;
+          }
+        })();
 
-        processQueue(null);
-        return api(original);
-      } catch (refreshError) {
-        processQueue(refreshError);
-        const status = refreshError.response?.status;
-        const isAuthFailure = status === 401 || status === 403;
+        const isRunnerPath = window.location.pathname.startsWith('/raw') ||
+          window.location.pathname.startsWith('/profile') ||
+          window.location.pathname.startsWith('/wallet') ||
+          window.location.pathname.startsWith('/disputes') ||
+          window.location.pathname.startsWith('/payout') ||
+          window.location.pathname.startsWith('/all-orders');
 
-        if (isAuthFailure) {
-          await clearSession();
-        } else {
-          console.warn('[API:Web] Refresh attempt failed transiently, not logging out:', refreshError.message);
+        const userType = isRunnerPath || storedUser?.userType === 'runner' || storedUser?.role === 'runner'
+          ? 'runner'
+          : 'user';
+
+        const { accessToken, refreshToken } = await authStorage.getTokens();
+        if (!accessToken && !refreshToken) {
+          const runnerId = (() => {
+            try {
+              const persisted = JSON.parse(localStorage.getItem('persist:auth') || '{}');
+              return JSON.parse(persisted.runner || 'null')?._id;
+            } catch {
+              return undefined;
+            }
+          })();
+
+          if (runnerId) {
+            wipeRunnerLocalStorage(runnerId);
+            localStorage.removeItem(`bot_messages_${runnerId}`);
+          }
+
+          dispatch(clearCredentials());
+          await persistor.purge();
+          setIsReady(true);
+          return;
         }
 
-        return Promise.reject(refreshError);
+        let fetchResult;
+
+        if (userType === 'runner') {
+          fetchResult = await fetchWithRetry(() => dispatch(fetchRunnerMe()).unwrap(), 'runner');
+        } else {
+          fetchResult = await fetchWithRetry(() => dispatch(fetchUserMe()).unwrap(), 'user');
+        }
+
+        if (fetchResult.status === 'network_error') {
+          console.warn('[Bootstrap] server unreachable after retries — proceeding anyway');
+          setIsReady(true);
+          return;
+        }
+
+        if (fetchResult.status === 'auth_failed') {
+          const id = userType === 'runner'
+            ? fetchResult.data?.payload?.runner?._id
+            : fetchResult.data?.payload?.user?._id;
+
+          if (userType === 'runner' && id) {
+            wipeRunnerLocalStorage(id);
+            localStorage.removeItem(`bot_messages_${id}`);
+          }
+
+          useOrderStore.getState()._reset();
+          dispatch(clearCredentials());
+          await persistor.purge();
+          await authStorage.clearTokens();
+
+          // No navigation — ProtectedRoute renders the logged-out state
+          // reactively once user/runner is null in Redux.
+          setIsReady(true);
+          return;
+        }
+
+        // Restore active chat
+        const { chatId, orderId } = await chatStorage.getActiveChat();
+        if (chatId) dispatch(setActiveChat({ chatId, orderId }));
+
+      } catch (err) {
+        console.error('[AuthBootstrap:App] Unexpected bootstrap error:', err);
       } finally {
-        isRefreshing = false;
+        setIsReady(true);
       }
-    }
+    };
 
-    return Promise.reject(error);
-  }
-);
+    bootstrap();
+  }, [dispatch]);
 
-let store;
-export const injectStore = (_store) => { store = _store; };
-export default api;
+  return isReady;
+};
