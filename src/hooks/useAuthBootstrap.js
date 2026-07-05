@@ -1,4 +1,4 @@
-// hooks/useAuthBootstrapApp.js
+// hooks/useAuthBootstrap.js - mobile
 import { useEffect, useRef, useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { authStorage } from '../utils/authStorage';
