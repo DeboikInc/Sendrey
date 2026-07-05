@@ -35,13 +35,6 @@ router.post('/register-user',
   authController.register
 );
 
-router.post('/login',
-  ipRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 5 }),
-  validate(authValidation.login),
-  auditLog('LOGIN'),
-  authController.login
-);
-
 router.post('/check-existing-user',
   ipRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 5 }),
   auditLog('CHECK-EXISTING-USER'),
@@ -64,6 +57,18 @@ router.post(
   refreshTokenLimiter,
   authController.refreshToken
 );
+
+router.get(
+  '/sessions',
+  authenticate,
+  authController.getSessions
+)
+
+router.delete(
+  '/sessions/:sessionId',
+  authenticate,
+  authController.revokeSession
+)
 
 router.get('/me', authenticate, authController.me);
 
@@ -130,10 +135,5 @@ router.post('/resend-email-verification',
   authController.resendEmailVerification
 );
 
-router.post('/logout',
-  validate(authValidation.logout),
-  auditLog('LOGOUT'),
-  authController.logout
-);
 
 module.exports = router;

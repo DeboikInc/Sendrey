@@ -21,12 +21,6 @@ router.post('/register-admin',
   authController.registerAdmin 
 );
 
-router.post('/logout',
-  validate(authValidation.logout),
-  auditLog('ADMIN_LOGOUT'),
-  authController.logout
-);
-
 router.post('/verify-email',
   validate(authValidation.verifyEmail),
   authController.verifyEmail
@@ -35,7 +29,7 @@ router.post('/verify-email',
 router.post('/resend-email-verification',
   userRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 3 }), // 3 resends per hour
   validate(authValidation.resendVerification),
-  authController.resendVerification
+  authController.resendEmailVerification
 );
 
 router.post('/forgot-password',
@@ -49,12 +43,12 @@ router.post('/reset-password',
   authController.resetPassword
 );
 
-router.post('/login',
-  userRateLimit({ windowMs: 15 * 60 * 1000, maxRequests: 5 }),
-  validate(authValidation.adminLogin),
-  auditLog('ADMIN_LOGIN'),
-  authController.adminLogin
-);
+// router.post('/login',
+//   userRateLimit({ windowMs: 15 * 60 * 1000, maxRequests: 5 }),
+//   validate(authValidation.adminLogin),
+//   auditLog('ADMIN_LOGIN'),
+//   authController.adminLogin
+// );
 
 router.use(authenticate)
 
