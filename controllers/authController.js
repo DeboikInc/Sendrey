@@ -1,3 +1,4 @@
+require('dotenv').config();
 const BaseController = require('./baseController');
 const authService = require('../services/authService');
 const userService = require('../services/userService');
@@ -14,11 +15,12 @@ const bcrypt = require('bcryptjs');
 const { sendEmailEvent } = require('../kafka/producers/emailProducer');
 const { sendSmsEvent } = require('../kafka/producers/smsProducer');
 
+
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const AuthSession = require('../models/AuthSession');
 
-const SESSION_TTL_MS = (parseInt(process.env.SESSION_TTL_DAYS));
+const SESSION_TTL_MS = (parseInt(process.env.SESSION_TTL_MS));
 
 class AuthController extends BaseController {
   constructor() {
