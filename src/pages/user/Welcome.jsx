@@ -552,7 +552,7 @@ export const Welcome = () => {
                         darkMode={dark}
                         toggleDarkMode={() => setDark(!dark)}
                         onMore={() => setShowMoreMenu(true)}
-                        showBack={true}
+                        showBack={false}
                         onBack={() => navigateTo('service_selection')}
                     />
                 );
