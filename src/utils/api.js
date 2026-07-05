@@ -18,7 +18,7 @@ const api = axios.create({
   withCredentials: true,
 });
 
-// ── Auth redirect helper ──────────────────────────────────────────────────────
+
 const redirectToAuth = async () => {
   await authStorage.clearTokens();
   document.cookie = 'token=; Max-Age=0; path=/';
@@ -31,7 +31,6 @@ const redirectToAuth = async () => {
   window.location.href = '/';
 };
 
-// ── Request interceptor ───────────────────────────────────────────────────────
 api.interceptors.request.use(
   async (config) => {
     if (useTokenAuth) {
