@@ -36,7 +36,7 @@ const fetchWithRetry = async (fetchFn, type, retryDelays = RETRY_DELAYS) => {
   return { status: 'network_error' };
 };
 
-export const useAuthBootstrapApp = () => {
+export const useAuthBootstrap = () => {
   const dispatch = useDispatch();
   const [isReady, setIsReady] = useState(false);
   const hasBootstrapped = useRef(false);
