@@ -4,7 +4,6 @@ const crypto = require('crypto');
 const User = require('../models/User');
 const Runner = require('../models/Runner');
 const Wallet = require('../models/Wallet')
-const config = require('../config');
 const logger = require('../utils/logger');
 
 class AuthService {
@@ -13,10 +12,8 @@ class AuthService {
    */
   async register(userData, creatorUserRole, userType = 'user') {
     try {
-      // Determine which model to use
       const Model = userType === 'runner' ? Runner : User;
 
-      // Check if user/runner already exists
       const conditions = [];
       if (userData.email) conditions.push({ email: userData.email });
       if (userData.phone) conditions.push({ phone: userData.phone });
@@ -27,17 +24,13 @@ class AuthService {
 
       if (existingUser) {
         if (!existingUser.isVerified) {
-          const token = this.generateTokens(existingUser);
-          return { user: existingUser, token, existing: true };
+          return { user: existingUser, existing: true };
         }
         const err = new Error('Account already exists');
         err.statusCode = 409;
         err.userName = existingUser.firstName;
         err.userEmail = existingUser.email;
         err.userPhone = existingUser.phone;
-        console.log('Existing user', existingUser.firstName)
-
-        // runnerkycs
         err.kycStatus = {
           isVerified: existingUser.isVerified,
           isEmailVerified: existingUser.isEmailVerified,
@@ -50,14 +43,11 @@ class AuthService {
         throw err;
       }
 
-      // Handle role assignment
       let role = userType;
 
       if (userType === 'user') {
         if (userData.role === 'admin' || userData.role === 'super-admin') {
-          // Only allow if request comes from an existing admin
           if (!creatorUserRole || !['admin', 'super-admin'].includes(creatorUserRole)) {
-            // Silently downgrade to regular user instead of throwing
             role = 'user';
           } else if (userData.role === 'admin') {
             role = 'admin';
@@ -70,8 +60,7 @@ class AuthService {
           }
         }
       } else if (userType === 'runner') {
-        // Runner-specific role handling
-        role = 'runner'; // Always 'runner' for runner model
+        role = 'runner';
       }
 
       const userDataWithLocation = {
@@ -90,10 +79,8 @@ class AuthService {
         };
       }
 
-      // Create user/runner
       const user = await Model.create(userDataWithLocation);
 
-      // Create wallet for users and runners only (not admins)
       if (!['admin', 'super-admin'].includes(role)) {
         await Wallet.create({
           userId: user._id,
@@ -102,19 +89,7 @@ class AuthService {
         });
       }
 
-      // Generate JWT token (skip for admins created by non-admins)
-      let token;
-      if (['admin', 'super-admin'].includes(role)) {
-        // always generate token for admins
-        token = this.generateTokens(user);
-      } else if (userType === 'runner') {
-        token = this.generateTokens(user);
-      } else {
-        // regular user
-        token = this.generateTokens(user);
-      }
-
-      return { user, token };
+      return { user };
     } catch (error) {
       logger.error(`AuthService - ${userType} Register error:`, error);
       throw error;
@@ -124,8 +99,6 @@ class AuthService {
   async checkExistingUser(email, userType = 'user') {
     const Model = userType === 'runner' ? Runner : User;
     const user = await Model.findOne({ email });
-
-    console.log("Existing user being checked", user?.firstName, "userType:",userType,);
 
     if (!user) return null;
 
@@ -147,63 +120,7 @@ class AuthService {
   }
 
   /**
-   * Single login for both user and runner (auto-detect)
-   */
-  async login(email, phone, password) {
-    try {
-      // Try to find as user first
-      let user = await User.findOne({
-        $or: [
-          { email: email || '' },
-          { phone: phone || '' }
-        ]
-      }).select('+password');
-
-      let userType = 'user';
-
-      // If not found as user, try as runner
-      if (!user) {
-        user = await Runner.findOne({
-          $or: [
-            { email: email || '' },
-            { phone: phone || '' }
-          ]
-        }).select('+password');
-        userType = 'runner';
-      }
-
-      if (!user) {
-        throw new Error('Invalid credentials or account does not exist');
-      }
-
-      // Check if account is active
-      if (!user.isActive) {
-        throw new Error('Account has been deactivated');
-      }
-
-      // Check verification status (skip for admins)
-      if (userType === 'user' && !['admin', 'super-admin'].includes(user.role) && !user.isVerified) {
-        throw new Error('Please verify your email before logging in');
-      }
-
-      // Verify password
-      const isPasswordValid = await bcrypt.compare(password, user.password);
-      if (!isPasswordValid) {
-        throw new Error('Invalid credentials');
-      }
-
-      // Generate JWT token
-      const token = this.generateTokens(user);
-
-      return { user, token, userType };
-    } catch (error) {
-      logger.error('AuthService - Login error:', error);
-      throw error;
-    }
-  }
-
-  /**
-   * Generate JWT token
+   * Generate access token JWT (short-lived, stateless).
    */
   generateToken = (user) => {
     return jwt.sign(
@@ -213,6 +130,10 @@ class AuthService {
     );
   };
 
+  /**
+   * Legacy access+refresh JWT pair — used only by admin (password-based) auth.
+   * Regular user/runner sessions use AuthController._createSession + AuthSession instead.
+   */
   generateTokens = (user) => {
     const accessToken = jwt.sign(
       { id: user._id, role: user.role },
@@ -227,12 +148,9 @@ class AuthService {
     return { accessToken, refreshToken };
   };
 
-  /**
-   * Generate email verification token
-   */
   async generateVerificationToken(userId, userType = 'user') {
     const token = crypto.randomBytes(32).toString('hex');
-    const expires = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+    const expires = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
     const Model = userType === 'runner' ? Runner : User;
 
@@ -244,53 +162,6 @@ class AuthService {
     return token;
   }
 
-  /**
- * Verify a refresh token and rotate it.
- */
-  async refreshTokens(refreshToken) {
-    if (!refreshToken) {
-      const err = new Error('Refresh token required');
-      err.statusCode = 401;
-      throw err;
-    }
-
-    let decoded;
-    try {
-      decoded = jwt.verify(refreshToken, process.env.JWT_REFRESH_SECRET);
-    } catch (err) {
-      const e = new Error('Invalid or expired refresh token');
-      e.statusCode = 401;
-      throw e;
-    }
-
-    let user = await User.findById(decoded.id).select('+refreshToken');
-    let isRunner = false;
-
-    if (!user) {
-      user = await Runner.findById(decoded.id).select('+refreshToken');
-      isRunner = true;
-    }
-
-    if (!user || (user.refreshToken !== refreshToken && user.previousRefreshToken !== refreshToken)) {
-      const err = new Error('Invalid refresh token');
-      err.statusCode = 401;
-      throw err;
-    }
-
-    const { accessToken, refreshToken: newRefresh } = this.generateTokens(user);
-
-    const Model = isRunner ? Runner : User;
-    await Model.findByIdAndUpdate(user._id, {
-      previousRefreshToken: user.refreshToken,
-      refreshToken: newRefresh,
-    });
-
-    return { user, isRunner, accessToken, refreshToken: newRefresh };
-  }
-
-  /**
-   * Verify email with token
-   */
   async verifyEmail(token, userType = 'user') {
     const Model = userType === 'runner' ? Runner : User;
 
@@ -311,43 +182,22 @@ class AuthService {
     return user;
   }
 
-  /**
- * Generate OTP for email verification
- */
   async generateEmailVerificationOTP(userId, email, userType = 'user') {
     const otp = crypto.randomInt(100000, 999999).toString();
-    const expires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    const expires = new Date(Date.now() + 10 * 60 * 1000);
 
     const Model = userType === 'runner' ? Runner : User;
 
-    const updated = await Model.findByIdAndUpdate(userId, {
+    await Model.findByIdAndUpdate(userId, {
       emailVerificationOTP: otp,
       emailVerificationExpires: expires,
     }, { new: true }).select('+emailVerificationOTP');
 
-    console.log('[generateEmailVerificationOTP] saved OTP:', updated?.emailVerificationOTP);
-
     return otp;
   }
 
-  /**
-   * Verify email OTP
-   */
   async verifyEmailOTPCode(otp, userType = 'user') {
     const Model = userType === 'runner' ? Runner : User;
-
-    const all = await Model.find({
-      emailVerificationExpires: { $gt: Date.now() }
-    })
-      .select('+emailVerificationOTP +emailVerificationExpires')
-      .lean();
-
-    console.log('[verifyEmailOTPCode] active OTP docs:', all.map(u => ({
-      id: u._id,
-      email: u.email,
-      otp: u.emailVerificationOTP,
-      match: u.emailVerificationOTP === otp,
-    })));
 
     const user = await Model.findOne({
       emailVerificationOTP: otp,
@@ -357,8 +207,6 @@ class AuthService {
       .lean();
 
     if (!user) throw new Error('Invalid or expired OTP');
-
-    console.log('[verifyEmailOTP] otp:', otp, 'userType:', userType);
 
     await Model.findByIdAndUpdate(user._id, {
       $set: { isVerified: true, isEmailVerified: true },
@@ -379,14 +227,12 @@ class AuthService {
     const kycStatus = userType === 'runner' ? {
       isVerified: user.isVerified,
       isEmailVerified: user.isEmailVerified,
-      // isPhoneVerified: user.isPhoneVerified,
       ninStatus: user.verificationDocuments?.nin?.status || 'not_submitted',
       driverLicenseStatus: user.verificationDocuments?.driverLicense?.status || 'not_submitted',
       selfieVerified: user.biometricVerification?.selfieVerified || false,
       overallVerified: user.isVerifiedKyc || false,
     } : {
       isVerified: user.isVerified,
-      // isPhoneVerified: user.isPhoneVerified,
       isEmailVerified: user.isEmailVerified,
     };
 
@@ -411,83 +257,6 @@ class AuthService {
     };
   }
 
-  /**
-   * Generate password reset token
-   */
-  async generatePasswordResetToken(email, phone, userType = 'user') {
-    const Model = userType === 'runner' ? Runner : User;
-
-    const user = await Model.findOne({
-      $or: [
-        { email: email || '' },
-        { phone: phone || '' }
-      ]
-    });
-
-    if (!user) {
-      // Don't reveal if user exists
-      return;
-    }
-
-    const token = crypto.randomBytes(32).toString('hex');
-    const expires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
-
-    user.resetPasswordToken = token;
-    user.resetPasswordExpires = expires;
-    await user.save();
-
-    return token;
-  }
-
-  /**
-   * Reset password with token
-   */
-  async resetPassword(token, newPassword, userType = 'user') {
-    const Model = userType === 'runner' ? Runner : User;
-
-    const user = await Model.findOne({
-      resetPasswordToken: token,
-      resetPasswordExpires: { $gt: Date.now() }
-    });
-
-    if (!user) {
-      throw new Error('Invalid or expired reset token');
-    }
-
-    user.password = newPassword;
-    user.resetPasswordToken = undefined;
-    user.resetPasswordExpires = undefined;
-    await user.save();
-
-    return user;
-  }
-
-  /**
-   * Change password for authenticated user/runner
-   */
-  async changePassword(userId, currentPassword, newPassword, userType = 'user') {
-    const Model = userType === 'runner' ? Runner : User;
-
-    const user = await Model.findById(userId).select('+password');
-
-    if (!user) {
-      throw new Error(`${userType} not found`);
-    }
-
-    const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
-    if (!isCurrentPasswordValid) {
-      throw new Error('Current password is incorrect');
-    }
-
-    user.password = newPassword;
-    await user.save();
-
-    return user;
-  }
-
-  /**
-   * Resend verification email
-   */
   async resendVerificationEmail(email, userType = 'user') {
     const Model = userType === 'runner' ? Runner : User;
 
@@ -498,7 +267,7 @@ class AuthService {
     }
 
     if (user.isVerified) {
-      throw new Error('Email is already verified');
+      const err = new Error('Email is already verified');
       err.statusCode = 400;
       throw err;
     }
@@ -507,12 +276,9 @@ class AuthService {
     return { user, token };
   }
 
-  /**
-   * Generate OTP for phone verification
-   */
   async generatePhoneVerificationOTP(userId, phone, userType = 'user') {
     const otp = crypto.randomInt(100000, 999999).toString();
-    const expires = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    const expires = new Date(Date.now() + 10 * 60 * 1000);
 
     const Model = userType === 'runner' ? Runner : User;
 
@@ -524,9 +290,6 @@ class AuthService {
     return otp;
   }
 
-  /**
-   * Verify phone OTP
-   */
   async verifyPhoneOTP(userId, otp, userType = 'user') {
     const Model = userType === 'runner' ? Runner : User;
 
@@ -547,15 +310,6 @@ class AuthService {
 
     return Model.findById(user._id).select('+pin');
   }
-
-  /**
-   * Blacklist token (for logout)
-   */
-  async blacklistToken(token) {
-    logger.info(`Token blacklisted: ${token.substring(0, 20)}...`);
-    return true;
-  }
-
 }
 
 module.exports = new AuthService();
