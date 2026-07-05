@@ -46,11 +46,10 @@ const getCurrentTime = () => {
   return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 };
 
-// ─── Initial bot messages ────────────────────────────────────────────────────
-const INITIAL_BOT_MESSAGES = [
+
+const getInitialBotMessages = () => [
   { id: 1, from: "them", text: "Welcome!", time: getCurrentTime(), status: "read" },
   { id: 2, from: "them", text: "Hi! I'm Sendrey Assistant 👋 ", time: getCurrentTime(), status: "delivered" },
-  // { id: 3, from: "them", text: "Would you like like to run a pickup or run an errand?", time: getCurrentTime(), status: "delivered" },
 ];
 
 const BOT_CHAT_ID = 'sendrey-bot';
@@ -675,7 +674,7 @@ function WhatsAppLikeChat() {
       if (activeChatIdRef.current !== BOT_CHAT_ID) return;
       const s = chatManager.get(BOT_CHAT_ID);
       if (s.messages.length === 0) {
-        botMessagesUpdater([INITIAL_BOT_MESSAGES[0]]);
+        botMessagesUpdater([getInitialBotMessages()[0]]);
       }
     }, 0);
 
@@ -683,7 +682,7 @@ function WhatsAppLikeChat() {
       if (activeChatIdRef.current !== BOT_CHAT_ID) return;
       const s = chatManager.get(BOT_CHAT_ID);
       if (s.messages.length === 1) {
-        botMessagesUpdater([...s.messages, INITIAL_BOT_MESSAGES[1]]);
+        botMessagesUpdater([...s.messages, getInitialBotMessages()[1]])
       }
       setTimeout(() => {
         setInitialMessagesComplete(true);
