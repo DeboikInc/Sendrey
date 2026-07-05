@@ -1,4 +1,5 @@
-// utils/api.js
+// utils/api.js - mobile
+
 import axios from "axios";
 import { clearCredentials, setToken } from "../Redux/authSlice";
 import { authStorage } from "./authStorage";
@@ -22,6 +23,7 @@ const clearSession = async () => {
   }
 };
 
+// ── Request interceptor ───────────────────────────────────────────────────────
 api.interceptors.request.use(
   async (config) => {
     const { accessToken } = await authStorage.getTokens();
@@ -38,7 +40,7 @@ api.interceptors.request.use(
 );
 
 let isRefreshing = false;
-let refreshQueue = [];
+let refreshQueue = []; // pending requests waiting for new token
 
 const processQueue = (error, token = null) => {
   refreshQueue.forEach(({ resolve, reject }) => {
@@ -48,7 +50,7 @@ const processQueue = (error, token = null) => {
   refreshQueue = [];
 };
 
-
+// ── Response interceptor ──────────────────────────────────────────────────────
 api.interceptors.response.use(
   (response) => {
     if (response.data && response.data.data !== undefined) {
@@ -61,7 +63,7 @@ api.interceptors.response.use(
 
     if (original._skipInterceptor) return Promise.reject(error);
 
-
+    // Refresh call itself failed — session is genuinely gone (revoked or truly expired)
     if (error.response?.status === 401 && original.url?.includes('refresh-token')) {
       await clearSession();
       return Promise.reject(error);
