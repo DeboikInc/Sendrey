@@ -1,4 +1,4 @@
-// utils/api.js
+// utils/api.js - mobile
 import axios from "axios";
 import { clearCredentials, setToken } from "../Redux/authSlice";
 import { authStorage } from "./authStorage";
@@ -22,6 +22,7 @@ const clearSession = async () => {
   }
 };
 
+// ── Request interceptor ───────────────────────────────────────────────────────
 api.interceptors.request.use(
   async (config) => {
     const { accessToken } = await authStorage.getTokens();
@@ -38,7 +39,7 @@ api.interceptors.request.use(
 );
 
 let isRefreshing = false;
-let refreshQueue = [];
+let refreshQueue = []; // pending requests waiting for new token
 
 const processQueue = (error, token = null) => {
   refreshQueue.forEach(({ resolve, reject }) => {
@@ -47,7 +48,6 @@ const processQueue = (error, token = null) => {
   });
   refreshQueue = [];
 };
-
 
 api.interceptors.response.use(
   (response) => {

@@ -611,7 +611,7 @@ export default function Message({
               }
             }}
           >
-            Resend
+              Resend
           </span>
           {parts[1] || ''}
         </div>
