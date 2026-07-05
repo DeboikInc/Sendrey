@@ -152,7 +152,6 @@ export const Auth = () => {
             onError,
             GEO_OPTIONS
         );
-
         // Hard time cap — always resolve eventually
         watchTimerRef.current = setTimeout(() => {
             console.log('[geo] Watch duration exceeded — settling');
