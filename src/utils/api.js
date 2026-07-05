@@ -1,13 +1,11 @@
-// utils/api.js
+// utils/api.js - web-app
 import axios from "axios";
-import { setToken } from "../Redux/authSlice";
-import { authStorage } from "./authStorage";
+import { 
+  clearCredentials, 
+  // setToken 
+} from "../Redux/authSlice";
 
 const BASE_URL = process.env.REACT_APP_API_URL;
-
-export const isCapacitor = false;
-export const isMobileBrowser = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
-const useTokenAuth = isMobileBrowser;
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -19,27 +17,17 @@ const api = axios.create({
 });
 
 
-const redirectToAuth = async () => {
-  await authStorage.clearTokens();
+const clearSession = async () => {
   document.cookie = 'token=; Max-Age=0; path=/';
   document.cookie = 'refreshToken=; Max-Age=0; path=/';
-  localStorage.removeItem('runner_ui');
-  localStorage.removeItem('persist:auth');
-  sessionStorage.clear();
 
-  // no reload — just navigate, the app will re-render unauthenticated
-  window.location.href = '/';
+  if (store) {
+    store.dispatch(clearCredentials());
+  }
 };
 
 api.interceptors.request.use(
-  async (config) => {
-    if (useTokenAuth) {
-      const { accessToken } = await authStorage.getTokens();
-      if (accessToken) {
-        config.headers.Authorization = `Bearer ${accessToken}`;
-      }
-    }
-
+  (config) => {
     if (config.data instanceof FormData) {
       delete config.headers['Content-Type'];
     }
@@ -48,21 +36,17 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-
-
-// Add these above the interceptors
 let isRefreshing = false;
-let refreshQueue = []; // pending requests waiting for new token
+let refreshQueue = [];
 
-const processQueue = (error, token = null) => {
+const processQueue = (error) => {
   refreshQueue.forEach(({ resolve, reject }) => {
     if (error) reject(error);
-    else resolve(token);
+    else resolve();
   });
   refreshQueue = [];
 };
 
-// ── Response interceptor ──────────────────────────────────────────────────────
 api.interceptors.response.use(
   (response) => {
     if (response.data && response.data.data !== undefined) {
@@ -74,67 +58,43 @@ api.interceptors.response.use(
     const original = error.config;
 
     if (original._skipInterceptor) return Promise.reject(error);
+
+    // Refresh call itself failed — session is genuinely gone (revoked or truly expired)
     if (error.response?.status === 401 && original.url?.includes('refresh-token')) {
-      await redirectToAuth();
+      await clearSession();
       return Promise.reject(error);
     }
 
     if (error.response?.status === 401 && !original._retry) {
       original._retry = true;
 
-      // If already refreshing, queue this request
       if (isRefreshing) {
         return new Promise((resolve, reject) => {
           refreshQueue.push({ resolve, reject });
-        }).then(token => {
-          if (useTokenAuth) {
-            original.headers['Authorization'] = `Bearer ${token}`;
-          }
-          return api(original);
-        }).catch(err => Promise.reject(err));
+        }).then(() => api(original))
+          .catch(err => Promise.reject(err));
       }
 
       isRefreshing = true;
 
       try {
-        let newAccess;
+        await axios.post(
+          `${BASE_URL}/auth/refresh-token`,
+          {},
+          { withCredentials: true }
+        );
 
-        if (useTokenAuth) {
-          const { accessToken, refreshToken } = await authStorage.getTokens();
-          console.log('[API] useTokenAuth:', useTokenAuth, '| token exists:', !!accessToken, '| url:', original.url);
-          if (!refreshToken) throw new Error('No refresh token');
-
-          const { data } = await axios.post(
-            `${BASE_URL}/auth/refresh-token`,
-            { refreshToken },
-            { withCredentials: true }
-          );
-
-          newAccess = data.accessToken || data.token;
-          const newRefresh = data.refreshToken || refreshToken;
-
-          await authStorage.setTokens(newAccess, newRefresh);
-          store.dispatch(setToken(newAccess));
-          original.headers['Authorization'] = `Bearer ${newAccess}`;
-        } else {
-          await axios.post(
-            `${BASE_URL}/auth/refresh-token`,
-            {},
-            { withCredentials: true }
-          );
-        }
-
-        processQueue(null, newAccess);
+        processQueue(null);
         return api(original);
       } catch (refreshError) {
-        processQueue(refreshError, null);
+        processQueue(refreshError);
         const status = refreshError.response?.status;
         const isAuthFailure = status === 401 || status === 403;
 
         if (isAuthFailure) {
-          await redirectToAuth();
+          await clearSession();
         } else {
-          console.warn('[API] Refresh attempt failed transiently, not logging out:', refreshError.message);
+          console.warn('[API:Web] Refresh attempt failed transiently, not logging out:', refreshError.message);
         }
 
         return Promise.reject(refreshError);
@@ -149,5 +109,4 @@ api.interceptors.response.use(
 
 let store;
 export const injectStore = (_store) => { store = _store; };
-export { useTokenAuth };
 export default api;
