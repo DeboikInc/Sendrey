@@ -190,7 +190,7 @@ export default function OnboardingScreen({
             setMessages(prev => [...prev, {
               id: msgId,
               from: "them",
-              text: errorText,
+              text: errorText ,
               time: getCurrentTime(),
               status: "delivered",
               isError: true,
