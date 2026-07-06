@@ -497,7 +497,7 @@ export default function ConfigTab() {
                                         onChange={v => dispatch(updateField({ resource: 'matching', field: 'pickupMaxDistance', value: v }))}
                                     />
                                     <NumberField
-                                        label="Total Max Distance (Pedestrian)"
+                                        label="Total Max Distance (Pedestrian) - sum of Pedestrian Distances"
                                         suffix="m"
                                         readOnly
                                         value={(pedestrianConfig?.pedestrianMaxRunnerLeg || 0) + (pedestrianConfig?.pedestrianMaxDeliveryLeg || 0)}
