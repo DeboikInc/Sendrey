@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useSelector } from "react-redux";
 import useDarkMode from "../../hooks/useDarkMode";
-import { useNavigate } from "react-router-dom";
 
 import ServiceSelectionScreen from "../../components/screens/ServiceSelectionScreen";
 import VehicleSelectionScreen from "../../components/screens/VehicleSelectionScreen";
@@ -48,7 +47,6 @@ export const Welcome = () => {
     const [showRunnerSheet, setShowRunnerSheet] = useState(false);
     const [selectedService, setSelectedService] = useState("");
     const dispatch = useDispatch();
-    const navigate = useNavigate();
 
     const { socket, joinUserRoom } = useSocket();
     const [schedulePrompt, setSchedulePrompt] = useState(null);
@@ -503,7 +501,7 @@ export const Welcome = () => {
                         }}
                         onMore={() => setShowMoreMenu(true)}
                         showBack={false}
-                        onBack={() => navigate('/auth')}
+                        showMore={true}
                     />
                 );
 
@@ -528,7 +526,8 @@ export const Welcome = () => {
                         darkMode={dark}
                         toggleDarkMode={() => setDark(!dark)}
                         onMore={() => setShowMoreMenu(true)}
-                        showBack={false}
+                        showBack={true}
+                        showMore={true}
                         onBack={() => navigateTo('service_selection')}
                     />
                 );
@@ -552,7 +551,8 @@ export const Welcome = () => {
                         darkMode={dark}
                         toggleDarkMode={() => setDark(!dark)}
                         onMore={() => setShowMoreMenu(true)}
-                        showBack={false}
+                        showBack={true}
+                        showMore={true}
                         onBack={() => navigateTo('service_selection')}
                     />
                 );
@@ -602,7 +602,8 @@ export const Welcome = () => {
                         darkMode={dark}
                         toggleDarkMode={() => setDark(!dark)}
                         onMore={() => setShowMoreMenu(true)}
-                        showBack={false}
+                        showBack={true}
+                        showMore={true}
                         onBack={() => {
                             setMarketScreenMessages([]); // ← clear messages on back
                             setPickupLocation(null);

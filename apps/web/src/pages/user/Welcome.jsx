@@ -503,6 +503,7 @@ export const Welcome = () => {
                         }}
                         onMore={() => setShowMoreMenu(true)}
                         showBack={false}
+                        showMore={true}
                         onBack={() => navigate('/auth')}
                     />
                 );
@@ -528,7 +529,8 @@ export const Welcome = () => {
                         darkMode={dark}
                         toggleDarkMode={() => setDark(!dark)}
                         onMore={() => setShowMoreMenu(true)}
-                        showBack={false}
+                        showBack={true}
+                        showMore={true}
                         onBack={() => navigateTo('service_selection')}
                     />
                 );
@@ -552,7 +554,8 @@ export const Welcome = () => {
                         darkMode={dark}
                         toggleDarkMode={() => setDark(!dark)}
                         onMore={() => setShowMoreMenu(true)}
-                        showBack={false}
+                        showBack={true}
+                        showMore={true}
                         onBack={() => navigateTo('service_selection')}
                     />
                 );
@@ -602,7 +605,8 @@ export const Welcome = () => {
                         darkMode={dark}
                         toggleDarkMode={() => setDark(!dark)}
                         onMore={() => setShowMoreMenu(true)}
-                        showBack={false}
+                        showBack={true}
+                        showMore={true}
                         onBack={() => {
                             setMarketScreenMessages([]); // ← clear messages on back
                             setPickupLocation(null);

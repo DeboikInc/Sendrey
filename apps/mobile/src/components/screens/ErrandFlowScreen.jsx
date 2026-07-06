@@ -46,7 +46,7 @@ export default function ErrandFlowScreen({
     onEditComplete,
     onMore,
     onBack,
-    showBack
+    showBack, showMore,
 }) {
     const [searchTerm, setSearchTerm] = useState("");
     const [showMap, setShowMap] = useState(false);
@@ -842,7 +842,7 @@ export default function ErrandFlowScreen({
 
     if (showMap) {
         return (
-            <Onboarding darkMode={darkMode} toggleDarkMode={toggleDarkMode} onMore={onMore}>
+            <Onboarding darkMode={darkMode} toggleDarkMode={toggleDarkMode}>
                 <div className="w-full h-full flex flex-col mx-auto overflow-hidden max-w-2xl">
                     <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 border-b">
                         <Button
@@ -929,7 +929,7 @@ export default function ErrandFlowScreen({
     }
 
     return (
-        <Onboarding darkMode={darkMode} toggleDarkMode={toggleDarkMode} onMore={onMore} showBack={showBack} onBack={onBack}>
+        <Onboarding darkMode={darkMode} toggleDarkMode={toggleDarkMode} showMore={showMore} onMore={onMore} showBack={showBack} onBack={onBack}>
             <div className="flex flex-col h-screen">
                 <div className="flex-1 overflow-y-auto marketSelection" ref={listRef}>
                     <div>

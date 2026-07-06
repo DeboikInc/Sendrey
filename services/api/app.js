@@ -1,6 +1,5 @@
 
 // app.js
-require("dotenv").config();
 const dns = require('node:dns/promises');
 dns.setServers(['8.8.8.8', '1.1.1.1']);
 
@@ -38,6 +37,7 @@ const { initMatchingConfigSubscriber } = require('./services/distanceConfigServi
 const { startRetryLoop } = require('./utils/paymentRetryQueue');
 const runSeeds = require('./utils/runSeeds');
 
+require("dotenv").config();
 
 // Database connection
 const connectDb = require('./config/database');

@@ -112,6 +112,8 @@ class AuthController extends BaseController {
         });
       }
 
+      console.log("otp sent", otp);
+
       // Virtual account (non-blocking)
       try {
         await paymentService.createVirtualAccount(
