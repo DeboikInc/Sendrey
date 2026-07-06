@@ -35,7 +35,7 @@ export default function PickupFlowScreen({
   onEditComplete,
   onMore,
   showBack,
-  onBack
+  onBack, showMore
 }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [phoneNumberInput, setPhoneNumberInput] = useState("");
@@ -994,7 +994,7 @@ export default function PickupFlowScreen({
 
   if (showMap) {
     return (
-      <Onboarding darkMode={darkMode} toggleDarkMode={toggleDarkMode} onMore={onMore}>
+      <Onboarding darkMode={darkMode} toggleDarkMode={toggleDarkMode}>
         <div className="w-full h-full flex flex-col mx-auto flex flex-col overflow-hidden max-w-2xl">
           <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 border-b">
             <Button
@@ -1081,7 +1081,7 @@ export default function PickupFlowScreen({
   }
 
   return (
-    <Onboarding darkMode={darkMode} toggleDarkMode={toggleDarkMode} onMore={onMore} >
+    <Onboarding darkMode={darkMode} toggleDarkMode={toggleDarkMode} onMore={onMore} showMore={showMore} showBack={showBack} onBack={onBack}>
       <div className="flex flex-col h-screen">
         <div className="flex-1 overflow-y-auto marketSelection" ref={listRef}>
           <div>

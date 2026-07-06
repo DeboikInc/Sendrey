@@ -61,8 +61,6 @@ class UserController extends BaseController {
   // Update user profile
   async updateProfile(req, res, next) {
     try {
-      console.log('req.file:', req.file);
-      console.log('req.body:', req.body);
 
       const userId = req.params.userId || req.user.id;
       const updateData = { ...req.body };
@@ -181,19 +179,10 @@ class UserController extends BaseController {
 
       });
 
-      // console.log('all users', users)
-
       const eligibleUsers = users.filter(user => {
-        console.log('User phone/email check:', {
-          id: user._id,
-          isPhoneVerified: user.isPhoneVerified,
-          isEmailVerified: user.isEmailVerified
-        });
         // return user.isPhoneVerified === true;
         return user.isEmailVerified === true;
       });
-
-      // console.log('eligible users', eligibleUsers)
 
       return this.success(res, {
         success: true,

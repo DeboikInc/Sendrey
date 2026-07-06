@@ -2,6 +2,7 @@
 import axios from "axios";
 import { clearCredentials, setToken } from "../Redux/authSlice";
 import { authStorage } from "./authStorage";
+export const isCapacitor = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 
 const BASE_URL = process.env.REACT_APP_API_URL;
 

@@ -34,6 +34,7 @@ export default function OnboardingScreen({
   const [canResendOtp, setCanResendOtp] = useState(false);
   const [showTerms, setShowTerms] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
+  const resendTimerRef = useRef(null);
 
   const listRef = useRef(null);
   const timeoutRef = useRef(null);
@@ -53,6 +54,19 @@ export default function OnboardingScreen({
     (messages.some(msg => msg.text === "In progress...") && !showOtpStep) ||
     registrationSuccess;
 
+  const scheduleResendActivation = (msgId) => {
+    if (resendTimerRef.current) {
+      clearTimeout(resendTimerRef.current);
+      resendTimerRef.current = null;
+    }
+    setCanResendOtp(false);
+    setActiveResendId(msgId);
+    resendTimerRef.current = setTimeout(() => {
+      setCanResendOtp(true);
+      resendTimerRef.current = null;
+    }, 30000);
+  };
+
   const handleAcceptTerms = async () => {
     try {
       await api.post('/terms/accept', {
@@ -71,6 +85,13 @@ export default function OnboardingScreen({
       console.error('Failed to save terms acceptance:', error);
     }
   };
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+      if (resendTimerRef.current) clearTimeout(resendTimerRef.current);
+    };
+  }, []);
 
   // Returning user — success
   useEffect(() => {
@@ -190,14 +211,14 @@ export default function OnboardingScreen({
             setMessages(prev => [...prev, {
               id: msgId,
               from: "them",
-              text: errorText,
+              text: `${errorText} \n \nDidn't receive OTP? `,
               time: getCurrentTime(),
               status: "delivered",
               isError: true,
               hasResendLink: true,
             }]);
 
-            setActiveResendId(msgId);
+            scheduleResendActivation(msgId);
           }
         }, index * 600);
       });
@@ -329,12 +350,8 @@ export default function OnboardingScreen({
         hasResendLink: true
       }]);
       setShowOtpStep(true);
+      scheduleResendActivation(secondOtpMsgId);
     }, 2000);
-
-    setTimeout(() => {
-      setCanResendOtp(true);
-      setActiveResendId(secondOtpMsgId);
-    }, 30000);
   };
 
   const handleOtpSubmit = () => {
@@ -381,19 +398,14 @@ export default function OnboardingScreen({
       {
         id: resendMsgId,
         from: "them",
-        text: `Enter the new OTP we sent to ${userData.email}, \n \nDidn't receive OTP? Resend`,
+        text: `Enter the new OTP we sent to ${userData.email}, \n \nDidn't receive OTP? `,
         time: getCurrentTime(),
         status: "delivered",
         hasResendLink: true,
       }
     ]);
 
-    setCanResendOtp(false);
-    setActiveResendId(null);
-    setTimeout(() => {
-      setCanResendOtp(true);
-      setActiveResendId(resendMsgId);
-    }, 30000);
+    scheduleResendActivation(resendMsgId);
   };
 
   useEffect(() => {

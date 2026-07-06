@@ -187,17 +187,11 @@ class UserService {
    */
   async updateUser(id, updateData) {
     try {
-      console.log('🔄 UPDATE USER CALLED:');
-      console.log('  User ID:', id);  // Changed from userId to id
-      console.log('  Update data:', JSON.stringify(updateData, null, 2));
 
       const user = await User.findById(id);
       if (!user) {
         throw new Error('User does not exist');
       }
-
-      // Debug what's being set
-      console.log('Setting updateData:', updateData);
 
       const updatedUser = await User.findByIdAndUpdate(
         id,
@@ -205,13 +199,9 @@ class UserService {
         { new: true, runValidators: false }
       );
 
-      console.log('✅ UPDATED USER:');
-      console.log('  fleetType:', updatedUser.currentRequest?.fleetType);
-      console.log('  Full data:', updatedUser.currentRequest);
-
       return updatedUser;
     } catch (error) {
-      console.log('❌ UPDATE ERROR:', error.message);
+      console.error('❌ UPDATE ERROR:', error.message);
       throw error;
     }
   }

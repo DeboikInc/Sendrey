@@ -651,7 +651,6 @@ runnerSchema.statics.findNearbyRunners = async function ({
     if (deliveryLat && deliveryLng) {
       const pickupToDelivery = haversineDistance(pickupLat, pickupLng, deliveryLat, deliveryLng);
       if (pickupToDelivery > DELIVERY_LEG_MAX) {
-        console.log('[findNearbyRunners] pedestrian: pickup→delivery too far:', pickupToDelivery);
         return [];
       }
     }
