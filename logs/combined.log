@@ -9177,3 +9177,35 @@
 {"duration":1120,"environment":"development","level":"warn","message":"Slow request: GET /suggestion/status took 1120ms","method":"GET","service":"sendrey-server","threshold":1000,"timestamp":"2026-07-05 21:23:50","url":"/suggestion/status"}
 {"environment":"development","level":"info","message":"User authenticated: timivictor565@gmail.com - GET /suggestion/status","service":"sendrey-server","timestamp":"2026-07-05 21:23:50"}
 {"environment":"development","level":"info","message":"User authenticated: timivictor565@gmail.com - GET /user/me","service":"sendrey-server","timestamp":"2026-07-05 21:32:02"}
+{"environment":"development","level":"info","logLevel":"info","message":"Logger Service started successfully","nodeVersion":"v22.13.0","service":"Logger Service","timestamp":"2026-07-05 22:02:07","type":"startup"}
+{"environment":"development","level":"info","message":"Twilio SMS service initialized successfully","service":"sendrey-server","timestamp":"2026-07-05 22:02:08"}
+{"environment":"development","level":"info","message":"Returning user OTP sent: timivictor565@gmail.com","service":"sendrey-server","timestamp":"2026-07-05 22:07:36"}
+{"duration":1522,"environment":"development","level":"warn","message":"Slow request: POST /send-returning-user-otp took 1522ms","method":"POST","service":"sendrey-server","threshold":1000,"timestamp":"2026-07-05 22:07:36","url":"/send-returning-user-otp"}
+{"MessageID":"qQbA5VCZNIuSvmbbBB-XPQ2","TransactionID":"c71cd57b-ace3-c10a-c07b-78ae422c4da9","environment":"development","level":"info","message":"Email sent via Elastic Email API to timivictor565@gmail.com","service":"sendrey-server","timestamp":"2026-07-05 22:07:37"}
+{"environment":"development","level":"info","message":"user email verified via OTP: timivictor565@gmail.com","service":"sendrey-server","timestamp":"2026-07-05 22:08:05"}
+{"duration":1875,"environment":"development","level":"warn","message":"Slow request: POST /verify-email-otp took 1875ms","method":"POST","service":"sendrey-server","threshold":1000,"timestamp":"2026-07-05 22:08:05","url":"/verify-email-otp"}
+{"environment":"development","level":"warn","message":"Client error: GET /user/me - 401","method":"GET","service":"sendrey-server","statusCode":401,"timestamp":"2026-07-06 03:41:18","url":"/user/me","userId":"anonymous"}
+{"environment":"development","level":"info","message":"User authenticated: timivictor565@gmail.com - GET /user/me","service":"sendrey-server","timestamp":"2026-07-06 03:41:19"}
+{"environment":"development","level":"info","message":"User authenticated: timivictor565@gmail.com - GET /user/me","service":"sendrey-server","timestamp":"2026-07-06 03:51:26"}
+{"environment":"development","level":"warn","message":"Client error: GET /user/me - 401","method":"GET","service":"sendrey-server","statusCode":401,"timestamp":"2026-07-06 04:04:45","url":"/user/me","userId":"anonymous"}
+{"environment":"development","level":"info","message":"User authenticated: timivictor565@gmail.com - GET /user/me","service":"sendrey-server","timestamp":"2026-07-06 04:04:46"}
+{"environment":"development","level":"info","message":"User authenticated: timivictor565@gmail.com - GET /user/me","service":"sendrey-server","timestamp":"2026-07-06 04:08:07"}
+{"environment":"development","level":"info","message":"User authenticated: timivictor565@gmail.com - GET /user/me","service":"sendrey-server","timestamp":"2026-07-06 04:09:40"}
+{"environment":"development","level":"info","message":"Returning user OTP sent: timivictor565@gmail.com","service":"sendrey-server","timestamp":"2026-07-06 04:23:05"}
+{"MessageID":"b-2Z46xq1Jhq2WHehpWBKg2","TransactionID":"c81cd56e-9d39-c2d5-006e-bfbb5736828b","environment":"development","level":"info","message":"Email sent via Elastic Email API to timivictor565@gmail.com","service":"sendrey-server","timestamp":"2026-07-06 04:23:07"}
+{"environment":"development","level":"info","message":"user email verified via OTP: timivictor565@gmail.com","service":"sendrey-server","timestamp":"2026-07-06 04:23:29"}
+{"environment":"development","level":"info","message":"Returning user OTP sent: timivictor565@gmail.com","service":"sendrey-server","timestamp":"2026-07-06 04:25:15"}
+{"MessageID":"5Ehk181ORDG8c1W1Pt-PtA2","TransactionID":"c81cd56d-1b3a-c1bf-e06d-06b854358211","environment":"development","level":"info","message":"Email sent via Elastic Email API to timivictor565@gmail.com","service":"sendrey-server","timestamp":"2026-07-06 04:25:16"}
+{"environment":"development","level":"info","message":"user email verified via OTP: timivictor565@gmail.com","service":"sendrey-server","timestamp":"2026-07-06 04:25:36"}
+{"environment":"development","level":"info","message":"Returning user OTP sent: timivictor565@gmail.com","service":"sendrey-server","timestamp":"2026-07-06 04:27:13"}
+{"MessageID":"jfDkCFmXYjEwYMS6EHT4_g2","TransactionID":"c81cd514-8f3a-410a-8014-8cc12d4cfb36","environment":"development","level":"info","message":"Email sent via Elastic Email API to timivictor565@gmail.com","service":"sendrey-server","timestamp":"2026-07-06 04:27:14"}
+{"environment":"development","level":"info","message":"user email verified via OTP: timivictor565@gmail.com","service":"sendrey-server","timestamp":"2026-07-06 04:27:31"}
+{"environment":"development","level":"info","message":"Returning user OTP sent: timivictor565@gmail.com","service":"sendrey-server","timestamp":"2026-07-06 04:31:26"}
+{"MessageID":"WYHhwWTj037tOkX1iBo72Q2","TransactionID":"c81cd50b-863b-81b7-800b-68de3253e5f8","environment":"development","level":"info","message":"Email sent via Elastic Email API to timivictor565@gmail.com","service":"sendrey-server","timestamp":"2026-07-06 04:31:27"}
+{"environment":"development","level":"info","message":"user email verified via OTP: timivictor565@gmail.com","service":"sendrey-server","timestamp":"2026-07-06 04:31:43"}
+{"environment":"development","level":"info","message":"User authenticated: timivictor565@gmail.com - GET /locations","service":"sendrey-server","timestamp":"2026-07-06 04:37:18"}
+{"environment":"development","level":"info","message":"User authenticated: timivictor565@gmail.com - GET /user/me","service":"sendrey-server","timestamp":"2026-07-06 04:39:39"}
+{"environment":"development","level":"info","message":"User authenticated: timivictor565@gmail.com - GET /user/me","service":"sendrey-server","timestamp":"2026-07-06 04:42:08"}
+{"environment":"development","level":"warn","message":"Client error: GET /user/me - 401","method":"GET","service":"sendrey-server","statusCode":401,"timestamp":"2026-07-06 05:42:53","url":"/user/me","userId":"anonymous"}
+{"duration":1827,"environment":"development","level":"warn","message":"Slow request: POST /refresh-token took 1827ms","method":"POST","service":"sendrey-server","threshold":1000,"timestamp":"2026-07-06 05:42:55","url":"/refresh-token"}
+{"environment":"development","level":"info","message":"User authenticated: timivictor565@gmail.com - GET /user/me","service":"sendrey-server","timestamp":"2026-07-06 05:42:55"}
