@@ -9,6 +9,8 @@ import disputeReducer from '../Redux/disputeSlice';
 import orderReducer from '../Redux/orderSlice';
 import payoutReducer from '../Redux/payoutSlice';
 import escrowReducer from '../Redux/escrowSlice';
+import configReducer from '../Redux/configSlice'
+
 const store = configureStore({
   reducer: {
     auth: adminAuthReducer,
@@ -20,6 +22,7 @@ const store = configureStore({
     orders: orderReducer,
     payouts: payoutReducer,
     escrow: escrowReducer,
+    config: configReducer,
   },
 });
 
