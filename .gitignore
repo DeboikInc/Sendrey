@@ -3,3 +3,4 @@ dist
 .next
 android
 ios
+# pnpm-lock.yaml
