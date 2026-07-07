@@ -3,5 +3,5 @@ node_modules
 ./tests/**
 /tests/**
 
-logs/*.log
+logs
 config/serviceAccountCredential.json
