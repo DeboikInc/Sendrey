@@ -23,6 +23,9 @@ import {
   submitItemsWithRetry, submitPickupItemWithRetry
 } from '../../utils/socketQueue';
 
+const getCurrentTime = () => {
+  return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+};
 
 // ─── Normalise any service-type string → canonical form ───────────────────────
 const normaliseServiceType = (raw) => {
@@ -418,7 +421,7 @@ function RunnerChatScreen({
       }
     };
 
-    tryRestore(); 
+    tryRestore();
 
     // Also try after hydration settles
     const t = setTimeout(tryRestore, 100);
@@ -559,7 +562,6 @@ function RunnerChatScreen({
     onOrderCreated((data) => {
       if (!mountedRef.current) return;
       const order = data.order || data;
-      console.log("order data at creation time", order);
       console.log("order.serviceType:", order.serviceType);
       if (!order?.orderId) return;
 
@@ -659,7 +661,7 @@ function RunnerChatScreen({
           id: `item-submit-error-${Date.now()}`,
           from: 'system', type: 'system', messageType: 'system',
           text: error || 'Failed to submit items. Please try again.',
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          time: getCurrentTime(),
           senderId: 'system', senderType: 'system',
           style: 'error', retryable: false, retryAction: 'submitItems',
         }]);
@@ -673,7 +675,7 @@ function RunnerChatScreen({
         id: retryId,
         from: 'system', type: 'system', messageType: 'system',
         text: 'Failed to submit items. Retrying… (1/5)',
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        time: getCurrentTime(),
         senderId: 'system', senderType: 'system',
         style: 'warning',
       }]);
@@ -706,7 +708,7 @@ function RunnerChatScreen({
               id: `item-submit-error-${Date.now()}`,
               from: 'system', type: 'system', messageType: 'system',
               text: 'Failed to submit items. Please try again.',
-              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              time: getCurrentTime(),
               senderId: 'system', senderType: 'system',
               style: 'error', retryable: true, retryAction: 'submitItems',
             },
@@ -723,7 +725,7 @@ function RunnerChatScreen({
           id: `pickup-submit-error-${Date.now()}`,
           from: 'system', type: 'system', messageType: 'system',
           text: error || 'Failed to submit pickup item. Please try again.',
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+          time: getCurrentTime(),
           senderId: 'system', senderType: 'system',
           style: 'error', retryable: false, retryAction: 'submitPickupItem',
         }]);
@@ -736,7 +738,7 @@ function RunnerChatScreen({
         id: retryId,
         from: 'system', type: 'system', messageType: 'system',
         text: 'Failed to submit pickup item. Retrying… (1/5)',
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        time: getCurrentTime(),
         senderId: 'system', senderType: 'system',
         style: 'warning',
       }]);
@@ -766,7 +768,7 @@ function RunnerChatScreen({
               id: `pickup-submit-error-${Date.now()}`,
               from: 'system', type: 'system', messageType: 'system',
               text: 'Failed to submit pickup item. Please try again.',
-              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+              time: getCurrentTime(),
               senderId: 'system', senderType: 'system',
               style: 'error', retryable: true, retryAction: 'submitPickupItem',
             },
@@ -1066,7 +1068,7 @@ function RunnerChatScreen({
       setMessagesAndSync(prev => [...prev, {
         id: tempId, tempId, from: 'me', type: msgType,
         fileName: file.name, fileType: file.type, fileUrl: localUrl, text: '',
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        time: getCurrentTime(),
         status: 'uploading', senderId: runnerId, senderType: 'runner',
         isUploading: true, createdAt: new Date().toISOString(),
       }]);
@@ -1092,7 +1094,7 @@ function RunnerChatScreen({
       setMessagesAndSync(prev => [...prev, {
         id: tempId, tempId, from: 'me', type: 'image',
         fileName: file.name, fileType: 'image/jpeg', fileUrl: image, text: replyText || '',
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        time: getCurrentTime(),
         status: 'uploading', senderId: runnerId, senderType: 'runner', isUploading: true,
         ...(replyingTo && { replyTo: replyingTo.id, replyToMessage: replyingTo.text || replyingTo.fileName || 'Media', replyToFrom: replyingTo.from }),
       }]);
@@ -1132,7 +1134,7 @@ function RunnerChatScreen({
         id: `items-submitted-${Date.now()}`,
         from: 'system', type: 'system', messageType: 'system',
         text: `You submitted item(s). ${selectedUser?.firstName || 'User'} must approve the items you sent before marking "Purchase completed".`,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        time: getCurrentTime(),
         status: 'sent', senderId: 'system', senderType: 'system',
         style: 'info', isItemSubmissionProof: true, hasItemPhotos: itemsData.hasItemPhotos ?? false,
       }]);
@@ -1179,7 +1181,7 @@ function RunnerChatScreen({
         type: 'pickup_item_submission',
         messageType: 'pickup_item_submission',
         text: `You submitted pickup item: "${itemData.itemName}". ${selectedUser?.firstName || 'User'} must approve before you can mark as collected.`,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        time: getCurrentTime(),
         senderId: 'system', senderType: 'system',
         style: 'info', isPickupSubmission: true,
         pickupItemName: itemData.itemName,
@@ -1237,7 +1239,7 @@ function RunnerChatScreen({
         id: optimisticMsgId,
         from: 'system', type: 'system', messageType: 'system',
         text: 'You marked delivery as complete. Waiting for the user to confirm.',
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        time: getCurrentTime(),
         status: 'sent', senderId: 'system', senderType: 'system',
       }]);
 
@@ -1446,13 +1448,12 @@ function RunnerChatScreen({
                 );
               }
 
-
               return <Message key={m.id} m={m} darkMode={dark} userType="runner"
                 onMessageClick={() => { }} showCursor={false} isChatActive={isChatActive}
                 onDelete={handleDeleteMessage} onEdit={handleEditMessage}
                 onReact={handleMessageReact} onReply={handleMessageReply}
                 onCancelReply={handleCancelReply} messages={messages}
-                onScrollToMessage={handleScrollToMessage}
+                onScrollToMessage={handleScrollToMessage} showRelativeTime={true}
               />
             })}
             {otherUserTyping && <TypingIndicator />}
@@ -1579,7 +1580,7 @@ function RunnerChatScreen({
                   setMessagesAndSync(prev => [...prev, {
                     id: tempId, tempId, from: 'me', type: msgType,
                     fileName: file.name, fileType: file.type, fileUrl: localUrl, text: '',
-                    time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                    time: getCurrentTime(),
                     status: 'uploading', senderId: runnerId, senderType: 'runner',
                     isUploading: true, createdAt: new Date().toISOString(),
                   }]);

@@ -42,11 +42,14 @@ import { fetchOrderByChatId } from '../../Redux/orderSlice';
 import BannedModal from '../../components/runnerScreens/BannedModal';
 import useOrderStore from '../../store/orderStore';
 
-// ─── Initial bot messages ────────────────────────────────────────────────────
-const INITIAL_BOT_MESSAGES = [
-  { id: 1, from: "them", text: "Welcome!", time: "12:24 PM", status: "read" },
-  { id: 2, from: "them", text: "Hi! I'm Sendrey Assistant 👋 ", time: "12:25 PM", status: "delivered" },
-  // { id: 3, from: "them", text: "Would you like like to run a pickup or run an errand?", time: "12:25 PM", status: "delivered" },
+const getCurrentTime = () => {
+  return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+};
+
+
+const getInitialBotMessages = () => [
+  { id: 1, from: "them", text: "Welcome!", time: getCurrentTime(), status: "read" },
+  { id: 2, from: "them", text: "Hi! I'm Sendrey Assistant 👋 ", time: getCurrentTime(), status: "delivered" },
 ];
 
 const BOT_CHAT_ID = 'sendrey-bot';
@@ -93,7 +96,7 @@ function WhatsAppLikeChat() {
     id: BOT_CHAT_ID,
     name: 'Sendrey Assistant',
     lastMessage: 'Welcome! Pick a service to get started.',
-    time: '',
+    time: getCurrentTime(),
     online: true,
     avatar: null,
     isBot: true,
@@ -609,7 +612,7 @@ function WhatsAppLikeChat() {
         id: `kyc-nudge-${Date.now()}`,
         from: 'them',
         text: `Hi${runnerData?.firstName ? ` ${runnerData.firstName}` : ''}, complete your KYC now and gain access to endless tasks. Take your selfie now to verify your identity, this would only take a minute 📸`,
-        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        time: getCurrentTime(),
         status: 'delivered',
         isKyc: true,
       };
@@ -671,7 +674,7 @@ function WhatsAppLikeChat() {
       if (activeChatIdRef.current !== BOT_CHAT_ID) return;
       const s = chatManager.get(BOT_CHAT_ID);
       if (s.messages.length === 0) {
-        botMessagesUpdater([INITIAL_BOT_MESSAGES[0]]);
+        botMessagesUpdater([getInitialBotMessages()[0]]);
       }
     }, 0);
 
@@ -679,7 +682,7 @@ function WhatsAppLikeChat() {
       if (activeChatIdRef.current !== BOT_CHAT_ID) return;
       const s = chatManager.get(BOT_CHAT_ID);
       if (s.messages.length === 1) {
-        botMessagesUpdater([...s.messages, INITIAL_BOT_MESSAGES[1]]);
+        botMessagesUpdater([...s.messages, getInitialBotMessages()[1]])
       }
       setTimeout(() => {
         setInitialMessagesComplete(true);
@@ -1194,7 +1197,7 @@ function WhatsAppLikeChat() {
     const msg1 = {
       id: Date.now(), from: "them",
       text: "We have sent you a new OTP",
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      time: getCurrentTime(),
       status: "delivered",
     };
     botMessagesUpdater(prev => [...prev, msg1]);
@@ -1204,7 +1207,7 @@ function WhatsAppLikeChat() {
         id: Date.now() + 1, from: "them",
         // text: `Enter the OTP we sent to ${runnerData?.phone}, \n \nDidn't receive OTP? Resend`,
         text: `Enter the OTP we sent to ${runnerData?.email}, \n \nDidn't receive OTP? Resend`,
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        time: getCurrentTime(),
         status: "delivered", hasResendLink: true,
       };
       botMessagesUpdater(prev => [...prev, msg2]);
@@ -1231,7 +1234,7 @@ function WhatsAppLikeChat() {
     const updater = botMessagesUpdater;
     updater(prev => [...prev, {
       id: Date.now().toString(), from: "me", text: 'Pick Up',
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      time: getCurrentTime(),
       status: "sent", isCredential: true,
     }]);
     setTimeout(() => startCredentialFlow('pick-up', updater), 1000);
@@ -1243,7 +1246,7 @@ function WhatsAppLikeChat() {
     const updater = botMessagesUpdater;
     updater(prev => [...prev, {
       id: Date.now().toString(), from: "me", text: 'Run Errand',
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      time: getCurrentTime(),
       status: "sent", isCredential: true,
     }]);
     setTimeout(() => startCredentialFlow('run-errand', updater), 1000);
@@ -1262,7 +1265,7 @@ function WhatsAppLikeChat() {
     if (isBotMode && !isCollectingCredentials && !needsOtpVerification && !registrationComplete) {
       botMessagesUpdater(prev => [...prev, {
         id: Date.now(), from: "me", text: "Get Started",
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        time: getCurrentTime(),
         status: "sent",
       }]);
       setTimeout(() => startCredentialFlow(null, botMessagesUpdater), 500);
@@ -1275,7 +1278,7 @@ function WhatsAppLikeChat() {
     if (needsOtpVerification) {
       botMessagesUpdater(prev => [...prev, {
         id: Date.now(), from: "me", text: text.trim(),
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        time: getCurrentTime(),
         status: "sent",
       }]);
       handleOtpVerification(text.trim(), botMessagesUpdater);
@@ -1287,7 +1290,7 @@ function WhatsAppLikeChat() {
       const newMsg = {
         id: Date.now().toString(), from: "me", type: "text",
         text: text.trim(),
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        time: getCurrentTime(),
         status: socket?.connected ? "pending" : "queued",
         senderId: currentRunnerId, senderType: "runner", // ← ref
         ...(replyingTo && {
@@ -1302,7 +1305,7 @@ function WhatsAppLikeChat() {
         sendMessage(chatId, newMsg);
         setChatHistory(prev => prev.map(c =>
           c.id === selectedUser._id
-            ? { ...c, lastMessage: text.trim().substring(0, 30), time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) }
+            ? { ...c, lastMessage: text.trim().substring(0, 30), time: getCurrentTime() }
             : c
         ));
       } else {
@@ -1704,7 +1707,7 @@ function WhatsAppLikeChat() {
                   id: `cancel-optimistic-${Date.now()}`,
                   from: 'system', type: 'system', messageType: 'system',
                   text: 'You cancelled this order.',
-                  time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+                  time: getCurrentTime(),
                   senderId: 'system', senderType: 'system',
                 }];
               });

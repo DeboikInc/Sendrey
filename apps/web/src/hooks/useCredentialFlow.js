@@ -4,7 +4,7 @@ import {
   verifyPhone, resendPhoneVerification, // eslint-disable-line no-unused-vars
   register,
   sendReturningUserEmailOTP,
-  verifyEmailOTP, resendEmailVerification,
+  verifyEmailOTP, resendEmailVerification, checkExistingUser
 } from "../Redux/authSlice";
 import { authStorage } from '../utils/authStorage';
 import { persistReturningKycStatus } from '../utils/returningUserKycUtils';
@@ -349,7 +349,6 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
       return;
     }
 
-    // Last question answered — inline validation before hitting server
     setMessages(prev => [
       ...prev,
       {
@@ -400,6 +399,43 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
       return;
     }
 
+    
+    try {
+      const checkResult = await dispatch(checkExistingUser({
+        email: updatedRunnerData.email,
+        userType: 'runner'
+      })).unwrap();
+
+      if (checkResult.exists) {
+        setMessages(prev => prev.filter(m => m.text !== 'In progress...'));
+
+        setReturningUserData({
+          ...updatedRunnerData,
+          firstName: checkResult.firstName,
+          kycStatus: checkResult.kycStatus
+        });
+        setTempUserData(updatedRunnerData);
+        setIsReturningUser(true);
+        setIsCollectingCredentials(false);
+        setCredentialStep(null);
+
+        const greetingText = buildReturningUserGreeting(checkResult.firstName, checkResult.kycStatus);
+        setMessages(prev => [...prev, {
+          id: Date.now(),
+          from: "them",
+          text: greetingText,
+          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          status: "delivered",
+        }]);
+
+        isAnsweringRef.current = false;
+        return;
+      }
+    } catch (checkErr) {
+      console.warn('User check failed, proceeding with registration:', checkErr);
+    }
+
+    // ── PROCEED WITH REGISTRATION (only if user doesn't exist or check failed) ──
     const submitWhenReady = async () => {
       if (!locationResolved) {
         setTimeout(submitWhenReady, 500);
@@ -417,7 +453,6 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
         email: updatedRunnerData.email,
         fleetType: updatedRunnerData.fleetType,
         role: "runner",
-        // serviceType: serviceTypeRef.current,
         isOnline: true,
         isAvailable: true,
         ...(firstName && { firstName }),
@@ -440,9 +475,6 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
         showOtpVerification(setMessages, updatedRunnerData.email);
       } catch (err) {
         console.error("Registration failed:", err);
-        console.log('[CRED] registration error raw:', JSON.stringify(err, null, 2));
-        console.log('[CRED] registration error keys:', Object.keys(err || {}));
-
         setMessages(prev => prev.filter(m => m.text !== "In progress..."));
 
         const is409 = typeof err === 'object' && err !== null
@@ -458,9 +490,6 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
         const errorMessage = networkPatterns.test(rawMessage)
           ? 'Something went wrong. Please check your internet connection and try again.'
           : rawMessage;
-
-        console.log('[CRED] errorMessage resolved to:', errorMessage);
-        console.log('[CRED] is409:', is409);
 
         const isExisting = is409 ||
           errorMessage.toLowerCase().includes("already exist") ||
@@ -497,7 +526,6 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
             status: "delivered",
           }]);
         } else {
-          // Show the error message
           setMessages(prev => [...prev, {
             id: Date.now(),
             from: "them",
@@ -506,7 +534,6 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
             status: "delivered",
           }]);
 
-          // Identify which field failed and only wipe that field
           const fieldHints = {
             phone: ['phone', 'number', 'mobile'],
             email: ['email', 'mail'],
@@ -524,7 +551,6 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
             }
           }
 
-          // Only wipe the failed field, keep all other valid answers
           const resetData = { ...updatedRunnerData };
           resetData[CREDENTIAL_QUESTIONS[failedFieldIndex].field] = '';
           setRunnerData(resetData);

@@ -1,3 +1,4 @@
+/* global google */
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Button } from "@material-tailwind/react";
 import { MapPin, X, Bookmark, Check, } from "lucide-react";
@@ -8,9 +9,14 @@ import Map from "../common/Map";
 import { useDispatch, useSelector } from "react-redux";
 import { addLocation } from "../../Redux/userSlice";
 import debounce from "lodash/debounce";
+import { useGoogleMaps } from "../../hooks/useGoogleMaps";
 
 import { getSuggestionStatus } from "../../Redux/businessSlice";
 import BusinessConversionFlow from "./BusinessConversionFlow";
+
+const getCurrentTime = () => {
+  return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+};
 
 export default function PickupFlowScreen({
   onOpenSavedLocations,
@@ -28,7 +34,7 @@ export default function PickupFlowScreen({
   currentOrder,
   onEditComplete,
   onMore,
-  showBack,
+  showBack,showMore,
   onBack
 }) {
   const [searchTerm, setSearchTerm] = useState("");
@@ -44,7 +50,7 @@ export default function PickupFlowScreen({
   const [showCustomInput, setShowCustomInput] = useState(true);
   const [showPhoneInput, setShowPhoneInput] = useState(false);
   const [pickupItems, setPickupItems] = useState("");
-
+  const [placesLibrary, setPlacesLibrary] = useState(null);
   const [showConversionFlow, setShowConversionFlow] = useState(false);
 
   // Search states
@@ -60,10 +66,15 @@ export default function PickupFlowScreen({
   const currentUser = useSelector(s => s.auth.user);
   const prevStepRef = useRef(null);
   const isSubmittingRef = useRef(false);
+  const usedButtonIdsRef = useRef(new Set());
 
   const pickupCoordinatesRef = useRef(null);
   const deliveryCoordinatesRef = useRef(null);
   const pickupPhoneMatchesUserPhone = useRef(false);
+  const sessionTokenRef = useRef(null);
+  const searchRequestIdRef = useRef(0);
+  const pendingDeliveryButtonIdRef = useRef(null);
+  const { isLoaded } = useGoogleMaps();
 
   // autoscroll
   useEffect(() => {
@@ -79,9 +90,31 @@ export default function PickupFlowScreen({
     }
   }, [messages, showCustomInput, showPhoneInput, currentStep, predictions.length]);
 
+  useEffect(() => {
+    if (!window.google) return;
 
-  const searchPlaces = useCallback((query, step) => {
-    if (!query || query.length < 2 || !window.google) {
+    const initPlaces = async () => {
+      try {
+        const { AutocompleteSuggestion, Place } = await google.maps.importLibrary("places");
+        setPlacesLibrary({ AutocompleteSuggestion, Place });
+      } catch (error) {
+        console.error('Failed to load Places library:', error);
+      }
+    };
+
+    initPlaces();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [window.google]);
+
+  const getSessionToken = () => {
+    if (!sessionTokenRef.current && window.google) {
+      sessionTokenRef.current = new window.google.maps.places.AutocompleteSessionToken();
+    }
+    return sessionTokenRef.current;
+  };
+
+  const searchPlaces = useCallback(async (query, step) => {
+    if (!query || query.length < 2 || !window.google || !placesLibrary) {
       setPredictions([]);
       return;
     }
@@ -92,59 +125,73 @@ export default function PickupFlowScreen({
 
     setIsSearching(true);
     setSearchError(null);
+    const requestId = ++searchRequestIdRef.current;
 
-    const service = new window.google.maps.places.AutocompleteService();
-    service.getPlacePredictions(
-      {
+    try {
+      const { AutocompleteSuggestion } = placesLibrary;
+
+      const request = {
         input: query,
-        componentRestrictions: { country: 'ng' },
         locationBias: {
-          center: new window.google.maps.LatLng(6.5244, 3.3792),
           radius: 50000,
+          center: { lat: 6.5244, lng: 3.3792 },
         },
-      },
-      (results, status) => {
-        if (status !== window.google.maps.places.PlacesServiceStatus.OK || !results) {
-          setPredictions([]);
-          setIsSearching(false);
-          return;
-        }
-        setPredictions(results.map((p) => ({
-          place_id: p.place_id,
-          description: p.description,
-          structured_formatting: {
-            main_text: p.structured_formatting.main_text,
-            secondary_text: p.structured_formatting.secondary_text,
-          },
-          lat: null, // resolved on select via getDetails
-          lng: null,
-        })));
-        setIsSearching(false);
-      }
-    );
-  }, []);
+        includedRegionCodes: ['ng'],
+        includedPrimaryTypes: ['street_address', 'premise', 'subpremise', 'establishment'],
+        sessionToken: getSessionToken(),
+      };
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const debouncedSearch = useCallback(
-    debounce(async (query, step) => {
-      // Only search for locations, not items
+      const { suggestions } = await AutocompleteSuggestion.fetchAutocompleteSuggestions(request);
+
+      if (requestId !== searchRequestIdRef.current) return;
+
+      const formattedPredictions = (suggestions || []).map((s) => {
+        const p = s.placePrediction;
+        return {
+          place_id: p.placeId,
+          description: p.text.text,
+          structured_formatting: {
+            main_text: p.mainText?.text || p.text.text,
+            secondary_text: p.secondaryText?.text || '',
+          },
+          _placePrediction: p, // keep the original for toPlace()
+        };
+      });
+
+      setPredictions(formattedPredictions);
+      setIsSearching(false);
+
+    } catch (error) {
+      if (requestId !== searchRequestIdRef.current) return;
+      console.error('AutocompleteSuggestion failed:', error);
+      setSearchError('Location search failed. Please try again.');
+      setPredictions([]);
+      setIsSearching(false);
+    }
+  }, [placesLibrary]);
+
+  const searchPlacesRef = useRef(searchPlaces);
+  useEffect(() => {
+    searchPlacesRef.current = searchPlaces;
+  }, [searchPlaces]);
+
+  const debouncedSearch = useRef(
+    debounce((query, step) => {
       if (step !== "pickup-location" && step !== "delivery-location") {
         setPredictions([]);
         setIsSearching(false);
         return;
       }
-
-      searchPlaces(query, step);
-    }, 400),
-    []
-  );
+      searchPlacesRef.current(query, step);
+    }, 400)
+  ).current;
 
   useEffect(() => {
     debouncedSearch(searchTerm, currentStep);
     return () => {
       debouncedSearch.cancel();
     };
-  }, [searchTerm, debouncedSearch, currentStep]);
+  }, [searchTerm, currentStep, debouncedSearch]);
 
   useEffect(() => {
     // Clear search whenever step changes, regardless of what it changes to
@@ -152,6 +199,7 @@ export default function PickupFlowScreen({
       setSearchTerm("");
       setPredictions([]);
       setIsSearching(false);
+      sessionTokenRef.current = null;
       prevStepRef.current = currentStep;
     }
   }, [currentStep]);
@@ -171,7 +219,7 @@ export default function PickupFlowScreen({
               id: Date.now(),
               from: "them",
               text: "Which location do you want to pickup from?",
-              time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              time: getCurrentTime(),
               status: "delivered"
             }
           ]);
@@ -186,7 +234,7 @@ export default function PickupFlowScreen({
               id: Date.now(),
               from: "them",
               text: "Set your delivery location. Choose Delivery Location",
-              time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              time: getCurrentTime(),
               status: "delivered",
               hasChooseDeliveryButton: true,
               hasViewSavedLocations: true,
@@ -203,7 +251,7 @@ export default function PickupFlowScreen({
               id: Date.now(),
               from: "them",
               text: "What item(s) do you want to pick up?",
-              time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              time: getCurrentTime(),
               status: "delivered"
             }
           ]);
@@ -218,7 +266,7 @@ export default function PickupFlowScreen({
               id: Date.now(),
               from: "them",
               text: "Please enter pick up phone number Use My Phone Number",
-              time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              time: getCurrentTime(),
               status: "delivered",
               hasUseMyNumberButton: true,
               phoneNumberType: "pickup",
@@ -235,7 +283,7 @@ export default function PickupFlowScreen({
               id: Date.now(),
               from: "them",
               text: "Kindly enter drop off phone number Use My Phone Number",
-              time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              time: getCurrentTime(),
               status: "delivered",
               // hasUseMyNumberButton: true,
               phoneNumberType: "dropoff",
@@ -251,43 +299,88 @@ export default function PickupFlowScreen({
 
   const handleSuggestionSelect = (prediction) => {
     if (!window.google || isSubmittingRef.current) return;
+
+    if (!prediction.place_id || typeof prediction.place_id !== 'string') {
+      console.error('Invalid place_id:', prediction.place_id);
+      setSearchError('Invalid location. Please try again.');
+      setShowCustomInput(true);
+      isSubmittingRef.current = false;
+      return;
+    }
+
     isSubmittingRef.current = true;
     setShowCustomInput(false);
+    console.log('[selected prediction]', prediction.place_id, prediction.description);
 
-    const service = new window.google.maps.places.PlacesService(
-      document.createElement('div')
-    );
-    service.getDetails(
-      { placeId: prediction.place_id, fields: ['geometry', 'formatted_address', 'name'] },
-      (result, status) => {
-        if (status !== window.google.maps.places.PlacesServiceStatus.OK) {
+    const handleLocationResult = (result) => {
+      const { lat, lng, address, name } = result;
+      const locationText = prediction.description;
+
+      if (currentStep === "pickup-location") {
+        pickupCoordinatesRef.current = { lat, lng };
+        send(locationText, "pickup-location");
+      } else if (currentStep === "delivery-location") {
+        deliveryCoordinatesRef.current = { lat, lng };
+        send(locationText, "delivery");
+      }
+
+      setSelectedPlace({ name, address, lat, lng });
+      setSearchTerm(name);
+      setPredictions([]);
+      isSubmittingRef.current = false;
+    };
+
+    if (prediction.lat && prediction.lng) {
+      handleLocationResult({
+        lat: prediction.lat,
+        lng: prediction.lng,
+        address: prediction.description,
+        name: prediction.structured_formatting?.main_text || prediction.description,
+      });
+      return;
+    }
+
+    const place = prediction._placePrediction.toPlace();
+
+    place.fetchFields({
+      fields: ['geometry', 'formattedAddress', 'displayName'],
+    })
+      .then((result) => {
+        handleLocationResult({
+          lat: result.place.location.lat(),
+          lng: result.place.location.lng(),
+          address: result.place.formattedAddress || prediction.description,
+          name: result.place.displayName || prediction.structured_formatting?.main_text || prediction.description,
+        });
+      })
+      .catch((error) => {
+        console.error('Place fetch failed:', error);
+        fallbackToGeocoder(prediction.place_id, prediction.description);
+      });
+
+    // final fallback
+    const fallbackToGeocoder = (placeId, description) => {
+      const geocoder = new google.maps.Geocoder();
+      geocoder.geocode({ placeId: placeId }, (results, status) => {
+        if (status === 'OK' && results[0]) {
+          handleLocationResult({
+            lat: results[0].geometry.location.lat(),
+            lng: results[0].geometry.location.lng(),
+            address: results[0].formatted_address || description,
+            name: results[0].formatted_address || description,
+          });
+        } else {
           isSubmittingRef.current = false;
           setShowCustomInput(true);
-          return;
-        };
-
-        const lat = result.geometry.location.lat();
-        const lng = result.geometry.location.lng();
-        const locationText = prediction.description;
-
-        if (currentStep === "pickup-location") {
-          pickupCoordinatesRef.current = { lat, lng };
-          send(locationText, "pickup-location");
-        } else if (currentStep === "delivery-location") {
-          deliveryCoordinatesRef.current = { lat, lng };
-          send(locationText, "delivery");
+          setSearchError('Could not find this location. Please try again.');
         }
-
-        setSelectedPlace({ name: result.name, address: result.formatted_address, lat, lng });
-        setSearchTerm(result.name);
-        setPredictions([]);
-      }
-    );
+      });
+    };
   };
 
 
   const initialMessages = [
-    { id: 1, from: "them", text: "Which location do you want to pickup from?", time: "12:25 PM", status: "delivered" },
+    { id: 1, from: "them", text: "Which location do you want to pickup from?", time: getCurrentTime(), status: "delivered" },
   ];
 
 
@@ -335,6 +428,16 @@ export default function PickupFlowScreen({
       setDeliveryLocation(locationText);
       deliveryLocationRef.current = locationText;
       send(locationText, "delivery");
+
+      // disable the button that opened this map
+      if (pendingDeliveryButtonIdRef.current) {
+        const usedId = pendingDeliveryButtonIdRef.current;
+        setMessages((prev) => prev.map((msg) =>
+          msg.id === usedId ? { ...msg, hasChooseDeliveryButton: false } : msg
+        ));
+        usedButtonIdsRef.current.add(usedId);
+        pendingDeliveryButtonIdRef.current = null;
+      }
     }
 
     setShowSaveConfirm(false);
@@ -345,20 +448,55 @@ export default function PickupFlowScreen({
     setPredictions([]);
   };
 
+  const geocodeAddress = (address, type) => {
+    if (!window.google) return;
+
+    const geocoder = new window.google.maps.Geocoder();
+    geocoder.geocode(
+      { address: address + ', Lagos, Nigeria', componentRestrictions: { country: 'ng' } },
+      (results, status) => {
+        if (status === 'OK' && results[0]) {
+          const lat = results[0].geometry.location.lat();
+          const lng = results[0].geometry.location.lng();
+
+          if (type === "pickup-location") {
+            pickupCoordinatesRef.current = { lat, lng };
+            send(address, "pickup-location");
+          } else {
+            deliveryCoordinatesRef.current = { lat, lng };
+            send(address, "delivery");
+          }
+        }
+      }
+    );
+  };
+
   const handleLocationSelectedFromSaved = (location, type) => {
     const locationText = location.address || location.name;
+
+    // use the lat/lng directly
     if (currentStep === "pickup-location") {
-      if (location.lat && location.lng) pickupCoordinatesRef.current = { lat: location.lat, lng: location.lng };
-      setPickupLocation(locationText);
-      pickupLocationRef.current = locationText;
-      send(locationText, "pickup-location");
+      if (location.lat && location.lng) {
+        pickupCoordinatesRef.current = { lat: location.lat, lng: location.lng };
+        setPickupLocation(locationText);
+        pickupLocationRef.current = locationText;
+        send(locationText, "pickup-location");
+      } else {
+        // If no coordinates, geocode the address
+        geocodeAddress(locationText, "pickup-location");
+      }
     } else if (currentStep === "delivery-location") {
-      if (location.lat && location.lng) deliveryCoordinatesRef.current = { lat: location.lat, lng: location.lng };
-      setDeliveryLocation(locationText);
-      deliveryLocationRef.current = locationText;
-      send(locationText, "delivery");
+      if (location.lat && location.lng) {
+        deliveryCoordinatesRef.current = { lat: location.lat, lng: location.lng };
+        setDeliveryLocation(locationText);
+        deliveryLocationRef.current = locationText;
+        send(locationText, "delivery");
+      } else {
+        geocodeAddress(locationText, "delivery");
+      }
     }
   };
+
 
 
   const checkAndShowSuggestion = async () => {
@@ -370,7 +508,7 @@ export default function PickupFlowScreen({
             id: Date.now() + 10,
             from: "them",
             text: `🚀 You've used Sendrey ${suggestionResult.monthlyTaskCount} times this month! Upgrade to a Business Account to unlock team access, expense reports & scheduled deliveries.`,
-            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            time: getCurrentTime(),
             status: "delivered",
             isBusinessSuggestion: true,
             onBusinessSuggestionAccept: () => setShowConversionFlow(true),
@@ -426,7 +564,7 @@ export default function PickupFlowScreen({
         id: Date.now(),
         from: "me",
         text: text.trim(),
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        time: getCurrentTime(),
         status: "sent",
       };
       setMessages((prev) => [...prev, newMsg]);
@@ -442,7 +580,7 @@ export default function PickupFlowScreen({
             id: Date.now() + 2,
             from: "them",
             text: validationError,
-            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            time: getCurrentTime(),
             status: "delivered",
           },
         ]);
@@ -481,7 +619,7 @@ export default function PickupFlowScreen({
       id: Date.now(),
       from: "me",
       text: msgText,
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      time: getCurrentTime(),
       status: "sent",
     };
     setMessages((prev) => [...prev, newMsg]);
@@ -578,7 +716,7 @@ export default function PickupFlowScreen({
                   id: Date.now() + 2,
                   from: "them",
                   text: error,
-                  time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                  time: getCurrentTime(),
                   status: "delivered",
                 },
               ]);
@@ -597,7 +735,7 @@ export default function PickupFlowScreen({
               id: Date.now() + 2,
               from: "them",
               text: "What item(s) do you want to pick up?",
-              time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              time: getCurrentTime(),
               status: "delivered",
             },
           ]);
@@ -612,7 +750,7 @@ export default function PickupFlowScreen({
               id: Date.now() + 2,
               from: "them",
               text: "Please enter pick up phone number Use My Phone Number",
-              time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              time: getCurrentTime(),
               status: "delivered",
               hasUseMyNumberButton: true,
               phoneNumberType: "pickup",
@@ -642,7 +780,7 @@ export default function PickupFlowScreen({
               id: Date.now() + 2,
               from: "them",
               text: "Set your delivery location. Choose Delivery Location",
-              time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              time: getCurrentTime(),
               status: "delivered",
               hasChooseDeliveryButton: true,
               hasViewSavedLocations: true,
@@ -659,7 +797,7 @@ export default function PickupFlowScreen({
               id: Date.now() + 2,
               from: "them",
               text: "Kindly enter drop off phone number Use My Phone Number",
-              time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              time: getCurrentTime(),
               status: "delivered",
               hasUseMyNumberButton: true,
               phoneNumberType: "dropoff",
@@ -689,7 +827,7 @@ export default function PickupFlowScreen({
                 id: Date.now() + 2,
                 from: "them",
                 text: "Pickup phone and delivery phone cannot be the same. Kindly enter a valid delivery phone.",
-                time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                time: getCurrentTime(),
                 status: "delivered",
               },
             ]);
@@ -724,7 +862,9 @@ export default function PickupFlowScreen({
     }, 1200);
   };
 
-  const handleUseMyNumber = (phoneType) => {
+  const handleUseMyNumber = (messageId, phoneType) => {
+    if (usedButtonIdsRef.current.has(messageId)) return;
+    usedButtonIdsRef.current.add(messageId);
     const myNumber = currentUser?.phone || currentUser?.user?.phone;
 
     console.log('currentUser in handleUseMyNumber:', currentUser);
@@ -737,13 +877,17 @@ export default function PickupFlowScreen({
         id: Date.now(),
         from: "them",
         text: "Oops! Something went wrong. seems you aren't authenticated. Try logging out and logging in again",
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        time: getCurrentTime(),
         status: "delivered",
       };
 
       setMessages((prev) => [...prev, errorMessage]);
       return;
     }
+
+    setMessages((prev) => prev.map((msg) =>
+      msg.id === messageId ? { ...msg, hasUseMyNumberButton: false } : msg
+    ));
 
     if (phoneType === "pickup") {
       send(myNumber, "pickup-phone");
@@ -752,7 +896,8 @@ export default function PickupFlowScreen({
     }
   };
 
-  const handleChooseDeliveryClick = () => {
+  const handleChooseDeliveryClick = (messageId) => {
+    pendingDeliveryButtonIdRef.current = messageId;
     setSelectedPlace(null);
     setShowMap(true);
     setShowLocationButtons(true);
@@ -804,8 +949,8 @@ export default function PickupFlowScreen({
       return;
     }
 
-    if (!window.google) {
-      setSearchError('Maps not ready yet. Please wait a moment and try again.');
+    if (!isLoaded || !window.google) {
+      setSearchError('Google Maps is still loading. Please wait a moment and try again.');
       return;
     }
 
@@ -849,7 +994,7 @@ export default function PickupFlowScreen({
 
   if (showMap) {
     return (
-      <Onboarding darkMode={darkMode} toggleDarkMode={toggleDarkMode} onMore={onMore}>
+      <Onboarding darkMode={darkMode} toggleDarkMode={toggleDarkMode}>
         <div className="w-full h-full flex flex-col mx-auto flex flex-col overflow-hidden max-w-2xl">
           <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 border-b">
             <Button
@@ -858,6 +1003,7 @@ export default function PickupFlowScreen({
                 setShowMap(false);
                 setShowLocationButtons(true);
                 setSelectedPlace(null);
+                pendingDeliveryButtonIdRef.current = null;
               }}
               className="flex items-center"
             >
@@ -935,7 +1081,7 @@ export default function PickupFlowScreen({
   }
 
   return (
-    <Onboarding darkMode={darkMode} toggleDarkMode={toggleDarkMode} onMore={onMore} showBack={showBack} onBack={onBack}>
+    <Onboarding darkMode={darkMode} toggleDarkMode={toggleDarkMode} showMore={showMore} onMore={onMore} showBack={showBack} onBack={onBack}>
       <div className="flex flex-col h-screen">
         <div className="flex-1 overflow-y-auto marketSelection" ref={listRef}>
           <div>
@@ -946,13 +1092,22 @@ export default function PickupFlowScreen({
                     m={m}
                     showCursor={false}
                     showStatusIcons={false}
-                    onChooseDeliveryClick={m.hasChooseDeliveryButton ? handleChooseDeliveryClick : undefined}
-                    onUseMyNumberClick={m.hasUseMyNumberButton ? () => handleUseMyNumber(m.phoneNumberType) : undefined}
-                    onViewSavedLocations={m.hasViewSavedLocations ? () => onOpenSavedLocations(  // ← ADD THIS
-                      true,
-                      handleLocationSelectedFromSaved,
-                      () => setShowLocationButtons(true)
-                    ) : undefined}
+                    onChooseDeliveryClick={m.hasChooseDeliveryButton ? () => handleChooseDeliveryClick(m.id) : undefined}
+                    onUseMyNumberClick={m.hasUseMyNumberButton ? () => handleUseMyNumber(m.id, m.phoneNumberType) : undefined}
+                    onViewSavedLocations={m.hasViewSavedLocations ? () => {
+                      if (usedButtonIdsRef.current.has(m.id)) return;
+                      usedButtonIdsRef.current.add(m.id);
+
+                      setMessages((prev) => prev.map((msg) =>
+                        msg.id === m.id ? { ...msg, hasViewSavedLocations: false } : msg
+                      ));
+
+                      onOpenSavedLocations(
+                        true,
+                        handleLocationSelectedFromSaved,
+                        () => setShowLocationButtons(true)
+                      );
+                    } : undefined}
                     disableContextMenu={true}
                   />
                 </p>
@@ -1030,23 +1185,26 @@ export default function PickupFlowScreen({
                       ) : predictions.length === 0 ? (
                         <div className="p-3 text-center text-sm text-gray-900 dark:text-white">No locations found</div>
                       ) : (
-                        predictions.map((p) => (
-                          <button
-                            key={p.place_id}
-                            onClick={() => handleSuggestionSelect(p)}
-                            className="w-full flex items-start gap-3 p-3 text-left hover:bg-gray-200 dark:hover:bg-black-100 border-b border-gray-300 dark:border-gray-700 last:border-0 transition-colors"
-                          >
-                            <MapPin className="h-5 w-5 text-gray-600 dark:text-gray-400 mt-1 flex-shrink-0" />
-                            <div className="flex-1 min-w-0">
-                              <p className="font-medium text-sm text-gray-900 dark:text-white truncate">
-                                {p.structured_formatting?.main_text || p.description}
-                              </p>
-                              <p className="text-xs text-gray-700 dark:text-gray-300 truncate">
-                                {p.structured_formatting?.secondary_text || p.description}
-                              </p>
-                            </div>
-                          </button>
-                        ))
+                        predictions.map((p) => {
+                          console.log('Rendering prediction:', p.place_id, p.description);
+                          return (
+                            <button
+                              key={p.place_id}
+                              onClick={() => handleSuggestionSelect(p)}
+                              className="w-full flex items-start gap-3 p-3 text-left hover:bg-gray-200 dark:hover:bg-black-100 border-b border-gray-300 dark:border-gray-700 last:border-0 transition-colors"
+                            >
+                              <MapPin className="h-5 w-5 text-gray-600 dark:text-gray-400 mt-1 flex-shrink-0" />
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-sm text-gray-900 dark:text-white truncate">
+                                  {p.structured_formatting?.main_text || p.description}
+                                </p>
+                                <p className="text-xs text-gray-700 dark:text-gray-300 truncate">
+                                  {p.structured_formatting?.secondary_text || p.description}
+                                </p>
+                              </div>
+                            </button>
+                          )
+                        })
                       )}
                     </div>
                   )}

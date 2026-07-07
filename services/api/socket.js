@@ -31,7 +31,6 @@ const { handleCancelOrder, handleTaskCompleted, handleRunnerStartedNewOrder } = 
 const { handleGetOrderByChatId } = require('./socket/orderByChatIdHandlers');
 const { registerPresenceHandlers, handleUserDisconnect } = require('./socket/presenceHandlers');
 const { flushPendingWrites, handleGetLastSeq, handleGetMissedMessages } = require('./socket/messageHandlers');
-const logger = require('./utils/logger');
 
 // Import models
 const { Chat } = require("./models/Chat");
@@ -47,10 +46,8 @@ require('events').EventEmitter.defaultMaxListeners = 20;
 let ioInstance;
 let serverInstance;
 
-
 async function startSocketServer(app) {
-  logger.info('socket started successfully')
-
+  console.log("✅ MongoDB connected, Socket");
   const server = http.createServer(app);
 
   const io = new Server(server, {
@@ -115,6 +112,8 @@ async function startSocketServer(app) {
   });
 
   try {
+    await redis.connect();
+
     const subscriber = redis.getSubscriber();
     await subscriber.subscribe('kyc:events', (err, count) => {
       if (err) {
@@ -444,7 +443,19 @@ async function startSocketServer(app) {
     });
   });
 
-  server.listen(process.env.PORT, () => console.log(`✅ Server running on port ${process.env.PORT}`));
+  server.listen(process.env.PORT, () => console.log(`✅ Socket.IO and API server running on port ${process.env.PORT}`));
+
+  // Self-ping to prevent Render spin-down
+  if (process.env.NODE_ENV === 'production') {
+    setInterval(async () => {
+      try {
+        await fetch(`${process.env.renderPingUrl}`);
+        console.log('[keep-alive] socket server pinged');
+      } catch (e) {
+        console.error('[keep-alive] ping failed:', e.message);
+      }
+    }, 5 * 60 * 1000);
+  }
 
   return { io, server };
 }
@@ -466,7 +477,6 @@ async function shutdownSocketServer() {
 
 module.exports.startSocketServer = startSocketServer;
 module.exports.shutdownSocketServer = shutdownSocketServer;
-
 module.exports.getIO = () => {
   if (!ioInstance) {
     console.warn('IO not initialized yet');
