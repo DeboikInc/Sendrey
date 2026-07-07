@@ -1,25 +1,42 @@
 // config/redis.js
 const Redis = require('ioredis');
 
-const redisConfig = {
-  host: process.env.REDIS_HOST,
-  port: process.env.REDIS_PORT,
-  password: process.env.REDIS_PASSWORD,
-  db: process.env.REDIS_DB,
-  tls: undefined,
-  retryStrategy: (times) => {
-    // Exponential backoff
-    const delay = Math.min(times * 200, 10000);
-    console.warn(`[Redis] reconnect attempt ${times}, retrying in ${delay}ms`);
-    return delay;
-  },
-  maxRetriesPerRequest: 3,
-  enableReadyCheck: true,
-  lazyConnect: false,
+const parseRedisConfig = () => {
+  const url = process.env.REDIS_HOST;
+  const port = process.env.REDIS_PORT;
+  const password = process.env.REDIS_PASSWORD;
+  const dbValue = process.env.REDIS_DB;
+  const db = Number.isNaN(Number(dbValue)) ? undefined : Number(dbValue);
+
+  if (typeof url === 'string' && /^rediss?:\/\//i.test(url.trim())) {
+    return url.trim();
+  }
+
+  const config = {
+    host: url,
+    port: port ? Number(port) : undefined,
+    password,
+    tls: undefined,
+    retryStrategy: (times) => {
+      const delay = Math.min(times * 50, 2000);
+      console.warn(`[Redis] reconnect attempt ${times}, retrying in ${delay}ms`);
+      return delay;
+    },
+    maxRetriesPerRequest: 3,
+    enableReadyCheck: true,
+    lazyConnect: false,
+  };
+
+  if (db !== undefined) {
+    config.db = db;
+  }
+
+  return config;
 };
 
-const INITIAL_CONNECT_TIMEOUT_MS = 20000;
+const redisConfig = parseRedisConfig();
 
+const INITIAL_CONNECT_TIMEOUT_MS = 20000;
 class RedisClient {
   constructor() {
     this.client = null;
@@ -27,7 +44,6 @@ class RedisClient {
     this.publisher = null;
     this.isConnected = false;
   }
-
 
   async connect() {
     if (this.client) return this.client;
