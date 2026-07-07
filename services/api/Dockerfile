@@ -1,7 +1,19 @@
-FROM node:20-alpine
+FROM node:22-alpine
+
 WORKDIR /app
-COPY package*.json ./
-RUN npm install --omit=dev
-COPY . .
-EXPOSE 3000
+
+RUN corepack enable
+
+COPY package.json .
+COPY pnpm-lock.yaml .
+COPY pnpm-workspace.yaml .
+
+COPY services/api ./services/api
+
+RUN pnpm install --frozen-lockfile
+
+WORKDIR /app/services/api
+
+EXPOSE 10000
+
 CMD ["node", "app.js"]

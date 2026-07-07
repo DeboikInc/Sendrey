@@ -4,6 +4,7 @@
   "main": "app.js",
   "scripts": {
     "dev": "nodemon app.js",
+    "start": "node app.js",
     "dev:all": "concurrently \"npm run dev\"",
     "seed:admin": "node scripts/seedAdmin.js"
   },

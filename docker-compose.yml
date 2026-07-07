@@ -1,0 +1,156 @@
+version: '3.8'
+
+services:
+  # MongoDB
+  mongodb:
+    image: mongo:8
+    container_name: sendrey-mongodb
+    restart: always
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: password
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+
+  # Redis
+  redis:
+    image: redis:7-alpine
+    container_name: sendrey-redis
+    restart: always
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  # API Server
+  api-server:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    container_name: sendrey-api
+    restart: always
+    environment:
+      NODE_ENV: development
+      PORT: 4000
+      DATABASE_URL: mongodb+srv://sendrey:sendrey@cluster0.6h2uo87.mongodb.net/sendrey-server-staging?retryWrites=true&w=majority
+      JWT_SECRET: LaT3#J5*Vx05*
+      JWT_EXPIRES_IN: "30m"
+      JWT_REFRESH_TOKEN_EXPIRES_IN: "30d"
+      JWT_REFRESH_SECRET: Vx0#5*J5T3*
+
+      FIREBASE_PROJECT_ID: "sendrey-6f52d"
+      FIREBASE_CLIENT_EMAIL: "firebase-adminsdk-fbsvc@sendrey-6f52d.iam.gserviceaccount.com"
+      FIREBASE_PRIVATE_KEY: "-----BEGIN PRIVATE KEY-----\nMIIEvwIBADANBgkqhkiG9w0BAQEFAASCBKkwggSlAgEAAoIBAQDF7hsolETHIp6X\nbmbnpr+KTXye7F+C8pEuk+Y/G2nGIDZxo+GQCBxejahh6QbcWRsLJPTuJasf8ppK\nP/eU/Kbee5nFB4TGZXH/n09002nxWD6OKKdbIMYB38FrMoafcOEhN6QtIKwWIeQE\nucTbn+SkdPvDyxI2+mRgz3Q5qWy5YUGgR6PXPxOEOtnwbncpbLguLYtrHwgXCwIe\nA8/0zc9ceX2KtHTaFk6TNovMK7bcPE2FOCKuprN5wwldunGWYB+H6nv2gfxc69l0\nyOi+tuAYWRAOhCmXx0eOlWmINg/xnj4iEO6xq1nDjEhlVXL6YIXd175fCUj8VqXy\nh6/RblApAgMBAAECggEACi1thlNEa5hpPvhhcHcrqW8FUc8t9JfoNPTMLbHJSTOi\nFQsUF8HBArAmSL2QmZ8306V/dijn8RU6j4eVQZsRsgY5QI87ya9Q8q/UiDlwPMWY\nttraiyYm5FUG9y4Ci9uEKf74UU05KAyvUrpiJ9hji3zL7tQH8F2E8JDuRSJD+c6y\nFG2OVzyVQ7Ao9N8p+9co1PQzf6IoHTExOXGmeko40EE05Du1c/T5GErxdKXZuBAV\nia26FOlpVJZxeHUY3IdYV6SYaLJ7beyT1+caGcEprXHk0BPqrtzQ6cx9RWsfABYR\nDzylba/CBIy0HYvSjo+7FA2MtCPtg03Y6MhKVPMvkQKBgQD0jtN6S2oPrXpj38DQ\nJkrG4o0dL8Nfs/HBTwQlcf7WySH4Z8oXkw30KxsyruRp4p7GmKt+837ocLAm4vdB\n887ohmlwNdKn4SsB7ejdDkcvmzPivu9C7mPESUzGPWqb0nhcrCs+QCORQRvLYtWS\nK4w+njf/nv7iNvVQ+5mTwJ3IUQKBgQDPMMyFLa0waTjqSuXl6anHIAAAPnEg0OyI\np1pz7G9qVpXoEbrSv4ggRYUVyBFJ4s/H/Szy1yPwOLGkaZHZgdQkbF2+5ixo72mv\n68OHeqtixCZwej+Pfx9eRBDwZ+hpq4B15Xo4luRhmRu5kK1HnCCzQJoTWB3zjJOs\nJWW69hnsWQKBgQDm1UUxgqtanvEOAi35ips8PKzbprCvzaZcQxvzyDS1QWXKFRVA\nyTH7jRB/92prs1cQtxvwmR7pgSwTmFmwK9PZ0L0HCBaNFVDF4mzQ8mAoxELmPDiU\nIXWT2WgZGfFdoPyw5GVwvZOU0DLO97wE2wvmMutCYS3OEffdd45PUxja8QKBgQCS\nXI6dpd6qTCqAl9g/ygi9OcXGZlXUMMJm5pHnQiaSoAfVoHCxX8vxwCp7cJGF+Et/\no0GVapVgpSwYUNtPI3+RG1w99qt4lWe7dnjxw54+bwIYgsNTwyGNnde5fC2aOCTP\nJARq5Wz/5QDI3YMLCyeuePxenejKm4vWF7T9lcxKQQKBgQCNfKwERa2WRYVAN3hc\nUSyCBBES9B7eOac2q5gfcXeGhwVxl2VBjEUNAD43mSCoIx4sE6Wr0StKLuT7Udpd\n+gPBbGeu1DswxtvFqfsxxmY63m0tx6gQYoe9cjNhzJ4R3fexnqnYs+pHkF3jJ0qU\n/jT4t+92RVoUNkXQUl0/G6v4xA==\n-----END PRIVATE KEY-----\n"
+
+      TWILIO_ACCOUNT_SID: AC8174c678be0ce30716fb6c6cb1a7f53f
+      TWILIO_AUTH_TOKEN: 2641649590a45ab226231b2a0963ec94
+      TWILIO_FROM_NUMBER: 'sendrey'
+
+      GOOGLE_VISION_KEY: AIzaSyBjwb_Frre0tcJZcemPhQ1AUL8GLWCETWY
+
+      SEED_ADMIN_EMAIL: superadmin@sendreyapp.com
+      SEED_ADMIN_PASSWORD: S*1!5#5576!
+
+      # ALLOWED_ORIGINS=[*]
+      SUPPORT_PHONE: +2349125273293
+
+      # Email Configuration
+      EMAIL_PROVIDER: elastic
+      ELASTIC_EMAIL_API_KEY: D233DCDC4D473774F80624F43109E965E3D8681E6A6E52794A90CB88B0381FE004D8205353442439815B1928B1171DE8
+      ELASTIC_EMAIL_FROM: no_reply@sendrey.com
+      SUPPORT_EMAIL: support@sendrey.com
+      ELASTIC_EMAIL_FROM_NAME: "Sendrey"   
+
+      # Frontend URLs
+      FRONTEND_URL: 'http://localhost:3000'
+      ADMIN_EMAIL: support@sendrey.com
+
+      LOGO_URL: 'https://app.sendrey.com/Sendrey-Logo-Variants-09.png'
+
+      # Logger Configuration
+      LOG_LEVEL: info
+
+      # Log files retention (in days)
+      LOG_RETENTION_DAYS: 30
+
+      # Enable/disable specific log types
+      LOG_HTTP: true
+      LOG_DATABASE: true
+      LOG_AUDIT: true
+
+      CLOUDINARY_CLOUD_NAME: "dsu7lnvia"
+      CLOUDINARY_API_KEY: "165717462879716"
+      CLOUDINARY_API_SECRET: "yiKlatFrUJfcB8aSMlQz16iT8No"
+      CLOUDINARY_URL: "cloudinary://165717462879716:yiKlatFrUJfcB8aSMlQz16iT8No@dsu7lnvia"
+
+      KAFKA_ENABLED: false
+
+      KAFKA_BROKER: localhost:9092
+
+      PAYSTACK_CALLBACK_URL: 'http://localhost:3000'
+
+      PAYSTACK_PUBLIC_KEY: pk_test_bca46a32a2df593880090c61c99f5c551f3f8691
+      PAYSTACK_SECRET_KEY: sk_test_62e8de01d37beeaee7a9b3fb9e8b91f9e03c0972
+
+      REDIS_HOST: redis://default:U0QrUkQcynS9miu2qkzEL7fu7oafMPLB@redis-19178.c232.us-east-1-2.ec2.cloud.redislabs.com:19178
+      REDIS_PORT: 19178
+      REDIS_PASSWORD: U0QrUkQcynS9miu2qkzEL7fu7oafMPLB
+      REDIS_DB: 0
+    ports:
+      - "4000:4000"
+    depends_on:
+      - mongodb
+      - redis
+    volumes:
+      - ./services/api:/app
+      - /app/node_modules
+
+  # Web App
+  # web-app:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.web
+  #   container_name: sendrey-web
+  #   restart: always
+  #   environment:
+  #     NODE_ENV: production
+  #     NEXT_PUBLIC_API_URL: http://api-server:5000
+  #   ports:
+  #     - "3000:3000"
+  #   depends_on:
+  #     - api-server
+
+  # Landing Page
+  # landing-page:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.landing
+  #   container_name: sendrey-landing
+  #   restart: always
+  #   environment:
+  #     NODE_ENV: production
+  #   ports:
+  #     - "3001:3001"
+  #   depends_on:
+  #     - api-server
+
+  # Backoffice
+  # backoffice:
+  #   build:
+  #     context: .
+  #     dockerfile: Dockerfile.backoffice
+  #   container_name: sendrey-backoffice
+  #   restart: always
+  #   environment:
+  #     NODE_ENV: production
+  #     PORT: 3002
+  #   ports:
+  #     - "3002:3002"
+  #   depends_on:
+  #     - api-server
+
+volumes:
+  mongodb_data:
+  redis_data:
