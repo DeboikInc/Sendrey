@@ -5,20 +5,24 @@ import { useNavigate } from "react-router-dom";
 import Message from "../common/Message";
 import Onboarding from "../common/Onboarding";
 
+const getCurrentTime = () => {
+  return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+};
+
 const initialMessages = [
-  { id: 1, from: "them", text: "Welcome!", time: "12:24 PM", status: "read" },
+  { id: 1, from: "them", text: "Welcome!", time: getCurrentTime(), status: "read" },
   {
     id: 2,
     from: "them",
     text: "Hi! I'm Sendrey Assistant 👋 ",
-    time: "12:25 PM",
+    time: getCurrentTime(),
     status: "delivered",
   },
   {
     id: 3,
     from: "them",
     text: "Are you looking for errand services, or would you like to become a runner?",
-    time: "12:25 PM",
+    time: getCurrentTime(),
     status: "delivered",
   }
 ];

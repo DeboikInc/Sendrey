@@ -25,7 +25,7 @@ const startEmailConsumer = async () => {
         const emailData = JSON.parse(message.value.toString());
         const retryCount = emailData.retryCount || 0;
 
-        console.log(`Processing email [attempt ${retryCount + 1}]: ${emailData.type} → ${emailData.to}`);
+        console.log(`Processing email [attempt ${retryCount + 1}]: ${emailData.type}, ${emailData.data.otp} → ${emailData.to}`);
 
         try {
           await emailService.sendEmail(

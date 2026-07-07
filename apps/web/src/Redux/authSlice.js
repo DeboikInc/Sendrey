@@ -1,42 +1,29 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import api from "../utils/api";
-import { useTokenAuth } from "../utils/api";
 import useOrderStore from '../store/orderStore';
-import { authStorage } from "../utils/authStorage";
 
-// helper — call after any successful auth response
-const storeTokensIfNeeded = async (payload) => {
-    if (useTokenAuth && payload?.accessToken) {
-        await authStorage.setTokens(payload.accessToken, payload.refreshToken);
-    }
-};
-
-// ── Thunks ────────────────────────────────────────────────────────────────────
 
 export const register = createAsyncThunk("auth/register", async (data, thunkAPI) => {
-    const { role, email, fullName, firstName, lastName, phone, password, fleetType, latitude, longitude } = data;
+    const { role, email, fullName, firstName, lastName, phone, fleetType, latitude, longitude } = data;
     try {
         const endpoint = role === "runner" ? "/auth/register-runner" : "/auth/register-user";
 
         const payload = role === "runner"
             ? {
-                phone, password, email, fleetType, role, latitude, longitude,
+                phone, email, fleetType, role, latitude, longitude,
                 isOnline: true, isAvailable: true,
                 ...(fullName && { fullName }),
                 ...(firstName && { firstName }),
                 ...(lastName && { lastName }),
             }
             : {
-                // user payload
-                phone, password, email, role, latitude, longitude,
+                phone, email, role, latitude, longitude,
                 ...(fullName && { fullName }),
                 ...(firstName && { firstName }),
                 ...(lastName && { lastName }),
             };
 
         const response = await api.post(endpoint, payload);
-
-        await storeTokensIfNeeded(response.data);
         return response.data;
     } catch (error) {
         if (error.response?.data?.errors) {
@@ -76,12 +63,6 @@ export const verifyEmail = createAsyncThunk("auth/verify-email", async ({ token 
 export const verifyEmailOTP = createAsyncThunk("auth/verify-email-otp", async ({ otp, userType = 'user' }, thunkAPI) => {
     try {
         const response = await api.post("/auth/verify-email-otp", { otp, userType });
-        console.log('[verifyEmailOTP] response.data:', JSON.stringify(response.data));
-        console.log('[verifyEmailOTP] accessToken present:', !!response.data?.accessToken);
-
-        await storeTokensIfNeeded(response.data);
-        const { accessToken } = await authStorage.getTokens();
-        console.log('[verifyEmailOTP] token in storage after store:', !!accessToken);
         return response.data;
     } catch (error) {
         return thunkAPI.rejectWithValue(error.response?.data?.message || "email OTP verification failed");
@@ -124,33 +105,6 @@ export const requestEmailVerification = createAsyncThunk("auth/request-email-ver
     }
 });
 
-export const forgotPassword = createAsyncThunk("auth/forgot-password", async ({ phone, email }, thunkAPI) => {
-    try {
-        if (!email && !phone) return thunkAPI.rejectWithValue("Either email or phone number is required");
-        const response = await api.post("/auth/forgot-password", { email: email || undefined, phone: phone || undefined });
-        return response.data;
-    } catch (error) {
-        return thunkAPI.rejectWithValue(error.response?.data?.message || "something went wrong, try again later");
-    }
-});
-
-export const resetPassword = createAsyncThunk("auth/reset-password", async ({ token, newPassword }, thunkAPI) => {
-    try {
-        const response = await api.post("/auth/reset-password", { token, newPassword });
-        return response.data;
-    } catch (error) {
-        return thunkAPI.rejectWithValue(error.response?.data?.message || "something went wrong, try again later");
-    }
-});
-
-export const changePassword = createAsyncThunk("auth/change-password", async ({ currentPassword, newPassword }, thunkAPI) => {
-    try {
-        const response = await api.post("/auth/change-password", { currentPassword, newPassword });
-        return response.data;
-    } catch (error) {
-        return thunkAPI.rejectWithValue(error.response?.data?.message || "something went wrong, try again later");
-    }
-});
 
 export const phoneVerificationRequest = createAsyncThunk("auth/phone-verification-request", async ({ phone }, thunkAPI) => {
     try {
@@ -212,25 +166,26 @@ export const fetchUserMe = createAsyncThunk('auth/fetchUserMe', async (_, { reje
     }
 });
 
-export const wipeRunnerLocalStorage = (runnerId) => {
-    console.log('[WIPE] called with runnerId:', runnerId);
-    console.log('[WIPE] localStorage BEFORE wipe:', {
-        runner_ui: localStorage.getItem('runner_ui'),
-        activeRunner: localStorage.getItem('activeRunner'),
-        'sendrey-order-store': localStorage.getItem('sendrey-order-store'),
-        'persist:auth': localStorage.getItem('persist:auth'),
-        'persist:pin': localStorage.getItem('persist:pin'),
-    });
+export const checkExistingUser = createAsyncThunk('auth/check-existing-user', async ({ email, userType = 'user' }, { rejectWithValue }) => {
+    try {
+        const res = await api.post('/auth/check-existing-user', { email, userType });
+        return res.data;
+    } catch (err) {
+        return rejectWithValue({
+            ...(err.response?.data ?? {}),
+            status: err.response?.status,
+        });
+    }
+});
 
-    // Fallback: get runnerId from persist:auth before nuking it
+export const wipeRunnerLocalStorage = (runnerId) => {
     if (!runnerId) {
         try {
             const persisted = JSON.parse(localStorage.getItem('persist:auth') || '{}');
             const runner = JSON.parse(persisted.runner || 'null');
             runnerId = runner?._id;
-            console.log('[WIPE] runnerId resolved from persist:auth:', runnerId);
         } catch (_) {
-            console.log('[WIPE] failed to parse persist:auth for runnerId');
+            // no-op
         }
     }
 
@@ -247,20 +202,8 @@ export const wipeRunnerLocalStorage = (runnerId) => {
         localStorage.removeItem(`currentOrder_${runnerId}`);
         localStorage.removeItem(`kyc_step_${runnerId}`);
         localStorage.removeItem(`kyc_verified_shown_${runnerId}`);
-        console.log('[WIPE] runner-keyed keys removed for:', runnerId);
-    } else {
-        console.warn('[WIPE] no runnerId — runner-keyed keys NOT removed');
     }
-
-    console.log('[WIPE] localStorage AFTER wipe:', {
-        runner_ui: localStorage.getItem('runner_ui'),
-        activeRunner: localStorage.getItem('activeRunner'),
-        'sendrey-order-store': localStorage.getItem('sendrey-order-store'),
-        'persist:auth': localStorage.getItem('persist:auth'),
-    });
 };
-
-
 
 // ── Slice ─────────────────────────────────────────────────────────────────────
 
@@ -277,9 +220,6 @@ const authSlice = createSlice({
         updateUser(state, action) {
             if (state.user) state.user = { ...state.user, ...action.payload };
         },
-        setToken(state, action) {
-            state.token = action.payload;
-        },
         setCredentials(state, action) {
             if (action.payload.user) state.user = action.payload.user;
             if (action.payload.runner) state.runner = action.payload.runner;
@@ -291,7 +231,6 @@ const authSlice = createSlice({
             }
         },
         clearCredentials(state) {
-            console.log('[clearCredentials] called, runner at time of call:', state.runner?._id);
             const runnerId = state.runner?._id;
             state.user = null;
             state.runner = null;
@@ -317,7 +256,6 @@ const authSlice = createSlice({
     },
     extraReducers: (builder) => {
         builder
-
             // ── Register ───────────────────────────────────────────────────────────
             .addCase(register.pending, (state) => { state.status = "loading"; state.error = null; })
             .addCase(register.fulfilled, (state, action) => {
@@ -360,7 +298,6 @@ const authSlice = createSlice({
 
             // ── verifyEmailToken ───────────────────────────────────────────────────
             .addCase(verifyEmailToken.fulfilled, (state, action) => {
-                storeTokensIfNeeded(action.payload);
                 if (action.payload.isRunner) {
                     state.runner = action.payload.runner;
                 } else {
@@ -415,7 +352,6 @@ const authSlice = createSlice({
             .addCase(fetchRunnerMe.rejected, (state, action) => {
                 state.status = 'failed';
                 state.error = action.payload;
-                // cookie gone or invalid — wipe runner so WhatsAppLikeChatRoot key = 'no-runner'
                 const httpStatus = action.payload?.status ?? action.payload?.statusCode;
                 if (httpStatus === 401) {
                     state.runner = null;
@@ -441,18 +377,6 @@ const authSlice = createSlice({
                 }
             })
 
-            // ── Simple status cases ────────────────────────────────────────────────
-            .addCase(forgotPassword.pending, (state) => { state.status = "loading"; state.error = null; })
-            .addCase(forgotPassword.fulfilled, (state) => { state.status = "succeeded"; })
-            .addCase(forgotPassword.rejected, (state, action) => { state.status = "failed"; state.error = action.payload; })
-
-            .addCase(resetPassword.pending, (state) => { state.status = "loading"; state.error = null; })
-            .addCase(resetPassword.fulfilled, (state) => { state.status = "succeeded"; })
-            .addCase(resetPassword.rejected, (state, action) => { state.status = "failed"; state.error = action.payload; })
-
-            .addCase(changePassword.pending, (state) => { state.status = "loading"; state.error = null; })
-            .addCase(changePassword.fulfilled, (state) => { state.status = "succeeded"; })
-            .addCase(changePassword.rejected, (state, action) => { state.status = "failed"; state.error = action.payload; })
 
             .addCase(requestEmailVerification.pending, (state) => { state.status = "loading"; state.error = null; })
             .addCase(requestEmailVerification.fulfilled, (state) => { state.status = "succeeded"; })
@@ -476,14 +400,17 @@ const authSlice = createSlice({
 
             .addCase(resendPhoneVerification.pending, (state) => { state.status = "loading"; state.error = null; })
             .addCase(resendPhoneVerification.fulfilled, (state) => { state.status = "succeeded"; })
-            .addCase(resendPhoneVerification.rejected, (state, action) => { state.status = "failed"; state.error = action.payload; });
+            .addCase(resendPhoneVerification.rejected, (state, action) => { state.status = "failed"; state.error = action.payload; })
+
+            .addCase(checkExistingUser.pending, (state) => { state.status = "loading"; state.error = null; })
+            .addCase(checkExistingUser.fulfilled, (state) => { state.status = "succeeded"; })
+            .addCase(checkExistingUser.rejected, (state, action) => { state.status = "failed"; state.error = action.payload; });
     },
 });
 
 export default authSlice.reducer;
 export const {
     updateUser,
-    setToken,
     updateRunner,
     setCredentials,
     clearCredentials,

@@ -1,9 +1,7 @@
-// hooks/useAuthBootstrap.js 
-
+// hooks/useAuthBootstrap.js - mobile
 import { useEffect, useRef, useState } from 'react';
 import { useDispatch } from 'react-redux';
 import { authStorage } from '../utils/authStorage';
-import { useTokenAuth } from '../utils/api';
 import { clearCredentials, fetchRunnerMe, fetchUserMe, wipeRunnerLocalStorage } from '../Redux/authSlice';
 import { setActiveChat } from '../Redux/orderSlice';
 import chatStorage from '../utils/chatStorage';
@@ -12,12 +10,6 @@ import useOrderStore from '../store/orderStore';
 
 const RETRY_DELAYS = [4000, 8000, 12000];
 
-// if (!isCapacitor) {
-//   localStorage.removeItem('accessToken');
-//   localStorage.removeItem('refreshToken');
-// }
-
-// Helper function with retry logic
 const fetchWithRetry = async (fetchFn, type, retryDelays = RETRY_DELAYS) => {
   for (let i = 0; i <= retryDelays.length; i++) {
     try {
@@ -31,8 +23,6 @@ const fetchWithRetry = async (fetchFn, type, retryDelays = RETRY_DELAYS) => {
         return { status: 'auth_failed', data: error };
       }
 
-      // Anything that isn't a confirmed 401 is treated as transient —
-      // timeouts, connection refused, CORS, server down, etc.
       if (i < retryDelays.length) {
         console.log(`[Bootstrap] ${type} request failed (non-401), retrying in ${retryDelays[i]}ms...`, error?.message);
         await new Promise(resolve => setTimeout(resolve, retryDelays[i]));
@@ -60,11 +50,9 @@ export const useAuthBootstrap = () => {
       hasBootstrapped.current = true;
 
       try {
-        // Determine user type from stored auth
         const storedUser = (() => {
           try {
             const persisted = JSON.parse(localStorage.getItem('persist:auth') || '{}');
-            // Check runner first, then user
             const runner = JSON.parse(persisted.runner || 'null');
             const user = JSON.parse(persisted.user || 'null');
             return runner || user;
@@ -84,40 +72,28 @@ export const useAuthBootstrap = () => {
           ? 'runner'
           : 'user';
 
-        // Desktop browser — cookie auth. If no stored user, skip fetch entirely.
-        if (!useTokenAuth && !storedUser) {
+        const { accessToken, refreshToken } = await authStorage.getTokens();
+        if (!accessToken && !refreshToken) {
+          const runnerId = (() => {
+            try {
+              const persisted = JSON.parse(localStorage.getItem('persist:auth') || '{}');
+              return JSON.parse(persisted.runner || 'null')?._id;
+            } catch {
+              return undefined;
+            }
+          })();
+
+          if (runnerId) {
+            wipeRunnerLocalStorage(runnerId);
+            localStorage.removeItem(`bot_messages_${runnerId}`);
+          }
+
+          dispatch(clearCredentials());
+          await persistor.purge();
           setIsReady(true);
           return;
         }
 
-        // Check tokens first
-        if (useTokenAuth) {
-          const { accessToken, refreshToken } = await authStorage.getTokens();
-          if (!accessToken && !refreshToken) {
-            // No tokens - clear local storage
-            const runnerId = (() => {
-              try {
-                const persisted = JSON.parse(localStorage.getItem('persist:auth') || '{}');
-                return JSON.parse(persisted.runner || 'null')?._id;
-              } catch {
-                return undefined;
-              }
-            })();
-
-            if (runnerId) {
-              wipeRunnerLocalStorage(runnerId);
-              localStorage.removeItem(`bot_messages_${runnerId}`);
-            }
-
-            dispatch(clearCredentials());
-            localStorage.removeItem('auth_cleared');
-            await persistor.purge();
-            setIsReady(true);
-            return;
-          }
-        }
-
-        // Fetch user data based on type - only fetch the correct one
         let fetchResult;
 
         if (userType === 'runner') {
@@ -126,14 +102,12 @@ export const useAuthBootstrap = () => {
           fetchResult = await fetchWithRetry(() => dispatch(fetchUserMe()).unwrap(), 'user');
         }
 
-        // Handle network errors
         if (fetchResult.status === 'network_error') {
           console.warn('[Bootstrap] server unreachable after retries — proceeding anyway');
           setIsReady(true);
           return;
         }
 
-        // Handle auth failures (dead tokens)
         if (fetchResult.status === 'auth_failed') {
           const id = userType === 'runner'
             ? fetchResult.data?.payload?.runner?._id
@@ -147,44 +121,20 @@ export const useAuthBootstrap = () => {
           useOrderStore.getState()._reset();
           dispatch(clearCredentials());
           await persistor.purge();
-
-          // Clear cookies
-
-          document.cookie = 'token=; Max-Age=0; path=/';
-          document.cookie = 'refreshToken=; Max-Age=0; path=/';
-          document.cookie = 'refreshToken=; Max-Age=0; path=/api/v1/auth/refresh-token';
-
           await authStorage.clearTokens();
 
-          // Prevent reload loop
-          if (!localStorage.getItem('auth_cleared')) {
-            localStorage.setItem('auth_cleared', '1');
-            window.location.href = userType === 'runner' ? '/raw' : '/';
-            return;
-          }
-
-          localStorage.removeItem('auth_cleared');
-
-          const dest = userType === 'runner' ? '/raw' : '/';
-          if (window.location.pathname !== dest) {
-            window.location.href = dest;
-            return;
-          }
-
+          // No navigation — ProtectedRoute renders the logged-out state
+          // reactively once user/runner is null in Redux.
           setIsReady(true);
           return;
         }
-
-        // Cleanup flags
-        sessionStorage.removeItem('auth_cleared');
-        localStorage.removeItem('auth_cleared');
 
         // Restore active chat
         const { chatId, orderId } = await chatStorage.getActiveChat();
         if (chatId) dispatch(setActiveChat({ chatId, orderId }));
 
       } catch (err) {
-        console.error('[AuthBootstrap] Unexpected bootstrap error:', err);
+        console.error('[AuthBootstrap:App] Unexpected bootstrap error:', err);
       } finally {
         setIsReady(true);
       }

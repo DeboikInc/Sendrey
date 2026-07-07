@@ -7,24 +7,34 @@ import { useDispatch, } from "react-redux";
 import { updateOrder } from '../../Redux/orderSlice';
 import { FaWalking, FaMotorcycle } from "react-icons/fa";
 import { useCameraHook } from "../../hooks/useCameraHook";
-import { calculateRouteDistance } from '../../utils/pricing';
+import { getPedestrianConfig } from '../../utils/pedestrianConfig';
+import { calculateRouteDistance, haversineDistance } from '../../utils/pricing';
 
-const initialMessages = [
-  {
-    id: 1,
-    from: "them",
-    text: "What kind of fleet can handle this errand? Select from the options below:",
-    time: "12:26 PM",
-    status: "delivered"
-  },
-  {
-    id: 2,
-    from: "them",
-    text: "⚠️ Note: Bikes, bicycles and pedestrians are only suitable for items weighing 5kg or less.",
-    time: "12:26 PM",
-    status: "delivered",
-  }
-];
+const getCurrentTime = () => {
+  return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+};
+
+const getInitialMessages = () => {
+  const now = new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return [
+    {
+      id: 1,
+      from: "them",
+      text: "What kind of fleet can handle this errand? Select from the options below:",
+      time: now,
+      status: "delivered",
+      isSystemPrompt: true,
+    },
+    {
+      id: 2,
+      from: "them",
+      text: "⚠️ Note: Bikes, bicycles and pedestrians are only suitable for items weighing 5kg or less.",
+      time: now,
+      status: "delivered",
+      isSystemPrompt: true,
+    }
+  ];
+};
 
 const HeaderIcon = ({ children, tooltip, onClick }) => (
   <Tooltip content={tooltip} placement="bottom" className="text-xs">
@@ -50,7 +60,7 @@ export default function VehicleSelectionScreen({
   showBack,
   onBack,
 }) {
-  const [messages, setMessages] = useState(initialMessages);
+  const [messages, setMessages] = useState(getInitialMessages);
   const dispatch = useDispatch();
   const [showConnectButton, setShowConnectButton] = useState(false);
   const [selectedVehicle, setSelectedVehicle] = useState(null);
@@ -101,15 +111,17 @@ export default function VehicleSelectionScreen({
           id: baseId,
           from: "them",
           text: "What kind of fleet can handle this errand? Select from the options below:",
-          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          time: getCurrentTime(),
           status: "delivered",
+          isSystemPrompt: true,
         },
         {
           id: baseId + 1,
           from: "them",
           text: "⚠️ Note: Bikes and bicycles are only suitable for items weighing 5kg or less.",
-          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          time: getCurrentTime(),
           status: "delivered",
+          isSystemPrompt: true,
         }
       ]);
       setShowConnectButton(false);
@@ -125,7 +137,7 @@ export default function VehicleSelectionScreen({
           id: baseId + 2,
           from: "them",
           text: "Make your request detailed enough for your runner to understand (Type a message, snap a picture or record a voice note). Press the Connect To Runner button when you are done. Connect To Runner",
-          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          time: getCurrentTime(),
           status: "delivered",
           hasConnectRunnerButton: true,
           isConnectToRunner: true,
@@ -301,7 +313,7 @@ export default function VehicleSelectionScreen({
         id: Date.now(),
         from: "them",
         text: `Make your request detailed enough for your runner to understand (Type a message, snap a picture or record a voice note). Press the Connect To Runner button when you are done. Connect To Runner`,
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        time: getCurrentTime(),
         status: "delivered",
         hasConnectRunnerButton: true,
         isConnectToRunner: true
@@ -311,7 +323,7 @@ export default function VehicleSelectionScreen({
   };
 
 
-  const handleSelect = (type, label) => {
+  const handleSelect = async (type, label) => {
     setOrderSent(false);
     const now = Date.now();
 
@@ -319,7 +331,7 @@ export default function VehicleSelectionScreen({
       id: now,
       from: "me",
       text: label,
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      time: getCurrentTime(),
       status: "sent",
       isFleetSelection: true,
     };
@@ -333,24 +345,34 @@ export default function VehicleSelectionScreen({
       const dest = service?.deliveryCoordinates;
 
       if (origin && dest) {
-        const { error } = calculateRouteDistance(selectedService, origin, dest, 'pedestrian');
+        try {
+          const pedestrianConfig = await getPedestrianConfig();
+          console.log('[pedestrian check]', { origin, dest, leg2: haversineDistance(origin, dest) });
+          const { error } = calculateRouteDistance(
+            selectedService, origin, dest, 'pedestrian',
+            pedestrianConfig.pedestrianMaxDeliveryLeg
+          );
 
-        if (error === 'PEDESTRIAN_TOO_FAR') {
-          setTimeout(() => {
-            setMessages(prev => {
-              const filtered = prev.filter(msg => msg.text !== "In progress...");
-              return [...filtered, {
-                id: Date.now(),
-                from: "them",
-                text: "⚠️ Pedestrian fleet cannot be used for distances more than 1km. Please select a different fleet type.",
-                time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-                status: "delivered",
-              }];
-            });
-            setSelectedVehicle(null);
-            setShowConnectButton(false);
-          }, 800);
-          return;
+          if (error === 'PEDESTRIAN_TOO_FAR') {
+            setTimeout(() => {
+              setMessages(prev => {
+                const filtered = prev.filter(msg => msg.text !== "In progress...");
+                return [...filtered, {
+                  id: Date.now(),
+                  from: "them",
+                  text: `⚠️ Pedestrian fleet cannot be used when the delivery distance exceeds ${pedestrianConfig.pedestrianMaxDeliveryLeg} meters. Please select a different fleet type.`,
+                  time: getCurrentTime(),
+                  status: "delivered",
+                  isSystemPrompt: true,
+                }];
+              });
+              setSelectedVehicle(null);
+              setShowConnectButton(false);
+            }, 800);
+            return;
+          }
+        } catch (err) {
+          console.error('[VehicleSelection] Failed to fetch pedestrian config:', err);
         }
       }
     }
@@ -362,6 +384,7 @@ export default function VehicleSelectionScreen({
       from: "them",
       text: "In progress...",
       status: "delivered",
+      isSystemPrompt: true,
     };
     setMessages(prev => [...prev, botResponse]);
 
@@ -382,7 +405,7 @@ export default function VehicleSelectionScreen({
         id: Date.now(),
         from: "me",
         text: text.trim(),
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        time: getCurrentTime(),
         status: "sent",
       };
 
@@ -404,7 +427,7 @@ export default function VehicleSelectionScreen({
           fileName: fileData.name,
           fileUrl: messageFileUrl,
           fileSize: `${(fileData.size / 1024).toFixed(1)} KB`,
-          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          time: getCurrentTime(),
           status: "sent",
           isUploading: false,
         };
@@ -655,7 +678,7 @@ export default function VehicleSelectionScreen({
                   showCursor={false}
                   showStatusIcons={false}
                   onConnectButtonClick={m.hasConnectRunnerButton ? handleConnectToRunner : undefined}
-                  disableContextMenu={m.isFleetSelection || m.isConnectToRunner ? true : false}
+                  disableContextMenu={m.isFleetSelection || m.isConnectToRunner || m.isSystemPrompt ? true : false}
                   alwaysAllowEdit={
                     m.from === "me" &&
                     !m.hasConnectRunnerButton &&

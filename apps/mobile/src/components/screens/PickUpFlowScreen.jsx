@@ -14,6 +14,10 @@ import { useGoogleMaps } from "../../hooks/useGoogleMaps";
 import { getSuggestionStatus } from "../../Redux/businessSlice";
 import BusinessConversionFlow from "./BusinessConversionFlow";
 
+const getCurrentTime = () => {
+  return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+};
+
 export default function PickupFlowScreen({
   onOpenSavedLocations,
   messages,
@@ -31,7 +35,7 @@ export default function PickupFlowScreen({
   onEditComplete,
   onMore,
   showBack,
-  onBack
+  onBack, showMore
 }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [phoneNumberInput, setPhoneNumberInput] = useState("");
@@ -215,7 +219,7 @@ export default function PickupFlowScreen({
               id: Date.now(),
               from: "them",
               text: "Which location do you want to pickup from?",
-              time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              time: getCurrentTime(),
               status: "delivered"
             }
           ]);
@@ -230,7 +234,7 @@ export default function PickupFlowScreen({
               id: Date.now(),
               from: "them",
               text: "Set your delivery location. Choose Delivery Location",
-              time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              time: getCurrentTime(),
               status: "delivered",
               hasChooseDeliveryButton: true,
               hasViewSavedLocations: true,
@@ -247,7 +251,7 @@ export default function PickupFlowScreen({
               id: Date.now(),
               from: "them",
               text: "What item(s) do you want to pick up?",
-              time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              time: getCurrentTime(),
               status: "delivered"
             }
           ]);
@@ -262,7 +266,7 @@ export default function PickupFlowScreen({
               id: Date.now(),
               from: "them",
               text: "Please enter pick up phone number Use My Phone Number",
-              time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              time: getCurrentTime(),
               status: "delivered",
               hasUseMyNumberButton: true,
               phoneNumberType: "pickup",
@@ -279,7 +283,7 @@ export default function PickupFlowScreen({
               id: Date.now(),
               from: "them",
               text: "Kindly enter drop off phone number Use My Phone Number",
-              time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              time: getCurrentTime(),
               status: "delivered",
               // hasUseMyNumberButton: true,
               phoneNumberType: "dropoff",
@@ -376,7 +380,7 @@ export default function PickupFlowScreen({
 
 
   const initialMessages = [
-    { id: 1, from: "them", text: "Which location do you want to pickup from?", time: "12:25 PM", status: "delivered" },
+    { id: 1, from: "them", text: "Which location do you want to pickup from?", time: getCurrentTime(), status: "delivered" },
   ];
 
 
@@ -504,7 +508,7 @@ export default function PickupFlowScreen({
             id: Date.now() + 10,
             from: "them",
             text: `🚀 You've used Sendrey ${suggestionResult.monthlyTaskCount} times this month! Upgrade to a Business Account to unlock team access, expense reports & scheduled deliveries.`,
-            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            time: getCurrentTime(),
             status: "delivered",
             isBusinessSuggestion: true,
             onBusinessSuggestionAccept: () => setShowConversionFlow(true),
@@ -560,7 +564,7 @@ export default function PickupFlowScreen({
         id: Date.now(),
         from: "me",
         text: text.trim(),
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        time: getCurrentTime(),
         status: "sent",
       };
       setMessages((prev) => [...prev, newMsg]);
@@ -576,7 +580,7 @@ export default function PickupFlowScreen({
             id: Date.now() + 2,
             from: "them",
             text: validationError,
-            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            time: getCurrentTime(),
             status: "delivered",
           },
         ]);
@@ -615,7 +619,7 @@ export default function PickupFlowScreen({
       id: Date.now(),
       from: "me",
       text: msgText,
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+      time: getCurrentTime(),
       status: "sent",
     };
     setMessages((prev) => [...prev, newMsg]);
@@ -712,7 +716,7 @@ export default function PickupFlowScreen({
                   id: Date.now() + 2,
                   from: "them",
                   text: error,
-                  time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                  time: getCurrentTime(),
                   status: "delivered",
                 },
               ]);
@@ -731,7 +735,7 @@ export default function PickupFlowScreen({
               id: Date.now() + 2,
               from: "them",
               text: "What item(s) do you want to pick up?",
-              time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              time: getCurrentTime(),
               status: "delivered",
             },
           ]);
@@ -746,7 +750,7 @@ export default function PickupFlowScreen({
               id: Date.now() + 2,
               from: "them",
               text: "Please enter pick up phone number Use My Phone Number",
-              time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              time: getCurrentTime(),
               status: "delivered",
               hasUseMyNumberButton: true,
               phoneNumberType: "pickup",
@@ -776,7 +780,7 @@ export default function PickupFlowScreen({
               id: Date.now() + 2,
               from: "them",
               text: "Set your delivery location. Choose Delivery Location",
-              time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              time: getCurrentTime(),
               status: "delivered",
               hasChooseDeliveryButton: true,
               hasViewSavedLocations: true,
@@ -793,7 +797,7 @@ export default function PickupFlowScreen({
               id: Date.now() + 2,
               from: "them",
               text: "Kindly enter drop off phone number Use My Phone Number",
-              time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              time: getCurrentTime(),
               status: "delivered",
               hasUseMyNumberButton: true,
               phoneNumberType: "dropoff",
@@ -823,7 +827,7 @@ export default function PickupFlowScreen({
                 id: Date.now() + 2,
                 from: "them",
                 text: "Pickup phone and delivery phone cannot be the same. Kindly enter a valid delivery phone.",
-                time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                time: getCurrentTime(),
                 status: "delivered",
               },
             ]);
@@ -873,7 +877,7 @@ export default function PickupFlowScreen({
         id: Date.now(),
         from: "them",
         text: "Oops! Something went wrong. seems you aren't authenticated. Try logging out and logging in again",
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        time: getCurrentTime(),
         status: "delivered",
       };
 
@@ -990,7 +994,7 @@ export default function PickupFlowScreen({
 
   if (showMap) {
     return (
-      <Onboarding darkMode={darkMode} toggleDarkMode={toggleDarkMode} onMore={onMore}>
+      <Onboarding darkMode={darkMode} toggleDarkMode={toggleDarkMode}>
         <div className="w-full h-full flex flex-col mx-auto flex flex-col overflow-hidden max-w-2xl">
           <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 border-b">
             <Button
@@ -1077,7 +1081,7 @@ export default function PickupFlowScreen({
   }
 
   return (
-    <Onboarding darkMode={darkMode} toggleDarkMode={toggleDarkMode} onMore={onMore} showBack={showBack} onBack={onBack}>
+    <Onboarding darkMode={darkMode} toggleDarkMode={toggleDarkMode} onMore={onMore} showMore={showMore} showBack={showBack} onBack={onBack}>
       <div className="flex flex-col h-screen">
         <div className="flex-1 overflow-y-auto marketSelection" ref={listRef}>
           <div>

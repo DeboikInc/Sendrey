@@ -426,6 +426,8 @@ export const Welcome = () => {
             const response = await dispatch(fetchNearbyRunners({
                 latitude: userLocation.latitude,
                 longitude: userLocation.longitude,
+                deliveryLat: confirmOrderData?.deliveryCoordinates?.lat,
+                deliveryLng: confirmOrderData?.deliveryCoordinates?.lng,
                 serviceType,
                 fleetType,
             })).unwrap();
@@ -500,7 +502,8 @@ export const Welcome = () => {
                             navigateTo("market_selection"); // errand flow
                         }}
                         onMore={() => setShowMoreMenu(true)}
-                        showBack={true}
+                        showBack={false}
+                        showMore={true}
                         onBack={() => navigate('/auth')}
                     />
                 );
@@ -527,6 +530,7 @@ export const Welcome = () => {
                         toggleDarkMode={() => setDark(!dark)}
                         onMore={() => setShowMoreMenu(true)}
                         showBack={true}
+                        showMore={true}
                         onBack={() => navigateTo('service_selection')}
                     />
                 );
@@ -551,6 +555,7 @@ export const Welcome = () => {
                         toggleDarkMode={() => setDark(!dark)}
                         onMore={() => setShowMoreMenu(true)}
                         showBack={true}
+                        showMore={true}
                         onBack={() => navigateTo('service_selection')}
                     />
                 );
@@ -586,8 +591,9 @@ export const Welcome = () => {
                                 const response = await dispatch(fetchNearbyRunners({
                                     latitude: userLocation.latitude,
                                     longitude: userLocation.longitude,
-                                    // serviceType: orderData.serviceType,
-                                    fleetType: orderData.fleetType
+                                    fleetType: orderData.fleetType,
+                                    deliveryLat: confirmOrderData?.deliveryCoordinates?.lat,
+                                    deliveryLng: confirmOrderData?.deliveryCoordinates?.lng,
                                 })).unwrap();
                                 handleConnectToRunner(response);
                             } catch (error) {
@@ -600,6 +606,7 @@ export const Welcome = () => {
                         toggleDarkMode={() => setDark(!dark)}
                         onMore={() => setShowMoreMenu(true)}
                         showBack={true}
+                        showMore={true}
                         onBack={() => {
                             setMarketScreenMessages([]); // ← clear messages on back
                             setPickupLocation(null);
@@ -813,8 +820,9 @@ export const Welcome = () => {
                         const response = await dispatch(fetchNearbyRunners({
                             latitude: userLocation.latitude,
                             longitude: userLocation.longitude,
-                            // serviceType,
-                            fleetType
+                            fleetType,
+                            deliveryLat: confirmOrderData?.deliveryCoordinates?.lat,
+                            deliveryLng: confirmOrderData?.deliveryCoordinates?.lng,
                         })).unwrap();
                         setRunnerResponseData(response);
                     } catch (error) {
@@ -829,10 +837,11 @@ export const Welcome = () => {
                     const response = await dispatch(fetchNearbyRunners({
                         latitude: userLocation.latitude,
                         longitude: userLocation.longitude,
-                        // serviceType,
                         fleetType,
+                        deliveryLat: confirmOrderData?.deliveryCoordinates?.lat,
+                        deliveryLng: confirmOrderData?.deliveryCoordinates?.lng,
                         sortBy: 'rating',
-                    })).unwrap(); // ← unwrap() already throws on failure, so catch will fire
+                    })).unwrap();
 
                     setRunnerResponseData(prev => ({
                         ...prev,

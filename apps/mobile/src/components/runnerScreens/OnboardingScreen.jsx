@@ -18,6 +18,10 @@ const FLEET_OPTIONS = [
   { type: "bike", icon: FaMotorcycle, label: "Bike" },
 ];
 
+const getCurrentTime = () => {
+  return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+};
+
 function OnboardingScreen({
   initialMessages,
   onMessagesChange,
@@ -248,13 +252,14 @@ function OnboardingScreen({
     connectMessageSentRef.current = false;
     setMessagesAndSync(prev => [...prev, {
       id: Date.now(), from: "me", text: "Cancel",
-      time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), status: "sent",
+      time: getCurrentTime(),
+      status: "sent",
     }]);
     setTimeout(() => {
       setMessagesAndSync(prev => [...prev, {
         id: Date.now() + 100, from: "them",
         text: "Okay, let me know when you're ready to connect!",
-        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }), status: "delivered",
+        time: getCurrentTime(), status: "delivered",
       }]);
     }, 500);
   };

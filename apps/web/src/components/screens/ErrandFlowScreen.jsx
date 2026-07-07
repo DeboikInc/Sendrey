@@ -1,3 +1,4 @@
+/* global google */
 // components/screens/ErrandFlow.jsx
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Button } from "@material-tailwind/react";
@@ -14,8 +15,17 @@ import debounce from "lodash/debounce";
 import { getSuggestionStatus } from "../../Redux/businessSlice";
 import BusinessConversionFlow from "./BusinessConversionFlow";
 
+const getCurrentTime = () => {
+    return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+};
+
 const initialMessages = [
-    { id: 1, from: "them", text: "Which market would you like us to go to?", time: "12:25 PM", status: "delivered" },
+    {
+        id: 1, from: "them",
+        text: "Which market would you like us to go to?",
+        time: getCurrentTime(),
+        status: "delivered"
+    },
 ];
 
 export default function ErrandFlowScreen({
@@ -36,7 +46,7 @@ export default function ErrandFlowScreen({
     onEditComplete,
     onMore,
     onBack,
-    showBack
+    showBack, showMore
 }) {
     const [searchTerm, setSearchTerm] = useState("");
     const [showMap, setShowMap] = useState(false);
@@ -56,6 +66,7 @@ export default function ErrandFlowScreen({
     const [isSearching, setIsSearching] = useState(false);
     const [predictions, setPredictions] = useState([]);
     const [searchError, setSearchError] = useState(null);
+    const [showConversionFlow, setShowConversionFlow] = useState(false);
 
     const dispatch = useDispatch();
     const listRef = useRef(null);
@@ -65,12 +76,14 @@ export default function ErrandFlowScreen({
     const authState = useSelector(s => s.auth.user);
     const prevStepRef = useRef(null);
     const isSubmittingRef = useRef(false);
-
-    const [showConversionFlow, setShowConversionFlow] = useState(false);
+    const pendingDeliveryButtonIdRef = useRef(null);
 
     // location coordinates
     const marketCoordinatesRef = useRef(null);
     const deliveryCoordinatesRef = useRef(null);
+    const searchRequestIdRef = useRef(0);
+    const sessionTokenRef = useRef(null);
+    const usedButtonIdsRef = useRef(new Set());
 
     const currentUser = authState?.user ?? authState;
 
@@ -87,7 +100,14 @@ export default function ErrandFlowScreen({
         }
     }, [messages, showCustomInput, currentStep, predictions.length]);
 
-    const searchPlaces = useCallback((query, step) => {
+    const getSessionToken = () => {
+        if (!sessionTokenRef.current && window.google) {
+            sessionTokenRef.current = new window.google.maps.places.AutocompleteSessionToken();
+        }
+        return sessionTokenRef.current;
+    };
+
+    const searchPlaces = useCallback(async (query, step) => {
         if (!query || query.length < 2 || !window.google) {
             setPredictions([]);
             return;
@@ -99,52 +119,64 @@ export default function ErrandFlowScreen({
 
         setIsSearching(true);
         setSearchError(null);
+        const requestId = ++searchRequestIdRef.current;
 
-        const service = new window.google.maps.places.AutocompleteService();
-        service.getPlacePredictions(
-            {
+        try {
+            const { AutocompleteSuggestion } = await google.maps.importLibrary("places");
+
+            const { suggestions } = await AutocompleteSuggestion.fetchAutocompleteSuggestions({
                 input: query,
-                componentRestrictions: { country: 'ng' },
                 locationBias: {
-                    center: new window.google.maps.LatLng(6.5244, 3.3792),
                     radius: 50000,
+                    center: { lat: 6.5244, lng: 3.3792 },
                 },
-            },
-            (results, status) => {
-                if (status !== window.google.maps.places.PlacesServiceStatus.OK || !results) {
-                    setPredictions([]);
-                    setIsSearching(false);
-                    return;
-                }
-                setPredictions(results.map((p) => ({
-                    place_id: p.place_id,
-                    description: p.description,
+                includedRegionCodes: ['ng'],
+                includedPrimaryTypes: ['street_address', 'premise', 'subpremise', 'establishment'],
+                sessionToken: getSessionToken(),
+            });
+
+            if (requestId !== searchRequestIdRef.current) return;
+
+            const formattedPredictions = (suggestions || []).map((s) => {
+                const p = s.placePrediction;
+                return {
+                    place_id: p.placeId,
+                    description: p.text.text,
                     structured_formatting: {
-                        main_text: p.structured_formatting.main_text,
-                        secondary_text: p.structured_formatting.secondary_text,
+                        main_text: p.mainText?.text || p.text.text,
+                        secondary_text: p.secondaryText?.text || '',
                     },
-                    lat: null, // resolved on select via getDetails
-                    lng: null,
-                })));
-                setIsSearching(false);
-            }
-        );
+                    _placePrediction: p,
+                };
+            });
+
+            setPredictions(formattedPredictions);
+            setIsSearching(false);
+
+        } catch (error) {
+            if (requestId !== searchRequestIdRef.current) return;
+            console.error('AutocompleteSuggestion failed:', error);
+            setSearchError('Location search failed. Please try again.');
+            setPredictions([]);
+            setIsSearching(false);
+        }
     }, []);
 
-    // Fixed debounce using useCallback (like PickupFlow)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    const debouncedSearch = useCallback(
-        debounce(async (query, step) => {
-            // Only search during location steps
+    const searchPlacesRef = useRef(searchPlaces);
+    useEffect(() => {
+        searchPlacesRef.current = searchPlaces;
+    }, [searchPlaces]);
+
+    const debouncedSearch = useRef(
+        debounce((query, step) => {
             if (step !== "market-location" && step !== "delivery-location") {
                 setPredictions([]);
                 setIsSearching(false);
                 return;
             }
-            searchPlaces(query, step)
-        }, 400),
-        []
-    );
+            searchPlacesRef.current(query, step);
+        }, 400)
+    ).current;
 
     // budget parsing and formatting
     const parseBudgetInput = (text) => {
@@ -186,6 +218,7 @@ export default function ErrandFlowScreen({
             setSearchTerm("");
             setPredictions([]);
             setIsSearching(false);
+            sessionTokenRef.current = null;
             prevStepRef.current = currentStep;
         }
     }, [currentStep]);
@@ -202,7 +235,7 @@ export default function ErrandFlowScreen({
                         id: Date.now(),
                         from: "them",
                         text: "Which market would you like us to go to?",
-                        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                        time: getCurrentTime(),
                         status: "delivered"
                     }]);
                     break;
@@ -214,7 +247,7 @@ export default function ErrandFlowScreen({
                         id: Date.now(),
                         from: "them",
                         text: "What items do you need from the market?",
-                        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                        time: getCurrentTime(),
                         status: "delivered"
                     }]);
                     break;
@@ -226,7 +259,7 @@ export default function ErrandFlowScreen({
                         id: Date.now(),
                         from: "them",
                         text: "What's your total budget for these items?",
-                        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                        time: getCurrentTime(),
                         status: "delivered"
                     }]);
                     break;
@@ -238,7 +271,7 @@ export default function ErrandFlowScreen({
                         id: Date.now(),
                         from: "them",
                         text: "Set your delivery location. Choose Delivery Location",
-                        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                        time: getCurrentTime(),
                         status: "delivered",
                         hasChooseDeliveryButton: true,
                     }]);
@@ -296,11 +329,20 @@ export default function ErrandFlowScreen({
             setDeliveryLocation(locationText);
             deliveryLocationRef.current = locationText;
             send(locationText, "delivery");
+
+            // disable the button that opened this map
+            if (pendingDeliveryButtonIdRef.current) {
+                const usedId = pendingDeliveryButtonIdRef.current;
+                setMessages((prev) => prev.map((msg) =>
+                    msg.id === usedId ? { ...msg, hasChooseDeliveryButton: false } : msg
+                ));
+                usedButtonIdsRef.current.add(usedId);
+                pendingDeliveryButtonIdRef.current = null;
+            }
         }
 
         setShowSaveConfirm(false);
         setShowMap(false);
-        // Clear selected place after each map use
         setSelectedPlace(null);
         setPendingPlace(null);
         setSearchTerm("");
@@ -322,40 +364,75 @@ export default function ErrandFlowScreen({
         }
     };
 
+    const handleLocationResult = (result, prediction) => {
+        const { lat, lng, address, name } = result;
+        const locationText = prediction.description;
+
+        if (currentStep === "market-location") {
+            marketCoordinatesRef.current = { lat, lng };
+            send(locationText, "market-location");
+        } else if (currentStep === "delivery-location") {
+            deliveryCoordinatesRef.current = { lat, lng };
+            send(locationText, "delivery");
+        }
+
+        setSelectedPlace({ name, address, lat, lng });
+        setSearchTerm(name);
+        setPredictions([]);
+        isSubmittingRef.current = false;
+    };
+
+    const fallbackToGeocoder = (placeId, description, prediction) => {
+        const geocoder = new google.maps.Geocoder();
+        geocoder.geocode({ placeId: placeId }, (results, status) => {
+            if (status === 'OK' && results[0]) {
+                handleLocationResult({
+                    lat: results[0].geometry.location.lat(),
+                    lng: results[0].geometry.location.lng(),
+                    address: results[0].formatted_address || description,
+                    name: results[0].formatted_address || description,
+                }, prediction);
+            } else {
+                isSubmittingRef.current = false;
+                setShowCustomInput(true);
+                setSearchError('Could not find this location. Please try again.');
+            }
+        });
+    };
+
     const handleSuggestionSelect = (prediction) => {
         if (!window.google || isSubmittingRef.current) return;
+
+        if (!prediction.place_id || typeof prediction.place_id !== 'string') {
+            console.error('Invalid place_id:', prediction.place_id);
+            setSearchError('Invalid location. Please try again.');
+            setShowCustomInput(true);
+            isSubmittingRef.current = false;
+            return;
+        }
+
         isSubmittingRef.current = true;
         setShowCustomInput(false);
 
-        const service = new window.google.maps.places.PlacesService(
-            document.createElement('div')
-        );
-        service.getDetails(
-            { placeId: prediction.place_id, fields: ['geometry', 'formatted_address', 'name'] },
-            (result, status) => {
-                if (status !== window.google.maps.places.PlacesServiceStatus.OK) {
-                    isSubmittingRef.current = false;
-                    setShowCustomInput(true);
-                    return;
-                };
+        const place = prediction._placePrediction.toPlace();
 
-                const lat = result.geometry.location.lat();
-                const lng = result.geometry.location.lng();
-                const locationText = prediction.description;
-
-                if (currentStep === "market-location") {
-                    marketCoordinatesRef.current = { lat, lng };
-                    send(locationText, "market-location");
-                } else if (currentStep === "delivery-location") {
-                    deliveryCoordinatesRef.current = { lat, lng };
-                    send(locationText, "delivery");
-                }
-
-                setSelectedPlace({ name: result.name, address: result.formatted_address, lat, lng });
-                setSearchTerm(result.name);
-                setPredictions([]);
-            }
-        );
+        place.fetchFields({
+            fields: ['location', 'formattedAddress', 'displayName'],
+        })
+            .then((result) => {
+                sessionTokenRef.current = null;
+                handleLocationResult({
+                    lat: result.place.location.lat(),
+                    lng: result.place.location.lng(),
+                    address: result.place.formattedAddress || prediction.description,
+                    name: result.place.displayName || prediction.structured_formatting?.main_text || prediction.description,
+                }, prediction);
+            })
+            .catch((error) => {
+                sessionTokenRef.current = null;
+                console.error('Place fetch failed:', error);
+                fallbackToGeocoder(prediction.place_id, prediction.description, prediction);
+            });
     };
 
     const handleSearchAction = async () => {
@@ -434,7 +511,7 @@ export default function ErrandFlowScreen({
                         id: Date.now() + 10,
                         from: "them",
                         text: `🚀 You've used Sendrey ${suggestionResult.monthlyTaskCount} times this month! Upgrade to a Business Account to unlock team access, expense reports & scheduled deliveries.`,
-                        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                        time: getCurrentTime(),
                         status: "delivered",
                         isBusinessSuggestion: true,
                         onBusinessSuggestionAccept: () => setShowConversionFlow(true),
@@ -498,7 +575,7 @@ export default function ErrandFlowScreen({
                 id: Date.now(),
                 from: "me",
                 text: text.trim(),
-                time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                time: getCurrentTime(),
                 status: "sent",
             };
             setMessages((prev) => [...prev, newMsg]);
@@ -514,7 +591,7 @@ export default function ErrandFlowScreen({
                         id: Date.now() + 2,
                         from: "them",
                         text: validationError,
-                        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                        time: getCurrentTime(),
                         status: "delivered",
                     },
                 ]);
@@ -548,7 +625,7 @@ export default function ErrandFlowScreen({
             id: Date.now(),
             from: "me",
             text: msgText,
-            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            time: getCurrentTime(),
             status: "sent",
         };
 
@@ -605,7 +682,7 @@ export default function ErrandFlowScreen({
                         id: Date.now() + 2,
                         from: "them",
                         text: "What items do you need from the market?",
-                        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                        time: getCurrentTime(),
                         status: "delivered",
                     }]);
                     setCurrentStep("market-items");
@@ -618,7 +695,7 @@ export default function ErrandFlowScreen({
                         id: Date.now() + 2,
                         from: "them",
                         text: "What's your total budget for these items?",
-                        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                        time: getCurrentTime(),
                         status: "delivered",
                     }]);
                     setCurrentStep("market-budget");
@@ -639,7 +716,7 @@ export default function ErrandFlowScreen({
                                 id: Date.now() + 2,
                                 from: "them",
                                 text: confirmText,
-                                time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                                time: getCurrentTime(),
                                 status: "delivered",
                                 hasBudgetConfirmButtons: true,
                                 confirmedBudget: parsedBudget,
@@ -651,7 +728,7 @@ export default function ErrandFlowScreen({
                                 id: Date.now() + 2,
                                 from: "them",
                                 text: `Should the runner stay strictly within ${formatBudgetDisplay(parsedBudget)}, or can they adjust slightly if needed?`,
-                                time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                                time: getCurrentTime(),
                                 status: "delivered",
                                 hasBudgetFlexibilityButtons: true,
                             }]);
@@ -667,7 +744,7 @@ export default function ErrandFlowScreen({
                         id: Date.now() + 2,
                         from: "them",
                         text: "Set your delivery location. Choose Delivery Location",
-                        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                        time: getCurrentTime(),
                         status: "delivered",
                         hasChooseDeliveryButton: true,
                     }]);
@@ -698,31 +775,46 @@ export default function ErrandFlowScreen({
         }, 1200);
     };
 
-    const handleChooseDeliveryClick = () => {
-        setSelectedPlace(null); // Clear before opening map
+    const handleChooseDeliveryClick = (messageId) => {
+        pendingDeliveryButtonIdRef.current = messageId;
+        setSelectedPlace(null);
         setShowMap(true);
         setShowLocationButtons(true);
     };
 
-    const handleBudgetFlexibility = (choice) => {
+    const handleBudgetFlexibility = (messageId, choice) => {
+        if (usedButtonIdsRef.current.has(messageId)) return;
+        usedButtonIdsRef.current.add(messageId);
+
+        setMessages((prev) => prev.map((msg) =>
+            msg.id === messageId ? { ...msg, hasBudgetFlexibilityButtons: false } : msg
+        ));
+
         send(choice, "budget-flexibility");
     };
 
 
-    const handleBudgetConfirm = (confirmed, confirmedBudget) => {
+    const handleBudgetConfirm = (messageId, confirmed, confirmedBudget) => {
+        if (usedButtonIdsRef.current.has(messageId)) return;
+        usedButtonIdsRef.current.add(messageId);
+
+        setMessages((prev) => prev.map((msg) =>
+            msg.id === messageId ? { ...msg, hasBudgetConfirmButtons: false } : msg
+        ));
+
         if (confirmed) {
             setMessages(prev => [...prev, {
                 id: Date.now(),
                 from: "me",
                 text: "Yes, that's correct",
-                time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                time: getCurrentTime(),
                 status: "sent",
             }]);
             setMessages(prev => [...prev, {
                 id: Date.now() + 1,
                 from: "them",
                 text: `Should the runner stay strictly within ${formatBudgetDisplay(confirmedBudget)}, or can they adjust slightly if needed?`,
-                time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                time: getCurrentTime(),
                 status: "delivered",
                 hasBudgetFlexibilityButtons: true,
             }]);
@@ -732,14 +824,14 @@ export default function ErrandFlowScreen({
                 id: Date.now(),
                 from: "me",
                 text: "No, let me re-enter",
-                time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                time: getCurrentTime(),
                 status: "sent",
             }]);
             setMessages(prev => [...prev, {
                 id: Date.now() + 1,
                 from: "them",
                 text: "What's your total budget for these items?",
-                time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                time: getCurrentTime(),
                 status: "delivered",
             }]);
             setCurrentStep("market-budget");
@@ -758,7 +850,8 @@ export default function ErrandFlowScreen({
                             onClick={() => {
                                 setShowMap(false);
                                 setShowLocationButtons(true);
-                                setSelectedPlace(null); // Clear on close
+                                setSelectedPlace(null);
+                                pendingDeliveryButtonIdRef.current = null;
                             }}
                             className="flex items-center"
                         >
@@ -836,7 +929,7 @@ export default function ErrandFlowScreen({
     }
 
     return (
-        <Onboarding darkMode={darkMode} toggleDarkMode={toggleDarkMode} onMore={onMore} showBack={showBack} onBack={onBack}>
+        <Onboarding darkMode={darkMode} toggleDarkMode={toggleDarkMode} showMore={showMore} onMore={onMore} showBack={showBack} onBack={onBack}>
             <div className="flex flex-col h-screen">
                 <div className="flex-1 overflow-y-auto marketSelection" ref={listRef}>
                     <div>
@@ -847,14 +940,23 @@ export default function ErrandFlowScreen({
                                         m={m}
                                         showCursor={false}
                                         showStatusIcons={false}
-                                        onChooseDeliveryClick={m.hasChooseDeliveryButton ? handleChooseDeliveryClick : undefined}
-                                        onBudgetFlexibilityClick={m.hasBudgetFlexibilityButtons ? handleBudgetFlexibility : undefined}
-                                        onBudgetConfirmClick={m.hasBudgetConfirmButtons ? handleBudgetConfirm : undefined}
-                                        onViewSavedLocations={m.hasViewSavedLocations ? () => onOpenSavedLocations(
-                                            true,
-                                            handleLocationSelectedFromSaved,
-                                            () => setShowLocationButtons(true)
-                                        ) : undefined}
+                                        onChooseDeliveryClick={m.hasChooseDeliveryButton ? () => handleChooseDeliveryClick(m.id) : undefined}
+                                        onBudgetFlexibilityClick={m.hasBudgetFlexibilityButtons ? (choice) => handleBudgetFlexibility(m.id, choice) : undefined}
+                                        onBudgetConfirmClick={m.hasBudgetConfirmButtons ? (confirmed, confirmedBudget) => handleBudgetConfirm(m.id, confirmed, confirmedBudget) : undefined}
+                                        onViewSavedLocations={m.hasViewSavedLocations ? () => {
+                                            if (usedButtonIdsRef.current.has(m.id)) return;
+                                            usedButtonIdsRef.current.add(m.id);
+
+                                            setMessages((prev) => prev.map((msg) =>
+                                                msg.id === m.id ? { ...msg, hasViewSavedLocations: false } : msg
+                                            ));
+
+                                            onOpenSavedLocations(
+                                                true,
+                                                handleLocationSelectedFromSaved,
+                                                () => setShowLocationButtons(true)
+                                            );
+                                        } : undefined}
                                     />
                                 </p>
                             ))}

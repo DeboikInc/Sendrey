@@ -15,6 +15,7 @@ import DisputeRaisedMessage from './DisputeRaisedMessage';
 import DisputeResolvedMessage from './DisputeResolvedMessage';
 
 import RatingSubmittedMessage from './RatingSubmittedMessage';
+import TimeDate from "./TimeDate";
 
 export default function Message({
   m,
@@ -39,7 +40,7 @@ export default function Message({
   alwaysAllowEdit = false,
   showDelete,
   showReply,
-
+  showRelativeTime=false,
   onApproveItems,
   onRejectItems,
   onConfirmDelivery,
@@ -447,7 +448,11 @@ export default function Message({
               </span>
             </div>
           </div>
-          <span className="text-gray-800 dark:text-gray-400 text-xs font-medium">{m.time}</span>
+          <TimeDate
+            timestamp={m.time}
+            format={showRelativeTime ? "relative" : "absolute"}
+            className="text-gray-800 dark:text-gray-400 text-xs font-medium"
+          />
         </div>
       </motion.div>
     );
@@ -635,38 +640,41 @@ export default function Message({
       );
     }
 
-    if (m.hasChooseDeliveryButton) {
+    if (m.text?.includes("Choose Delivery Location")) {
       const lastIndex = m.text.lastIndexOf('Choose Delivery Location');
       const beforeText = m.text.substring(0, lastIndex);
       const afterText = m.text.substring(lastIndex + 'Choose Delivery Location'.length);
+
       return (
         <div>
           {beforeText}
-          <div className="mt-3">
-            <Button
-              className="w-full bg-primary text-white"
-              onClick={(e) => {
-                e.stopPropagation();
-                onChooseDeliveryClick && onChooseDeliveryClick();
-              }}
-            >
-              Choose Delivery Location
-            </Button>
-          </div>
+          {m.hasChooseDeliveryButton && (
+            <div className="mt-3">
+              <Button
+                className="w-full bg-primary text-white"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onChooseDeliveryClick && onChooseDeliveryClick();
+                }}
+              >
+                Choose Delivery Location
+              </Button>
+            </div>
+          )}
           {afterText}
         </div>
       );
     }
 
-    if (m.hasUseMyNumberButton && onUseMyNumberClick) {
+    if (m.text?.includes("Use My Phone Number")) {
       const useMyNumberText = "Use My Phone Number";
       const index = m.text.indexOf(useMyNumberText);
+      const beforeText = index !== -1 ? m.text.substring(0, index) : m.text;
 
-      if (index !== -1) {
-        const beforeText = m.text.substring(0, index);
-        return (
-          <div>
-            {beforeText}
+      return (
+        <div>
+          {beforeText}
+          {m.hasUseMyNumberButton && onUseMyNumberClick && (
             <div className="mt-3">
               <Button
                 className={`w-full text-white ${m.disableUseMyNumber
@@ -682,25 +690,7 @@ export default function Message({
                 Use My Phone Number
               </Button>
             </div>
-          </div>
-        );
-      }
-
-      return (
-        <div>
-          {m.text}
-          <div className="mt-3">
-            <Button
-              className={`w-full bg-primary text-white ${m.disableUseMyNumber ? 'opacity-40 bg-gray-500 cursor-not-allowed' : 'cursor-pointer'}`}
-              disabled={m.disableUseMyNumber}
-              onClick={(e) => {
-                e.stopPropagation();
-                onUseMyNumberClick && onUseMyNumberClick();
-              }}
-            >
-              Use My Phone Number
-            </Button>
-          </div>
+          )}
         </div>
       );
     }

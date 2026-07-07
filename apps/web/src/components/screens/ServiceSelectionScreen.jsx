@@ -3,13 +3,17 @@ import Onboarding from "../common/Onboarding";
 import { useEffect, useRef, useState } from "react";
 import Message from "../common/Message";
 
+const getCurrentTime = () => {
+  return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+};
+
 const initialMessages = [
-  { id: 1, from: "them", text: "Welcome!", time: "12:24 PM", status: "read" },
+  { id: 1, from: "them", text: "Welcome!", time: getCurrentTime(), status: "read" },
   {
     id: 2,
     from: "them",
     text: "Would you like to schedule a Pick Up (e.g pick up an item, document somewhere) or Run an Errand?(e.g get something from a market)",
-    time: "12:25 PM",
+    time: getCurrentTime(),
     status: "delivered",
   }
 ];
@@ -22,7 +26,7 @@ export default function ServiceSelectionScreen({
   onNavigateToPickup,
   onNavigateToErrand,
   onMore,
-  showBack,
+  showBack, showMore,
   onBack
 }) {
 
@@ -86,11 +90,11 @@ export default function ServiceSelectionScreen({
   };
 
   return (
-    <Onboarding darkMode={darkMode} toggleDarkMode={toggleDarkMode} onMore={onMore} showBack={showBack} onBack={onBack}>
+    <Onboarding darkMode={darkMode} toggleDarkMode={toggleDarkMode} showMore={showMore} onMore={onMore} showBack={showBack} onBack={onBack}>
       <div className="w-full max-w-2xl mx-auto p-4 relative">
         {messages.map((m) => (
           <Message key={m.id} m={m}
-          showStatusIcons={false}
+            showStatusIcons={false}
             showCursor={false}
             disableContextMenu={true}
           />
