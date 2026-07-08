@@ -4,3 +4,4 @@ dist
 android
 ios
 # pnpm-lock.yaml
+docker-compose.yml
