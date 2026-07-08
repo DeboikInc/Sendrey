@@ -5,3 +5,5 @@ node_modules
 
 logs
 config/serviceAccountCredential.json
+
+docker-compose.yml
