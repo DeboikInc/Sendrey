@@ -492,7 +492,7 @@ export default function OnboardingScreen({
   return (
     <Onboarding darkMode={darkMode} toggleDarkMode={toggleDarkMode} showBack={showBack} onBack={onBack}>
       <div className="w-full h-full flex flex-col overflow-hidden max-w-2xl mx-auto">
-        <div ref={listRef} className="flex-1 overflow-y-auto p-4 pb-4">
+        <div ref={listRef} className="flex-1 overflow-y-auto p-4 pb-4 scrollbar-hide scroll-smooth">
           {messages.map((m) => (
             <Message
               key={m.id}
@@ -506,10 +506,8 @@ export default function OnboardingScreen({
           ))}
         </div>
 
-        <div className="h-3"></div>
-
         {!shouldBlockInput && !isVerifyingOtp && (
-          <div className="py-10 px-3 placeholder:text-sm">
+          <div className="py-3 px-3 placeholder:text-sm">
             {hasReturningPrompt ? (
               <div className="grid grid-cols-2 gap-3">
                 <Button
