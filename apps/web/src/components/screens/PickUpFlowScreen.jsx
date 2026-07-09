@@ -34,7 +34,7 @@ export default function PickupFlowScreen({
   currentOrder,
   onEditComplete,
   onMore,
-  showBack,showMore,
+  showBack, showMore,
   onBack
 }) {
   const [searchTerm, setSearchTerm] = useState("");
@@ -995,8 +995,8 @@ export default function PickupFlowScreen({
   if (showMap) {
     return (
       <Onboarding darkMode={darkMode} toggleDarkMode={toggleDarkMode}>
-        <div className="w-full h-full flex flex-col mx-auto flex flex-col overflow-hidden max-w-2xl">
-          <div className="flex items-center justify-between p-4 bg-white dark:bg-gray-800 border-b">
+        <div className="w-full h-full mx-auto flex flex-col overflow-hidden max-w-2xl">
+          <div className="flex items-center justify-between p-4 bg-inherit">
             <Button
               variant="text"
               onClick={() => {
