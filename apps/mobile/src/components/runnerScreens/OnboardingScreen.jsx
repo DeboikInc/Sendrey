@@ -294,7 +294,7 @@ function OnboardingScreen({
         </div>
 
         {/* Messages */}
-        <div ref={listRef} className="flex-1 min-h-0 overflow-y-auto px-3 sm:px-6 py-4 bg-chat-pattern bg-gray-100 dark:bg-black-200">
+        <div ref={listRef} className="flex-1 min-h-0 overflow-y-auto px-3 sm:px-6 py-4 bg-chat-pattern bg-gray-100 dark:bg-black-200 scrollbar-hide scroll-smooth">
           <div className="mx-auto max-w-3xl">
             {messages.map((m) => (
               <Message
