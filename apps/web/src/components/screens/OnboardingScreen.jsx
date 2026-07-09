@@ -106,7 +106,7 @@ export default function OnboardingScreen({
     setMessages(prev => [...prev, {
       id: Date.now(),
       from: "them",
-      text: `Welcome back ${returningUserName || ''}! I'm glad to have you back onboard.`,
+      text: `Welcome back ${returningUserName || ''}! I'm glad to have you onboard.`,
       time: getCurrentTime(),
       status: "delivered",
     }]);
