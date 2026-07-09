@@ -9,13 +9,6 @@
   font-style: normal;
 }
 
-
-/* .bg-chat-pattern {
-  background-image: radial-gradient(circle at 1px 1px, rgba(255, 255, 255, 0.05) 1px, transparent 0);
-  background-size: 24px 24px;
-} */
-
-
 /* forces the Google Maps Autocomplete dropdown to become a "drop-up" */
 .pac-container {
   position: fixed !important;
@@ -121,4 +114,49 @@ html {
 
 .highlight-message {
   animation: highlight 2s ease-in-out;
+}
+
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
+
+.scrollbar-auto-on-hover {
+  scrollbar-gutter: stable;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.scrollbar-auto-on-hover::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.scrollbar-auto-on-hover::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.scrollbar-auto-on-hover::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 999px;
+}
+
+.scrollbar-auto-on-hover:hover {
+  scrollbar-color: #2a2a2a #0f0f0f;
+}
+
+.scrollbar-auto-on-hover:hover::-webkit-scrollbar-track {
+  background: #0f0f0f;
+}
+
+.scrollbar-auto-on-hover:hover::-webkit-scrollbar-thumb {
+  background: #2a2a2a;
+}
+
+.scrollbar-auto-on-hover:hover::-webkit-scrollbar-thumb:hover {
+  background: #3a3a3a;
 }
