@@ -49,11 +49,4 @@ module.exports = {
       fromNumber: process.env.TWILIO_FROM_NUMBER
     }
   },
-
-  cors: {
-    origin: process.env.ALLOWED_ORIGINS?.split(',') || '*',
-    credentials: true,
-    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization', 'X-API-Key']
-  }
 };
