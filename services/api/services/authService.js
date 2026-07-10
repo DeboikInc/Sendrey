@@ -105,6 +105,7 @@ class AuthService {
     return {
       exists: true,
       firstName: user.firstName,
+      fleetType: user.fleetType,
       kycStatus: userType === 'runner' ? {
         isVerified: user.isVerified,
         isEmailVerified: user.isEmailVerified,
