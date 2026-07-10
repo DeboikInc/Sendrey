@@ -9,7 +9,7 @@ import {
 import { authStorage } from '../utils/authStorage';
 import { persistReturningKycStatus } from '../utils/returningUserKycUtils';
 
-// ─── Geolocation config ───────────────────────────────────────────────────────
+// ─── Geolocation config 
 const GEO_OPTIONS = {
   enableHighAccuracy: false,
   timeout: 15000,
@@ -25,48 +25,48 @@ const CREDENTIAL_QUESTIONS = [
 ];
 
 
-// ─── Greeting builder ─────────────────────────────────────────────────────────
-// Kept outside the hook so it's pure and testable.
-// All branch logic lives here — the catch block just calls it.
-
-const buildReturningUserGreeting = (name, kycStatus = {}) => {
+// Greeting builder
+const buildReturningUserGreeting = (name, kycStatus = {}, fleetType = '') => {
   const {
     isVerified,
-    ninStatus,
-    driverLicenseStatus,
-    selfieVerified,
+    overallVerified,
+    ninStatus = 'not_submitted',
+    driverLicenseStatus = 'not_submitted',
+    selfieVerified = false,
   } = kycStatus;
 
-  const ninVerified = ninStatus === 'verified';
-  const licenseVerified = driverLicenseStatus === 'verified';
-  const ninPending = ['pending', 'pending_review'].includes(ninStatus);
-  const licensePending = ['pending', 'pending_review'].includes(driverLicenseStatus);
-  const ninSubmitted = ninStatus !== 'not_submitted';
-  const licenseSubmitted = driverLicenseStatus !== 'not_submitted';
-
-  const idVerified = ninVerified || licenseVerified;
-  const idPending = !idVerified && (ninPending || licensePending);
-  const idSubmitted = ninSubmitted || licenseSubmitted;
-
-  // Which specific ID is still missing (for the "one submitted" case)
-  const missingId = ninSubmitted && !licenseSubmitted ? "driver's license"
-    : licenseSubmitted && !ninSubmitted ? 'NIN'
-      : null;
-
-  console.log('missing id', missingId);
-
-  // OTP??
   if (!isVerified) {
     return `Hi ${name}, looks like you started signing up before! Would you like to continue where you left off?`;
   }
 
-  if (idVerified && selfieVerified) {
-    return `Hi ${name}, would you like to continue as ${name}?`;
+  const isPedestrian = fleetType?.toLowerCase() === 'pedestrian';
+
+  // Pedestrians only need one of nin/license verified. Everyone else needs both.
+  const idComplete = isPedestrian
+    ? (ninStatus === 'verified' || driverLicenseStatus === 'verified')
+    : (ninStatus === 'verified' && driverLicenseStatus === 'verified');
+
+  const fullyVerified = overallVerified || (idComplete && selfieVerified);
+
+  if (fullyVerified && selfieVerified) {
+    return `Hi ${name}, welcome back! would you like to continue as ${name}?`;
   }
 
-  if (idVerified && !selfieVerified) {
+  if (idComplete && !selfieVerified) {
     return `Hi ${name}, welcome back! You just need to take your selfie to unlock orders. Continue as ${name}?`;
   }
+
+  const ninSubmitted = ninStatus !== 'not_submitted';
+  const licenseSubmitted = driverLicenseStatus !== 'not_submitted';
+  const ninPending = ['pending', 'pending_review'].includes(ninStatus);
+  const licensePending = ['pending', 'pending_review'].includes(driverLicenseStatus);
+  const idPending = ninPending || licensePending;
+  const idSubmitted = ninSubmitted || licenseSubmitted;
+
+
+  const missingId = !isPedestrian && ninSubmitted && !licenseSubmitted ? "driver's license"
+    : !isPedestrian && licenseSubmitted && !ninSubmitted ? 'NIN'
+      : null;
 
   if (idPending) {
     return `Hi ${name}, welcome back! Your ID is still being reviewed. Continue as ${name}?`;
@@ -76,7 +76,6 @@ const buildReturningUserGreeting = (name, kycStatus = {}) => {
     return `Hi ${name}, welcome back! You still need to upload your ${missingId}. Continue as ${name}?`;
   }
 
-  // Neither ID submitted at all
   return `Hi ${name}, welcome back! You still need to upload your ID to start taking orders. Continue as ${name}?`;
 };
 
@@ -399,7 +398,7 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
       return;
     }
 
-    
+
     try {
       const checkResult = await dispatch(checkExistingUser({
         email: updatedRunnerData.email,
@@ -419,7 +418,7 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
         setIsCollectingCredentials(false);
         setCredentialStep(null);
 
-        const greetingText = buildReturningUserGreeting(checkResult.firstName, checkResult.kycStatus);
+        const greetingText = buildReturningUserGreeting(checkResult.firstName, checkResult.kycStatus, checkResult.fleetType || updatedRunnerData.fleetType);
         setMessages(prev => [...prev, {
           id: Date.now(),
           from: "them",
@@ -498,7 +497,8 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
         if (isExisting) {
           const serverName = err?.data?.userName || err?.userName || updatedRunnerData.name.trim().split(" ")[0];
           const kycStatus = err?.data?.kycStatus || err?.kycStatus || {};
-          const greetingText = buildReturningUserGreeting(serverName, kycStatus);
+          const fleetType = err?.data?.fleetType || err?.fleetType || {};
+          const greetingText = buildReturningUserGreeting(serverName, kycStatus, fleetType || updatedRunnerData.fleetType);
 
           setReturningUserData({
             ...updatedRunnerData,
