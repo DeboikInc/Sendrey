@@ -46,7 +46,7 @@ export default function ErrandFlowScreen({
   onEditComplete,
   onMore,
   onBack,
-  showBack, showMore
+  showBack, showMore,
 }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [showMap, setShowMap] = useState(false);
@@ -67,6 +67,10 @@ export default function ErrandFlowScreen({
   const [predictions, setPredictions] = useState([]);
   const [searchError, setSearchError] = useState(null);
   const [showConversionFlow, setShowConversionFlow] = useState(false);
+
+  const [showPhoneInput, setShowPhoneInput] = useState(false);
+  const [phoneNumberInput, setPhoneNumberInput] = useState("");
+  const [deliveryPhoneNumber, setDeliveryPhoneNumber] = useState("");
 
   const dispatch = useDispatch();
   const listRef = useRef(null);
@@ -275,6 +279,23 @@ export default function ErrandFlowScreen({
             status: "delivered",
             hasChooseDeliveryButton: true,
           }]);
+          break;
+        case "delivery-phone":
+          setCurrentStep("delivery-phone");
+          setShowPhoneInput(true);
+          setShowCustomInput(false);
+          setShowLocationButtons(false);
+          setMessages([
+            {
+              id: Date.now(),
+              from: "them",
+              text: "Kindly enter delivery phone number Use My Phone Number",
+              time: getCurrentTime(),
+              status: "delivered",
+              // hasUseMyNumberButton: true,
+              phoneNumberType: "delivery",
+            }
+          ]);
           break;
         default:
           break;
@@ -561,6 +582,13 @@ export default function ErrandFlowScreen({
       return null;
     }
 
+    if (source === "delivery-phone") {
+      const phonePattern = /^(\+?[\d\s\-()+]{7,15})$/;
+      if (!phonePattern.test(trimmed))
+        return "Invalid answer. Input must be a valid phone number.";
+      return null;
+    }
+
     return null;
   };
 
@@ -602,6 +630,22 @@ export default function ErrandFlowScreen({
           setShowLocationButtons(true);
         } else if (source === "market-items" || source === "market-budget") {
           setShowCustomInput(true);
+        }
+
+        if (editingField === "delivery-phone" && source === "delivery-phone") {
+          let formattedNumber = text;
+          if (text.startsWith('+234')) {
+            // Remove accidental 0 after country code
+            formattedNumber = text.replace(/^\+2340/, '+234');
+          } else if (!text.startsWith('+234') && text.replace(/\D/g, '').length === 11) {
+            formattedNumber = `+234${text.substring(1)}`;
+          }
+          const updatedData = {
+            ...currentOrder,
+            deliveryPhone: formattedNumber
+          };
+          onEditComplete(updatedData);
+          return;
         }
       }, 1200);
 
@@ -669,6 +713,17 @@ export default function ErrandFlowScreen({
             deliveryLocation: msgText,
             deliveryCoordinates: deliveryCoordinatesRef.current
           });
+          return;
+        }
+
+        if (editingField === "delivery-phone" && source === "delivery-phone") {
+          let formattedNumber = text;
+          if (text.startsWith('+234')) {
+            formattedNumber = text.replace(/^\+2340/, '+234');
+          } else if (!text.startsWith('+234') && text.replace(/\D/g, '').length === 11) {
+            formattedNumber = `+234${text.substring(1)}`;
+          }
+          onEditComplete({ ...currentOrder, deliveryPhone: formattedNumber });
           return;
         }
       }
@@ -752,13 +807,36 @@ export default function ErrandFlowScreen({
           setTimeout(() => setShowLocationButtons(true), 200);
           setShowCustomInput(true);
 
-        } else if (source === "delivery") {
+        } else if (source === "delivery" && !deliveryPhoneNumber) {
           setDeliveryLocation(msgText);
+
+          setMessages(prev => [...prev, {
+            id: Date.now() + 2,
+            from: "them",
+            text: "Kindly enter delivery phone number Use My Phone Number",
+            time: getCurrentTime(),
+            status: "delivered",
+            hasUseMyNumberButton: true,
+            phoneNumberType: "delivery",
+          }]);
+          setCurrentStep("delivery-phone");
+          setShowCustomInput(false);
+          setShowPhoneInput(true);
+
+        } else if (source === "delivery-phone") {
+          let formattedNumber = text;
+          if (text.startsWith('+234')) {
+            formattedNumber = text.replace(/^\+2340/, '+234');
+          } else if (!text.startsWith('+234') && text.replace(/\D/g, '').length === 11) {
+            formattedNumber = `+234${text.substring(1)}`;
+          }
+          setDeliveryPhoneNumber(formattedNumber);
 
           onSelectErrand({
             serviceType: "run-errand",
             marketLocation: pickupLocationRef.current,
-            deliveryLocation: msgText,
+            deliveryLocation: deliveryLocationRef.current,
+            deliveryPhone: formattedNumber,
             marketItems,
             budget,
             canAdjustSlightly: budgetFlexibility === "can adjust slightly",
@@ -768,7 +846,7 @@ export default function ErrandFlowScreen({
             deliveryCoordinates: deliveryCoordinatesRef.current
           });
 
-          // call business status
+
           checkAndShowSuggestion();
         }
       }
@@ -780,6 +858,29 @@ export default function ErrandFlowScreen({
     setSelectedPlace(null);
     setShowMap(true);
     setShowLocationButtons(true);
+  };
+
+  const handleUseMyNumber = (messageId) => {
+    if (usedButtonIdsRef.current.has(messageId)) return;
+    usedButtonIdsRef.current.add(messageId);
+    const myNumber = currentUser?.phone || currentUser?.user?.phone;
+
+    if (!myNumber) {
+      setMessages((prev) => [...prev, {
+        id: Date.now(),
+        from: "them",
+        text: "Oops! Something went wrong. Seems you aren't authenticated. Try logging out and logging in again",
+        time: getCurrentTime(),
+        status: "delivered",
+      }]);
+      return;
+    }
+
+    setMessages((prev) => prev.map((msg) =>
+      msg.id === messageId ? { ...msg, hasUseMyNumberButton: false } : msg
+    ));
+
+    send(myNumber, "delivery-phone");
   };
 
   const handleBudgetFlexibility = (messageId, choice) => {
@@ -842,9 +943,9 @@ export default function ErrandFlowScreen({
 
   if (showMap) {
     return (
-      <Onboarding darkMode={darkMode} toggleDarkMode={toggleDarkMode} onMore={onMore}>
+      <Onboarding darkMode={darkMode} toggleDarkMode={toggleDarkMode}>
         <div className="w-full h-full flex flex-col mx-auto overflow-hidden max-w-2xl">
-          <div className="flex items-center justify-between p-4 bg-inherit">
+          <div className="flex items-center justify-between p-4 bg-inherit border-b">
             <Button
               variant="text"
               onClick={() => {
@@ -941,6 +1042,7 @@ export default function ErrandFlowScreen({
                     showCursor={false}
                     showStatusIcons={false}
                     onChooseDeliveryClick={m.hasChooseDeliveryButton ? () => handleChooseDeliveryClick(m.id) : undefined}
+                    onUseMyNumberClick={m.hasUseMyNumberButton ? () => handleUseMyNumber(m.id) : undefined}
                     onBudgetFlexibilityClick={m.hasBudgetFlexibilityButtons ? (choice) => handleBudgetFlexibility(m.id, choice) : undefined}
                     onBudgetConfirmClick={m.hasBudgetConfirmButtons ? (confirmed, confirmedBudget) => handleBudgetConfirm(m.id, confirmed, confirmedBudget) : undefined}
                     onViewSavedLocations={m.hasViewSavedLocations ? () => {
@@ -1002,7 +1104,7 @@ export default function ErrandFlowScreen({
         </div>
 
         <div className="sticky bottom-0 w-full px-4 sm:px-8 lg:px-28 py-3 bg-gray-100 dark:bg-black-200 z-10">
-          {showCustomInput && (
+          {showCustomInput && !showPhoneInput && (
             <div className="w-full mx-auto relative">
               <CustomInput
                 countryRestriction="us"
@@ -1051,6 +1153,24 @@ export default function ErrandFlowScreen({
                   {searchError}
                 </div>
               )}
+            </div>
+          )}
+
+          {showPhoneInput && (
+            <div className="w-full mx-auto relative">
+              <CustomInput
+                value={phoneNumberInput}
+                onChange={(e) => setPhoneNumberInput(e.target.value)}
+                placeholder="Enter phone number"
+                showMic={false}
+                showIcons={false}
+                send={() => {
+                  if (phoneNumberInput.trim()) {
+                    send(phoneNumberInput, "delivery-phone");
+                    setPhoneNumberInput("");
+                  }
+                }}
+              />
             </div>
           )}
         </div>

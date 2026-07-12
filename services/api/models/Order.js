@@ -70,8 +70,8 @@ const orderSchema = new mongoose.Schema({
   },
 
   // ── Locations 
-  pickupLocation: { address: String, contactName: String, contactPhone: String },
-  deliveryLocation: { address: String, contactName: String, contactPhone: String },
+  pickupLocation: { address: String, contactName: String, pickupPhone: String },
+  deliveryLocation: { address: String, contactName: String, deliveryPhone: String },
   marketLocation: { address: String },
 
   marketCoordinates: { type: coordinatesSchema, default: () => ({}) },
