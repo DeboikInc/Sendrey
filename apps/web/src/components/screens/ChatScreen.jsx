@@ -37,6 +37,7 @@ import TeamNotifyPrompt from './TeamNotifyPrompt'
 import Settings from "../../pages/user/settings/Settings";
 import DisputeForm from '../common/DisputeForm';
 import RatingModal from '../common/RatingModal';
+import RunnerContactInformation from './RunnerContactInformation'
 
 import { checkCanRate } from '../../Redux/ratingSlice';
 import OrderDetailsSheet from '../common/OrderDetailsSheet';
@@ -82,6 +83,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
   const [showSettings, setShowSettings] = useState(false);
   const [showDisputeForm, setShowDisputeForm] = useState(false);
   const [showRatingModal, setShowRatingModal] = useState(false);
+  const [showRunnerContactInfo, setShowRunnerContactInfo] = useState(false);
   const [localIsPaid, setLocalIsPaid] = useState(false);
 
   const [cancelledByName, setCancelledByName] = useState(null);
@@ -1920,6 +1922,15 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
         />
       )}
 
+      {showRunnerContactInfo && (
+        <RunnerContactInformation 
+          isOpen={showRunnerContactInfo}
+          runnerPhone={runner?.phone}
+          onClose={() => setShowRunnerContactInfo(false)}
+          darkMode={darkMode}
+        />
+      )}
+
       {showWallet && (
         <div className="fixed inset-0 z-50">
           <UserWallet darkMode={darkMode} onBack={() => setShowWallet(false)} userData={userData} />
@@ -1936,6 +1947,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
         hasActiveOrder={canRaiseDispute}
         onRaiseDispute={() => { setShowMoreSheet(false); setShowDisputeForm(true); }}
         onOrderDetails={() => { setShowMoreSheet(false); setShowOrderDetails(true); }}
+        onRunnerContactInfo={() => {setShowMoreSheet(false); setShowRunnerContactInfo(true);}}
         canRate={canRate}
         onRateRunner={() => { setShowMoreSheet(false); if (ratingOrderId) setShowRatingModal(true); }}
       />

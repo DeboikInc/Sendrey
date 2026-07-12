@@ -17,6 +17,7 @@ import { usePushNotifications } from '../../hooks/usePushNotifications';
 import { useTypingAndRecordingIndicator } from '../../hooks/useTypingIndicator';
 import useOrderStore from '../../store/orderStore';
 import BarLoader from "../common/BarLoader";
+import RecepientContactInformation from "./RecepientContactInformation";
 
 import {
   flushSocketQueue, enqueueSocketEvent,
@@ -171,7 +172,15 @@ function RunnerChatScreen({
   const [showPickupItemForm, setShowPickupItemForm] = useState(false);
   const [runnerLocation, setRunnerLocation] = useState(null); // eslint-disable-line no-unused-vars
   const [markingDelivery, setMarkingDelivery] = useState(false);
+  const [showContactModal, setShowContactModal] = useState(false);
 
+  const currentRequest = selectedUser?.currentRequest ?? currentOrder ?? null;
+  const counterpart = selectedUser ? {
+    phone: selectedUser.phone,
+    firstName: selectedUser.firstName,
+    lastName: selectedUser.lastName,
+    label: 'Task creator',
+  } : null;
 
   const [backHomeDisabled] = useState(() => {
     try { return localStorage.getItem(`backHome_disabled_${chatId}`) === 'true'; } catch { return false; }
@@ -1557,6 +1566,10 @@ function RunnerChatScreen({
                 setIsAttachFlowOpen(false);
                 handleMarkDeliveryComplete();
               }}
+              onOpenContactDetails={() => {
+                setIsAttachFlowOpen(false);
+                setShowContactModal(true);
+              }}
               darkMode={dark}
               onSelectCamera={() => { setIsAttachFlowOpen(false); openCamera(); }}
               showSubmitItems={isRunErrand}
@@ -1596,6 +1609,17 @@ function RunnerChatScreen({
               }}
             />
           )}
+
+          <RecepientContactInformation
+            isOpen={showContactModal}
+            onClose={() => {
+              setShowContactModal(false);
+              setIsAttachFlowOpen(true);
+            }}
+            darkMode={dark}
+            currentRequest={currentRequest}
+            counterpart={counterpart}
+          />
 
           {showCameraPreview && previewImage && !showItemSubmissionForm && (
             <CameraPreviewModal

@@ -49,6 +49,7 @@ import { fetchOrderByChatId } from '../../Redux/orderSlice';
 import { enqueueSocketEvent, flushSocketQueue } from '../../utils/socketQueue';
 
 import useUserOrderStore from '../../store/userOrderStore';
+import RunnerContactInformation from "./RunnerContactInformation";
 
 const getCurrentTime = () => {
   return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -80,6 +81,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
   const [showMoreSheet, setShowMoreSheet] = useState(false);
   const [showWallet, setShowWallet] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showRunnerContactInfo, setShowRunnerContactInfo] = useState(false);
   const [showDisputeForm, setShowDisputeForm] = useState(false);
   const [showRatingModal, setShowRatingModal] = useState(false);
   const [localIsPaid, setLocalIsPaid] = useState(false);
@@ -1879,6 +1881,15 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
         </div>
       )}
 
+      {showRunnerContactInfo && (
+        <RunnerContactInformation
+          darkMode={darkMode}
+          onClose={() => setShowRunnerContactInfo(false)}
+          isOpen={showRunnerContactInfo}
+          runnerPhone={runner?.phone}
+        />
+      )}
+
       {showOrderDetails && (
         <OrderDetailsSheet
           isOpen={showOrderDetails}
@@ -1935,6 +1946,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
         onSettings={() => { setShowMoreSheet(false); setShowSettings(true); }}
         hasActiveOrder={canRaiseDispute}
         onRaiseDispute={() => { setShowMoreSheet(false); setShowDisputeForm(true); }}
+        onRunnerContactInfo={() => { setShowMoreSheet(false); setShowRunnerContactInfo(true); }}
         onOrderDetails={() => { setShowMoreSheet(false); setShowOrderDetails(true); }}
         canRate={canRate}
         onRateRunner={() => { setShowMoreSheet(false); if (ratingOrderId) setShowRatingModal(true); }}

@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Wallet, AlertTriangle, FileText, Star, Settings } from 'lucide-react';
+import { Wallet, AlertTriangle, FileText, Star, Settings, Phone } from 'lucide-react';
 import useUserOrderStore from '../../store/userOrderStore';
 import { getAvailableReasons } from '../../utils/disputeReasons';
 
@@ -13,6 +13,7 @@ export default function MoreOptionsSheet({
   onSettings,
   onRateRunner,
   canRate,
+  onRunnerContactInfo,
 }) {
   const currentOrder = useUserOrderStore((s) => s.currentOrder);
   const orderCancelled = useUserOrderStore((s) => s.orderCancelled);
@@ -44,14 +45,18 @@ export default function MoreOptionsSheet({
         description: 'View payment breakdown & status',
         onClick: () => { onClose(); onOrderDetails(); }
       },
-    // ...(canRaiseDispute ? [
+      {
+        icon: <Phone className="w-5 h-5 text-red-500" />,
+        label: 'Runner Contact',
+        description: 'call the runner directly',
+        onClick: () => { onClose(); onRunnerContactInfo(); }
+      },
       {
         icon: <AlertTriangle className="w-5 h-5 text-red-500" />,
         label: 'Raise Dispute',
         description: 'Report an issue with this order',
         onClick: () => { onClose(); onRaiseDispute(); }
       },
-    // ] : []),
     ...(canRate ? [
       {
         icon: <Star className="w-5 h-5 text-yellow-500" />,
