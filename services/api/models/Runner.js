@@ -385,7 +385,11 @@ const runnerSchema = new mongoose.Schema({
       lat: { type: Number },
       lng: { type: Number }
     },
-  }
+  },
+
+  whatsappOptIn: { type: Boolean, default: false },
+  whatsappOptInSource: { type: String },
+  whatsappOptInTimestamp: { type: Date },
 
 }, {
   timestamps: true,
@@ -643,9 +647,9 @@ runnerSchema.statics.findNearbyRunners = async function ({
   const isPedestrian = fleetType?.toLowerCase() === 'pedestrian';
 
   if (isPedestrian) {
-    const RUNNER_LEG_MAX = matchingConfig.pedestrianMaxRunnerLeg; 
-    const DELIVERY_LEG_MAX = matchingConfig.pedestrianMaxDeliveryLeg; 
-    const TOTAL_MAX = matchingConfig.pedestrianTotalMax;            
+    const RUNNER_LEG_MAX = matchingConfig.pedestrianMaxRunnerLeg;
+    const DELIVERY_LEG_MAX = matchingConfig.pedestrianMaxDeliveryLeg;
+    const TOTAL_MAX = matchingConfig.pedestrianTotalMax;
 
     // Guard: pickup → delivery must be ≤ pedestrianMaxDeliveryLeg
     if (deliveryLat && deliveryLng) {

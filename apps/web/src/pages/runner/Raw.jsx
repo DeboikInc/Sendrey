@@ -495,9 +495,15 @@ function WhatsAppLikeChat() {
   const KYC_NUDGE_INTERVAL = 2 * 24 * 60 * 60 * 1000;
 
   // ── Terms acceptance ────────────────────────────────────────────────────────
-  const handleAcceptTerms = async () => {
+  const handleAcceptTerms = async ({ whatsappOptIn }) => {
     try {
-      await api.post('/terms/accept', { version: RUNNER_TERMS.version, userType: 'runner' });
+      await api.post('/terms/accept',
+        {
+          version: RUNNER_TERMS.version,
+          userType: 'runner',
+          whatsappOptIn
+        }
+      );
       localStorage.setItem(`terms_accepted_${runnerId}`, 'true');
       localStorage.setItem(`kyc_flow_started_${runnerId}`, 'true');
       setShowTerms(false);
