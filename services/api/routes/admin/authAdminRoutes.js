@@ -43,12 +43,12 @@ router.post('/reset-password',
   authController.resetPassword
 );
 
-// router.post('/login',
-//   userRateLimit({ windowMs: 15 * 60 * 1000, maxRequests: 5 }),
-//   validate(authValidation.adminLogin),
-//   auditLog('ADMIN_LOGIN'),
-//   authController.adminLogin
-// );
+router.post('/login',
+  userRateLimit({ windowMs: 15 * 60 * 1000, maxRequests: 5 }),
+  validate(authValidation.adminLogin),
+  auditLog('ADMIN_LOGIN'),
+  authController.adminLogin
+);
 
 router.use(authenticate)
 

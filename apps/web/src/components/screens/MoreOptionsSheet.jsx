@@ -1,7 +1,11 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Wallet, AlertTriangle, FileText, Star, Settings } from 'lucide-react';
-import useUserOrderStore from '../../store/userOrderStore';
-import { getAvailableReasons } from '../../utils/disputeReasons';
+import {
+  Wallet, AlertTriangle, FileText,
+  //  Star,
+  Settings, Phone
+} from 'lucide-react';
+// import useUserOrderStore from '../../store/userOrderStore';
+// import { getAvailableReasons } from '../../utils/disputeReasons';
 
 export default function MoreOptionsSheet({
   isOpen,
@@ -13,23 +17,9 @@ export default function MoreOptionsSheet({
   onSettings,
   onRateRunner,
   canRate,
+  onRunnerContactInfo,
 }) {
-  const currentOrder = useUserOrderStore((s) => s.currentOrder);
-  const orderCancelled = useUserOrderStore((s) => s.orderCancelled);
-
   if (!isOpen) return null;
-
-  // Derived — mirrors canRaiseDispute logic from ChatScreen but lives here now
-  // eslint-disable-next-line 
-  const canRaiseDispute = (() => { 
-    if (!currentOrder || orderCancelled) return false;
-    if (currentOrder.status === 'cancelled') return false;
-    if (currentOrder.hasDispute) return false;
-    return getAvailableReasons(
-      currentOrder.serviceType ?? currentOrder.taskType,
-      currentOrder.status
-    ).length > 0;
-  })();
 
   const options = [
     {
@@ -38,28 +28,32 @@ export default function MoreOptionsSheet({
       description: 'View balance & transactions',
       onClick: () => { onClose(); onWallet(); }
     },
-      {
-        icon: <FileText className="w-5 h-5 text-secondary" />,
-        label: 'Order Details',
-        description: 'View payment breakdown & status',
-        onClick: () => { onClose(); onOrderDetails(); }
-      },
-    // ...(canRaiseDispute ? [
-      {
-        icon: <AlertTriangle className="w-5 h-5 text-red-500" />,
-        label: 'Raise Dispute',
-        description: 'Report an issue with this order',
-        onClick: () => { onClose(); onRaiseDispute(); }
-      },
+    {
+      icon: <FileText className="w-5 h-5 text-secondary" />,
+      label: 'Order Details',
+      description: 'View payment breakdown & status',
+      onClick: () => { onClose(); onOrderDetails(); }
+    },
+    {
+      icon: <AlertTriangle className="w-5 h-5 text-red-500" />,
+      label: 'Raise Dispute',
+      description: 'Report an issue with this order',
+      onClick: () => { onClose(); onRaiseDispute(); }
+    },
+    {
+      icon: <Phone className="w-5 h-5 text-primary" />,
+      label: 'Runner Contact Info',
+      description: 'call the runner directly',
+      onClick: () => { onClose(); onRunnerContactInfo(); }
+    },
+    // ...(canRate ? [
+    //   {
+    //     icon: <Star className="w-5 h-5 text-yellow-500" />,
+    //     label: 'Rate Runner',
+    //     description: 'Leave a rating for your runner',
+    //     onClick: () => { onClose(); onRateRunner(); }
+    //   }
     // ] : []),
-    ...(canRate ? [
-      {
-        icon: <Star className="w-5 h-5 text-yellow-500" />,
-        label: 'Rate Runner',
-        description: 'Leave a rating for your runner',
-        onClick: () => { onClose(); onRateRunner(); }
-      }
-    ] : []),
     {
       icon: <Settings className="w-5 h-5 text-primary" />,
       label: 'Settings',
