@@ -67,11 +67,12 @@ export default function OnboardingScreen({
     }, 30000);
   };
 
-  const handleAcceptTerms = async () => {
+  const handleAcceptTerms = async ({ whatsappOptIn }) => {
     try {
       await api.post('/terms/accept', {
         version: USER_TERMS.version,
-        userType: 'user'
+        userType: 'user',
+        whatsappOptIn
       });
       setShowTerms(false);
       onTermsAccepted(serviceType);

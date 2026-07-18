@@ -10,10 +10,13 @@ import { Wallet } from "./pages/runner/Wallet";
 import { Orders } from "./pages/runner/Orders";
 import { Payout } from "./pages/runner/Payout";
 import ChatDeepLink from "./utils/ChatDeepLink";
-
+import NotFound from "./pages/NotFound"
 import ProtectedRoute from "./components/common/ProtectedRoute";
+import useDarkMode from "./hooks/useDarkMode";
 
 export default function ProjectedRoutes() {
+  const [dark] = useDarkMode();
+
   return (
     <Routes>
       {/* Runner routes - require runner authentication */}
@@ -62,6 +65,9 @@ export default function ProjectedRoutes() {
       <Route path="/raw" element={<WhatsAppLikeChat />} />
       <Route path="/runner/chat/:chatId" element={<ChatDeepLink userType="runner" />} />
       <Route path="/user/chat/:chatId" element={<ChatDeepLink userType="user" />} />
+
+      {/* catch all non existing routes */}
+      <Route path="*" element={<NotFound darkMode={dark} />} />
     </Routes>
   );
 }

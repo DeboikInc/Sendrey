@@ -338,6 +338,10 @@ const userSchema = new mongoose.Schema({
     },
   ],
 
+  whatsappOptIn: { type: Boolean, default: false },
+  whatsappOptInSource: { type: String },
+  whatsappOptInTimestamp: { type: Date },
+
 }, {
   timestamps: true,
   toJSON: {
