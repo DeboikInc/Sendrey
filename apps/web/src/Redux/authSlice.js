@@ -205,7 +205,7 @@ export const wipeRunnerLocalStorage = (runnerId) => {
     }
 };
 
-// ── Slice ─────────────────────────────────────────────────────────────────────
+// ── Slice ──
 
 const authSlice = createSlice({
     name: "auth",

@@ -38,7 +38,8 @@ class AuthController extends BaseController {
       httpOnly: true,
       secure: isProd,
       sameSite: isProd ? 'none' : 'lax',
-      maxAge: 15 * 60 * 1000 // 15 mins
+      maxAge: 15 * 60 * 1000, // 15 mins
+      // domain: isProd ? '.sendrey.com' : undefined,
     });
 
     res.cookie('refreshToken', refreshToken, {
@@ -46,6 +47,7 @@ class AuthController extends BaseController {
       secure: isProd,
       sameSite: isProd ? 'none' : 'lax',
       maxAge: SESSION_TTL_MS,
+      // domain: isProd ? '.sendrey.com' : undefined,
     });
   };
 
@@ -295,6 +297,9 @@ class AuthController extends BaseController {
 
   refreshToken = async (req, res, next) => {
     try {
+      console.log('[Refresh] Cookies received:', req.cookies);
+      console.log('[Refresh] Refresh token from cookie:', req.cookies?.refreshToken);
+
       const incomingToken = req.cookies.refreshToken || req.body.refreshToken;
       if (!incomingToken) return this.error(res, 'No refresh token provided', 401);
 

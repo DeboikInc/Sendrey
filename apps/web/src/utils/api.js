@@ -26,6 +26,7 @@ const clearSession = async () => {
   }
 };
 
+
 api.interceptors.request.use(
   (config) => {
     if (config.data instanceof FormData) {
