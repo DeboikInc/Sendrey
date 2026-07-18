@@ -33,21 +33,33 @@ class AuthController extends BaseController {
 
   setAuthCookies = async (res, accessToken, refreshToken) => {
     const isProd = process.env.NODE_ENV === 'production';
+    const isStaging = process.env.NODE_ENV === 'staging';
+
+    let domain = undefined;
+    if (isProd) {
+      domain = '.sendrey.com';
+    } else if (isStaging) {
+      domain = 'api-staging.sendrey.com';
+    } else {
+      domain = 'localhost'; // or undefined for localhost
+    }
 
     res.cookie('token', accessToken, {
       httpOnly: true,
-      secure: isProd,
-      sameSite: isProd ? 'none' : 'lax',
+      secure: isProd || isStaging || false,
+      sameSite: isProd || isStaging ? 'none' : 'lax',
       maxAge: 15 * 60 * 1000, // 15 mins
-      // domain: isProd ? '.sendrey.com' : undefined,
+      path: '/',
+      domain: domain,
     });
 
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
-      secure: isProd,
-      sameSite: isProd ? 'none' : 'lax',
+      secure: isProd || isStaging || false,
+      sameSite: isProd || isStaging ? 'none' : 'lax',
       maxAge: SESSION_TTL_MS,
-      // domain: isProd ? '.sendrey.com' : undefined,
+      path: '/',
+      domain: domain,
     });
   };
 
