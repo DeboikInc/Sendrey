@@ -16,7 +16,7 @@ export const fetchRunnerOrders = createAsyncThunk(
 );
 
 export const fetchOrderByChatId = createAsyncThunk(
-  'payment/fetchOrderByChatId',
+  'order/fetchOrderByChatId',
   async (chatId, { rejectWithValue }) => {
     try {
       const response = await api.get(`/orders/by-chat/${chatId}`);
@@ -27,6 +27,18 @@ export const fetchOrderByChatId = createAsyncThunk(
     }
   }
 );
+
+export const fetchOrderHistory = createAsyncThunk(
+  'order/fetchOrderHistory',
+  async (userId, {rejectWithValue}) => {
+    try {
+      const response = await api.get(`order/get-order-history/${userId}`)
+      return response.data;
+    } catch (err) {
+      return rejectWithValue(null)
+    }
+  }
+)
 
 // ─── Slice
 

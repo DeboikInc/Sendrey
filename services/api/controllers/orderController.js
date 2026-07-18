@@ -1,103 +1,113 @@
-// controllers/orderController.js
 const BaseController = require('./baseController');
-const Order = require('../models/Order');
+const orderService = require('../services/orderService');
 const logger = require('../utils/logger');
-
 
 class OrderController extends BaseController {
   constructor() {
     super(null);
+    this.getOrderHistory = this.getOrderHistory.bind(this);
+    this.getOrderByChatId = this.getOrderByChatId.bind(this);
     this.getRunnerOrders = this.getRunnerOrders.bind(this);
     this.adminGetAllOrders = this.adminGetAllOrders.bind(this);
-    this.getOrderByChatId = this.getOrderByChatId.bind(this);
+    this.cancelOrder = this.cancelOrder.bind(this);
+  }
+
+  async getOrderHistory(req, res) {
+    try {
+      const userId = req.user.id || req.userId;
+
+      if (!userId) {
+        return this.error(res, 'User ID not found', 401);
+      }
+
+      const { status, taskType, search, dateFrom, dateTo, cursor, limit } = req.query;
+
+      const result = await orderService.getOrderHistory({
+        userId,
+        status,
+        taskType,
+        search,
+        dateFrom,
+        dateTo,
+        cursor,
+        limit: parseInt(limit) || 20
+      });
+
+      return this.success(res, result);
+    } catch (err) {
+      logger.error('getOrderHistory error:', err);
+      return this.error(res, err.message);
+    }
   }
 
   async getOrderByChatId(req, res) {
     try {
       const { chatId } = req.params;
-      const order = await Order.findOne({ chatId })
-      .sort({ createdAt: -1 })
-      .lean();
-      if (!order) return this.notFound(res, 'No order found for this chat');
-      this.success(res, order);
+
+      if (!chatId) {
+        return this.error(res, 'Chat ID not found', 401);
+      }
+      const order = await orderService.getOrderByChatId(chatId);
+      return this.success(res, order);
     } catch (err) {
-      this.error(res, err.message);
+      logger.error('getOrderByChatId error:', err);
+      return this.error(res, err.message);
     }
   }
 
-  // GET /orders/runner/:runnerId
   async getRunnerOrders(req, res) {
     try {
       const { runnerId } = req.params;
+
+      if ( !runnerId ) {
+        return this.error(res, 'Runner Id not found', 401)
+      }
+
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 10;
-      const skip = (page - 1) * limit;
 
-      const [orders, total] = await Promise.all([
-        Order.find({ runnerId })
-          .sort({ createdAt: -1 })
-          .skip(skip)
-          .limit(limit)
-          .select('orderId serviceType taskType status paymentStatus itemBudget itemLists deliveryFee totalAmount createdAt cancelledAt specialInstructions')
-          .lean(),
-        Order.countDocuments({ runnerId }),
-      ]);
-
-      return this.success(res, {
-        orders,
-        page,
-        hasMore: skip + orders.length < total,
-        total,
-      });
+      const result = await orderService.getRunnerOrders(runnerId, page, limit);
+      return this.success(res, result);
     } catch (err) {
       logger.error('getRunnerOrders error:', err);
       return this.error(res, err.message);
     }
   }
 
-  // GET /admin/orders
   async adminGetAllOrders(req, res) {
     try {
-      const {
-        page = 1, limit = 20,
-        status, paymentStatus,
-        runnerId, userId,
-        from, to,
-      } = req.query;
-
-      const skip = (page - 1) * limit;
-      const query = {};
-
-      if (status) query.status = status;
-      if (paymentStatus) query.paymentStatus = paymentStatus;
-      if (runnerId) query.runnerId = runnerId;
-      if (userId) query.userId = userId;
-      if (from || to) {
-        query.createdAt = {};
-        if (from) query.createdAt.$gte = new Date(from);
-        if (to) query.createdAt.$lte = new Date(to);
-      }
-
-      const [orders, total] = await Promise.all([
-        Order.find(query)
-          .populate('userId', 'firstName lastName phone email')
-          .populate('runnerId', 'firstName lastName phone email')
-          .sort({ createdAt: -1 })
-          .skip(skip)
-          .limit(parseInt(limit))
-          .lean(),
-        Order.countDocuments(query),
-      ]);
-
-      return this.success(res, {
-        orders,
-        total,
-        page: parseInt(page),
-        limit: parseInt(limit),
-        hasMore: skip + orders.length < total,
-      });
+      const result = await orderService.adminGetAllOrders(req.query);
+      return this.success(res, result);
     } catch (err) {
       logger.error('adminGetAllOrders error:', err);
+      return this.error(res, err.message);
+    }
+  }
+
+  async cancelOrder(req, res) {
+    try {
+      const { orderId, chatId, runnerId, userId, reason, cancelledBy } = req.body;
+
+      if ( !runnerId || !userId) {
+        return this.error(res, "User or Runner not found", 401);
+      }
+
+      if ( !orderId ) {
+        return this.error(res, "Order not found", 404)
+      }
+
+      const result = await orderService.cancelOrder({
+        orderId,
+        chatId,
+        runnerId,
+        userId,
+        reason,
+        cancelledBy
+      });
+
+      return this.success(res, result);
+    } catch (err) {
+      logger.error('cancelOrder error:', err);
       return this.error(res, err.message);
     }
   }

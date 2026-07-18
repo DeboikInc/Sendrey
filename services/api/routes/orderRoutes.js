@@ -15,4 +15,11 @@ router.get(
     auditLog('GET_ORDERS_BY_CHAT_ID'),
     orderController.getOrderByChatId);
 
+router.get(
+    '/get-order-history/:userId',
+    authenticate,
+    auditLog("GET_ORDER_HISTORY"),
+    orderController.getOrderHistory
+);
+
 module.exports = router;
