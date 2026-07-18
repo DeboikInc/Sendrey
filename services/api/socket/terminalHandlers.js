@@ -14,8 +14,10 @@ const { notifyAutoConfirmWarning } = require('../services/notificationService');
 const orderStateMachine = require('../services/orderStateMachine');
 
 // Remove runner from the in-memory service pool
+const orderService = require('../services/orderService');
 const { runnersByService } = require('./socketHandlers');
-const { cancelOrder } = require('../services/orderService');
+
+const { cancelOrder } = orderService;
 
 const {
     notifyRatingPrompt,
@@ -118,10 +120,15 @@ const handleCancelOrder = async (socket, io, data) => {
         }
 
     } catch (error) {
-        const msg = error.message === 'PAID_ORDER'
-            ? 'This order has already been funded and cannot be cancelled.'
-            : 'Failed to cancel order. Please try again.';
-        socket.emit('cancelOrderError', { message: msg });
+        if (error.code === 'PAID_ORDER') {
+            socket.emit('cancelOrderError', {
+                message: 'This order has already been funded and cannot be cancelled.'
+            });
+        } else {
+            socket.emit('cancelOrderError', {
+                message: 'Failed to cancel order. Please try again.'
+            });
+        }
     }
 };
 

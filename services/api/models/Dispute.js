@@ -49,13 +49,24 @@ const disputeSchema = new mongoose.Schema({
       'runner_misconduct',
       'runner_unresponsive',
       'user_misconduct',
+      'wrong_item',
+      'missing_item',
+      'damaged_item',
+      'delivery_issue',
+      'incorrect_charge',
       'other',
     ]
+  },
+  category: {
+    type: String,
+    enum: ['wrong_item', 'missing_item', 'damaged_item', 'delivery_issue', 'incorrect_charge', 'runner_conduct', 'other'],
+    required: function () { return this.isPostCompletion; }
   },
   description: {
     type: String,
     required: true
   },
+  createdAt: Date,
   evidence: [{
     type: {
       type: String,

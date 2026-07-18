@@ -1,45 +1,22 @@
 // utils/disputeReasons.js (SERVER)
-
+// utils/disputeReasons.js
 const RUN_ERRAND_REASONS = [
-  {
-    value: 'runner_misconduct',
-    label: 'Runner misconduct',
-    description: 'Unprofessional, threatening, or abusive behaviour',
-    windowClosesAfter: [],
-  },
-  {
-    value: 'runner_unresponsive',
-    label: 'Runner went offline / unresponsive',
-    description: 'Runner stopped communicating mid-order',
-    windowClosesAfter: [],
-  },
-  {
-    value: 'other',
-    label: 'Other',
-    description: 'Something else not listed above',
-    windowClosesAfter: [],
-  },
+  { value: 'wrong_item', label: 'Wrong item', description: 'Runner purchased the wrong item', windowClosesAfter: [] },
+  { value: 'missing_item', label: 'Missing item', description: 'One or more items were not delivered', windowClosesAfter: [] },
+  { value: 'damaged_item', label: 'Damaged item', description: 'Item arrived damaged', windowClosesAfter: [] },
+  { value: 'delivery_issue', label: 'Delivery issue', description: 'Problem with how the order was delivered', windowClosesAfter: [] },
+  { value: 'incorrect_charge', label: 'Incorrect charge', description: 'Amount charged does not match the order', windowClosesAfter: [] },
+  { value: 'runner_misconduct', label: 'Runner conduct', description: 'Unprofessional, threatening, or abusive behaviour', windowClosesAfter: [] },
+  { value: 'runner_unresponsive', label: 'Runner went offline / unresponsive', description: 'Runner stopped communicating mid-order', windowClosesAfter: [] },
+  { value: 'other', label: 'Other', description: 'Something else not listed above', windowClosesAfter: [] },
 ];
 
 const PICK_UP_REASONS = [
-  {
-    value: 'runner_misconduct',
-    label: 'Runner misconduct',
-    description: 'Unprofessional, threatening, or abusive behaviour',
-    windowClosesAfter: [],
-  },
-  {
-    value: 'runner_unresponsive',
-    label: 'Runner went offline / unresponsive',
-    description: 'Runner stopped communicating mid-order',
-    windowClosesAfter: [],
-  },
-  {
-    value: 'other',
-    label: 'Other',
-    description: 'Something else not listed above',
-    windowClosesAfter: [],
-  },
+  { value: 'damaged_item', label: 'Damaged item', description: 'Item arrived damaged', windowClosesAfter: [] },
+  { value: 'delivery_issue', label: 'Delivery issue', description: 'Problem with how the order was delivered', windowClosesAfter: [] },
+  { value: 'runner_misconduct', label: 'Runner conduct', description: 'Unprofessional, threatening, or abusive behaviour', windowClosesAfter: [] },
+  { value: 'runner_unresponsive', label: 'Runner went offline / unresponsive', description: 'Runner stopped communicating mid-order', windowClosesAfter: [] },
+  { value: 'other', label: 'Other', description: 'Something else not listed above', windowClosesAfter: [] },
 ];
 
 const RUNNER_PICK_UP_REASONS = [
@@ -124,7 +101,7 @@ function getReasonLabel(reasonValue) {
 }
 
 function isItemLevelReason(reason) {
-  return false; // simplified — no item-level reasons in current set
+  return ['wrong_item', 'missing_item'].includes(reason);
 }
 
 module.exports = {

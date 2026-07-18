@@ -1,12 +1,18 @@
 const mongoose = require('mongoose');
-const { TASK_TYPES, SERVICE_TYPE } = require('../config/constants');
+const { TASK_TYPES, SERVICE_TYPE, CANCELLABLE_STATES_BY_SERVICE, DISPUTE_WINDOW_HOURS } = require('../config/constants');
+const OrderActivityLog = require('./orderActivityLog');
 
 //  Valid status transitions 
 const VALID_TRANSITIONS = {
   pending_payment: ['paid', 'payment_failed', 'cancelled'],
   payment_failed: ['pending_payment', 'cancelled'],
   paid: ['accepted', 'items_submitted', 'items_approved', 'cancelled'],
-  accepted: ['en_route_to_pickup', 'arrived_at_pickup', 'picked_up', 'en_route_to_delivery', 'arrived_at_delivery', 'delivered', 'items_submitted', 'items_approved', 'shopping'],
+  accepted: [
+    'en_route_to_pickup', 'arrived_at_pickup', 'picked_up',
+    'en_route_to_delivery',
+    'arrived_at_delivery', 'delivered', 'items_submitted', 'items_approved',
+    'shopping', 'cancelled'
+  ],
   shopping: ['items_submitted', 'cancelled'],
   items_submitted: ['items_approved', 'shopping', 'arrived_at_pickup', 'cancelled'],
   items_approved: ['en_route_to_pickup', 'en_route_to_delivery', 'cancelled'],
@@ -27,6 +33,7 @@ const VALID_TRANSITIONS = {
 };
 
 const TERMINAL_STATUSES = ['completed', 'cancelled'];
+const USER_CANCELLABLE_STATES = new Set(['pending_payment', 'paid', 'accepted']);
 
 const coordinatesSchema = new mongoose.Schema({
   lat: { type: Number, default: null },
@@ -96,7 +103,13 @@ const orderSchema = new mongoose.Schema({
   routeDistanceMeters: { type: Number, default: 0 },
   routeLegs: { type: mongoose.Schema.Types.Mixed, default: {} },
 
-  // ── Payment 
+  // ── Payment
+  paymentMethod: {
+    type: String,
+    enum: ['card', 'wallet'],
+    default: null,
+  },
+
   escrowId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Escrow',
@@ -129,22 +142,15 @@ const orderSchema = new mongoose.Schema({
     enum: Object.keys(VALID_TRANSITIONS),
     default: 'pending_payment',
   },
-  statusHistory: [{
-    status: String,
-    timestamp: { type: Date, default: Date.now },
-    triggeredBy: { type: String, enum: ['user', 'runner', 'system'] },
-    triggeredById: String,
-    note: String,
-  }],
 
   // ── Explicit timestamps (not mongoose timestamps option) ───────────────────
   paidAt: { type: Date, default: null },
   acceptedAt: { type: Date, default: null },
   itemsSubmittedAt: { type: Date, default: null },
   deliveredAt: { type: Date, default: null },
+  cancelledAt: { type: Date, default: null },
   completedAt: { type: Date, default: null },
   disputedAt: { type: Date, default: null },
-  cancelledAt: { type: Date, default: null },
 
   // ── Delivery confirmation
   deliveryConfirmedAt: { type: Date, default: null },
@@ -179,7 +185,12 @@ const orderSchema = new mongoose.Schema({
   estimatedDeliveryTime: { type: Date, default: null },
 
   // ── Cancellation 
-  cancellationReason: { type: String, default: null },
+  cancellationReason: {
+    type: String,
+    enum: ['no_longer_needed', 'wrong_information', 'created_by_mistake', 'taking_too_long', 'other']
+  },
+  cancellationNote: String,
+  disputeWindowExpiresAt: Date,
   cancelledBy: {
     type: String,
     enum: ['user', 'runner', 'system', null],
@@ -239,6 +250,7 @@ orderSchema.pre('save', function (next) {
 orderSchema.methods.updateStatus = async function (newStatus, triggeredBy = 'system', meta = {}) {
   const allowed = VALID_TRANSITIONS[this.status];
   if (!allowed) throw new Error(`Unknown current status: ${this.status}`);
+
   if (!allowed.includes(newStatus)) {
     throw new Error(
       `Invalid transition: ${this.status} → ${newStatus}. ` +
@@ -249,16 +261,8 @@ orderSchema.methods.updateStatus = async function (newStatus, triggeredBy = 'sys
     throw new Error(`Order ${this.orderId} is terminal (${this.status}) and cannot be updated.`);
   }
 
-  // Record the transition
-  this.statusHistory.push({
-    status: newStatus,
-    timestamp: new Date(),
-    triggeredBy,
-    triggeredById: meta.triggeredById || null,
-    note: meta.note || null,
-  });
+  const fromStatus = this.status;
 
-  // Auto-set relevant timestamp
   const timestampMap = {
     paid: 'paidAt',
     accepted: 'acceptedAt',
@@ -268,25 +272,46 @@ orderSchema.methods.updateStatus = async function (newStatus, triggeredBy = 'sys
     disputed: 'disputedAt',
     cancelled: 'cancelledAt',
   };
+
   if (timestampMap[newStatus]) this[timestampMap[newStatus]] = new Date();
+
+  if (newStatus === 'completed') {
+    this.disputeWindowExpiresAt = new Date(Date.now() + DISPUTE_WINDOW_HOURS * 60 * 60 * 1000);
+  }
 
   this._allowTransition = true;
   this.status = newStatus;
   await this.save();
   this._allowTransition = false;
 
+  await OrderActivityLog.create({
+    orderId: this.orderId,
+    actorType: triggeredBy,
+    actorId: meta.triggeredById || null,
+    action: 'status_changed',
+    metadata: { from: fromStatus, to: newStatus, note: meta.note || null },
+  });
+
   return this;
 };
 
 // ── canBeCancelled 
 orderSchema.methods.canBeCancelled = function () {
-  return VALID_TRANSITIONS[this.status]?.includes('cancelled') ?? false;
+  const allowedByGraph = VALID_TRANSITIONS[this.status]?.includes('cancelled') ?? false;
+  if (!allowedByGraph) return false;
+
+  const window = CANCELLABLE_STATES_BY_SERVICE[this.serviceType];
+  return window ? window.has(this.status) : false;
 };
 
 // ── needsItemApproval
 orderSchema.methods.needsItemApproval = function () {
   return this.serviceType === SERVICE_TYPE.RUN_ERRAND &&
     this.approvalStatus === 'pending';
+};
+
+orderSchema.methods.canUserCancel = function () {
+  return USER_CANCELLABLE_STATES.has(this.status) && this.canBeCancelled();
 };
 
 // ── generateOrderId 
@@ -297,6 +322,7 @@ orderSchema.statics.generateOrderId = function () {
 };
 
 orderSchema.statics.VALID_TRANSITIONS = VALID_TRANSITIONS;
+
 
 const Order = mongoose.model('Order', orderSchema);
 module.exports = Order;
