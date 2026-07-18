@@ -790,6 +790,7 @@ export default function PickupFlowScreen({
           setCurrentStep("delivery-location");
           setShowCustomInput(true);
           setTimeout(() => setShowLocationButtons(true), 200);
+          
         } else if (source === "delivery" && !dropoffPhoneNumber) {
           setMessages((p) => [
             ...p,

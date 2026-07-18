@@ -5,3 +5,5 @@ android
 ios
 # pnpm-lock.yaml
 docker-compose.yml
+services/api/logs/
+apps/admin-dashboard/package-lock.json

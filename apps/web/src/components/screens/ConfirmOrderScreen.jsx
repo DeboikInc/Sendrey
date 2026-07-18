@@ -33,6 +33,7 @@ export default function ConfirmOrderScreen({
     specialInstructions,
     pickupPhone,
     dropoffPhone,
+    deliveryPhone,
     marketItems,
     budget,
     canAdjustSlightly, // eslint-disable-line no-unused-vars
@@ -150,8 +151,10 @@ export default function ConfirmOrderScreen({
           userId,
           specialInstructions: resolvedSpecialInstructions, // ← real URLs now
           timestamp: new Date().toISOString(),
+          dropoffPhone: orderData?.dropoffPhone || orderData?.deliveryPhone,
           deliveryLocation: orderData?.deliveryLocation,
           status: 'awaiting_runner_connection',
+
           ...(serviceType === 'run-errand' ? {
             marketLocation: orderData?.marketLocation,
             marketItems: orderData?.marketItems,
@@ -165,7 +168,6 @@ export default function ConfirmOrderScreen({
             pickupItems: orderData?.pickupItems,
             pickupPhone: orderData?.pickupPhone,
             pickupCoordinates: orderData?.pickupCoordinates,
-            dropoffPhone: orderData?.dropoffPhone,
             deliveryCoordinates: orderData?.deliveryCoordinates,
           }),
         }
@@ -368,17 +370,21 @@ export default function ConfirmOrderScreen({
           </div>
 
           {/* Dropoff Phone (only for pick-up service) */}
-          {serviceType === "pick-up" && dropoffPhone && (
+          {(dropoffPhone || deliveryPhone)  && (
             <div className="flex items-start justify-between p-3 bg-gray-200 dark:bg-black-100 border-b">
               <div className="flex items-start gap-3 flex-1">
                 <Phone className="h-5 w-5 mt-0.5 text-purple-500" />
                 <div>
-                  <p className="text-sm font-medium opacity-70">Dropoff Contact</p>
-                  <p className="font-semibold">{dropoffPhone}</p>
+                  <p className="text-sm font-medium opacity-70">
+                    {serviceType === "run-errand" ? "Delivery Contact" : "Dropoff Contact"}
+                  </p>
+                  <p className="font-semibold">
+                    <p className="font-semibold">{dropoffPhone || deliveryPhone}</p>
+                  </p>
                 </div>
               </div>
               <button
-                onClick={() => handleEdit("dropoff-phone")}
+                onClick={() => handleEdit(serviceType === "run-errand" ? "delivery-phone" : "dropoff-phone")}
                 className="p-2 border-gray-800 border rounded-lg transition-colors ml-2"
               >
                 <Edit2 className="h-4 w-4 text-primary" />

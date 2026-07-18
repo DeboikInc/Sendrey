@@ -1,6 +1,6 @@
 import { useRef, useEffect, useCallback } from "react";
 import { motion, AnimatePresence } from 'framer-motion';
-import { Package, Truck } from 'lucide-react';
+import { Package, Truck, Phone } from 'lucide-react';
 import useOrderStore from '../../store/orderStore';
 
 export default function AttachmentOptionsFlow({
@@ -17,6 +17,7 @@ export default function AttachmentOptionsFlow({
     forceReset,
     chatId,
     markingDelivery,
+    onOpenContactDetails
 }) {
     const mountedRef = useRef(true);
 
@@ -128,7 +129,7 @@ export default function AttachmentOptionsFlow({
                         exit={{ y: '100%' }}
                         transition={{ type: 'spring', damping: 30, stiffness: 300 }}
                         onClick={(e) => e.stopPropagation()}
-                        className="w-full rounded-t-3xl p-6"
+                        className="w-full rounded-t-3xl p-6 max-h-[85vh] overflow-y-auto"
                     >
                         <div className={`${darkMode ? 'bg-black-100' : 'bg-white'} rounded-2xl p-4`}>
                             <div className="text-center mb-6">
@@ -214,6 +215,22 @@ export default function AttachmentOptionsFlow({
                                                             : !canMarkDelivery
                                                                 ? 'Mark as Delivered (waiting for item approval)'
                                                                 : 'Mark as Delivered'}
+                                    </p>
+                                    
+                                </button>
+                                            
+                                <button
+                                    onClick={() => { if (!isPaid) return; onOpenContactDetails?.(); }}
+                                    disabled={!isPaid}
+                                    className={`w-full flex items-center justify-center gap-3 p-4 rounded-xl transition-colors
+                                        ${!isPaid
+                                            ? 'opacity-40 cursor-not-allowed bg-gray-100 dark:bg-black-200'
+                                            : 'bg-gray-100 dark:bg-black-200 hover:opacity-80'
+                                        }`}
+                                >
+                                    <Phone className="h-6 w-6 text-primary" />
+                                    <p className={`text-lg font-medium ${darkMode ? 'text-white' : 'text-black-200'}`}>
+                                        {!isPaid ? 'Contact details (awaiting payment)' : 'Contact details'}
                                     </p>
                                 </button>
                             </div>
