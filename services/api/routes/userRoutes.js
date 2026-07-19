@@ -26,6 +26,7 @@ router.get('/nearby-users',
 router.get('/profile',
   userController.getProfile
 );
+
 router.post('/update-location',
   validate(userValidation.saveLocation),
   userController.saveLocation
