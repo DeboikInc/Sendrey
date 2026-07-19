@@ -17,7 +17,7 @@ const orderStateMachine = require('../services/orderStateMachine');
 const orderService = require('../services/orderService');
 const { runnersByService } = require('./socketHandlers');
 
-const { cancelOrder } = orderService;
+const { cancelOrder, cancelStaleOrders } = orderService;
 
 const {
     notifyRatingPrompt,
@@ -216,9 +216,9 @@ const handleTaskCompleted = async (io, data) => {
             // Don't wipe messages — runner/user may want to browse completed chat
         );
 
-        await Order.updateMany(
-            { chatId, paymentStatus: 'unpaid', status: { $nin: ['completed', 'cancelled', 'task_completed'] }, orderId: { $ne: orderId } },
-            { $set: { status: 'cancelled', cancelledAt: new Date(), cancelReason: 'task_completed_new_order_started' } }
+        await cancelStaleOrders(
+            { chatId, paymentStatus: 'unpaid', status: { $nin: ['completed', 'cancelled'] }, orderId: { $ne: orderId } },
+            'task_completed_new_order_started'
         );
 
         // Archive session on completion
@@ -283,30 +283,15 @@ const handleTaskCompleted = async (io, data) => {
 const handleRunnerStartedNewOrder = async (socket, data) => {
     const { runnerId, previousOrderId } = data;
     try {
-        // Cancel any lingering unpaid orders for this runner
-        await Order.updateMany(
+
+        await cancelStaleOrders(
             {
                 runnerId,
                 paymentStatus: { $ne: 'paid' },
                 status: { $nin: ['completed', 'cancelled'] },
                 ...(previousOrderId ? { orderId: { $ne: previousOrderId } } : {})
             },
-            {
-                $set: {
-                    status: 'cancelled',
-                    cancelledBy: 'system',
-                    cancelledAt: new Date(),
-                    cancellationReason: 'Runner started new order',
-                },
-                $push: {
-                    statusHistory: {
-                        status: 'cancelled',
-                        timestamp: new Date(),
-                        triggeredBy: 'system',
-                        note: 'Runner started new order — stale pending order auto-cancelled',
-                    }
-                }
-            }
+            'Runner started new order — stale pending order auto-cancelled'
         );
 
         await Runner.findByIdAndUpdate(runnerId, {

@@ -293,6 +293,8 @@ class UserService {
         throw new Error('Maximum of 10 saved locations reached');
       }
 
+      // if (user.savedLocations)
+
       const updatedUser = await User.findByIdAndUpdate(
         userId,
         { $push: { savedLocations: locationData } },

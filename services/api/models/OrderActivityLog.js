@@ -10,6 +10,5 @@ const orderActivityLogSchema = new mongoose.Schema({
 });
 
 orderActivityLogSchema.index({ orderId: 1, createdAt: -1 });
-
-const OrderActivityLog = mongoose.model('OrderActivityLog', orderActivityLogSchema);
+const OrderActivityLog = mongoose.models.OrderActivityLog || mongoose.model('OrderActivityLog', orderActivityLogSchema);
 module.exports = OrderActivityLog;
