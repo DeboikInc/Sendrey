@@ -13,6 +13,10 @@ const { logSocketAudit } = require('../utils/socketAudit');
 const { computeDeliveryFeeFromDocs, calculateFeeSplit } = require('../config/pricing');
 const { getPricingConfig } = require('../services/pricingService');
 
+const orderHistoryCache = require('../cache/orderHistoryCache');
+const cancelStaleOrders = require('../services/orderService')
+const OrderActivityLog = require('../models/OrderActivityLog');
+
 const {
   socketMessageSnapshot,
   pendingWrites,
@@ -76,6 +80,7 @@ const archiveCurrentSession = async (chatId, orderId, status = 'completed') => {
   if (!hasRealContent) return;
 
   const order = await Order.findOne({ orderId }).sort({ createdAt: -1 }).lean();
+  const activityLog = await OrderActivityLog.find({ orderId }).sort({ createdAt: 1 }).lean();
 
   const sessionObj = {
     orderId,
@@ -109,7 +114,7 @@ const archiveCurrentSession = async (chatId, orderId, status = 'completed') => {
       createdAt: order?.createdAt,
       completedAt: order?.completedAt || new Date(),
       deliveryConfirmedAt: order?.deliveryConfirmedAt,
-      statusHistory: order?.statusHistory,
+      statusHistory: order?.activityLog,
     },
     runnerInfo: order?.runnerId ? { runnerId: order.runnerId } : null,
     userInfo: order?.userId ? { userId: order.userId } : null,
@@ -286,12 +291,6 @@ const createOrder = async (io, { chatId, userId, runnerId, serviceType }) => {
     status: 'pending_payment',
     paymentStatus: 'unpaid',
     approvalStatus: isErrand ? 'pending' : 'not_required',
-    statusHistory: [{
-      status: 'pending_payment',
-      timestamp: now,
-      triggeredBy: 'system',
-      note: 'Order created on session start',
-    }],
     createdAt: now,
     updatedAt: now,
   };
@@ -319,24 +318,10 @@ const createOrder = async (io, { chatId, userId, runnerId, serviceType }) => {
     },
   };
 
-  // ── 2. Fire all writes in parallel — none depend on each other ───────────────
+  // Fire all writes in parallel
   const [order] = await Promise.all([
     // Insert order (insertMany returns array, we take first)
     Order.insertMany([orderDoc], { ordered: true }).then(docs => docs[0]),
-
-    // Cancel stale orders for this chat
-    Order.updateMany(
-      {
-        chatId,
-        status: { $nin: ['completed', 'cancelled', 'task_completed'] },
-        paymentStatus: { $ne: 'paid' },
-        orderId: { $ne: orderId }, // don't cancel the one we just made
-      },
-      {
-        $set: { status: 'cancelled', cancelledAt: now, cancelReason: 'new_session_started' },
-        $push: { statusHistory: { status: 'cancelled', timestamp: now, triggeredBy: 'system', note: 'Superseded by new session' } },
-      }
-    ),
 
     // Inject payment_request into chat + pin orderId
     Chat.findOneAndUpdate(
@@ -353,13 +338,27 @@ const createOrder = async (io, { chatId, userId, runnerId, serviceType }) => {
     User.findByIdAndUpdate(userId, { activeOrderId: orderId }),
   ]);
 
-  console.log('[createOrder] Order created:', orderId);
+  await OrderActivityLog.create({
+    orderId,
+    actorType: 'system',
+    actorId: null,
+    action: 'created',
+    metadata: { status: 'pending_payment' },
+  });
 
-  // ── 3. Read the final chat state (needed for chatHistory emit) ───────────────
+  // Cancel stale orders for this chat
+  await cancelStaleOrders(
+    { chatId, status: { $nin: ['completed', 'cancelled'] }, paymentStatus: { $ne: 'paid' }, orderId: { $ne: orderId } },
+    'Superseded by new session'
+  );
+
+  await orderHistoryCache.invalidate(userId.toString());
+
+  // Read the final chat state (needed for chatHistory emit)
   const finalChat = await Chat.findOne({ chatId }).lean();
   const cleanMessages = deduplicateMessages(finalChat.messages);
 
-  // ── 4. Build lean payload and broadcast ──────────────────────────────────────
+  // Build lean payload and broadcast 
   const orderPayload = {
     orderId,
     chatId,
@@ -388,10 +387,6 @@ const createOrder = async (io, { chatId, userId, runnerId, serviceType }) => {
     pickupPhone: orderDoc.pickupPhone || null,
     dropoffPhone: orderDoc.dropoffPhone || null,
   };
-
-  console.log('[createOrder] orderPayload.serviceType:', orderPayload.serviceType);
-  console.log('[createOrder] resolvedServiceType:', resolvedServiceType);
-  console.log('[createOrder] userDoc.currentRequest:', JSON.stringify(userDoc?.currentRequest, null, 2));
 
   // Emit orderCreated first so clients can set up state before history arrives
   io.to(`user-${userId}`).emit('orderCreated', { order: orderPayload, isNewOrder: true });
@@ -723,24 +718,7 @@ const initializeChatAndProceed = async (io, chatId, state) => {
       // 3. Save chat + cancel stale orders in parallel (both required before proceeding)
       await Promise.all([
         existingChat.save(),
-        Order.updateMany(
-          { chatId, status: { $nin: ['completed', 'cancelled', 'task_completed'] } },
-          {
-            $set: {
-              status: 'cancelled',
-              cancelledAt: new Date(),
-              cancelReason: 'new_session_started',
-            },
-            $push: {
-              statusHistory: {
-                status: 'cancelled',
-                timestamp: new Date(),
-                triggeredBy: 'system',
-                note: 'New session started',
-              },
-            },
-          }
-        ),
+        cancelStaleOrders({ chatId, status: { $nin: ['completed', 'cancelled'] } }, 'New session started')
       ]);
 
       // 4. Reset socket state in background (doesn't need to block proceedToChat)

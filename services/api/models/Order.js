@@ -1,6 +1,7 @@
 const mongoose = require('mongoose');
 const { TASK_TYPES, SERVICE_TYPE, CANCELLABLE_STATES_BY_SERVICE, DISPUTE_WINDOW_HOURS } = require('../config/constants');
 const OrderActivityLog = require('./orderActivityLog');
+const orderHistoryCache = require('../cache/orderHistoryCache');
 
 //  Valid status transitions 
 const VALID_TRANSITIONS = {
@@ -282,6 +283,7 @@ orderSchema.methods.updateStatus = async function (newStatus, triggeredBy = 'sys
   this._allowTransition = true;
   this.status = newStatus;
   await this.save();
+  await orderHistoryCache.invalidate(this.userId.toString());
   this._allowTransition = false;
 
   await OrderActivityLog.create({
@@ -292,6 +294,7 @@ orderSchema.methods.updateStatus = async function (newStatus, triggeredBy = 'sys
     metadata: { from: fromStatus, to: newStatus, note: meta.note || null },
   });
 
+  
   return this;
 };
 

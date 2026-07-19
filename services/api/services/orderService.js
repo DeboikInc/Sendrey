@@ -7,7 +7,7 @@ const Wallet = require('../models/Wallet');
 const LedgerEntry = require('../models/LedgerEntry');
 const { STATUS_GROUPS } = require('../config/constants');
 const logger = require('../utils/logger');
-
+const orderHistoryCache = require('../cache/orderHistoryCache');
 const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 const encodeCursor = (doc) =>
@@ -19,8 +19,15 @@ const decodeCursor = (cursor) =>
 class OrderService {
   constructor() { }
 
+  // for user
   async getOrderHistory({ userId, status, taskType, search, dateFrom, dateTo, cursor, limit = 20 }) {
     if (!userId) throw new Error('userId is required');
+
+    const cacheable = orderHistoryCache.isCacheable(params) && limit === 20;
+    if (cacheable) {
+      const cached = await orderHistoryCache.get(userId);
+      if (cached) return cached;
+    }
 
     const filter = { userId };
 
@@ -59,10 +66,11 @@ class OrderService {
     const hasMore = orders.length > limit;
     const page = hasMore ? orders.slice(0, limit) : orders;
 
-    return {
-      orders: page,
-      nextCursor: hasMore ? encodeCursor(page[page.length - 1]) : null,
-    };
+
+    const result = { orders: page, nextCursor: hasMore ? encodeCursor(page[page.length - 1]) : null };
+
+    if (cacheable) await orderHistoryCache.set(userId, result);
+    return result;
   }
 
   async getOrderByChatId(chatId) {
@@ -180,12 +188,47 @@ class OrderService {
       status: 'sent',
     };
 
+    await orderHistoryCache.invalidate(order.userId.toString());
+
     await Chat.findOneAndUpdate(
       { chatId: chatId || order.chatId },
       { $push: { messages: cancelMessage } }
     );
 
     return { order, cancelMessage, escrowFlagged };
+  }
+
+  async cancelStaleOrders({ filter, reason }) {
+    const orders = await Order.find(filter).select('_id orderId userId status');
+    const cancellable = orders.filter(o => Order.VALID_TRANSITIONS[o.status]?.includes('cancelled'));
+    if (!cancellable.length) return;
+
+    const now = new Date();
+    const ids = cancellable.map(o => o._id);
+
+    await Order.updateMany(
+      { _id: { $in: ids } },
+      {
+        $set:
+        {
+          status: 'cancelled',
+          cancelledAt: now, cancelledBy: 'system',
+          cancellationReason: reason
+        }
+      }
+    );
+
+    await OrderActivityLog.insertMany(cancellable.map(o => ({
+      orderId: o.orderId,
+      actorType: 'system',
+      actorId: null,
+      action: 'status_changed',
+      metadata: { from: o.status, to: 'cancelled', note: reason },
+      createdAt: now,
+    })));
+
+    await Promise.all([...new Set(cancellable.map(o => o.userId.toString()))].map(uid => orderHistoryCache.invalidate(uid)));
+
   }
 }
 
