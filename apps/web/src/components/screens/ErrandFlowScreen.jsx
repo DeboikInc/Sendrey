@@ -272,8 +272,11 @@ export default function ErrandFlowScreen({
           setCurrentStep("delivery-location");
           setShowCustomInput(true);
           setShowLocationButtons(true);
+          const editDeliveryId = Date.now();
+          pendingDeliveryButtonIdRef.current = editDeliveryId;
+
           setMessages([{
-            id: Date.now(),
+            id: editDeliveryId,
             from: "them",
             text: "Set your delivery location. Choose Delivery Location",
             time: getCurrentTime(),
@@ -366,6 +369,15 @@ export default function ErrandFlowScreen({
       setDeliveryLocation(locationText);
       deliveryLocationRef.current = locationText;
       send(locationText, "delivery");
+
+      if (pendingDeliveryButtonIdRef.current) {
+        const usedId = pendingDeliveryButtonIdRef.current;
+        setMessages((prev) => prev.map((msg) =>
+          msg.id === usedId ? { ...msg, hasChooseDeliveryButton: false } : msg
+        ));
+        usedButtonIdsRef.current.add(usedId);
+        pendingDeliveryButtonIdRef.current = null;
+      }
     }
   };
 
@@ -778,14 +790,17 @@ export default function ErrandFlowScreen({
         } else if (source === "budget-flexibility") {
           const isStrict = text === "stay within budget" || text.includes("stay within budget");
           setBudgetFlexibility(isStrict ? "stay within budget" : "can adjust slightly");
+          const deliveryPromptId = Date.now() + 2;
+          pendingDeliveryButtonIdRef.current = deliveryPromptId;
 
           setMessages(prev => [...prev, {
-            id: Date.now() + 2,
+            id: deliveryPromptId,
             from: "them",
             text: "Set your delivery location. Choose Delivery Location",
             time: getCurrentTime(),
             status: "delivered",
             hasChooseDeliveryButton: true,
+            hasViewSavedLocations: true,
           }]);
           setCurrentStep("delivery-location");
           setTimeout(() => setShowLocationButtons(true), 200);

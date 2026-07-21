@@ -228,9 +228,11 @@ export default function PickupFlowScreen({
           setShowCustomInput(true);
           setShowPhoneInput(false);
           setShowLocationButtons(true);
+          const editDeliveryId = Date.now();
+          pendingDeliveryButtonIdRef.current = editDeliveryId;
           setMessages([
             {
-              id: Date.now(),
+              id: editDeliveryId,
               from: "them",
               text: "Set your delivery location. Choose Delivery Location",
               time: getCurrentTime(),
@@ -475,6 +477,15 @@ export default function PickupFlowScreen({
         send(locationText, "delivery");
       } else {
         geocodeAddress(locationText, "delivery");
+      }
+
+      if (pendingDeliveryButtonIdRef.current) {
+        const usedId = pendingDeliveryButtonIdRef.current;
+        setMessages((prev) => prev.map((msg) =>
+          msg.id === usedId ? { ...msg, hasChooseDeliveryButton: false } : msg
+        ));
+        usedButtonIdsRef.current.add(usedId);
+        pendingDeliveryButtonIdRef.current = null;
       }
     }
   };
@@ -756,10 +767,13 @@ export default function PickupFlowScreen({
           const normalizedMyNumber = myNumber?.replace(/^\+2340/, '+234');
           pickupPhoneMatchesUserPhone.current = formattedNumber === normalizedMyNumber;
 
+          const deliveryPromptId = Date.now() + 2;
+          pendingDeliveryButtonIdRef.current = deliveryPromptId;
+          
           setMessages((p) => [
             ...p,
             {
-              id: Date.now() + 2,
+              id: deliveryPromptId,
               from: "them",
               text: "Set your delivery location. Choose Delivery Location",
               time: getCurrentTime(),
@@ -1056,6 +1070,7 @@ export default function PickupFlowScreen({
                     onViewSavedLocations={m.hasViewSavedLocations ? () => {
                       if (usedButtonIdsRef.current.has(m.id)) return;
                       usedButtonIdsRef.current.add(m.id);
+
 
                       setMessages((prev) => prev.map((msg) =>
                         msg.id === m.id ? { ...msg, hasViewSavedLocations: false } : msg
