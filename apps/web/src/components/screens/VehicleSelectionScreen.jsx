@@ -454,7 +454,7 @@ export default function VehicleSelectionScreen({
   const getFreshLocation = () => {
     return new Promise((resolve, reject) => {
       if (!navigator.geolocation) {
-        reject(new Error('Geolocation not supported'));
+        reject(new Error('Geolocation not supported on this device.'));
         return;
       }
       navigator.geolocation.getCurrentPosition(
@@ -464,18 +464,46 @@ export default function VehicleSelectionScreen({
             longitude: position.coords.longitude
           });
         },
-        (error) => reject(error),
+        (error) => {
+          let message;
+          switch (error.code) {
+            case error.PERMISSION_DENIED:
+              message = 'Location access was denied. Please enable location permissions for this site and try again.';
+              break;
+            case error.POSITION_UNAVAILABLE:
+              message = 'Your current location could not be determined. Please check your device settings and try again.';
+              break;
+            case error.TIMEOUT:
+              message = 'Getting your location took too long. Please try again, ideally with a clear view of the sky or a stronger signal.';
+              break;
+            default:
+              message = 'Unable to get your current location. Please try again.';
+          }
+          reject(new Error(message));
+        },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
     });
   };
 
-  const handleConnectToRunner = async () => {
-    console.log('[VehicleSelection] handleConnectToRunner called', {
-      selectedVehicle,
-      service: service,
-      selectedService
+  const reverseGeocode = (lat, lng) => {
+    return new Promise((resolve) => {
+      if (!window.google) {
+        resolve(`Location (${lat.toFixed(6)}, ${lng.toFixed(6)})`);
+        return;
+      }
+      const geocoder = new window.google.maps.Geocoder();
+      geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+        if (status === 'OK' && results[0]) {
+          resolve(results[0].formatted_address);
+        } else {
+          resolve(`Location (${lat.toFixed(6)}, ${lng.toFixed(6)})`);
+        }
+      });
     });
+  };
+
+  const handleConnectToRunner = async () => {
 
     if (!selectedVehicle) {
       return;
@@ -485,11 +513,13 @@ export default function VehicleSelectionScreen({
 
     if (!serverUpdated) {
       try {
-        currentLocation = await getFreshLocation();
+        const coords = await getFreshLocation();
+        const address = await reverseGeocode(coords.latitude, coords.longitude);
+        currentLocation = { ...coords, address };
         setUserLocation(currentLocation);
       } catch (error) {
         console.error('Location error:', error);
-        alert('Unable to get your current location. Please enable location services and try again.');
+        alert(error.message);
         return;
       }
     }
@@ -518,7 +548,10 @@ export default function VehicleSelectionScreen({
         })),
       } : null,
       serviceType: selectedService,
-      userLocation: currentLocation
+      currentUserLocation: currentLocation?.address || null,
+      currentUserCoordinates: currentLocation
+        ? { lat: currentLocation.latitude, lng: currentLocation.longitude }
+        : null,
     };
 
     const serializableOrderData = {

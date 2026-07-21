@@ -24,11 +24,14 @@ const {
 } = require('../services/notificationService');
 
 const handleCancelOrder = async (socket, io, data) => {
+    console.log('[handleCancelOrder] INVOKED', { socketId: socket.id, data });
     const { chatId, orderId, runnerId, userId, reason } = data;
     try {
         const { order, cancelMessage } = await cancelOrder({
             orderId, chatId, runnerId, userId, reason, cancelledBy: 'runner'
         });
+
+        console.log('[handleCancelOrder] cancelOrder service resolved', { orderId: order?.orderId });
 
         const now = new Date().toISOString();
         const reasonSuffix = reason ? ` Reason: ${reason}` : '';
@@ -118,6 +121,7 @@ const handleCancelOrder = async (socket, io, data) => {
         }
 
     } catch (error) {
+        console.error('[handleCancelOrder] FAILED', { orderId, chatId, error: error.message, stack: error.stack });
         const msg = error.message === 'PAID_ORDER'
             ? 'This order has already been funded and cannot be cancelled.'
             : 'Failed to cancel order. Please try again.';
@@ -136,6 +140,26 @@ const handleTaskCompleted = async (io, data) => {
     };
 
     emitTaskCompleted();
+
+    const taskCompletedMarker = stampMessage(chatId, {
+        id: `task-completed-marker-${Date.now()}`,
+        from: 'system',
+        type: 'task_completed_marker',
+        messageType: 'task_completed_marker',
+        text: 'Task completed by runner.',
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        status: 'sent',
+        senderId: 'system',
+        senderType: 'system',
+        orderId,
+    });
+
+    io.to(chatId).emit('message', taskCompletedMarker);
+
+    Chat.findOneAndUpdate(
+        { chatId },
+        { $push: { messages: taskCompletedMarker } }
+    ).catch(err => logger.error('[taskCompleted] Marker persist failed:', err));
 
     const MAX_ATTEMPTS = 3;
     let attempt = 0;

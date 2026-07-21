@@ -7,3 +7,7 @@ ios
 docker-compose.yml
 services/api/logs/
 apps/admin-dashboard/package-lock.json
+apps/web/.env
+apps/mobile/.env
+apps/admin-dashboard/.env
+apps/ladning-page/.env

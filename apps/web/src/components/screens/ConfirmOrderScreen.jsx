@@ -40,7 +40,7 @@ export default function ConfirmOrderScreen({
     budgetFlexibility,
     estimatedPrice, // eslint-disable-line no-unused-vars
     marketCoordinates, // eslint-disable-line no-unused-vars
-    deliveryCoordinates  // eslint-disable-line no-unused-vars
+    deliveryCoordinates,  // eslint-disable-line no-unused-vars
   } = orderData || {};
 
   const midOrPickupCoords = serviceType === "run-errand"
@@ -149,6 +149,8 @@ export default function ConfirmOrderScreen({
           serviceType,
           fleetType,
           userId,
+          currentUserLocation: orderData?.currentUserLocation,
+          currentUserCoordinates: orderData?.currentUserCoordinates,
           specialInstructions: resolvedSpecialInstructions, // ← real URLs now
           timestamp: new Date().toISOString(),
           dropoffPhone: orderData?.dropoffPhone || orderData?.deliveryPhone,
@@ -370,7 +372,7 @@ export default function ConfirmOrderScreen({
           </div>
 
           {/* Dropoff Phone (only for pick-up service) */}
-          {(dropoffPhone || deliveryPhone)  && (
+          {(dropoffPhone || deliveryPhone) && (
             <div className="flex items-start justify-between p-3 bg-gray-200 dark:bg-black-100 border-b">
               <div className="flex items-start gap-3 flex-1">
                 <Phone className="h-5 w-5 mt-0.5 text-purple-500" />

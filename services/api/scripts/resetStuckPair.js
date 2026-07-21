@@ -6,7 +6,7 @@ const Runner = require('../models/Runner');
 const Order = require('../models/Order');
 
 async function reset() {
-  await mongoose.connect(process.env.DATABASE_URL);
+ await mongoose.connect(process.env.DATABASE_URL); 
 
   // Cancel all non-terminal orders
   const orders = await Order.updateMany(

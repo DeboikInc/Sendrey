@@ -278,7 +278,11 @@ const userSchema = new mongoose.Schema({
   currentRequest: {
     serviceType: { type: String, enum: SERVICE_TYPE },
     fleetType: { type: String, enum: FLEET_TYPE },
-
+    currentUserLocation: { type: String },
+    currentUserCoordinates: {
+      lat: { type: Number },
+      lng: { type: Number }
+    },
     deliveryLocation: { type: String },
     deliveryCoordinates: {
       lat: { type: Number },

@@ -6,7 +6,8 @@ import { authStorage } from "../utils/authStorage";
 // helper — call after any successful auth response
 const storeTokensIfNeeded = async (payload) => {
     if (payload?.accessToken) {
-        await authStorage.setTokens(payload.accessToken, payload.refreshToken);
+        const userType = payload.runner ? 'runner' : 'user';
+        await authStorage.setTokens(payload.accessToken, payload.refreshToken, userType);
     }
 };
 

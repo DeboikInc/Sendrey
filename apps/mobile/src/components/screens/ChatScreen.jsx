@@ -37,6 +37,7 @@ import TeamNotifyPrompt from './TeamNotifyPrompt'
 import Settings from "../../pages/user/settings/Settings";
 import DisputeForm from '../common/DisputeForm';
 import RatingModal from '../common/RatingModal';
+import RunnerContactInformation from './RunnerContactInformation'
 
 import { checkCanRate } from '../../Redux/ratingSlice';
 import OrderDetailsSheet from '../common/OrderDetailsSheet';
@@ -49,7 +50,6 @@ import { fetchOrderByChatId } from '../../Redux/orderSlice';
 import { enqueueSocketEvent, flushSocketQueue } from '../../utils/socketQueue';
 
 import useUserOrderStore from '../../store/userOrderStore';
-import RunnerContactInformation from "./RunnerContactInformation";
 
 const getCurrentTime = () => {
   return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -81,9 +81,9 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
   const [showMoreSheet, setShowMoreSheet] = useState(false);
   const [showWallet, setShowWallet] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [showRunnerContactInfo, setShowRunnerContactInfo] = useState(false);
   const [showDisputeForm, setShowDisputeForm] = useState(false);
   const [showRatingModal, setShowRatingModal] = useState(false);
+  const [showRunnerContactInfo, setShowRunnerContactInfo] = useState(false);
   const [localIsPaid, setLocalIsPaid] = useState(false);
 
   const [cancelledByName, setCancelledByName] = useState(null);
@@ -599,7 +599,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
       socket.off('chatReset');
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [socket, currentOrder?.orderId, dispatch, chatId]);
+  }, [socket, dispatch, chatId]);
 
   useEffect(() => {
     const stageMap = {
@@ -749,6 +749,10 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
         )
         : serverMessages;
 
+      const visibleServerMessages = filteredServerMessages.filter(m =>
+        m.type !== 'task_completed_marker' && m.messageType !== 'task_completed_marker'
+      );
+
       // Check if this is a new session
       const firstMsg = msgs[0];
       const isNewSession =
@@ -786,7 +790,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
 
 
         // Save to storage
-        const stableMessages = filteredServerMessages.filter(m => !m.isUploading && !m.tempId);
+        const stableMessages = visibleServerMessages.filter(m => !m.isUploading && !m.tempId);
         if (stableMessages.length) {
           chatStorage.saveMessages(chatId, stableMessages);
         }
@@ -817,21 +821,21 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
           initialHistoryProcessedRef.current = true;
 
           // Save to storage
-          const stableMessages = serverMessages.filter(m => !m.isUploading && !m.tempId);
+          const stableMessages = visibleServerMessages.filter(m => !m.isUploading && !m.tempId);
           if (stableMessages.length) {
             chatStorage.saveMessages(chatId, stableMessages);
           }
 
-          return serverMessages;
+          return visibleServerMessages;
         }
 
         // Merge existing (from storage) with server messages
         console.log('[chatHistory] merging:', {
           stored: prev.length,
-          server: serverMessages.length
+          server: visibleServerMessages.length
         });
 
-        const merged = mergeMessages(prev, serverMessages);
+        const merged = mergeMessages(prev, visibleServerMessages);
 
         // Mark all server messages as seen
         serverMessages.forEach(m => markSeen(m));
@@ -889,8 +893,11 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
       const isCompleted = msgs.some(m =>
         m.type === "task_completed" ||
         m.messageType === "task_completed" ||
+        m.type === "task_completed_marker" ||
+        m.messageType === "task_completed_marker" ||
         (m.type === "system" && m.text?.toLowerCase().includes("task completed"))
       );
+
       setTaskCompleted(isCompleted);
 
       // Process cancellation
@@ -918,6 +925,40 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
     };
 
     const handleMessage = (msg) => {
+
+      // Backup terminal marker — apply side effects, never render.
+      if (msg.type === 'task_completed_marker' || msg.messageType === 'task_completed_marker') {
+        const msgId = msg.id || `system-task-completed-${Date.now()}`;
+        const normalizedMsg = { ...msg, id: msgId };
+        if (isSeen(normalizedMsg)) return;
+        markSeen(normalizedMsg);
+
+        setTaskCompleted(true);
+
+        chatStorage.saveChatStatus(chatId, {
+          orderCancelled: false,
+          cancelledByName: null,
+          taskCompleted: true,
+          currentOrder: currentOrderRef.current || null,
+        });
+        chatStorage.clearMessages(chatId);
+        chatStorage.clearActiveChat();
+        chatStorage.clearDeliveryConfirmations(chatId);
+        chatStorage.clearRunnerData();
+
+        const orderId = msg.orderId || currentOrderRef.current?.orderId;
+        if (orderId && orderId !== 'undefined') {
+          dispatch(checkCanRate(orderId)).unwrap()
+            .then(result => {
+              if (result?.canRate || result.data?.canRate) {
+                setRatingOrderId(orderId);
+                setCanRate(true);
+                setTimeout(() => setShowRatingModal(true), 1500);
+              }
+            }).catch(() => { });
+        }
+        return;
+      }
 
       if (msg.text?.toLowerCase().includes('item delivered') ||
         msg.type === 'item_delivered' ||
@@ -1881,15 +1922,6 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
         </div>
       )}
 
-      {showRunnerContactInfo && (
-        <RunnerContactInformation
-          darkMode={darkMode}
-          onClose={() => setShowRunnerContactInfo(false)}
-          isOpen={showRunnerContactInfo}
-          runnerPhone={runner?.phone}
-        />
-      )}
-
       {showOrderDetails && (
         <OrderDetailsSheet
           isOpen={showOrderDetails}
@@ -1931,6 +1963,15 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
         />
       )}
 
+      {showRunnerContactInfo && (
+        <RunnerContactInformation
+          isOpen={showRunnerContactInfo}
+          runnerPhone={runner?.phone}
+          onClose={() => setShowRunnerContactInfo(false)}
+          darkMode={darkMode}
+        />
+      )}
+
       {showWallet && (
         <div className="fixed inset-0 z-50">
           <UserWallet darkMode={darkMode} onBack={() => setShowWallet(false)} userData={userData} />
@@ -1946,8 +1987,8 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
         onSettings={() => { setShowMoreSheet(false); setShowSettings(true); }}
         hasActiveOrder={canRaiseDispute}
         onRaiseDispute={() => { setShowMoreSheet(false); setShowDisputeForm(true); }}
-        onRunnerContactInfo={() => { setShowMoreSheet(false); setShowRunnerContactInfo(true); }}
         onOrderDetails={() => { setShowMoreSheet(false); setShowOrderDetails(true); }}
+        onRunnerContactInfo={() => { setShowMoreSheet(false); setShowRunnerContactInfo(true); }}
         canRate={canRate}
         onRateRunner={() => { setShowMoreSheet(false); if (ratingOrderId) setShowRatingModal(true); }}
       />
@@ -2092,6 +2133,10 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
                 return null;
               }
 
+              if (m.type === 'task_completed_marker' || m.messageType === 'task_completed_marker') {
+                return null;
+              }
+
               // dispute
               if (m.type === 'dispute_raised' || m.messageType === 'dispute_raised') {
                 return (
@@ -2204,8 +2249,6 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
                 );
               }
 
-              // All other types: system, text, image, audio, video, file,
-              // payment_success, payment_failed, payment_pending,
               return (
                 <Message
                   key={m.id}
@@ -2270,9 +2313,6 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
           ) : orderCancelled ? (
             // ── Order cancelled by runner ──
             <div className="flex flex-col items-center gap-3 px-4 sm:px-8 lg:px-64">
-              <p className={`text-sm font-medium text-center ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
-                {cancelledByName ? `${cancelledByName} cancelled this order` : 'This order was cancelled'}
-              </p>
               <button
                 onClick={onOrderComplete}
                 className="w-full py-4 rounded-xl bg-primary text-white font-semibold"
