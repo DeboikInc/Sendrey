@@ -2,138 +2,124 @@
 const MatchingConfig = require('../models/MatchConfig');
 const redis = require('../config/redis');
 
-let cachedConfig = null;
-let loadingPromise = null;
+class DistanceConfigService {
+  constructor() {
+    this.cachedPedestrianConfig = null;
+    this.pedestrianLoadingPromise = null;
 
-async function loadFromDb() {
-  const doc = await MatchingConfig.findOne({ key: 'active' }).lean();
-  if (!doc) {
-    throw new Error('[matchingConfigCache] No active MatchingConfig found in DB — run the seed script.');
+    this.PEDESTRIAN_ALLOWED_FIELDS = [
+      'pickupMaxDistance',
+      'totalMaxDistance',
+      'pedestrianMaxRunnerLeg',
+      'pedestrianMaxDeliveryLeg',
+      'pedestrianTotalMax',
+    ];
   }
-  return doc;
-}
 
-async function getMatchingConfig() {
-  if (cachedConfig) return cachedConfig;
+  getOrCreatePedestrianConfig = async () => {
+    return MatchingConfig.findOneAndUpdate(
+      { key: 'active' },
+      { $setOnInsert: { key: 'active' } },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    ).lean();
+  };
 
-  if (!loadingPromise) {
-    loadingPromise = loadFromDb()
-      .then((doc) => {
-        cachedConfig = doc;
-        return doc;
-      })
-      .finally(() => {
-        loadingPromise = null;
-      });
-  }
-  return loadingPromise;
-}
+  loadPedestrianConfigFromDb = async () => {
+    return this.getOrCreatePedestrianConfig();
+  };
 
-function invalidateMatchingConfig() {
-  cachedConfig = null;
-  console.log('[matchingConfigCache] Cache invalidated — next call will refetch from DB');
-}
+  getPedestrianConfig = async () => {
+    if (this.cachedPedestrianConfig) return this.cachedPedestrianConfig;
 
-// Call once at server startup, after redis.connect()
-async function initMatchingConfigSubscriber() {
-  await getMatchingConfig();
-
-  const subscriber = redis.getSubscriber();
-  await subscriber.subscribe('matchingConfig:updated', (err, count) => {
-    if (err) {
-      console.error('[matchingConfigCache] Failed to subscribe to matchingConfig:updated:', err);
-    } else {
-      console.log(`✅ Subscribed to matchingConfig:updated (${count} channels)`);
+    if (!this.pedestrianLoadingPromise) {
+      this.pedestrianLoadingPromise = this.loadPedestrianConfigFromDb()
+        .then((doc) => {
+          this.cachedPedestrianConfig = doc;
+          return doc;
+        })
+        .finally(() => {
+          this.pedestrianLoadingPromise = null;
+        });
     }
-  });
+    return this.pedestrianLoadingPromise;
+  };
 
-  subscriber.on('message', (channel) => {
-    if (channel === 'matchingConfig:updated') {
-      console.log('[matchingConfigCache] Received matchingConfig:updated — invalidating cache');
-      invalidateMatchingConfig();
+  invalidatePedestrianConfig = () => {
+    this.cachedPedestrianConfig = null;
+    console.log('[pedestrianConfigCache] Cache invalidated — next call will refetch from DB');
+  };
+
+  initPedestrianConfigSubscriber = async () => {
+    await this.getPedestrianConfig();
+
+    const subscriber = redis.getSubscriber();
+    await subscriber.subscribe('matchingConfig:updated', (err, count) => {
+      if (err) {
+        console.error('[pedestrianConfigCache] Failed to subscribe to matchingConfig:updated:', err);
+      } else {
+        console.log(`✅ Subscribed to matchingConfig:updated (${count} channels)`);
+      }
+    });
+
+    subscriber.on('message', (channel) => {
+      if (channel === 'matchingConfig:updated') {
+        console.log('[pedestrianConfigCache] Received matchingConfig:updated — invalidating cache');
+        this.invalidatePedestrianConfig();
+      }
+    });
+  };
+
+  updatePedestrianConfig = async (updates, userId) => {
+    const set = {};
+    for (const field of this.PEDESTRIAN_ALLOWED_FIELDS) {
+      if (updates[field] !== undefined) set[field] = updates[field];
     }
-  });
-}
+    if (userId) set.updatedBy = userId;
 
-const ALLOWED_FIELDS = [
-  'pickupMaxDistance',
-  'totalMaxDistance',
-  'pedestrianMaxRunnerLeg',
-  'pedestrianMaxDeliveryLeg',
-  'pedestrianTotalMax',
-];
-
-// Used by the pedestrian-config route — full field set, cached read path
-async function updateMatchingConfig(updates, userId) {
-  const set = {};
-  for (const field of ALLOWED_FIELDS) {
-    if (updates[field] !== undefined) set[field] = updates[field];
-  }
-  if (userId) set.updatedBy = userId;
-
-  const pedestrianFields = ['pedestrianMaxRunnerLeg', 'pedestrianMaxDeliveryLeg', 'pedestrianTotalMax'];
-  const touchesPedestrianFields = pedestrianFields.some((f) => set[f] !== undefined);
-
-  if (touchesPedestrianFields) {
-    const current = await MatchingConfig.findOne({ key: 'active' }).lean();
-    if (!current) return null;
-
-    const runnerLeg = set.pedestrianMaxRunnerLeg ?? current.pedestrianMaxRunnerLeg;
-    const deliveryLeg = set.pedestrianMaxDeliveryLeg ?? current.pedestrianMaxDeliveryLeg;
-    const totalMax = set.pedestrianTotalMax ?? current.pedestrianTotalMax;
-
-    if (runnerLeg + deliveryLeg !== totalMax) {
-      const err = new Error(
-        `pedestrianMaxRunnerLeg (${runnerLeg}) + pedestrianMaxDeliveryLeg (${deliveryLeg}) must equal pedestrianTotalMax (${totalMax})`
-      );
-      err.statusCode = 400;
-      throw err;
+    // If either leg field is being updated, recalculate total
+    if (set.pedestrianMaxRunnerLeg || set.pedestrianMaxDeliveryLeg) {
+      const current = await this.getPedestrianConfig();
+      const runnerLeg = set.pedestrianMaxRunnerLeg ?? current.pedestrianMaxRunnerLeg;
+      const deliveryLeg = set.pedestrianMaxDeliveryLeg ?? current.pedestrianMaxDeliveryLeg;
+      set.pedestrianTotalMax = runnerLeg + deliveryLeg;
     }
-  }
 
-  const config = await MatchingConfig.findOneAndUpdate(
-    { key: 'active' },
-    { $set: set, $inc: { version: 1 } },
-    { new: true, runValidators: true }
-  );
+    const config = await MatchingConfig.findOneAndUpdate(
+      { key: 'active' },
+      { $set: set, $inc: { version: 1 }, $setOnInsert: { key: 'active' } },
+      { new: true, runValidators: true, upsert: true, setDefaultsOnInsert: true }
+    );
 
-  if (!config) return null;
+    this.invalidatePedestrianConfig();
+    const pub = redis.getPublisher();
+    await pub.publish('matchingConfig:updated', JSON.stringify({ updatedAt: new Date() }));
 
-  invalidateMatchingConfig();
-  const pub = redis.getPublisher();
-  await pub.publish('matchingConfig:updated', JSON.stringify({ updatedAt: new Date() }));
+    return config;
+  };
 
-  return config;
+  // other fleetTypes
+  getRawMatchingConfig = async () => {
+    return this.getOrCreatePedestrianConfig();
+  };
+
+  updateMatchingDistanceCaps = async (pickupMaxDistance, totalMaxDistance, userId) => {
+    let existing = await MatchingConfig.findOne({ key: 'active' });
+    if (!existing) {
+      existing = await MatchingConfig.create({ key: 'active' });
+    }
+
+    existing.pickupMaxDistance = pickupMaxDistance;
+    existing.totalMaxDistance = totalMaxDistance;
+    existing.version += 1;
+    if (userId) existing.updatedBy = userId;
+
+    await existing.save();
+
+    this.invalidatePedestrianConfig();
+    await redis.getClient().publish('matchingConfig:updated', JSON.stringify({ version: existing.version }));
+
+    return existing;
+  };
 }
 
-// Used by the matching-config (distance caps) route — direct DB read, bypasses cache
-async function getRawMatchingConfig() {
-  return MatchingConfig.findOne({ key: 'active' }).lean();
-}
-
-// Used by the matching-config (distance caps) route — only pickupMaxDistance/totalMaxDistance
-async function updateMatchingDistanceCaps(pickupMaxDistance, totalMaxDistance, userId) {
-  const existing = await MatchingConfig.findOne({ key: 'active' });
-  if (!existing) return null;
-
-  existing.pickupMaxDistance = pickupMaxDistance;
-  existing.totalMaxDistance = totalMaxDistance;
-  existing.version += 1;
-  if (userId) existing.updatedBy = userId;
-
-  await existing.save();
-
-  invalidateMatchingConfig();
-  await redis.getClient().publish('matchingConfig:updated', JSON.stringify({ version: existing.version }));
-
-  return existing;
-}
-
-module.exports = {
-  getMatchingConfig,
-  invalidateMatchingConfig,
-  initMatchingConfigSubscriber,
-  updateMatchingConfig,
-  getRawMatchingConfig,
-  updateMatchingDistanceCaps,
-};
+module.exports = new DistanceConfigService();

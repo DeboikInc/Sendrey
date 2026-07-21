@@ -6,7 +6,6 @@ const { authenticate, authorize, auditLog, userRateLimit } = require('../middlew
 const { validate } = require('../middleware/validation');
 const { userParamsValidation, userValidation } = require('../validations/userValidation');
 const upload = require('../middleware/upload');
-
 // Protected routes (require authentication)
 router.use(authenticate);
 
@@ -70,6 +69,17 @@ router.get('/online',
 );
 
 
+router.get('/chat/:runnerId/recent-chats',
+  authorize(['runner']),
+  auditLog('FETCH_RECENT_CHATS'),
+  runnerController.getRecentChats,
+);
+
+router.post('/chat/:runnerId/refresh-recent-chats',
+  authorize(['runner']),
+  auditLog('REFRESH_RECENT_CHATS'),
+  runnerController.refreshRecentChats
+);
 
 router.patch(
     '/:runnerId/avatar',

@@ -151,7 +151,7 @@ class UserService {
         User.countDocuments(query)
       ]);
 
-      
+
       const userIds = users.map(u => u._id);
       const orderCounts = await Order.aggregate([
         { $match: { userId: { $in: userIds } } },
@@ -285,12 +285,21 @@ class UserService {
    * Add a new saved location to user profile
    */
   async addSavedLocation(userId, locationData) {
+
     try {
       const user = await User.findById(userId);
       if (!user) throw new Error('User not found');
 
       if (user.savedLocations && user.savedLocations.length >= 10) {
         throw new Error('Maximum of 10 saved locations reached');
+      }
+
+      const isDuplicate = user.savedLocations?.some(loc =>
+        Math.abs(loc.lat - locationData.lat) < 0.0001 &&
+        Math.abs(loc.lng - locationData.lng) < 0.0001
+      );
+      if (isDuplicate) {
+        throw new Error('This location has already been saved');
       }
 
       const updatedUser = await User.findByIdAndUpdate(
@@ -311,13 +320,19 @@ class UserService {
    */
   async removeSavedLocation(userId, locationId) {
     try {
-      const user = await User.findByIdAndUpdate(
+      const user = await User.findById(userId);
+      if (!user) throw new Error('User not found');
+
+      const exists = user.savedLocations.some(loc => loc._id.toString() === locationId);
+      if (!exists) throw new Error('Location does not exist or has already been removed');
+
+      const updatedUser = await User.findByIdAndUpdate(
         userId,
         { $pull: { savedLocations: { _id: locationId } } },
         { new: true }
       );
-      if (!user) throw new Error('User not found');
-      return user.savedLocations;
+      return updatedUser.savedLocations;
+
     } catch (error) {
       logger.error('UserService - Remove saved location error:', error);
       throw error;

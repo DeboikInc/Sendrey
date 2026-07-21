@@ -1,60 +1,43 @@
 // controllers/distanceConfigController.js
 const BaseController = require('./baseController');
 const distanceConfigService = require('../services/distanceConfigService');
-const {
-  getMatchingConfig,
-  invalidateMatchingConfig,
-  initMatchingConfigSubscriber,
-  updateMatchingConfig,
-  getRawMatchingConfig,
-  updateMatchingDistanceCaps,
-} = distanceConfigService;
 
 class DistanceConfigController extends BaseController {
   constructor() {
     super(distanceConfigService);
-    this.getMatchingConfig = getMatchingConfig;
-    this.invalidateMatchingConfig = invalidateMatchingConfig;
-    this.initMatchingConfigSubscriber = initMatchingConfigSubscriber;
-    this.updateMatchingConfig = updateMatchingConfig;
-    this.getRawMatchingConfig = getRawMatchingConfig;
-    this.updateMatchingDistanceCaps = updateMatchingDistanceCaps;
   }
 
-  // GET /get-pedestrian-config
   getPedestrianConfig = async (req, res, next) => {
     try {
-      const config = await getMatchingConfig();
+      console.log('[Controller] getPedestrianConfig called');
+      const config = await distanceConfigService.getPedestrianConfig();
+      console.log('[Controller] Config retrieved:', config);
       return this.success(res, config);
     } catch (err) {
+      console.error('[Controller] Error in getPedestrianConfig:', err);
       next(err);
     }
   };
 
-  // PUT /update-pedestrian-config
   updatePedestrianConfig = async (req, res, next) => {
     try {
-      const config = await updateMatchingConfig(req.body, req.user?._id);
-      if (!config) return this.notFound(res, 'Matching config not found');
-      return this.success(res, config, 'Matching config updated');
+      const config = await distanceConfigService.updatePedestrianConfig(req.body, req.user?._id);
+      return this.success(res, config, 'Pedestrian config updated');
     } catch (err) {
       if (err.statusCode === 400) return this.badRequest(res, err.message);
       next(err);
     }
   };
 
-  // GET /get-matching-config
   getDistanceCapsConfig = async (req, res, next) => {
     try {
-      const config = await getRawMatchingConfig();
-      if (!config) return this.notFound(res, 'No active matching config found. Run the seed script.');
+      const config = await distanceConfigService.getRawMatchingConfig();
       return this.success(res, config);
     } catch (err) {
       next(err);
     }
   };
 
-  // PUT /put-matching-config
   updateDistanceCapsConfig = async (req, res, next) => {
     try {
       const { pickupMaxDistance, totalMaxDistance } = req.body;
@@ -66,9 +49,11 @@ class DistanceConfigController extends BaseController {
         }
       }
 
-      const config = await updateMatchingDistanceCaps(pickupMaxDistance, totalMaxDistance, req.admin?._id);
-      if (!config) return this.notFound(res, 'No active matching config found. Run the seed script first.');
-
+      const config = await distanceConfigService.updateMatchingDistanceCaps(
+        pickupMaxDistance, 
+        totalMaxDistance, 
+        req.admin?._id
+      );
       return this.success(res, config);
     } catch (err) {
       next(err);

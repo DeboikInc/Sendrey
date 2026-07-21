@@ -35,7 +35,6 @@ const { startSocketServer, shutdownSocketServer } = require('./socket');
 const { initPricingConfigSubscriber } = require('./services/pricingService');
 const { initMatchingConfigSubscriber } = require('./services/distanceConfigService');
 const { startRetryLoop } = require('./utils/paymentRetryQueue');
-const runSeeds = require('./utils/runSeeds');
 
 require("dotenv").config();
 
@@ -56,9 +55,7 @@ const startServer = async () => {
     // 1. Await the database connection first
     await connectDb();
     console.log(' Database connected');
-
-    await runSeeds();
-
+    
     // restore any scheduled cron jobs that were active before the server restarted
     await startExpenseReportJobs();
 

@@ -266,8 +266,7 @@ export const Welcome = () => {
 
     useEffect(() => {
         if (!currentUser?._id) return;
-        const timer = setTimeout(restoreIfActive, socket?.connected);
-        return () => clearTimeout(timer);
+        restoreIfActive();
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [currentUser?._id]);
 

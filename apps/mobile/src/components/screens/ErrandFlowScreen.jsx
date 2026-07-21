@@ -2,18 +2,18 @@
 // components/screens/ErrandFlow.jsx
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Button } from "@material-tailwind/react";
-import { MapPin, X, Bookmark, Check } from "lucide-react";
+import { MapPin, X, } from "lucide-react";
 import Message from "../common/Message";
 import Onboarding from "../common/Onboarding";
 import CustomInput from "../common/CustomInput";
 import Map from "../common/Map";
 import { useDispatch } from "react-redux";
-import { addLocation } from "../../Redux/userSlice";
 import { useSelector } from "react-redux";
 import debounce from "lodash/debounce";
 
 import { getSuggestionStatus } from "../../Redux/businessSlice";
 import BusinessConversionFlow from "./BusinessConversionFlow";
+import SaveLocationConfirmModal from "./SaveLocationConfirmModal";
 
 const getCurrentTime = () => {
   return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -53,8 +53,6 @@ export default function ErrandFlowScreen({
   const [selectedPlace, setSelectedPlace] = useState(null);
   const [showLocationButtons, setShowLocationButtons] = useState(true);
   const [currentStep, setCurrentStep] = useState("market-location");
-  const [showSaveConfirm, setShowSaveConfirm] = useState(false);
-  const [pendingPlace, setPendingPlace] = useState(null);
   const [showCustomInput, setShowCustomInput] = useState(true);
 
   // Market run states
@@ -88,6 +86,9 @@ export default function ErrandFlowScreen({
   const searchRequestIdRef = useRef(0);
   const sessionTokenRef = useRef(null);
   const usedButtonIdsRef = useRef(new Set());
+
+  const [pendingPlace, setPendingPlace] = useState(null);
+
 
   const currentUser = authState?.user ?? authState;
 
@@ -271,8 +272,11 @@ export default function ErrandFlowScreen({
           setCurrentStep("delivery-location");
           setShowCustomInput(true);
           setShowLocationButtons(true);
+          const editDeliveryId = Date.now();
+          pendingDeliveryButtonIdRef.current = editDeliveryId;
+
           setMessages([{
-            id: Date.now(),
+            id: editDeliveryId,
             from: "them",
             text: "Set your delivery location. Choose Delivery Location",
             time: getCurrentTime(),
@@ -320,25 +324,10 @@ export default function ErrandFlowScreen({
   const handleMapSelection = () => {
     if (!selectedPlace) return;
     setPendingPlace(selectedPlace);
-    setShowSaveConfirm(true);
   };
 
-  const finalizeSelection = async (shouldSave) => {
-    const place = pendingPlace;
+  const proceedWithLocation = (place) => {
     const locationText = place.name || place.address;
-
-    if (shouldSave) {
-      try {
-        await dispatch(addLocation({
-          name: place.name || "Mapped Location",
-          address: place.address,
-          lat: place.lat,
-          lng: place.lng
-        })).unwrap();
-      } catch (err) {
-        console.error("Failed to save location:", err);
-      }
-    }
 
     if (currentStep === "market-location") {
       marketCoordinatesRef.current = { lat: place.lat, lng: place.lng };
@@ -351,7 +340,6 @@ export default function ErrandFlowScreen({
       deliveryLocationRef.current = locationText;
       send(locationText, "delivery");
 
-      // disable the button that opened this map
       if (pendingDeliveryButtonIdRef.current) {
         const usedId = pendingDeliveryButtonIdRef.current;
         setMessages((prev) => prev.map((msg) =>
@@ -362,7 +350,6 @@ export default function ErrandFlowScreen({
       }
     }
 
-    setShowSaveConfirm(false);
     setShowMap(false);
     setSelectedPlace(null);
     setPendingPlace(null);
@@ -382,6 +369,15 @@ export default function ErrandFlowScreen({
       setDeliveryLocation(locationText);
       deliveryLocationRef.current = locationText;
       send(locationText, "delivery");
+
+      if (pendingDeliveryButtonIdRef.current) {
+        const usedId = pendingDeliveryButtonIdRef.current;
+        setMessages((prev) => prev.map((msg) =>
+          msg.id === usedId ? { ...msg, hasChooseDeliveryButton: false } : msg
+        ));
+        usedButtonIdsRef.current.add(usedId);
+        pendingDeliveryButtonIdRef.current = null;
+      }
     }
   };
 
@@ -794,14 +790,17 @@ export default function ErrandFlowScreen({
         } else if (source === "budget-flexibility") {
           const isStrict = text === "stay within budget" || text.includes("stay within budget");
           setBudgetFlexibility(isStrict ? "stay within budget" : "can adjust slightly");
+          const deliveryPromptId = Date.now() + 2;
+          pendingDeliveryButtonIdRef.current = deliveryPromptId;
 
           setMessages(prev => [...prev, {
-            id: Date.now() + 2,
+            id: deliveryPromptId,
             from: "them",
             text: "Set your delivery location. Choose Delivery Location",
             time: getCurrentTime(),
             status: "delivered",
             hasChooseDeliveryButton: true,
+            hasViewSavedLocations: true,
           }]);
           setCurrentStep("delivery-location");
           setTimeout(() => setShowLocationButtons(true), 200);
@@ -981,37 +980,13 @@ export default function ErrandFlowScreen({
             </div>
           )}
 
-          {showSaveConfirm && (
-            <div className="absolute inset-0 z-[60] flex items-center justify-center p-6 bg-black/50 backdrop-blur-sm">
-              <div className={`w-full max-w-xs p-6 rounded-2xl shadow-xl ${darkMode ? 'bg-black-100 text-white' : 'bg-white text-gray-800'}`}>
-                <div className="flex flex-col items-center text-center">
-                  <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-                    <Bookmark className="text-primary" size={24} />
-                  </div>
-                  <h4 className="font-bold text-lg mb-2">Save to Favourites?</h4>
-                  <p className="text-sm opacity-70 mb-6">
-                    Would you like to keep this location for your next request?
-                  </p>
-                  <div className="flex flex-col w-full gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() => finalizeSelection(true)}
-                      className="bg-primary flex items-center justify-center gap-2"
-                    >
-                      <Check size={16} /> Save & Select
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="text"
-                      onClick={() => finalizeSelection(false)}
-                      className={darkMode ? 'text-gray-400' : 'text-gray-600'}
-                    >
-                      Just Select
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </div>
+          {pendingPlace && (
+            <SaveLocationConfirmModal
+              place={pendingPlace}
+              darkMode={darkMode}
+              onConfirm={proceedWithLocation}
+              onCancel={() => setPendingPlace(null)}
+            />
           )}
         </div>
       </Onboarding>

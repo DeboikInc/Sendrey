@@ -15,6 +15,8 @@ import {
 } from "../../Redux/authSlice";
 import { authStorage } from '../../utils/authStorage';
 import { isCapacitor } from "../../utils/api";
+import { useRedirectIfAuthenticated } from '../../hooks/useRedirectIfAuthenticated';
+
 
 // Geolocation config
 const GEO_OPTIONS = {
@@ -26,6 +28,7 @@ const GEO_OPTIONS = {
 const MAX_WATCH_DURATION = 20000;
 
 export const Auth = () => {
+  useRedirectIfAuthenticated();
   const [dark, setDark] = useDarkMode();
   const navigate = useNavigate();
   const location = useLocation();
