@@ -111,6 +111,12 @@ class RunnerController extends BaseController {
         sortBy,
       });
 
+      const runnerList = Array.isArray(eligibleRunners) ? eligibleRunners : eligibleRunners?.data || eligibleRunners?.runners || [];
+
+      runnerList.forEach((runner, index) => {
+        console.log(`[Runner Service] Runner ${String.fromCharCode(65 + index)}: isAvailable: ${runner.isAvailable}, isActive: ${runner.isActive}`);
+      });
+
       return this.success(res, {
         count: eligibleRunners.length,
         runners: eligibleRunners,

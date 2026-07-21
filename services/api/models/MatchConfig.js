@@ -5,14 +5,12 @@ const matchingConfigSchema = new mongoose.Schema({
   version: { type: Number, required: true, default: 1 },
   updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin' },
 
-  // General
-  pickupMaxDistance: { type: Number, required: true, min: 0 },
-  totalMaxDistance: { type: Number, required: true, min: 0 },
+  pickupMaxDistance: { type: Number, required: true, min: 0, default: 99999999 },
+  totalMaxDistance: { type: Number, required: true, min: 0, default: 99999999 },
 
-  // Pedestrian-specific
-  pedestrianMaxRunnerLeg: { type: Number, required: true, min: 0, default: 200 },  // runner → pickup
-  pedestrianMaxDeliveryLeg: { type: Number, required: true, min: 0, default: 800 }, // pickup → delivery
-  pedestrianTotalMax: { type: Number, required: true, min: 0, default: 1000 },      // combined cap
+  pedestrianMaxRunnerLeg: { type: Number, required: true, min: 0, default: 200 },
+  pedestrianMaxDeliveryLeg: { type: Number, required: true, min: 0, default: 1000 },
+  pedestrianTotalMax: { type: Number, required: true, min: 0, default: 1200 },
 }, { timestamps: true });
 
 module.exports = mongoose.model('MatchingConfig', matchingConfigSchema);

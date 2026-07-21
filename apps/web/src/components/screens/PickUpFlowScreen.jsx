@@ -34,8 +34,8 @@ export default function PickupFlowScreen({
   currentOrder,
   onEditComplete,
   onMore,
-  showBack, showMore,
-  onBack
+  showBack,
+  onBack, showMore
 }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [phoneNumberInput, setPhoneNumberInput] = useState("");
@@ -228,9 +228,11 @@ export default function PickupFlowScreen({
           setShowCustomInput(true);
           setShowPhoneInput(false);
           setShowLocationButtons(true);
+          const editDeliveryId = Date.now();
+          pendingDeliveryButtonIdRef.current = editDeliveryId;
           setMessages([
             {
-              id: Date.now(),
+              id: editDeliveryId,
               from: "them",
               text: "Set your delivery location. Choose Delivery Location",
               time: getCurrentTime(),
@@ -475,6 +477,15 @@ export default function PickupFlowScreen({
         send(locationText, "delivery");
       } else {
         geocodeAddress(locationText, "delivery");
+      }
+
+      if (pendingDeliveryButtonIdRef.current) {
+        const usedId = pendingDeliveryButtonIdRef.current;
+        setMessages((prev) => prev.map((msg) =>
+          msg.id === usedId ? { ...msg, hasChooseDeliveryButton: false } : msg
+        ));
+        usedButtonIdsRef.current.add(usedId);
+        pendingDeliveryButtonIdRef.current = null;
       }
     }
   };
@@ -756,10 +767,13 @@ export default function PickupFlowScreen({
           const normalizedMyNumber = myNumber?.replace(/^\+2340/, '+234');
           pickupPhoneMatchesUserPhone.current = formattedNumber === normalizedMyNumber;
 
+          const deliveryPromptId = Date.now() + 2;
+          pendingDeliveryButtonIdRef.current = deliveryPromptId;
+          
           setMessages((p) => [
             ...p,
             {
-              id: Date.now() + 2,
+              id: deliveryPromptId,
               from: "them",
               text: "Set your delivery location. Choose Delivery Location",
               time: getCurrentTime(),
@@ -772,6 +786,7 @@ export default function PickupFlowScreen({
           setCurrentStep("delivery-location");
           setShowCustomInput(true);
           setTimeout(() => setShowLocationButtons(true), 200);
+
         } else if (source === "delivery" && !dropoffPhoneNumber) {
           setMessages((p) => [
             ...p,
@@ -978,7 +993,7 @@ export default function PickupFlowScreen({
     return (
       <Onboarding darkMode={darkMode} toggleDarkMode={toggleDarkMode}>
         <div className="w-full h-full mx-auto flex flex-col overflow-hidden max-w-2xl">
-          <div className="flex items-center justify-between p-4 bg-inherit">
+          <div className="flex items-center justify-between p-4 bg-inherit border-b">
             <Button
               variant="text"
               onClick={() => {
@@ -1039,7 +1054,7 @@ export default function PickupFlowScreen({
   }
 
   return (
-    <Onboarding darkMode={darkMode} toggleDarkMode={toggleDarkMode} showMore={showMore} onMore={onMore} showBack={showBack} onBack={onBack}>
+    <Onboarding darkMode={darkMode} toggleDarkMode={toggleDarkMode} onMore={onMore} showMore={showMore} showBack={showBack} onBack={onBack}>
       <div className="flex flex-col h-screen">
         <div className="flex-1 overflow-y-auto marketSelection" ref={listRef}>
           <div>
@@ -1055,6 +1070,7 @@ export default function PickupFlowScreen({
                     onViewSavedLocations={m.hasViewSavedLocations ? () => {
                       if (usedButtonIdsRef.current.has(m.id)) return;
                       usedButtonIdsRef.current.add(m.id);
+
 
                       setMessages((prev) => prev.map((msg) =>
                         msg.id === m.id ? { ...msg, hasViewSavedLocations: false } : msg

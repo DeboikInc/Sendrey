@@ -8,7 +8,7 @@ import {
     fetchMatchingConfig, saveMatchingConfig,
     fetchPlatformConfig, savePlatformConfig,
     fetchPedestrianConfig, savePedestrianConfig,
-    updateField, updateFleetRule, updateTier, addTier, removeTier, discardChanges,
+    updateField, updatePedestrianLeg, updateFleetRule, updateTier, addTier, removeTier, discardChanges,
 } from '../Redux/configSlice';
 
 function ConfirmModal({ isOpen, title, message, confirmLabel = 'Confirm', confirmVariant = 'destructive', onConfirm, onCancel }) {
@@ -234,16 +234,12 @@ export default function ConfigTab() {
     };
 
     const handlePedestrianConfigSave = () => {
-        const payload = {
-            ...pedestrianConfig,
-            pedestrianTotalMax: pedestrianConfig.pedestrianMaxRunnerLeg + pedestrianConfig.pedestrianMaxDeliveryLeg,
-        };
         setConfirm({
             title: 'Save Pedestrian Distances',
             message: 'Save changes to pedestrian distance limits? These changes take effect immediately.',
             confirmLabel: 'Save Changes',
             confirmVariant: 'primary',
-            onConfirm: () => { setConfirm(null); dispatch(savePedestrianConfig(payload)); },
+            onConfirm: () => { setConfirm(null); dispatch(savePedestrianConfig(pedestrianConfig)); },
         });
     };
 
@@ -496,12 +492,6 @@ export default function ConfigTab() {
                                         value={matchingConfig.pickupMaxDistance}
                                         onChange={v => dispatch(updateField({ resource: 'matching', field: 'pickupMaxDistance', value: v }))}
                                     />
-                                    <NumberField
-                                        label="Total Max Distance (Pedestrian) - sum of Pedestrian Distances"
-                                        suffix="m"
-                                        readOnly
-                                        value={(pedestrianConfig?.pedestrianMaxRunnerLeg || 0) + (pedestrianConfig?.pedestrianMaxDeliveryLeg || 0)}
-                                    />
                                 </div>
                             </div>
                         )}
@@ -519,25 +509,27 @@ export default function ConfigTab() {
                                         onCancel={() => confirmDiscard('pedestrian', 'Pedestrian Distances')}
                                     />
                                 </div>
-                                <p className="text-white/40 text-xs -mt-2">Caps used to validate pedestrian errands. Total Max is derived from Runner + Delivery legs.</p>
+                                <p className="text-white/40 text-xs -mt-2">
+                                    Caps for pedestrian errands. Total distance is derived and saved automatically.
+                                </p>
                                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                     <NumberField
                                         label="Max Runner Leg"
                                         suffix="m"
                                         value={pedestrianConfig.pedestrianMaxRunnerLeg}
-                                        onChange={v => {
-                                            dispatch(updateField({ resource: 'pedestrian', field: 'pedestrianMaxRunnerLeg', value: v }));
-                                            dispatch(updateField({ resource: 'matching', field: 'totalMaxDistance', value: v + (pedestrianConfig.pedestrianMaxDeliveryLeg || 0) }));
-                                        }}
+                                        onChange={v => dispatch(updatePedestrianLeg({ field: 'pedestrianMaxRunnerLeg', value: v }))}
                                     />
                                     <NumberField
                                         label="Max Delivery Leg"
                                         suffix="m"
                                         value={pedestrianConfig.pedestrianMaxDeliveryLeg}
-                                        onChange={v => {
-                                            dispatch(updateField({ resource: 'pedestrian', field: 'pedestrianMaxDeliveryLeg', value: v }));
-                                            dispatch(updateField({ resource: 'matching', field: 'totalMaxDistance', value: (pedestrianConfig.pedestrianMaxRunnerLeg || 0) + v }));
-                                        }}
+                                        onChange={v => dispatch(updatePedestrianLeg({ field: 'pedestrianMaxDeliveryLeg', value: v }))}
+                                    />
+                                    <NumberField
+                                        label="Total Max Distance (Pedestrian)"
+                                        suffix="m"
+                                        readOnly
+                                        value={pedestrianConfig.pedestrianTotalMax}
                                     />
                                 </div>
                             </div>

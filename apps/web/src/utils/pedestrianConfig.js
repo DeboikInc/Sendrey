@@ -18,6 +18,9 @@ export async function getPedestrianConfig({ forceRefresh = false } = {}) {
                 cachedConfig = data.data || data;
                 return cachedConfig;
             })
+            .catch((err) => {
+                console.log("Error ", err.message, err)
+            })
             .finally(() => {
                 fetchPromise = null;
             });
