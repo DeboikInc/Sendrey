@@ -4,8 +4,10 @@ import { useNavigate } from "react-router-dom";
 import { useEffect } from "react";
 import { useDispatch } from "react-redux";
 import { verifyEmailToken } from "../../Redux/authSlice";
+import { useRedirectIfAuthenticated } from '../../hooks/useRedirectIfAuthenticated';
 
 export const Home = () => {
+  useRedirectIfAuthenticated();
   const [dark, setDark] = useDarkMode();
   const navigate = useNavigate();
   const dispatch = useDispatch();

@@ -33,15 +33,6 @@ export const register = createAsyncThunk("auth/register", async (data, thunkAPI)
     }
 });
 
-export const login = createAsyncThunk("auth/login", async ({ email, password }, thunkAPI) => {
-    try {
-        const response = await api.post("/auth/login", { email, password });
-        return response.data;
-    } catch (error) {
-        return thunkAPI.rejectWithValue(error.response?.data?.message || "Login failed");
-    }
-});
-
 export const logout = createAsyncThunk("auth/logout", async (_, thunkAPI) => {
     try {
         const response = await api.post("/auth/logout");
@@ -265,27 +256,12 @@ const authSlice = createSlice({
                     state.runner = action.payload.runner;
                 } else {
                     state.user = action.payload.user;
+                    state.runner = null;
                 }
             })
             .addCase(register.rejected, (state, action) => {
                 state.status = "failed";
                 state.error = action.payload || "Registration failed";
-            })
-
-            // ── Login ──────────────────────────────────────────────────────────────
-            .addCase(login.pending, (state) => { state.status = "loading"; state.error = null; })
-            .addCase(login.fulfilled, (state, action) => {
-                state.status = "succeeded";
-                state.isAuthenticated = true;
-                if (action.payload.userType === 'runner' || action.payload.runner) {
-                    state.runner = action.payload.runner || action.payload.user;
-                } else {
-                    state.user = action.payload.user;
-                }
-            })
-            .addCase(login.rejected, (state, action) => {
-                state.status = "failed";
-                state.error = action.payload || "Login failed";
             })
 
             // ── Logout ─────────────────────────────────────────────────────────────
@@ -315,6 +291,7 @@ const authSlice = createSlice({
                     state.runner = action.payload.runner;
                 } else if (action.payload.user) {
                     state.user = action.payload.user;
+                    state.runner = null;
                 }
             })
             .addCase(verifyEmailOTP.rejected, (state, action) => {

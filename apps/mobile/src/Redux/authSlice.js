@@ -263,6 +263,7 @@ const authSlice = createSlice({
                     state.runner = action.payload.runner;
                 } else {
                     state.user = action.payload.user;
+                    state.runner = null;
                 }
             })
             .addCase(register.rejected, (state, action) => {
@@ -287,6 +288,7 @@ const authSlice = createSlice({
                     state.runner = action.payload.runner;
                 } else if (action.payload.user) {
                     state.user = action.payload.user;
+                    state.runner = null;
                 }
             })
             .addCase(verifyEmailOTP.rejected, (state, action) => {

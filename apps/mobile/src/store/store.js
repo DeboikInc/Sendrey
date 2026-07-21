@@ -19,7 +19,7 @@ import pinReducer from '../Redux/pinSlice';
 const store = configureStore({
   reducer: {
     auth: persistReducer(
-      { key: 'auth', storage, whitelist: ['runner', 'user'] },
+      { key: 'auth', storage, whitelist: ['runner', 'user', 'isAuthenticated'] },
       authReducer
     ),
     users: userReducer,
