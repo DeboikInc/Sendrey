@@ -121,12 +121,12 @@ const orderSessionSchema = new mongoose.Schema({
 
 const chatSchema = new mongoose.Schema({
   chatId: { type: String, required: true, unique: true },
+  userId: { type: String, default: null, index: true },
+  runnerId: { type: String, default: null, index: true },
   messages: [messageSchema],
   orderSessions: [orderSessionSchema],
   taskId: { type: String, required: false, index: true },
-  orderId: { type: String, default: null, index: true },  // Order reference
-  userId: { type: String, default: null, index: true },
-  runnerId: { type: String, default: null, index: true },
+  orderId: { type: String, default: null, index: true },  
   serviceType: {
     type: String,
     enum: ['pick-up', 'run-errand', null],
@@ -148,7 +148,7 @@ const chatSchema = new mongoose.Schema({
     }],
     createdAt: { type: Date, default: null }
   },
-
+  isBotChat: { type: Boolean, default: false },
   lastActivity: { type: Date, default: Date.now },
   isActive: { type: Boolean, default: true }
 });

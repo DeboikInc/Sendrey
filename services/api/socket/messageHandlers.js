@@ -1,6 +1,7 @@
 const { Chat } = require('../models/Chat');
 const { logMetric } = require('../utils/metricsLogger');
 const { logSocketAudit } = require('../utils/socketAudit');
+const chatService = require('../services/chatService');
 
 // ─── In-memory state ──────────────────────────────────────────────────────────
 
@@ -62,7 +63,7 @@ const snapshotMessage = (socketId, chatId, messageId) => {
 
 // ─── Handlers ─────────────────────────────────────────────────────────────────
 
-const handleSendMessage = async (socket, io, { chatId, message }) => {
+const handleSendMessage = async (socket, io, { chatId, message, runnerId     }) => {
     const startTime = Date.now();
     try {
         // Stamp sequence number server-side — client seq is untrusted
@@ -116,11 +117,13 @@ const handleSendMessage = async (socket, io, { chatId, message }) => {
             const toWrite = pending.messages.splice(0);
             pendingWrites.delete(chatId);
             try {
-                await Chat.findOneAndUpdate(
+                const updatedChat = await Chat.findOneAndUpdate(
                     { chatId },
                     { $push: { messages: { $each: toWrite } } },
                     { upsert: true }
                 );
+
+                await chatService.saveChatHistory(chatId, updatedChat.messages);
             } catch (err) {
                 console.error('[sendMessage] batch write failed:', err.message);
             }

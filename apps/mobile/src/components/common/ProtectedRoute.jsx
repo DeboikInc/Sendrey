@@ -2,12 +2,16 @@
 import { useSelector } from "react-redux";
 import { Navigate } from "react-router-dom";
 import { isCapacitor } from "../../utils/api";
+import { useAuthBootstrap } from '../../hooks/useAuthBootstrap';
 
 export default function ProtectedRoute({ children, requireRunner = false }) {
+  const isReady = useAuthBootstrap();
   const user = useSelector(s => s.auth.user);
   const token = useSelector(s => s.auth.token);
   const runner = useSelector(s => s.auth.runner);
   const runnerToken = useSelector(s => s.auth.runnerToken);
+
+  if (!isReady) return null;
 
   const isUserAuthenticated = isCapacitor
     ? !!(user && token)

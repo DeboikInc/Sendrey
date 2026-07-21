@@ -1,9 +1,13 @@
 import { useSelector } from "react-redux";
 import { Navigate } from "react-router-dom";
+import { useAuthBootstrap } from '../../hooks/useAuthBootstrap';
 
 export default function ProtectedRoute({ children, requireRunner = false }) {
   const user = useSelector(s => s.auth.user);
   const runner = useSelector(s => s.auth.runner);
+  const isReady = useAuthBootstrap();
+
+  if (!isReady) return null;
 
   const isUserAuthenticated = !!user;
   const isRunnerAuthenticated = !!runner;

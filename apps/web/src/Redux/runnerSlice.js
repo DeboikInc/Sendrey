@@ -40,6 +40,32 @@ export const fetchRunnersByService = createAsyncThunk(
   }
 );
 
+export const fetchRecentChatHistory = createAsyncThunk(
+  "runners/fetchRecentChatHistory",
+
+  async (runnerId, { rejectWithValue }) => {
+    try {
+      const response = await api.get(`/runners/chat/${runnerId}/recent-chats`);
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data || error.message);
+    }
+  }
+)
+
+export const fetchRefreshRecentChats = createAsyncThunk(
+  "runners/fetchRefreshRecentChatHistory",
+
+  async (runnerId, { rejectWithValue }) => {
+    try {
+      const response = await api.post(`/runners/chat/${runnerId}/refresh-recent-chats`);
+      return response.data;
+    } catch (error) {
+      return rejectWithValue(error.response?.data || error.message);
+    }
+  }
+)
+
 // Get nearby runners
 export const fetchNearbyRunners = createAsyncThunk(
   "runners/fetchNearby",
@@ -227,6 +253,26 @@ const runnerSlice = createSlice({
       .addCase(fetchNearbyRunners.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload;
+      })
+
+    builder
+      .addCase(fetchRecentChatHistory.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchRecentChatHistory.fulfilled, (state, action) => {
+        state.loading = false;
+        state.recentChatHistory = action.payload.data;
+      })
+
+    builder
+      .addCase(fetchRefreshRecentChats.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
+      .addCase(fetchRefreshRecentChats.fulfilled, (state, action) => {
+        state.loading = false;
+        state.recentChats = action.payload.data?.chats || action.payload.data || [];
       })
 
     builder

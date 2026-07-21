@@ -1,10 +1,9 @@
-// controllers/sessionController.js - Fixed
 
 const Order = require('../models/Order');
 const jwt = require('jsonwebtoken');
 const BaseController = require('./baseController');
-
-const TERMINAL_STATUSES = ['cancelled', 'task_completed'];
+const authService = require('../services/authService');
+const TERMINAL_STATUSES = ['cancelled', 'task_completed', 'cancelled'];
 
 class SessionController extends BaseController {
 

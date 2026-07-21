@@ -8,16 +8,21 @@ const Wallet = require('../models/Wallet');
 const LedgerEntry = require('../models/LedgerEntry');
 
 const cancelOrder = async ({ orderId, chatId, runnerId, userId, reason, cancelledBy = 'runner' }) => {
+  console.log('Cancel Service starting', { orderId, chatId })
   const order = await Order.findOne({
     ...(orderId ? { orderId } : {}),
     ...(chatId ? { chatId } : {})
   }).sort({ createdAt: -1 });
+
+  console.log('[cancelOrder service] order found?', !!order);
 
   if (!order) throw new Error('Order not found');
 
   if (order.paymentStatus === 'paid') {
     throw new Error('Paid orders cannot be cancelled. Please raise a dispute instead.');
   }
+
+  console.log('[cancelOrder service] about to call order.updateStatus');
 
   await order.updateStatus('cancelled', cancelledBy, {
     note: reason || `Cancelled by ${cancelledBy}`,
@@ -26,6 +31,8 @@ const cancelOrder = async ({ orderId, chatId, runnerId, userId, reason, cancelle
         : 'system',
   });
 
+  console.log('[cancelOrder service] updateStatus DONE');
+
   await Order.findByIdAndUpdate(order._id, {
     $set: {
       cancelledBy: cancelledBy,
@@ -33,6 +40,7 @@ const cancelOrder = async ({ orderId, chatId, runnerId, userId, reason, cancelle
     },
   });
 
+  console.log('[cancelOrder service] order fields patched');
 
   await Runner.findByIdAndUpdate(runnerId, {
     isAvailable: true,
@@ -46,6 +54,8 @@ const cancelOrder = async ({ orderId, chatId, runnerId, userId, reason, cancelle
     currentRunnerId: null,
     $unset: { currentRequest: '' },
   });
+  
+  const escrowFlagged = false;
 
   const cancelMessage = {
     id: `cancel-${Date.now()}`,
