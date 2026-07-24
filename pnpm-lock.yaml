@@ -366,6 +366,9 @@ importers:
       next:
         specifier: 16.2.11
         version: 16.2.11(@opentelemetry/api@1.9.1)(babel-plugin-react-compiler@1.0.0)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
+      nodemailer:
+        specifier: ^9.0.3
+        version: 9.0.3
       react:
         specifier: 19.2.4
         version: 19.2.4
@@ -6841,6 +6844,10 @@ packages:
 
   nodemailer@8.0.11:
     resolution: {integrity: sha512-nrO/pDAUKl+wXX+lx16tDLbnm0fW6sK/x8mgohaCpg+CdCEl482bD4tCuAZk2DyliruiNTIZxRCoWkDqJEnAiA==}
+    engines: {node: '>=6.0.0'}
+
+  nodemailer@9.0.3:
+    resolution: {integrity: sha512-n+YP+NKwR5zRWa60k3GiQ6Q3B4KXCoAw40dAKeCtYn020iNN74aWK2liXIC3ZEATeGql7we3tE3t8QwhY0eskw==}
     engines: {node: '>=6.0.0'}
 
   nodemon@2.0.22:
@@ -17352,6 +17359,8 @@ snapshots:
   nodemailer@6.10.1: {}
 
   nodemailer@8.0.11: {}
+
+  nodemailer@9.0.3: {}
 
   nodemon@2.0.22:
     dependencies:
