@@ -66,6 +66,7 @@ export default function PickupFlowScreen({
   const prevStepRef = useRef(null);
   const isSubmittingRef = useRef(false);
   const usedButtonIdsRef = useRef(new Set());
+  const pickupPhoneNumberRef = useRef("");
 
   const pickupCoordinatesRef = useRef(null);
   const deliveryCoordinatesRef = useRef(null);
@@ -88,6 +89,17 @@ export default function PickupFlowScreen({
       return () => clearTimeout(timeoutId);
     }
   }, [messages, showCustomInput, showPhoneInput, currentStep, predictions.length]);
+
+  useEffect(() => {
+    console.log('[PICKUP SCREEN Debug] State changed:', {
+      currentStep,
+      pickupPhoneNumber,
+      deliveryLocation,
+      pickupItems,
+      messagesLength: messages.length,
+      lastMessage: messages[messages.length - 1]?.text
+    });
+  }, [currentStep, pickupPhoneNumber, deliveryLocation, pickupItems, messages]);
 
   useEffect(() => {
     if (!window.google) return;
@@ -547,6 +559,8 @@ export default function PickupFlowScreen({
   };
 
   const send = (text, source) => {
+    console.log('[PICKUP SCREEN Debug send] called with:', { text, source, currentStep, pickupPhoneNumber, deliveryLocation });
+
     if (!text || typeof text !== "string") return;
     isSubmittingRef.current = false;
 
@@ -752,7 +766,7 @@ export default function PickupFlowScreen({
           setCurrentStep("pickup-phone");
           setShowPhoneInput(true);
           setShowCustomInput(false);
-        } else if (source === "pickup-phone" && !deliveryLocation) {
+        } else if (source === "pickup-phone") {
           let formattedNumber = text;
           if (text.startsWith('+234')) {
             // Remove accidental 0 after country code
@@ -760,32 +774,42 @@ export default function PickupFlowScreen({
           } else if (!text.startsWith('+234') && text.replace(/\D/g, '').length === 11) {
             formattedNumber = `+234${text.substring(1)}`;
           }
+
           setPickupPhoneNumber(formattedNumber);
+          pickupPhoneNumberRef.current = formattedNumber;
 
           // ← Check if pickup phone matches user's phone
           const myNumber = currentUser?.phone || currentUser?.user?.phone;
           const normalizedMyNumber = myNumber?.replace(/^\+2340/, '+234');
           pickupPhoneMatchesUserPhone.current = formattedNumber === normalizedMyNumber;
 
+          setMessages((prev) => prev.map((msg) =>
+            msg.hasUseMyNumberButton ? { ...msg, hasUseMyNumberButton: false } : msg
+          ));
+
           const deliveryPromptId = Date.now() + 2;
           pendingDeliveryButtonIdRef.current = deliveryPromptId;
-          
-          setMessages((p) => [
-            ...p,
-            {
-              id: deliveryPromptId,
-              from: "them",
-              text: "Set your delivery location. Choose Delivery Location",
-              time: getCurrentTime(),
-              status: "delivered",
-              hasChooseDeliveryButton: true,
-              hasViewSavedLocations: true,
-              disableUseMyNumber: pickupPhoneMatchesUserPhone.current
-            },
-          ]);
-          setCurrentStep("delivery-location");
-          setShowCustomInput(true);
-          setTimeout(() => setShowLocationButtons(true), 200);
+
+          setMessages((prev) => prev.filter(msg => msg.text !== "In progress..."));
+
+          setTimeout(() => {
+            setMessages((p) => [
+              ...p,
+              {
+                id: deliveryPromptId,
+                from: "them",
+                text: "Set your delivery location. Choose Delivery Location",
+                time: getCurrentTime(),
+                status: "delivered",
+                hasChooseDeliveryButton: true,
+                hasViewSavedLocations: true,
+                disableUseMyNumber: pickupPhoneMatchesUserPhone.current
+              },
+            ]);
+            setCurrentStep("delivery-location");
+            setShowCustomInput(true);
+            setTimeout(() => setShowLocationButtons(true), 200);
+          }, 100);
 
         } else if (source === "delivery" && !dropoffPhoneNumber) {
           setMessages((p) => [
@@ -812,9 +836,13 @@ export default function PickupFlowScreen({
             formattedNumber = `+234${text.substring(1)}`;
           }
 
-          const normalizedPickup = pickupPhoneNumber.startsWith('+234')
-            ? pickupPhoneNumber.replace(/^\+2340/, '+234')
-            : pickupPhoneNumber;
+          setMessages((prev) => prev.map((msg) =>
+            msg.hasUseMyNumberButton ? { ...msg, hasUseMyNumberButton: false } : msg
+          ));
+
+          const normalizedPickup = pickupPhoneNumberRef.current.startsWith('+234')
+            ? pickupPhoneNumberRef.current.replace(/^\+2340/, '+234')
+            : pickupPhoneNumberRef.current;
 
           if (formattedNumber === normalizedPickup) {
             // Show warning but proceed normally
@@ -834,17 +862,20 @@ export default function PickupFlowScreen({
             return; // ← don't proceed to onSelectPickup, let them re-enter
           }
 
-
           setDropoffPhoneNumber(formattedNumber);
+
+          setMessages((prev) => prev.filter(msg => msg.text !== "In progress..."));
 
           console.log('Final pickup location ref:', pickupLocationRef.current);
           console.log('Final delivery location ref:', deliveryLocationRef.current);
+          console.log('Pickup phone ref:', pickupPhoneNumberRef.current);
+          console.log('Dropoff phone:', formattedNumber);
 
           onSelectPickup({
             serviceType: "pick-up",
             pickupLocation: pickupLocationRef.current,
             deliveryLocation: deliveryLocationRef.current,
-            pickupPhone: pickupPhoneNumber,
+            pickupPhone: pickupPhoneNumberRef.current,
             dropoffPhone: formattedNumber,
             pickupItems: pickupItems,
             pickupCoordinates: pickupCoordinatesRef.current,
@@ -860,12 +891,15 @@ export default function PickupFlowScreen({
   };
 
   const handleUseMyNumber = (messageId, phoneType) => {
+
     if (usedButtonIdsRef.current.has(messageId)) return;
     usedButtonIdsRef.current.add(messageId);
-    const myNumber = currentUser?.phone || currentUser?.user?.phone;
 
-    console.log('currentUser in handleUseMyNumber:', currentUser);
-    console.log('currentUser in handleUseMyNumber:', currentUser);
+    setMessages((prev) => prev.map((msg) =>
+      msg.id === messageId ? { ...msg, hasUseMyNumberButton: false } : msg
+    ));
+
+    const myNumber = currentUser?.phone || currentUser?.user?.phone;
 
     if (!myNumber) {
       console.error("Phone number not found in user data");
@@ -886,7 +920,14 @@ export default function PickupFlowScreen({
       msg.id === messageId ? { ...msg, hasUseMyNumberButton: false } : msg
     ));
 
+    const formattedNumber = myNumber.startsWith('+234')
+      ? myNumber.replace(/^\+2340/, '+234')
+      : myNumber;
+
+
     if (phoneType === "pickup") {
+      setPickupPhoneNumber(formattedNumber);
+      pickupPhoneNumberRef.current = formattedNumber;
       send(myNumber, "pickup-phone");
     } else {
       send(myNumber, "dropoff-phone");
@@ -1223,6 +1264,10 @@ export default function PickupFlowScreen({
                 showIcons={false}
                 send={() => {
                   if (phoneNumberInput.trim()) {
+                    setMessages((prev) => prev.map((msg) =>
+                      msg.hasUseMyNumberButton ? { ...msg, hasUseMyNumberButton: false } : msg
+                    ));
+
                     if (currentStep === "pickup-phone") {
                       send(phoneNumberInput, "pickup-phone");
                     } else if (currentStep === "dropoff-phone") {

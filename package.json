@@ -10,7 +10,25 @@
     "lint": "turbo run lint"
   },
   "devDependencies": {
+    "eslint-webpack-plugin": "2.6.0",
     "turbo": "^2.0.0"
   },
-  "packageManager": "pnpm@9.0.0"
+  "packageManager": "pnpm@9.0.0",
+  "pnpm": {
+    "overrides": {
+      "webpack": "5.88.2",
+      "webpack-manifest-plugin": "5.0.0",
+      "eslint-config-react-app": "7.0.1",
+      "eslint": "8.57.0"
+    },
+    "hoistPattern": [],
+    "publicHoistPattern": [],
+    "peerDependencyRules": {
+      "ignoreMissing": [
+        "eslint",
+        "react",
+        "react-dom"
+      ]
+    }
+  }
 }

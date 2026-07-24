@@ -8,11 +8,17 @@ export function useRedirectIfAuthenticated() {
 
   useEffect(() => {
     if (!isAuthenticated) return;
-    if (runner?._id) {
+    if (runner?._id && runner?.termsAccepted?.version) {
       navigate('/raw', { replace: true });
-    } else if (user?._id) {
+    } else if (user?._id && user?.termsAccepted?.version) {
       navigate('/welcome', { replace: true });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isAuthenticated, runner?._id, user?._id]);
+  }, [
+    isAuthenticated,
+    runner?._id,
+    runner?.termsAccepted?.version,
+    user?._id,
+    user?.termsAccepted?.version,
+  ]);
 }

@@ -23,6 +23,7 @@ export default function ConfirmOrderScreen({
   const dispatch = useDispatch();
   const [isConnecting, setIsConnecting] = useState(false);
   const [deliveryFee, setDeliveryFee] = useState(null);
+  const [locationError, setLocationError] = useState(null);
 
   const {
     serviceType,
@@ -69,9 +70,64 @@ export default function ConfirmOrderScreen({
     onClose();
   };
 
+  const getFreshLocation = () => {
+    return new Promise((resolve, reject) => {
+      if (!navigator.geolocation) {
+        reject(new Error('Geolocation not supported on this device.'));
+        return;
+      }
+      navigator.geolocation.getCurrentPosition(
+        (position) => {
+          resolve({
+            latitude: position.coords.latitude,
+            longitude: position.coords.longitude
+          });
+        },
+        (error) => {
+          let message;
+          switch (error.code) {
+            case error.PERMISSION_DENIED:
+              message = 'Location access was denied. Please enable location permissions and try again.';
+              break;
+            case error.POSITION_UNAVAILABLE:
+              message = 'Your current location could not be determined. Please check your device settings and try again.';
+              break;
+            case error.TIMEOUT:
+              message = 'Getting your location took too long. Please try again.';
+              break;
+            default:
+              message = 'Unable to get your current location. Please try again.';
+          }
+          reject(new Error(message));
+        },
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+      );
+    });
+  };
+
+  const reverseGeocode = (lat, lng) => {
+    return new Promise((resolve) => {
+      if (!window.google) {
+        resolve(`Location (${lat.toFixed(6)}, ${lng.toFixed(6)})`);
+        return;
+      }
+      const geocoder = new window.google.maps.Geocoder();
+      geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+        if (status === 'OK' && results[0]) {
+          resolve(results[0].formatted_address);
+        } else {
+          resolve(`Location (${lat.toFixed(6)}, ${lng.toFixed(6)})`);
+        }
+      });
+    });
+  };
+
   const handleContinueClick = async () => {
+    if (isConnecting) return;
+    
     try {
       setIsConnecting(true);
+      setLocationError(null);
       const userId = currentUser?._id;
 
       console.log('[ConfirmOrder] orderData.specialInstructions:',
@@ -87,6 +143,22 @@ export default function ConfirmOrderScreen({
         alert('User not found. Please login again.');
         setIsConnecting(false);
         return;
+      }
+
+      let freshCurrentUserLocation = orderData?.currentUserLocation;
+      let freshCurrentUserCoordinates = orderData?.currentUserCoordinates;
+      try {
+        const coords = await getFreshLocation();
+        const address = await reverseGeocode(coords.latitude, coords.longitude);
+        freshCurrentUserLocation = address;
+        freshCurrentUserCoordinates = { lat: coords.latitude, lng: coords.longitude };
+      } catch (locError) {
+        console.warn('[ConfirmOrder] Could not refresh location, falling back to stored value:', locError.message);
+        if (!freshCurrentUserLocation) {
+          setLocationError(locError.message + ' Tap Continue to try again.');
+          return;
+        }
+        setLocationError('Could not refresh your location — using your last known location instead.');
       }
 
       // ── Upload special instruction media first ──────────────────────────────
@@ -149,9 +221,10 @@ export default function ConfirmOrderScreen({
           serviceType,
           fleetType,
           userId,
-          currentUserLocation: orderData?.currentUserLocation,
-          currentUserCoordinates: orderData?.currentUserCoordinates,
-          specialInstructions: resolvedSpecialInstructions, // ← real URLs now
+          currentUserLocation: freshCurrentUserLocation,
+          currentUserCoordinates: freshCurrentUserCoordinates,
+
+          specialInstructions: resolvedSpecialInstructions,
           timestamp: new Date().toISOString(),
           dropoffPhone: orderData?.dropoffPhone || orderData?.deliveryPhone,
           deliveryLocation: orderData?.deliveryLocation,
@@ -493,6 +566,9 @@ export default function ConfirmOrderScreen({
 
         {/* Footer */}
         <div className="sticky bottom-0 p-4 bg-inherit">
+          {locationError && (
+            <p className="text-xs text-amber-500 mb-2 text-center">{locationError}</p>
+          )}
           <Button
             onClick={handleContinueClick}
             disabled={isConnecting}
