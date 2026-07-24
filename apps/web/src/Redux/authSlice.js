@@ -251,7 +251,6 @@ const authSlice = createSlice({
             .addCase(register.pending, (state) => { state.status = "loading"; state.error = null; })
             .addCase(register.fulfilled, (state, action) => {
                 state.status = "succeeded";
-                state.isAuthenticated = true;
                 if (action.payload.runner) {
                     state.runner = action.payload.runner;
                 } else {

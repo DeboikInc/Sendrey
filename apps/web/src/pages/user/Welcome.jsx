@@ -33,31 +33,60 @@ import { authStorage } from '../../utils/authStorage';
 
 import useUserOrderStore from '../../store/userOrderStore';
 
+const usePersistedState = (key, initialValue) => {
+  const [state, setState] = useState(() => {
+    try {
+      const stored = localStorage.getItem(key);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        // If initialValue is an array and parsed is not an array, return initialValue
+        if (Array.isArray(initialValue) && !Array.isArray(parsed)) {
+          return initialValue;
+        }
+        return parsed;
+      }
+      return initialValue;
+    } catch {
+      return initialValue;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(key, JSON.stringify(state));
+    } catch {
+
+    }
+  }, [key, state]);
+
+  return [state, setState];
+};
+
 export const Welcome = () => {
   const [dark, setDark] = useDarkMode();
   const serviceTypeRef = useRef(null);
   const [runnerId, setRunnerId] = useState(null); // eslint-disable-line no-unused-vars
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
+
+  const { socket, joinUserRoom } = useSocket();
 
   const { runnerLocation } = useCredentialFlow(serviceTypeRef, (runnerData) => {
     setRunnerId(runnerData._id || runnerData.id);
   });
 
   const [userData, setUserData] = useState({});
-  const [currentScreen, setCurrentScreen] = useState("service_selection");
+  const [currentScreen, setCurrentScreen] = usePersistedState('welcome_currentScreen', "service_selection");
   const [selectedRunner, setSelectedRunner] = useState(null);
   const [showRunnerSheet, setShowRunnerSheet] = useState(false);
-  const [selectedService, setSelectedService] = useState("");
-  const dispatch = useDispatch();
-  const navigate = useNavigate();
-
-  const { socket, joinUserRoom } = useSocket();
+  const [selectedService, setSelectedService] = usePersistedState('welcome_selectedService', "");
   const [schedulePrompt, setSchedulePrompt] = useState(null);
 
   const [chatReady, setChatReady] = useState(false);
-  const [selectedMarket, setSelectedMarket] = useState("");
-  const [selectedFleetType, setSelectedFleetType] = useState("");
+  const [selectedMarket, setSelectedMarket] = usePersistedState('welcome_selectedMarket', "");
+  const [selectedFleetType, setSelectedFleetType] = usePersistedState('welcome_selectedFleetType', "");
   const [showConnecting, setShowConnecting] = useState(false);
-  const [serverUpdated, setServerUpdated] = useState(false);
+  const [serverUpdated, setServerUpdated] = usePersistedState('welcome_serverUpdated', false);
 
   const [settingsEditScheduleId, setSettingsEditScheduleId] = useState(null);
 
@@ -74,11 +103,12 @@ export const Welcome = () => {
 
   // state declarations for marketscreen
   const [marketScreenMessages, setMarketScreenMessages] = useState([]);
-  const [pickupLocation, setPickupLocation] = useState(null);
-  const [deliveryLocation, setDeliveryLocation] = useState(null);
+  const [pickupLocation, setPickupLocation] = usePersistedState('welcome_pickupLocation', null);
+  const [deliveryLocation, setDeliveryLocation] = usePersistedState('welcome_deliveryLocation', null);
 
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [confirmOrderData, setConfirmOrderData] = useState(null);
+
+  const [showConfirmModal, setShowConfirmModal] = usePersistedState('welcome_showConfirmModal', false);
+  const [confirmOrderData, setConfirmOrderData] = usePersistedState('welcome_confirmOrderData', null);
   const [chatMounted, setChatMounted] = useState(false);
 
   const currentUser = useSelector(s => s.auth.user);
@@ -264,6 +294,7 @@ export const Welcome = () => {
     setShowConnecting(true);
     setChatMounted(true);
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {

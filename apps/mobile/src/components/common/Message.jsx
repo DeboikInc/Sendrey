@@ -26,6 +26,7 @@ export default function Message({
   onMessageClick,
   canResendOtp,
   onConnectButtonClick,
+  connectButtonDisabled = false,
   onBudgetFlexibilityClick,
   onChooseDeliveryClick,
   showCursor = true,
@@ -40,8 +41,7 @@ export default function Message({
   alwaysAllowEdit = false,
   showDelete,
   showReply,
-  showRelativeTime=false,
-
+  showRelativeTime = false,
   onApproveItems,
   onRejectItems,
   onConfirmDelivery,
@@ -611,7 +611,7 @@ export default function Message({
               }
             }}
           >
-              Resend
+            Resend
           </span>
           {parts[1] || ''}
         </div>
@@ -627,13 +627,20 @@ export default function Message({
           {beforeText}
           <div className="mt-3">
             <Button
-              className="w-full bg-primary text-white"
+              className={`w-full text-white ${connectButtonDisabled
+                ? 'bg-gray-400 cursor-not-allowed opacity-70'
+                : 'bg-primary cursor-pointer'
+                }`}
+              disabled={connectButtonDisabled}
               onClick={(e) => {
                 e.stopPropagation();
-                onConnectButtonClick && onConnectButtonClick();
+
+                if (!connectButtonDisabled) {
+                  onConnectButtonClick && onConnectButtonClick();
+                }
               }}
             >
-              Connect To Runner
+              {connectButtonDisabled ? 'Connecting...' : 'Connect To Runner'}
             </Button>
           </div>
           {afterText}

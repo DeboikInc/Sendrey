@@ -68,7 +68,7 @@ export default function ErrandFlowScreen({
 
   const [showPhoneInput, setShowPhoneInput] = useState(false);
   const [phoneNumberInput, setPhoneNumberInput] = useState("");
-  const [deliveryPhoneNumber, setDeliveryPhoneNumber] = useState("");
+  const [ , setDeliveryPhoneNumber] = useState("");
 
   const dispatch = useDispatch();
   const listRef = useRef(null);
@@ -79,6 +79,7 @@ export default function ErrandFlowScreen({
   const prevStepRef = useRef(null);
   const isSubmittingRef = useRef(false);
   const pendingDeliveryButtonIdRef = useRef(null);
+  const deliveryPhoneNumberRef = useRef("");
 
   // location coordinates
   const marketCoordinatesRef = useRef(null);
@@ -713,6 +714,10 @@ export default function ErrandFlowScreen({
         }
 
         if (editingField === "delivery-phone" && source === "delivery-phone") {
+          setMessages((prev) => prev.map((msg) =>
+            msg.hasUseMyNumberButton ? { ...msg, hasUseMyNumberButton: false } : msg
+          ));
+
           let formattedNumber = text;
           if (text.startsWith('+234')) {
             formattedNumber = text.replace(/^\+2340/, '+234');
@@ -806,7 +811,7 @@ export default function ErrandFlowScreen({
           setTimeout(() => setShowLocationButtons(true), 200);
           setShowCustomInput(true);
 
-        } else if (source === "delivery" && !deliveryPhoneNumber) {
+        } else if (source === "delivery") {
           setDeliveryLocation(msgText);
 
           setMessages(prev => [...prev, {
@@ -830,23 +835,31 @@ export default function ErrandFlowScreen({
             formattedNumber = `+234${text.substring(1)}`;
           }
           setDeliveryPhoneNumber(formattedNumber);
+          deliveryPhoneNumberRef.current = formattedNumber;
 
-          onSelectErrand({
-            serviceType: "run-errand",
-            marketLocation: pickupLocationRef.current,
-            deliveryLocation: deliveryLocationRef.current,
-            deliveryPhone: formattedNumber,
-            marketItems,
-            budget,
-            canAdjustSlightly: budgetFlexibility === "can adjust slightly",
-            budgetFlexibility,
-            userId: currentUser?._id,
-            marketCoordinates: marketCoordinatesRef.current,
-            deliveryCoordinates: deliveryCoordinatesRef.current
-          });
+          setMessages((prev) => prev.map((msg) =>
+            msg.hasUseMyNumberButton ? { ...msg, hasUseMyNumberButton: false } : msg
+          ));
 
+          setMessages((prev) => prev.filter(msg => msg.text !== "In progress..."));
 
-          checkAndShowSuggestion();
+          setTimeout(() => {
+            onSelectErrand({
+              serviceType: "run-errand",
+              marketLocation: pickupLocationRef.current,
+              deliveryLocation: deliveryLocationRef.current,
+              deliveryPhone: formattedNumber,
+              marketItems,
+              budget,
+              canAdjustSlightly: budgetFlexibility === "can adjust slightly",
+              budgetFlexibility,
+              userId: currentUser?._id,
+              marketCoordinates: marketCoordinatesRef.current,
+              deliveryCoordinates: deliveryCoordinatesRef.current
+            });
+
+            checkAndShowSuggestion();
+          }, 100);
         }
       }
     }, 1200);
@@ -862,6 +875,11 @@ export default function ErrandFlowScreen({
   const handleUseMyNumber = (messageId) => {
     if (usedButtonIdsRef.current.has(messageId)) return;
     usedButtonIdsRef.current.add(messageId);
+
+    setMessages((prev) => prev.map((msg) =>
+      msg.id === messageId ? { ...msg, hasUseMyNumberButton: false } : msg
+    ));
+
     const myNumber = currentUser?.phone || currentUser?.user?.phone;
 
     if (!myNumber) {
@@ -875,9 +893,12 @@ export default function ErrandFlowScreen({
       return;
     }
 
-    setMessages((prev) => prev.map((msg) =>
-      msg.id === messageId ? { ...msg, hasUseMyNumberButton: false } : msg
-    ));
+    const formattedNumber = myNumber.startsWith('+234')
+      ? myNumber.replace(/^\+2340/, '+234')
+      : myNumber;
+
+    setDeliveryPhoneNumber(formattedNumber);
+    deliveryPhoneNumberRef.current = formattedNumber;
 
     send(myNumber, "delivery-phone");
   };
@@ -1141,6 +1162,10 @@ export default function ErrandFlowScreen({
                 showIcons={false}
                 send={() => {
                   if (phoneNumberInput.trim()) {
+                    setMessages((prev) => prev.map((msg) =>
+                      msg.hasUseMyNumberButton ? { ...msg, hasUseMyNumberButton: false } : msg
+                    ));
+
                     send(phoneNumberInput, "delivery-phone");
                     setPhoneNumberInput("");
                   }
