@@ -27,7 +27,7 @@ export const WhySendrey = () => {
           <p>
             Anyone who has tried to get an errand done in traffic knows
             the problem: your time is worth more than the queue at the bank,
-            the market run, or the trip across town to pick up a package.
+            the <strong className="text-secondary">market errands</strong>, or the trip across town to <strong className="text-secondary"> pick up</strong> a package.
             Sendrey was built to close that gap.
           </p>
           <p>
@@ -60,7 +60,7 @@ export const WhySendrey = () => {
       label: "Mission",
       content: (
         <article key="mission-content">
-          Our mission is to make errands and deliveries fast, affordable,
+          Our mission is to make <strong className="text-secondary"> errands</strong> and deliveries fast, affordable,
           and trustworthy by putting a verified runner within reach of
           every request while giving runners a fair, transparent way to
           earn from the work they already do best: getting around their
@@ -110,7 +110,7 @@ export const WhySendrey = () => {
                   <p>
                     Every runner on Sendrey is verified before they take their
                     first job, and every order is tracked in real time from
-                    pickup to drop-off{" "}
+                     <strong className="text-secondary"> pickup</strong> to drop-off{" "}
                     <strong className="text-secondary">
                       so you always know where your errand stands
                     </strong>

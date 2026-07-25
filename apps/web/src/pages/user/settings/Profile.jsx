@@ -113,7 +113,7 @@ export default function Profile({ darkMode }) {
         </div>
 
         <p className="text-primary text-xs">
-          To change any information, contact <a href="mailto:sendrey@support.com">sendrey@support.com</a>
+          To change any information, contact <a href="mailto:support@sendrey.com">support@sendrey.com</a>
         </p>
       </div>
 

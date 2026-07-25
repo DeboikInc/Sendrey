@@ -3,6 +3,7 @@ import { Hero } from '@/components/hero';
 import { WhySendrey } from '@/components/whySendrey';
 import { Footer } from '@/components/footer'
 import { HowItWorks } from '@/components/howItWorks';
+import { BusinessFeature } from '@/components/businessFeature';
 
 export default function Home() {
   return (
@@ -16,6 +17,8 @@ export default function Home() {
 
       <HowItWorks />
 
+      <BusinessFeature />
+      
       <Footer />
     </div>
   );

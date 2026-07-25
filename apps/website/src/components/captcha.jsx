@@ -1,8 +1,8 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, forwardRef, useImperativeHandle } from "react";
 import { BiRefresh } from "react-icons/bi";
 
-export const Captcha = ({ onCaptchaPass }) => {
+export const Captcha = forwardRef(({ onCaptchaPass }, ref) => {
   const [captcha, setCaptcha] = useState({ question: "", answer: null, token: "" });
   const [userInput, setUserInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -22,6 +22,10 @@ export const Captcha = ({ onCaptchaPass }) => {
     }
     setIsLoading(false);
   };
+
+  useImperativeHandle(ref, () => ({
+    refresh: fetchCaptcha,
+  }));
 
   useEffect(() => {
     fetchCaptcha();
@@ -74,4 +78,6 @@ export const Captcha = ({ onCaptchaPass }) => {
       {error && <span className="text-sm text-red-500">{error}</span>}
     </section>
   );
-};
+});
+
+Captcha.displayName = "Captcha";

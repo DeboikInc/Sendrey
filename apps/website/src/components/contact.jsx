@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Buttons } from "@/components/button";
 import { Captcha } from "@/components/captcha";
 import { motion } from "framer-motion";
@@ -21,6 +21,7 @@ export const Contact = () => {
   const [captchaPassed, setCaptchaPassed] = useState(false);
   const [captchaToken, setCaptchaToken] = useState("");
   const [captchaAnswer, setCaptchaAnswer] = useState("");
+  const captchaRef = useRef(null);
 
   const handleChange = (e) => {
     setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
@@ -57,6 +58,7 @@ export const Contact = () => {
       setCaptchaPassed(false);
       setCaptchaToken("");
       setCaptchaAnswer("");
+      captchaRef.current?.refresh();
     } catch (err) {
       setStatus("error");
       setErrorMessage(err.message || "Something went wrong. Please try again.");
@@ -134,7 +136,7 @@ export const Contact = () => {
               />
             </div>
 
-            <Captcha onCaptchaPass={handleCaptchaPass} />
+            <Captcha ref={captchaRef} onCaptchaPass={handleCaptchaPass} />
 
             <Buttons
               type="submit"
@@ -145,9 +147,9 @@ export const Contact = () => {
             </Buttons>
 
             {status === "success" && (
-              <p className="text-center text-sm text-primary">
+              <strong className="text-center text-sm text-primary">
                 Message sent — we&apos;ll get back to you soon.
-              </p>
+              </strong>
             )}
             {status === "error" && (
               <p className="text-center text-sm text-red-500">

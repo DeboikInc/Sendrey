@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import nodemailer from "nodemailer";
 import { verifyCaptchaToken } from "../captcha/route";
 
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const ELASTIC_EMAIL_ENDPOINT = "https://api.elasticemail.com/v4/emails/transactional";
 
 function escapeHtml(str) {
   return String(str)
@@ -13,20 +13,48 @@ function escapeHtml(str) {
     .replace(/'/g, "&#39;");
 }
 
-let transporter;
-function getTransporter() {
-  if (!transporter) {
-    transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: Number(process.env.SMTP_PORT || 587),
-      secure: Number(process.env.SMTP_PORT) === 465,
-      auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
+async function sendViaElasticEmail({ name, email, message }) {
+  const res = await fetch(ELASTIC_EMAIL_ENDPOINT, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-ElasticEmail-ApiKey": process.env.ELASTIC_EMAIL_API_KEY,
+    },
+    body: JSON.stringify({
+      Recipients: {
+        To: [process.env.CONTACT_TO_EMAIL || "support@sendrey.com"],
       },
-    });
+      Content: {
+        From: `Sendrey Website <${process.env.ELASTIC_EMAIL_FROM}>`,
+        ReplyTo: email,
+        Subject: `New contact form message from ${name}`,
+        Body: [
+          {
+            ContentType: "HTML",
+            Charset: "utf-8",
+            Content: `
+              <p><strong>Name:</strong> ${escapeHtml(name)}</p>
+              <p><strong>Email:</strong> ${escapeHtml(email)}</p>
+              <p><strong>Message:</strong></p>
+              <p>${escapeHtml(message).replace(/\n/g, "<br/>")}</p>
+            `,
+          },
+          {
+            ContentType: "PlainText",
+            Charset: "utf-8",
+            Content: `Name: ${name}\nEmail: ${email}\n\nMessage:\n${message}`,
+          },
+        ],
+      },
+    }),
+  });
+
+  if (!res.ok) {
+    const errBody = await res.text().catch(() => "");
+    throw new Error(`Elastic Email request failed (${res.status}): ${errBody}`);
   }
-  return transporter;
+
+  return res.json();
 }
 
 export async function POST(request) {
@@ -63,19 +91,10 @@ export async function POST(request) {
   }
 
   try {
-    const mailer = getTransporter();
-    await mailer.sendMail({
-      from: `"Sendrey Website" <${process.env.SMTP_FROM || process.env.SMTP_USER}>`,
-      to: process.env.CONTACT_TO_EMAIL || "support@sendrey.com",
-      replyTo: email.trim(),
-      subject: `New contact form message from ${name.trim()}`,
-      text: `Name: ${name.trim()}\nEmail: ${email.trim()}\n\nMessage:\n${message.trim()}`,
-      html: `
-        <p><strong>Name:</strong> ${escapeHtml(name.trim())}</p>
-        <p><strong>Email:</strong> ${escapeHtml(email.trim())}</p>
-        <p><strong>Message:</strong></p>
-        <p>${escapeHtml(message.trim()).replace(/\n/g, "<br/>")}</p>
-      `,
+    await sendViaElasticEmail({
+      name: name.trim(),
+      email: email.trim(),
+      message: message.trim(),
     });
 
     return NextResponse.json({ success: true });
