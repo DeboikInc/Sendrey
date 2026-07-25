@@ -9,7 +9,7 @@ const FOOTER_LINKS = [
     { label: "Home", href: "/" },
     { label: "About", href: "/about" },
     { label: "Contact", href: "/contact" },
-    { label: "Faqs", href: "/faqs" },
+    { label: "FAQs", href: "/faqs" },
 ];
 
 const fadeUp = {
@@ -27,7 +27,7 @@ const SOCIAL_LINKS = [
     },
     {
         icon: IoLogoInstagram,
-        href: "https://www.instagram.com/sendrey.africa",
+        href: "https://www.instagram.com/sendrey.africa?igsh=NDNrNnplaW1oaXA=",
         label: "Instagram"
     },
     {
@@ -42,7 +42,7 @@ const SOCIAL_LINKS = [
     },
     {
         icon: FaXTwitter,
-        href: "",
+        href: "https://x.com/sendreyafrica",
         label: "Twitter"
     },
 ];

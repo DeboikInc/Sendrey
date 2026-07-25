@@ -62,7 +62,7 @@ const journey = [
     image: '/runner-order-location.png',
     callout: {
       icon: IoStorefrontOutline,
-      text: 'On Run an Errand orders, you\u2019ll pay the vendor directly. That payment is tracked and ledgered in your payout history, with its own payout ID.',
+      text: 'On Market Errand orders, you\u2019ll pay the vendor directly. That payment is tracked and ledgered in your payout history, with its own payout ID.',
     },
   },
   {
