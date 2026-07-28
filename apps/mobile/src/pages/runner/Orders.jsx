@@ -158,6 +158,11 @@ const OrderCard = ({ order, darkMode }) => {
 
     const hasItems = !!itemsText;
 
+    const formatAmount = (order) => {
+        if (order.status === "cancelled") return "—";
+        return formatNaira(order.runnerPayout);
+    };
+
     return (
         <div className={`rounded-xl border px-4 py-4 ${darkMode ? "border-white/5 bg-black-100" : "border-gray-100 bg-white"}`}>
             <div className="flex items-start justify-between gap-3">
@@ -179,8 +184,8 @@ const OrderCard = ({ order, darkMode }) => {
                 </div>
 
                 <div className="text-right flex-shrink-0 flex flex-col items-end gap-1">
-                    <p className="text-sm font-semibold text-green-600 dark:text-green-400">
-                        {formatNaira(order.runnerPayout)}
+                    <p className={`text-sm font-semibold ${order.status === "cancelled" ? "text-black-100/60 dark:text-red-500" : "text-green-600 dark:text-green-400"}`}>
+                        {formatAmount(order)}
                     </p>
                     {hasItems && (
                         <button
