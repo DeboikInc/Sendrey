@@ -238,6 +238,11 @@ const userValidation = {
           'any.required': 'Delivery location is required'
         }),
 
+      currentUserLocation: Joi.string().optional()
+        .messages({ 'string.empty': 'Current location cannot be empty' }),
+
+      currentUserCoordinates: coordinatesSchema,
+
       dropoffPhone: Joi.string().allow('').optional()
         .messages({
           'string.empty': 'Dropoff phone cannot be empty'

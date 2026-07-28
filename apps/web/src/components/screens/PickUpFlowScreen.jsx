@@ -1,18 +1,18 @@
 /* global google */
 import { useEffect, useRef, useState, useCallback } from "react";
 import { Button } from "@material-tailwind/react";
-import { MapPin, X, Bookmark, Check, } from "lucide-react";
+import { MapPin, X, } from "lucide-react";
 import Message from "../common/Message";
 import Onboarding from "../common/Onboarding";
 import CustomInput from "../common/CustomInput";
 import Map from "../common/Map";
 import { useDispatch, useSelector } from "react-redux";
-import { addLocation } from "../../Redux/userSlice";
 import debounce from "lodash/debounce";
 import { useGoogleMaps } from "../../hooks/useGoogleMaps";
 
 import { getSuggestionStatus } from "../../Redux/businessSlice";
 import BusinessConversionFlow from "./BusinessConversionFlow";
+import SaveLocationConfirmModal from "./SaveLocationConfirmModal";
 
 const getCurrentTime = () => {
   return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -34,8 +34,8 @@ export default function PickupFlowScreen({
   currentOrder,
   onEditComplete,
   onMore,
-  showBack, showMore,
-  onBack
+  showBack,
+  onBack, showMore
 }) {
   const [searchTerm, setSearchTerm] = useState("");
   const [phoneNumberInput, setPhoneNumberInput] = useState("");
@@ -45,7 +45,6 @@ export default function PickupFlowScreen({
   const [pickupPhoneNumber, setPickupPhoneNumber] = useState("");
   const [dropoffPhoneNumber, setDropoffPhoneNumber] = useState("");
   const [currentStep, setCurrentStep] = useState("pickup-location");
-  const [showSaveConfirm, setShowSaveConfirm] = useState(false);
   const [pendingPlace, setPendingPlace] = useState(null);
   const [showCustomInput, setShowCustomInput] = useState(true);
   const [showPhoneInput, setShowPhoneInput] = useState(false);
@@ -67,6 +66,7 @@ export default function PickupFlowScreen({
   const prevStepRef = useRef(null);
   const isSubmittingRef = useRef(false);
   const usedButtonIdsRef = useRef(new Set());
+  const pickupPhoneNumberRef = useRef("");
 
   const pickupCoordinatesRef = useRef(null);
   const deliveryCoordinatesRef = useRef(null);
@@ -89,6 +89,17 @@ export default function PickupFlowScreen({
       return () => clearTimeout(timeoutId);
     }
   }, [messages, showCustomInput, showPhoneInput, currentStep, predictions.length]);
+
+  useEffect(() => {
+    console.log('[PICKUP SCREEN Debug] State changed:', {
+      currentStep,
+      pickupPhoneNumber,
+      deliveryLocation,
+      pickupItems,
+      messagesLength: messages.length,
+      lastMessage: messages[messages.length - 1]?.text
+    });
+  }, [currentStep, pickupPhoneNumber, deliveryLocation, pickupItems, messages]);
 
   useEffect(() => {
     if (!window.google) return;
@@ -229,9 +240,11 @@ export default function PickupFlowScreen({
           setShowCustomInput(true);
           setShowPhoneInput(false);
           setShowLocationButtons(true);
+          const editDeliveryId = Date.now();
+          pendingDeliveryButtonIdRef.current = editDeliveryId;
           setMessages([
             {
-              id: Date.now(),
+              id: editDeliveryId,
               from: "them",
               text: "Set your delivery location. Choose Delivery Location",
               time: getCurrentTime(),
@@ -398,28 +411,13 @@ export default function PickupFlowScreen({
   const handleMapSelection = () => {
     if (!selectedPlace) return;
     setPendingPlace(selectedPlace);
-    setShowSaveConfirm(true);
   };
 
-  const finalizeSelection = async (shouldSave) => {
-    const place = pendingPlace;
+  const proceedWithLocation = (place) => {
     const locationText = place.name || place.address;
 
-    if (shouldSave) {
-      try {
-        await dispatch(addLocation({
-          name: place.name || "Mapped Location",
-          address: place.address,
-          lat: place.lat,
-          lng: place.lng
-        })).unwrap();
-      } catch (err) {
-        console.error("Failed to save location:", err);
-      }
-    }
-
     if (currentStep === "pickup-location") {
-      pickupCoordinatesRef.current = { lat: place.lat, lng: place.lng }
+      pickupCoordinatesRef.current = { lat: place.lat, lng: place.lng };
       setPickupLocation(locationText);
       pickupLocationRef.current = locationText;
       send(locationText, "pickup-location");
@@ -429,7 +427,6 @@ export default function PickupFlowScreen({
       deliveryLocationRef.current = locationText;
       send(locationText, "delivery");
 
-      // disable the button that opened this map
       if (pendingDeliveryButtonIdRef.current) {
         const usedId = pendingDeliveryButtonIdRef.current;
         setMessages((prev) => prev.map((msg) =>
@@ -440,7 +437,6 @@ export default function PickupFlowScreen({
       }
     }
 
-    setShowSaveConfirm(false);
     setShowMap(false);
     setSelectedPlace(null);
     setPendingPlace(null);
@@ -493,6 +489,15 @@ export default function PickupFlowScreen({
         send(locationText, "delivery");
       } else {
         geocodeAddress(locationText, "delivery");
+      }
+
+      if (pendingDeliveryButtonIdRef.current) {
+        const usedId = pendingDeliveryButtonIdRef.current;
+        setMessages((prev) => prev.map((msg) =>
+          msg.id === usedId ? { ...msg, hasChooseDeliveryButton: false } : msg
+        ));
+        usedButtonIdsRef.current.add(usedId);
+        pendingDeliveryButtonIdRef.current = null;
       }
     }
   };
@@ -554,6 +559,8 @@ export default function PickupFlowScreen({
   };
 
   const send = (text, source) => {
+    console.log('[PICKUP SCREEN Debug send] called with:', { text, source, currentStep, pickupPhoneNumber, deliveryLocation });
+
     if (!text || typeof text !== "string") return;
     isSubmittingRef.current = false;
 
@@ -759,7 +766,7 @@ export default function PickupFlowScreen({
           setCurrentStep("pickup-phone");
           setShowPhoneInput(true);
           setShowCustomInput(false);
-        } else if (source === "pickup-phone" && !deliveryLocation) {
+        } else if (source === "pickup-phone") {
           let formattedNumber = text;
           if (text.startsWith('+234')) {
             // Remove accidental 0 after country code
@@ -767,29 +774,43 @@ export default function PickupFlowScreen({
           } else if (!text.startsWith('+234') && text.replace(/\D/g, '').length === 11) {
             formattedNumber = `+234${text.substring(1)}`;
           }
+
           setPickupPhoneNumber(formattedNumber);
+          pickupPhoneNumberRef.current = formattedNumber;
 
           // ← Check if pickup phone matches user's phone
           const myNumber = currentUser?.phone || currentUser?.user?.phone;
           const normalizedMyNumber = myNumber?.replace(/^\+2340/, '+234');
           pickupPhoneMatchesUserPhone.current = formattedNumber === normalizedMyNumber;
 
-          setMessages((p) => [
-            ...p,
-            {
-              id: Date.now() + 2,
-              from: "them",
-              text: "Set your delivery location. Choose Delivery Location",
-              time: getCurrentTime(),
-              status: "delivered",
-              hasChooseDeliveryButton: true,
-              hasViewSavedLocations: true,
-              disableUseMyNumber: pickupPhoneMatchesUserPhone.current
-            },
-          ]);
-          setCurrentStep("delivery-location");
-          setShowCustomInput(true);
-          setTimeout(() => setShowLocationButtons(true), 200);
+          setMessages((prev) => prev.map((msg) =>
+            msg.hasUseMyNumberButton ? { ...msg, hasUseMyNumberButton: false } : msg
+          ));
+
+          const deliveryPromptId = Date.now() + 2;
+          pendingDeliveryButtonIdRef.current = deliveryPromptId;
+
+          setMessages((prev) => prev.filter(msg => msg.text !== "In progress..."));
+
+          setTimeout(() => {
+            setMessages((p) => [
+              ...p,
+              {
+                id: deliveryPromptId,
+                from: "them",
+                text: "Set your delivery location. Choose Delivery Location",
+                time: getCurrentTime(),
+                status: "delivered",
+                hasChooseDeliveryButton: true,
+                hasViewSavedLocations: true,
+                disableUseMyNumber: pickupPhoneMatchesUserPhone.current
+              },
+            ]);
+            setCurrentStep("delivery-location");
+            setShowCustomInput(true);
+            setTimeout(() => setShowLocationButtons(true), 200);
+          }, 100);
+
         } else if (source === "delivery" && !dropoffPhoneNumber) {
           setMessages((p) => [
             ...p,
@@ -815,9 +836,13 @@ export default function PickupFlowScreen({
             formattedNumber = `+234${text.substring(1)}`;
           }
 
-          const normalizedPickup = pickupPhoneNumber.startsWith('+234')
-            ? pickupPhoneNumber.replace(/^\+2340/, '+234')
-            : pickupPhoneNumber;
+          setMessages((prev) => prev.map((msg) =>
+            msg.hasUseMyNumberButton ? { ...msg, hasUseMyNumberButton: false } : msg
+          ));
+
+          const normalizedPickup = pickupPhoneNumberRef.current.startsWith('+234')
+            ? pickupPhoneNumberRef.current.replace(/^\+2340/, '+234')
+            : pickupPhoneNumberRef.current;
 
           if (formattedNumber === normalizedPickup) {
             // Show warning but proceed normally
@@ -837,17 +862,20 @@ export default function PickupFlowScreen({
             return; // ← don't proceed to onSelectPickup, let them re-enter
           }
 
-
           setDropoffPhoneNumber(formattedNumber);
+
+          setMessages((prev) => prev.filter(msg => msg.text !== "In progress..."));
 
           console.log('Final pickup location ref:', pickupLocationRef.current);
           console.log('Final delivery location ref:', deliveryLocationRef.current);
+          console.log('Pickup phone ref:', pickupPhoneNumberRef.current);
+          console.log('Dropoff phone:', formattedNumber);
 
           onSelectPickup({
             serviceType: "pick-up",
             pickupLocation: pickupLocationRef.current,
             deliveryLocation: deliveryLocationRef.current,
-            pickupPhone: pickupPhoneNumber,
+            pickupPhone: pickupPhoneNumberRef.current,
             dropoffPhone: formattedNumber,
             pickupItems: pickupItems,
             pickupCoordinates: pickupCoordinatesRef.current,
@@ -863,12 +891,15 @@ export default function PickupFlowScreen({
   };
 
   const handleUseMyNumber = (messageId, phoneType) => {
+
     if (usedButtonIdsRef.current.has(messageId)) return;
     usedButtonIdsRef.current.add(messageId);
-    const myNumber = currentUser?.phone || currentUser?.user?.phone;
 
-    console.log('currentUser in handleUseMyNumber:', currentUser);
-    console.log('currentUser in handleUseMyNumber:', currentUser);
+    setMessages((prev) => prev.map((msg) =>
+      msg.id === messageId ? { ...msg, hasUseMyNumberButton: false } : msg
+    ));
+
+    const myNumber = currentUser?.phone || currentUser?.user?.phone;
 
     if (!myNumber) {
       console.error("Phone number not found in user data");
@@ -889,7 +920,14 @@ export default function PickupFlowScreen({
       msg.id === messageId ? { ...msg, hasUseMyNumberButton: false } : msg
     ));
 
+    const formattedNumber = myNumber.startsWith('+234')
+      ? myNumber.replace(/^\+2340/, '+234')
+      : myNumber;
+
+
     if (phoneType === "pickup") {
+      setPickupPhoneNumber(formattedNumber);
+      pickupPhoneNumberRef.current = formattedNumber;
       send(myNumber, "pickup-phone");
     } else {
       send(myNumber, "dropoff-phone");
@@ -996,7 +1034,7 @@ export default function PickupFlowScreen({
     return (
       <Onboarding darkMode={darkMode} toggleDarkMode={toggleDarkMode}>
         <div className="w-full h-full mx-auto flex flex-col overflow-hidden max-w-2xl">
-          <div className="flex items-center justify-between p-4 bg-inherit">
+          <div className="flex items-center justify-between p-4 bg-inherit border-b">
             <Button
               variant="text"
               onClick={() => {
@@ -1032,37 +1070,13 @@ export default function PickupFlowScreen({
             </div>
           )}
 
-          {showSaveConfirm && (
-            <div className="absolute inset-0 z-[60] flex items-center justify-center p-6 bg-black/50 backdrop-blur-sm">
-              <div className={`w-full max-w-xs p-6 rounded-2xl shadow-xl ${darkMode ? 'bg-black-100 text-white' : 'bg-white text-gray-800'}`}>
-                <div className="flex flex-col items-center text-center">
-                  <div className="w-12 h-12 bg-primary/10 rounded-full flex items-center justify-center mb-4">
-                    <Bookmark className="text-primary" size={24} />
-                  </div>
-                  <h4 className="font-bold text-lg mb-2">Save to Favourites?</h4>
-                  <p className="text-sm opacity-70 mb-6">
-                    Would you like to keep this location for your next request?
-                  </p>
-                  <div className="flex flex-col w-full gap-2">
-                    <Button
-                      size="sm"
-                      onClick={() => finalizeSelection(true)}
-                      className="bg-primary flex items-center justify-center gap-2"
-                    >
-                      <Check size={16} /> Save & Select
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="text"
-                      onClick={() => finalizeSelection(false)}
-                      className={darkMode ? 'text-gray-400' : 'text-gray-600'}
-                    >
-                      Just Select
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            </div>
+          {pendingPlace && (
+            <SaveLocationConfirmModal
+              place={pendingPlace}
+              darkMode={darkMode}
+              onConfirm={proceedWithLocation}
+              onCancel={() => setPendingPlace(null)}
+            />
           )}
         </div>
       </Onboarding>
@@ -1081,7 +1095,7 @@ export default function PickupFlowScreen({
   }
 
   return (
-    <Onboarding darkMode={darkMode} toggleDarkMode={toggleDarkMode} showMore={showMore} onMore={onMore} showBack={showBack} onBack={onBack}>
+    <Onboarding darkMode={darkMode} toggleDarkMode={toggleDarkMode} onMore={onMore} showMore={showMore} showBack={showBack} onBack={onBack}>
       <div className="flex flex-col h-screen">
         <div className="flex-1 overflow-y-auto marketSelection" ref={listRef}>
           <div>
@@ -1097,6 +1111,7 @@ export default function PickupFlowScreen({
                     onViewSavedLocations={m.hasViewSavedLocations ? () => {
                       if (usedButtonIdsRef.current.has(m.id)) return;
                       usedButtonIdsRef.current.add(m.id);
+
 
                       setMessages((prev) => prev.map((msg) =>
                         msg.id === m.id ? { ...msg, hasViewSavedLocations: false } : msg
@@ -1249,6 +1264,10 @@ export default function PickupFlowScreen({
                 showIcons={false}
                 send={() => {
                   if (phoneNumberInput.trim()) {
+                    setMessages((prev) => prev.map((msg) =>
+                      msg.hasUseMyNumberButton ? { ...msg, hasUseMyNumberButton: false } : msg
+                    ));
+
                     if (currentStep === "pickup-phone") {
                       send(phoneNumberInput, "pickup-phone");
                     } else if (currentStep === "dropoff-phone") {

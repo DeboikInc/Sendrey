@@ -9,6 +9,10 @@
   font-style: normal;
 }
 
+body {
+  overscroll-behavior: none;
+}
+
 /* forces the Google Maps Autocomplete dropdown to become a "drop-up" */
 .pac-container {
   position: fixed !important;
@@ -159,4 +163,19 @@ html {
 
 .scrollbar-auto-on-hover:hover::-webkit-scrollbar-thumb:hover {
   background: #3a3a3a;
+}
+
+/* Pull to refresh */
+.pull-to-refresh {
+  overscroll-behavior: contain;
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+button, a {
+  min-height: 44px;
+  min-width: 44px;
 }

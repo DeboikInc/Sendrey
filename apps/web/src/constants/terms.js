@@ -1,5 +1,5 @@
 export const USER_TERMS = {
-  title: "User Terms & Conditions",
+  title: "Terms & Conditions",
   version: "1.0",
   effectiveDate: "2025-02-18",
   summary: [

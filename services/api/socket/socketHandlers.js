@@ -12,12 +12,7 @@ const { logSocketAudit } = require('../utils/socketAudit');
 
 const { computeDeliveryFeeFromDocs, calculateFeeSplit } = require('../config/pricing');
 const { getPricingConfig } = require('../services/pricingService');
-
-const orderHistoryCache = require('../cache/orderHistoryCache');
-const { cancelStaleOrders } = require('../services/orderService')
-const OrderActivityLog = require('../models/OrderActivityLog');
-console.log('[boot] OrderActivityLog loaded:', typeof OrderActivityLog, typeof OrderActivityLog?.create);
-const { releaseLockAndAbort } = require('./orderHandlers')
+const chatService = require('../services/chatService');
 
 const {
   socketMessageSnapshot,
@@ -82,7 +77,6 @@ const archiveCurrentSession = async (chatId, orderId, status = 'completed') => {
   if (!hasRealContent) return;
 
   const order = await Order.findOne({ orderId }).sort({ createdAt: -1 }).lean();
-  const activityLog = await OrderActivityLog.find({ orderId }).sort({ createdAt: 1 }).lean();
 
   const sessionObj = {
     orderId,
@@ -116,7 +110,7 @@ const archiveCurrentSession = async (chatId, orderId, status = 'completed') => {
       createdAt: order?.createdAt,
       completedAt: order?.completedAt || new Date(),
       deliveryConfirmedAt: order?.deliveryConfirmedAt,
-      statusHistory: order?.activityLog,
+      statusHistory: order?.statusHistory,
     },
     runnerInfo: order?.runnerId ? { runnerId: order.runnerId } : null,
     userInfo: order?.userId ? { userId: order.userId } : null,
@@ -224,8 +218,6 @@ const createOrder = async (io, { chatId, userId, runnerId, serviceType }) => {
       message: 'User has no active request. The session cannot continue.',
       chatId,
     });
-
-    await releaseLockAndAbort(io, { chatId, userId, runnerId, reason: 'No active request found.' });
     throw Object.assign(new Error('No active currentRequest'), { statusCode: 400 });
   }
 
@@ -239,8 +231,6 @@ const createOrder = async (io, { chatId, userId, runnerId, serviceType }) => {
       message: 'Your active request does not match this chat session.',
       chatId,
     });
-
-    await releaseLockAndAbort(io, { chatId, userId, runnerId, reason: 'Service type mismatch.' });
     throw Object.assign(new Error('serviceType mismatch'), { statusCode: 400 });
   }
 
@@ -297,6 +287,12 @@ const createOrder = async (io, { chatId, userId, runnerId, serviceType }) => {
     status: 'pending_payment',
     paymentStatus: 'unpaid',
     approvalStatus: isErrand ? 'pending' : 'not_required',
+    statusHistory: [{
+      status: 'pending_payment',
+      timestamp: now,
+      triggeredBy: 'system',
+      note: 'Order created on session start',
+    }],
     createdAt: now,
     updatedAt: now,
   };
@@ -324,10 +320,24 @@ const createOrder = async (io, { chatId, userId, runnerId, serviceType }) => {
     },
   };
 
-  // Fire all writes in parallel
+  // ── 2. Fire all writes in parallel — none depend on each other ───────────────
   const [order] = await Promise.all([
     // Insert order (insertMany returns array, we take first)
     Order.insertMany([orderDoc], { ordered: true }).then(docs => docs[0]),
+
+    // Cancel stale orders for this chat
+    Order.updateMany(
+      {
+        chatId,
+        status: { $nin: ['completed', 'cancelled', 'task_completed'] },
+        paymentStatus: { $ne: 'paid' },
+        orderId: { $ne: orderId }, // don't cancel the one we just made
+      },
+      {
+        $set: { status: 'cancelled', cancelledAt: now, cancelReason: 'new_session_started' },
+        $push: { statusHistory: { status: 'cancelled', timestamp: now, triggeredBy: 'system', note: 'Superseded by new session' } },
+      }
+    ),
 
     // Inject payment_request into chat + pin orderId
     Chat.findOneAndUpdate(
@@ -344,29 +354,13 @@ const createOrder = async (io, { chatId, userId, runnerId, serviceType }) => {
     User.findByIdAndUpdate(userId, { activeOrderId: orderId }),
   ]);
 
-  console.log("[createOrder] Order Created successfully")
+  console.log('[createOrder] Order created:', orderId);
 
-  // await OrderActivityLog.create({
-  //   orderId,
-  //   actorType: 'system',
-  //   actorId: null,
-  //   action: 'created',
-  //   metadata: { status: 'pending_payment' },
-  // });
-
-  // Cancel stale orders for this chat
-  await cancelStaleOrders(
-    { chatId, status: { $nin: ['completed', 'cancelled'] }, paymentStatus: { $ne: 'paid' }, orderId: { $ne: orderId } },
-    'Superseded by new session'
-  );
-
-  await orderHistoryCache.invalidate(userId.toString());
-
-  // Read the final chat state (needed for chatHistory emit)
+  // ── 3. Read the final chat state (needed for chatHistory emit) ───────────────
   const finalChat = await Chat.findOne({ chatId }).lean();
   const cleanMessages = deduplicateMessages(finalChat.messages);
 
-  // Build lean payload and broadcast 
+  // ── 4. Build lean payload and broadcast ──────────────────────────────────────
   const orderPayload = {
     orderId,
     chatId,
@@ -395,6 +389,10 @@ const createOrder = async (io, { chatId, userId, runnerId, serviceType }) => {
     pickupPhone: orderDoc.pickupPhone || null,
     dropoffPhone: orderDoc.dropoffPhone || null,
   };
+
+  console.log('[createOrder] orderPayload.serviceType:', orderPayload.serviceType);
+  console.log('[createOrder] resolvedServiceType:', resolvedServiceType);
+  console.log('[createOrder] userDoc.currentRequest:', JSON.stringify(userDoc?.currentRequest, null, 2));
 
   // Emit orderCreated first so clients can set up state before history arrives
   io.to(`user-${userId}`).emit('orderCreated', { order: orderPayload, isNewOrder: true });
@@ -705,7 +703,6 @@ const initializeChatAndProceed = async (io, chatId, state) => {
     let chat;
 
     if (existingChat) {
-      // 1. Archive in background
       const archivePromise = lastOrder?.orderId
         ? archiveCurrentSession(
           chatId,
@@ -714,7 +711,7 @@ const initializeChatAndProceed = async (io, chatId, state) => {
         ).catch(err => console.error('[archive] bg failed:', err.message))
         : Promise.resolve();
 
-      // 2. Reset chat document (THIS MUST WAIT - chat needs fresh state)
+      // Reset chat document
       existingChat.messages = [...initialMessages];
       existingChat.specialInstructions = specialInstructions || null;
       existingChat.lastActivity = new Date();
@@ -723,13 +720,31 @@ const initializeChatAndProceed = async (io, chatId, state) => {
       existingChat.taskId = null;
       existingChat.orderSessionId = orderSessionId;
 
-      // 3. Save chat + cancel stale orders in parallel (both required before proceeding)
+      // Save chat + cancel stale orders in parallel (both required before proceeding)
       await Promise.all([
         existingChat.save(),
-        cancelStaleOrders({ chatId, status: { $nin: ['completed', 'cancelled'] } }, 'New session started')
+        Order.updateMany(
+          { chatId, status: { $nin: ['completed', 'cancelled', 'task_completed'] } },
+          {
+            $set: {
+              status: 'cancelled',
+              cancelledAt: new Date(),
+              cancelReason: 'new_session_started',
+            },
+            $push: {
+              statusHistory: {
+                status: 'cancelled',
+                timestamp: new Date(),
+                triggeredBy: 'system',
+                note: 'New session started',
+              },
+            },
+          }
+        ),
+        await chatService.updateRecentChats(runnerId, existingChat)
       ]);
 
-      // 4. Reset socket state in background (doesn't need to block proceedToChat)
+      // Reset socket state in background 
       const resetSocketState = async () => {
         for (const roomName of [chatId, `runner-${runnerId}`, `user-${userId}`]) {
           const room = io.sockets.adapter.rooms.get(roomName);
@@ -764,6 +779,9 @@ const initializeChatAndProceed = async (io, chatId, state) => {
         createdAt: new Date(),
         specialInstructions: specialInstructions || null,
       });
+
+      await chatService.saveChatHistory(chatId, chat.messages);
+      await chatService.updateRecentChats(runnerId, chat);
       console.log('[initializeChat] New chat created');
     }
 
@@ -822,7 +840,6 @@ const initializeChatAndProceed = async (io, chatId, state) => {
 
   } catch (error) {
     console.error('[initializeChat] error:', error);
-    await releaseLockAndAbort(io, { chatId, userId, runnerId, reason: 'Failed to prepare chat.' });
     preRoomState.delete(chatId);
     io.to(`user-${userId}`).emit('chatError', {
       code: 'CHAT_INIT_FAILED',
@@ -1071,11 +1088,6 @@ const handleUserJoinChat = async (socket, io, data) => {
     console.error('[userJoinChat] error:', orderErr);
 
     console.error('[userJoinChat] createOrder failed:', orderErr.message);
-    await releaseLockAndAbort(io, {
-      chatId, userId, runnerId,
-      reason: 'Failed to create your order. Please try again.',
-    });
-
     socket.emit('chatError', {
       code: 'ORDER_CREATE_FAILED',
       message: 'Failed to create your order. Please try again.',

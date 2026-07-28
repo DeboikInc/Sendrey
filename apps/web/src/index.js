@@ -7,6 +7,7 @@ import { Provider } from "react-redux";
 import { ThemeProvider } from "@material-tailwind/react";
 import { PersistGate } from 'redux-persist/integration/react';
 import store, { persistor } from './store/store';
+import * as serviceWorkerRegistration from './serviceWorkerRegistration';
 
 if (process.env.NODE_ENV === 'production') {
   console.log = () => { };
@@ -29,3 +30,5 @@ root.render(
     </Provider>
   </React.StrictMode>,
 );
+
+serviceWorkerRegistration.register();
