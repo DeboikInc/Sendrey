@@ -2,12 +2,21 @@ import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import api from '../utils/api';
 
 // ─── Async thunk
-
 export const fetchRunnerOrders = createAsyncThunk(
   'order/fetchRunnerOrders',
-  async ({ runnerId, page = 1, limit = 10 }, { rejectWithValue }) => {
+  async (
+    { runnerId, page = 1, limit = 10, status, taskType, dateFrom, dateTo, search },
+    { rejectWithValue }
+  ) => {
     try {
-      const res = await api.get(`/orders/runner/${runnerId}?page=${page}&limit=${limit}`);
+      const params = new URLSearchParams({ page, limit });
+      if (status) params.set('status', status);
+      if (taskType) params.set('taskType', taskType);
+      if (dateFrom) params.set('dateFrom', dateFrom);
+      if (dateTo) params.set('dateTo', dateTo);
+      if (search) params.set('search', search);
+
+      const res = await api.get(`/orders/history/runner/${runnerId}?${params.toString()}`);
       return res.data;
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || 'Failed to fetch orders');
@@ -28,17 +37,28 @@ export const fetchOrderByChatId = createAsyncThunk(
   }
 );
 
-export const fetchOrderHistory = createAsyncThunk(
-  'order/fetchOrderHistory',
-  async (userId, {rejectWithValue}) => {
+export const fetchUserOrderHistory = createAsyncThunk(
+  'order/fetchUserOrderHistory',
+  async ({ userId, status, taskType, search, dateFrom, dateTo, cursor, limit = 20 }, { rejectWithValue }) => {
     try {
-      const response = await api.get(`order/get-order-history/${userId}`)
-      return response.data;
-    } catch (err) {
-      return rejectWithValue(null)
+      const params = new URLSearchParams();
+      if (status) params.set('status', status);
+      if (taskType) params.set('taskType', taskType);
+      if (search) params.set('search', search);
+      if (dateFrom) params.set('dateFrom', dateFrom);
+      if (dateTo) params.set('dateTo', dateTo);
+      if (cursor) params.set('cursor', cursor);
+      params.set('limit', limit);
+
+      const res = await api.get(`/orders/history/user/${userId}?${params.toString()}`);
+      console.log('[fetchUserOrderHistory] raw res.data:', JSON.stringify(res.data, null, 2));
+      return res.data;
+    } catch (error) {
+      console.log('[fetchUserOrderHistory] error:', error.response?.data);
+      return rejectWithValue(error.response?.data?.message || 'Failed to fetch order history');
     }
   }
-)
+);
 
 // ─── Slice
 
@@ -56,6 +76,11 @@ const initialState = {
   ordersLoading: false,
   ordersError: null,
   setActiveChat: null,
+
+  userOrders: [],
+  userOrdersNextCursor: null,
+  userOrdersLoading: false,
+  userOrdersError: null,
 };
 
 const orderSlice = createSlice({
@@ -148,6 +173,28 @@ const orderSlice = createSlice({
         // silent — order just doesn't exist yet
       })
 
+      .addCase(fetchUserOrderHistory.pending, (state) => {
+        state.userOrdersLoading = true;
+        state.userOrdersError = null;
+      })
+
+      .addCase(fetchUserOrderHistory.fulfilled, (state, action) => {
+        state.userOrdersLoading = false;
+        const { orders, nextCursor } = action.payload?.data ?? action.payload;
+
+        if (action.meta.arg?.cursor) {
+          const existingIds = new Set(state.userOrders.map((o) => o.orderId));
+          state.userOrders = [...state.userOrders, ...orders.filter((o) => !existingIds.has(o.orderId))];
+        } else {
+          state.userOrders = orders;
+        }
+        state.userOrdersNextCursor = nextCursor;
+      })
+
+      .addCase(fetchUserOrderHistory.rejected, (state, action) => {
+        state.userOrdersLoading = false;
+        state.userOrdersError = action.payload;
+      });
 
   },
 });

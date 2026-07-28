@@ -956,6 +956,7 @@ function WhatsAppLikeChat() {
           completedStatuses: [],
           deliveryMarked: false,
           userConfirmedDelivery: false,
+          orderMissing: false,
         });
         currentOrderRef.current = null;
       }

@@ -18,14 +18,17 @@ const useUserOrderStore = create(
       cancelledByName: null,
       taskCompleted: false,
       isPaid: false,
-
+      orderMissing: false,
+      
       // ── Setters ────────────────────────────────────────────────────────────
 
       setCurrentOrder: (order) => {
         console.log('[store] setCurrentOrder called:', order?.orderId, new Error().stack.split('\n')[2]);
         set({ currentOrder: order });
       },
-
+      
+      setOrderMissing: (val) => set({ orderMissing: val }),
+      
       updateCurrentOrder: (patch) =>
         set((state) => ({
           currentOrder: state.currentOrder

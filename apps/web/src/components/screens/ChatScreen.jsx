@@ -51,6 +51,9 @@ import { enqueueSocketEvent, flushSocketQueue } from '../../utils/socketQueue';
 
 import useUserOrderStore from '../../store/userOrderStore';
 
+import { useCheckOrderExist } from '../../hooks/useCheckOrderExist';
+import OrderPendingModal from '../common/OrderPendingModal';
+
 const getCurrentTime = () => {
   return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 };
@@ -97,6 +100,9 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
   const currentOrder = useUserOrderStore((s) => s.currentOrder);
   const orderCancelled = useUserOrderStore((s) => s.orderCancelled);
   const taskCompleted = useUserOrderStore((s) => s.taskCompleted);
+  const orderMissingFromStore = useUserOrderStore((s) => s.orderMissing);
+  const { setOrderMissing } = useUserOrderStore();
+  const wasOrderMissingOnMountRef = useRef(orderMissingFromStore);
 
   const serviceType =
     currentOrder?.serviceType ||
@@ -192,6 +198,22 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
       ? `user-${userData._id}-runner-${runner._id}`
       : null;
   }, [userData?._id, runner?._id]);
+
+  const { orderMissing: orderMissingLive } = useCheckOrderExist({
+    chatId,
+    hasOrder: !!currentOrder?.orderId,
+    socket,
+    enabled: !!chatId && !orderMissingFromStore,
+  });
+
+  const orderMissing = orderMissingFromStore || orderMissingLive;
+
+  useEffect(() => {
+    if (orderMissingLive) {
+      setOrderMissing(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderMissingLive]);
 
   // Restore paid chats on mount
   useEffect(() => {
@@ -581,6 +603,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
       setCurrentOrder(null);
       currentOrderRef.current = null;
       setTaskCompleted(false);
+      setOrderMissing(false);
       setPaidChatIds(prev => { const n = new Set(prev); n.delete(chatId); return n; });
       lastProcessedSystemMsgRef.current = null;
       resetDedup();
@@ -762,6 +785,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
         lastProcessedSystemMsgRef.current = null;
         setOrderCancelled(false);
         setTaskCompleted(false);
+        setOrderMissing(false);
 
         // Don't wipe currentOrder if orderCreated already set a fresh one for this chatId
         const TERMINAL = ['completed', 'cancelled', 'task_completed'];
@@ -1923,7 +1947,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
       )}
 
       {showRunnerContactInfo && (
-        <RunnerContactInformation 
+        <RunnerContactInformation
           isOpen={showRunnerContactInfo}
           runnerPhone={runner?.phone}
           onClose={() => setShowRunnerContactInfo(false)}
@@ -1947,7 +1971,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
         hasActiveOrder={canRaiseDispute}
         onRaiseDispute={() => { setShowMoreSheet(false); setShowDisputeForm(true); }}
         onOrderDetails={() => { setShowMoreSheet(false); setShowOrderDetails(true); }}
-        onRunnerContactInfo={() => {setShowMoreSheet(false); setShowRunnerContactInfo(true);}}
+        onRunnerContactInfo={() => { setShowMoreSheet(false); setShowRunnerContactInfo(true); }}
         canRate={canRate}
         onRateRunner={() => { setShowMoreSheet(false); if (ratingOrderId) setShowRatingModal(true); }}
       />
@@ -2280,6 +2304,18 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
                 Back to Home
               </button>
             </div>
+          ) : orderMissing ? (
+            <div className="flex flex-col items-center gap-3 px-4 sm:px-8 lg:px-64">
+              <p className={`text-sm font-medium text-center ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                This order could not be found. It may have failed to create.
+              </p>
+              <button
+                onClick={onOrderComplete}
+                className="w-full py-4 rounded-xl bg-primary text-white font-semibold"
+              >
+                Back to Home
+              </button>
+            </div>
           ) : (
             // ── Normal chat input ──
             <div className="absolute w-full bottom-8 sm:bottom-[40px] px-4 sm:px-8 lg:px-64 right-0 left-0">
@@ -2383,6 +2419,13 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
           onDismiss={() => setShowTeamNotify(false)}
         />
       )}
+
+      <OrderPendingModal
+        isOpen={orderMissing && !wasOrderMissingOnMountRef.current}
+        darkMode={darkMode}
+        userType="user"
+        onLeave={() => onOrderComplete?.()}
+      />
     </>
   );
 }
