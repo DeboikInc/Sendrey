@@ -6,6 +6,11 @@ const Runner = require('../models/Runner');
 
 router.post('/accept', authenticate, async (req, res) => {
   try {
+    if (req.tokenExpired) {
+      logger.info(`Terms accepted with expired token for user ${req.user._id}`);
+      // Still allow the request since they're authenticated via grace period
+    }
+
     const { version, userType, whatsappOptIn } = req.body;
     const userId = req.user._id;
     const ipAddress = req.ip || req.connection.remoteAddress;
