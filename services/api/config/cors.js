@@ -1,8 +1,14 @@
 // config/cors.js
 require('dotenv').config();
 
-// Get allowed origins from env
-const allowedOrigins = (process.env.ALLOWED_ORIGINS || '').split(',').map(o => o.trim()).filter(Boolean);
+let allowedOrigins = [];
+const envOrigins = process.env.ALLOWED_ORIGINS;
+
+if (envOrigins) {
+  const clean = envOrigins.replace(/[\[\]']/g, '').trim();
+  allowedOrigins = clean.split(',').map(o => o.trim()).filter(Boolean);
+}
+
 
 // For development, allow localhost and common ports
 const isDevelopment = process.env.NODE_ENV === 'development';
@@ -16,7 +22,7 @@ const devOrigins = [
 
 // Combine allowed origins
 const origins = isDevelopment
-  ? [...new Set([...allowedOrigins, ...devOrigins])] // Remove duplicates
+  ? [...new Set([...allowedOrigins, ...devOrigins])] 
   : allowedOrigins;
 
 const corsOptions = {
@@ -42,9 +48,10 @@ const corsOptions = {
     'Accept',
     'Authorization',
     'X-Admin-Role',
-    'X-API-Key'
+    'X-API-Key',
+    'cookie'
   ],
-  exposedHeaders: ['Content-Type', 'Content-Length', 'Authorization'],
+  exposedHeaders: ['Content-Type', 'Content-Length', 'Authorization', 'Set-Cookie'],
   credentials: true,
   optionsSuccessStatus: 200,
   maxAge: 86400 // 24 hours - cache preflight requests
