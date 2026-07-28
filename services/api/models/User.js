@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const { GENDER, ROLE, SERVICE_TYPE, FLEET_TYPE } = require('../config/constants');
-const { getMatchingConfig } = require('../services/distanceConfigService');
+const distanceConfigService = require('../services/distanceConfigService');
 
 
 const userSchema = new mongoose.Schema({
@@ -278,7 +278,11 @@ const userSchema = new mongoose.Schema({
   currentRequest: {
     serviceType: { type: String, enum: SERVICE_TYPE },
     fleetType: { type: String, enum: FLEET_TYPE },
-
+    currentUserLocation: { type: String },
+    currentUserCoordinates: {
+      lat: { type: Number },
+      lng: { type: Number }
+    },
     deliveryLocation: { type: String },
     deliveryCoordinates: {
       lat: { type: Number },
@@ -564,7 +568,7 @@ function haversineDistance(lat1, lng1, lat2, lng2) {
 }
 
 userSchema.statics.findNearbyUsers = async function ({ latitude, longitude, fleetType }) {
-  const matchingConfig = await getMatchingConfig();
+  const matchingConfig = await distanceConfigService.getPedestrianConfig();
   const TOTAL_MAX = matchingConfig.totalMaxDistance;
 
   const query = {

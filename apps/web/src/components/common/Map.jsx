@@ -35,11 +35,15 @@ export default function Map({
       const geocoder = new window.google.maps.Geocoder();
       geocoder.geocode({ location: latLng }, (results, status) => {
         if (status === "OK" && results[0]) {
+          const formatted = results[0].formatted_address;
+          const shortComponent = results[0].address_components?.find(c =>
+            c.types.includes('premise') || c.types.includes('point_of_interest') || c.types.includes('route')
+          );
           resolve({
             lat: latLng.lat,
             lng: latLng.lng,
-            address: results[0].formatted_address,
-            name: results[0].formatted_address,
+            address: formatted,
+            name: shortComponent?.long_name || formatted.split(',')[0].trim(),
           });
         } else {
           resolve({

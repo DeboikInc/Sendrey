@@ -1,7 +1,8 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const { GENDER, ROLE, FLEET, EDUCATION, SERVICE_TYPE, RUNNER_STATUS, VERIFICATION_STATUS } = require('../config/constants');
-const { getMatchingConfig } = require('../services/distanceConfigService');
+
+const distanceConfigService = require('../services/distanceConfigService');
 
 const runnerSchema = new mongoose.Schema({
 
@@ -642,7 +643,7 @@ runnerSchema.statics.findNearbyRunners = async function ({
   deliveryLng,
   fleetType,
 }) {
-  const matchingConfig = await getMatchingConfig();
+  const matchingConfig = await distanceConfigService.getPedestrianConfig();
   const PICKUP_MAX = matchingConfig.pickupMaxDistance;
   const isPedestrian = fleetType?.toLowerCase() === 'pedestrian';
 

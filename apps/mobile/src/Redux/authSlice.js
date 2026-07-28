@@ -6,7 +6,8 @@ import { authStorage } from "../utils/authStorage";
 // helper — call after any successful auth response
 const storeTokensIfNeeded = async (payload) => {
     if (payload?.accessToken) {
-        await authStorage.setTokens(payload.accessToken, payload.refreshToken);
+        const userType = payload.runner ? 'runner' : 'user';
+        await authStorage.setTokens(payload.accessToken, payload.refreshToken, userType);
     }
 };
 
@@ -257,11 +258,11 @@ const authSlice = createSlice({
             .addCase(register.pending, (state) => { state.status = "loading"; state.error = null; })
             .addCase(register.fulfilled, (state, action) => {
                 state.status = "succeeded";
-                state.isAuthenticated = true;
                 if (action.payload.runner) {
                     state.runner = action.payload.runner;
                 } else {
                     state.user = action.payload.user;
+                    state.runner = null;
                 }
             })
             .addCase(register.rejected, (state, action) => {
@@ -286,6 +287,7 @@ const authSlice = createSlice({
                     state.runner = action.payload.runner;
                 } else if (action.payload.user) {
                     state.user = action.payload.user;
+                    state.runner = null;
                 }
             })
             .addCase(verifyEmailOTP.rejected, (state, action) => {
