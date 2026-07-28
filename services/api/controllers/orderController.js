@@ -5,14 +5,14 @@ const logger = require('../utils/logger');
 class OrderController extends BaseController {
   constructor() {
     super(null);
-    this.getOrderHistory = this.getOrderHistory.bind(this);
+    this.getUserOrderHistory = this.getUserOrderHistory.bind(this);
+    this.getRunnerOrderHistory = this.getRunnerOrderHistory.bind(this);
     this.getOrderByChatId = this.getOrderByChatId.bind(this);
-    this.getRunnerOrders = this.getRunnerOrders.bind(this);
     this.adminGetAllOrders = this.adminGetAllOrders.bind(this);
     this.cancelOrder = this.cancelOrder.bind(this);
   }
 
-  async getOrderHistory(req, res) {
+  async getUserOrderHistory(req, res) {
     try {
       const userId = req.user.id || req.userId;
 
@@ -22,7 +22,7 @@ class OrderController extends BaseController {
 
       const { status, taskType, search, dateFrom, dateTo, cursor, limit } = req.query;
 
-      const result = await orderService.getOrderHistory({
+      const result = await orderService.getUserOrderHistory({
         userId,
         status,
         taskType,
@@ -45,7 +45,7 @@ class OrderController extends BaseController {
       const { chatId } = req.params;
 
       if (!chatId) {
-        return this.error(res, 'Chat ID not found', 401);
+        return this.error(res, 'Chat ID not found', 400);
       }
       const order = await orderService.getOrderByChatId(chatId);
       return this.success(res, order);
@@ -55,21 +55,24 @@ class OrderController extends BaseController {
     }
   }
 
-  async getRunnerOrders(req, res) {
+  async getRunnerOrderHistory(req, res) {
     try {
       const { runnerId } = req.params;
 
-      if ( !runnerId ) {
-        return this.error(res, 'Runner Id not found', 401)
+      if (!runnerId) {
+        return this.error(res, 'Runner Id not found', 400);
       }
 
       const page = parseInt(req.query.page) || 1;
       const limit = parseInt(req.query.limit) || 10;
+      const { status, taskType, dateFrom, dateTo, search } = req.query;
 
-      const result = await orderService.getRunnerOrders(runnerId, page, limit);
+      const result = await orderService.getRunnerOrderHistory(runnerId, page, limit, {
+        status, taskType, dateFrom, dateTo, search,
+      });
       return this.success(res, result);
     } catch (err) {
-      logger.error('getRunnerOrders error:', err);
+      logger.error('getRunnerOrderHistory error:', err);
       return this.error(res, err.message);
     }
   }
@@ -88,12 +91,12 @@ class OrderController extends BaseController {
     try {
       const { orderId, chatId, runnerId, userId, reason, cancelledBy } = req.body;
 
-      if ( !runnerId || !userId) {
-        return this.error(res, "User or Runner not found", 401);
+      if (!orderId) {
+        return this.error(res, 'Order not found', 400);
       }
 
-      if ( !orderId ) {
-        return this.error(res, "Order not found", 404)
+      if (!runnerId && !userId) {
+        return this.error(res, 'User or Runner not found', 400);
       }
 
       const result = await orderService.cancelOrder({

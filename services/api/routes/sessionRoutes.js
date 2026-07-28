@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const sessionController = require('../controllers/sessionController');
-const { authenticate, authenticateOptional } = require('../middleware/auth');
+const { authenticateOptional } = require('../middleware/auth');
 
 // Validate current session - uses optional auth (won't fail if token expired)
 router.post('/validate', authenticateOptional, sessionController.validateSession);

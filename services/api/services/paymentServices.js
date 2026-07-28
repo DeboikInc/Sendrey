@@ -82,13 +82,6 @@ class PaymentService {
       }
 
       return withTransaction(async (session) => {
-        const lockedOrder = await Order.findOneAndUpdate(
-          { orderId },
-          { $set: { escrowId: escrow._id, paymentStatus: 'paid', status: 'paid', paymentMethod: 'wallet' } },
-          { session }
-        );
-        if (!lockedOrder) throw new Error('Order already paid or not found');
-
         const wallet = await Wallet.findOne({ userId }).session(session);
         if (!wallet || wallet._balance < order.totalAmount) {
           throw new Error('Insufficient wallet balance');
@@ -119,11 +112,12 @@ class PaymentService {
 
         const [escrow] = await Escrow.create([escrowDoc], { session });
 
-        await Order.findOneAndUpdate(
-          { orderId },
+        const lockedOrder = await Order.findOneAndUpdate(
+          { orderId, paymentStatus: { $ne: 'paid' } },
           { $set: { escrowId: escrow._id, paymentStatus: 'paid', status: 'paid' } },
           { session }
         );
+        if (!lockedOrder) throw new Error('Order already paid or not found');
 
         await LedgerEntry.create([{
           userId: order.userId,

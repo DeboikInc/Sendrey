@@ -15,6 +15,7 @@ import Settings from "./settings/Settings";
 import UserWallet from "../../components/screens/UserWallet";
 import MoreMenu from "../../components/screens/MoreMenu";
 import UserDisputes from "../../components/screens/UserDisputes";
+import OrderHistory from "../../components/screens/OrderHistory";
 
 import ChatScreen from "../../components/screens/ChatScreen";
 import { useDispatch } from "react-redux";
@@ -70,6 +71,7 @@ export const Welcome = () => {
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showWallet, setShowWallet] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showOrderHistory, setShowOrderHistory] = useState(false);
   const [showDisputes, setShowDisputes] = useState(false);
 
   // state declarations for marketscreen
@@ -133,6 +135,7 @@ export const Welcome = () => {
         setShowMoreMenu(false);
         setShowWallet(false);
         setShowSettings(false);
+        setShowOrderHistory(false);
         setShowDisputes(false);
         setChatReady(true);
         setShowConnecting(false);
@@ -707,6 +710,7 @@ export const Welcome = () => {
         onWallet={() => setShowWallet(true)}
         onSettings={() => setShowSettings(true)}
         onDisputes={() => setShowDisputes(true)}
+        onOrderHistory={() => setShowOrderHistory(true)}
       // others
       />
 
@@ -715,6 +719,18 @@ export const Welcome = () => {
           <UserWallet darkMode={dark} onBack={() => setShowWallet(false)} userData={currentUser} />
         </div>
       )}
+
+      {showOrderHistory && currentScreen !== 'chat' && (
+        <div className="fixed inset-0 z-[10001]">
+          <OrderHistory 
+          darkMode={dark} 
+          onBack={() => setShowOrderHistory(false)} 
+          userData={currentUser}
+          userId={currentUser?._id}
+          />
+        </div>
+      )}
+
       {showSettings && currentScreen !== 'chat' && (
         <div className="fixed inset-0 z-[10001]">
           <Settings darkMode={dark}

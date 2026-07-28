@@ -14,8 +14,10 @@ const { computeDeliveryFeeFromDocs, calculateFeeSplit } = require('../config/pri
 const { getPricingConfig } = require('../services/pricingService');
 
 const orderHistoryCache = require('../cache/orderHistoryCache');
-const cancelStaleOrders = require('../services/orderService')
+const { cancelStaleOrders } = require('../services/orderService')
 const OrderActivityLog = require('../models/OrderActivityLog');
+console.log('[boot] OrderActivityLog loaded:', typeof OrderActivityLog, typeof OrderActivityLog?.create);
+const { releaseLockAndAbort } = require('./orderHandlers')
 
 const {
   socketMessageSnapshot,
@@ -222,6 +224,8 @@ const createOrder = async (io, { chatId, userId, runnerId, serviceType }) => {
       message: 'User has no active request. The session cannot continue.',
       chatId,
     });
+
+    await releaseLockAndAbort(io, { chatId, userId, runnerId, reason: 'No active request found.' });
     throw Object.assign(new Error('No active currentRequest'), { statusCode: 400 });
   }
 
@@ -235,6 +239,8 @@ const createOrder = async (io, { chatId, userId, runnerId, serviceType }) => {
       message: 'Your active request does not match this chat session.',
       chatId,
     });
+
+    await releaseLockAndAbort(io, { chatId, userId, runnerId, reason: 'Service type mismatch.' });
     throw Object.assign(new Error('serviceType mismatch'), { statusCode: 400 });
   }
 
@@ -338,13 +344,15 @@ const createOrder = async (io, { chatId, userId, runnerId, serviceType }) => {
     User.findByIdAndUpdate(userId, { activeOrderId: orderId }),
   ]);
 
-  await OrderActivityLog.create({
-    orderId,
-    actorType: 'system',
-    actorId: null,
-    action: 'created',
-    metadata: { status: 'pending_payment' },
-  });
+  console.log("[createOrder] Order Created successfully")
+
+  // await OrderActivityLog.create({
+  //   orderId,
+  //   actorType: 'system',
+  //   actorId: null,
+  //   action: 'created',
+  //   metadata: { status: 'pending_payment' },
+  // });
 
   // Cancel stale orders for this chat
   await cancelStaleOrders(
@@ -814,6 +822,7 @@ const initializeChatAndProceed = async (io, chatId, state) => {
 
   } catch (error) {
     console.error('[initializeChat] error:', error);
+    await releaseLockAndAbort(io, { chatId, userId, runnerId, reason: 'Failed to prepare chat.' });
     preRoomState.delete(chatId);
     io.to(`user-${userId}`).emit('chatError', {
       code: 'CHAT_INIT_FAILED',
@@ -1062,6 +1071,11 @@ const handleUserJoinChat = async (socket, io, data) => {
     console.error('[userJoinChat] error:', orderErr);
 
     console.error('[userJoinChat] createOrder failed:', orderErr.message);
+    await releaseLockAndAbort(io, {
+      chatId, userId, runnerId,
+      reason: 'Failed to create your order. Please try again.',
+    });
+
     socket.emit('chatError', {
       code: 'ORDER_CREATE_FAILED',
       message: 'Failed to create your order. Please try again.',

@@ -9,6 +9,7 @@ const { STATUS_GROUPS } = require('../config/constants');
 const logger = require('../utils/logger');
 const orderHistoryCache = require('../cache/orderHistoryCache');
 const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const OrderActivityLog = require('../models/OrderActivityLog');
 
 const encodeCursor = (doc) =>
   Buffer.from(JSON.stringify({ createdAt: doc.createdAt, _id: doc._id })).toString('base64');
@@ -20,10 +21,10 @@ class OrderService {
   constructor() { }
 
   // for user
-  async getOrderHistory({ userId, status, taskType, search, dateFrom, dateTo, cursor, limit = 20 }) {
+  async getUserOrderHistory({ userId, status, taskType, search, dateFrom, dateTo, cursor, limit = 20 }) {
     if (!userId) throw new Error('userId is required');
 
-    const cacheable = orderHistoryCache.isCacheable(params) && limit === 20;
+    const cacheable = orderHistoryCache.isCacheable({ status, taskType, search, dateFrom, dateTo, cursor }) && limit === 20;
     if (cacheable) {
       const cached = await orderHistoryCache.get(userId);
       if (cached) return cached;
@@ -60,14 +61,33 @@ class OrderService {
     const orders = await Order.find(filter)
       .sort({ createdAt: -1, _id: -1 })
       .limit(limit + 1)
-      .populate('runnerId', 'name fleetType serviceType')
+      .select('orderId serviceType taskType status totalAmount createdAt runnerId')
+      .populate('runnerId', 'firstName lastName fleetType serviceType')
       .lean();
 
     const hasMore = orders.length > limit;
     const page = hasMore ? orders.slice(0, limit) : orders;
 
+    const formatted = page.map((o) => ({
+      orderId: o.orderId,
+      serviceType: o.serviceType,
+      taskType: o.taskType,
+      createdAt: o.createdAt,
+      status: o.status,
+      totalAmount: o.totalAmount,
+      runner: o.runnerId
+        ? {
+          name: [o.runnerId.firstName, o.runnerId.lastName].filter(Boolean).join(' '),
+          fleetType: o.runnerId.fleetType,
+          serviceType: o.runnerId.serviceType,
+        }
+        : null,
+    }));
 
-    const result = { orders: page, nextCursor: hasMore ? encodeCursor(page[page.length - 1]) : null };
+    const result = {
+      orders: formatted,
+      nextCursor: hasMore ? encodeCursor(page[page.length - 1]) : null,
+    };
 
     if (cacheable) await orderHistoryCache.set(userId, result);
     return result;
@@ -78,21 +98,40 @@ class OrderService {
       .sort({ createdAt: -1 })
       .lean();
 
-    if (!order) throw new Error('No order found for this chat');
-    return order;
+    return order || null;
   }
 
-  async getRunnerOrders(runnerId, page = 1, limit = 10) {
+  async getRunnerOrderHistory(runnerId, page = 1, limit = 10, filters = {}) {
     const skip = (page - 1) * limit;
+    const { status, taskType, dateFrom, dateTo, search } = filters;
+
+    const query = { runnerId };
+
+    if (status) query.status = status;
+    if (taskType) query.serviceType = taskType;
+
+    if (dateFrom || dateTo) {
+      query.createdAt = {};
+      if (dateFrom) query.createdAt.$gte = new Date(dateFrom);
+      if (dateTo) {
+        const end = new Date(dateTo);
+        end.setHours(23, 59, 59, 999);
+        query.createdAt.$lte = end;
+      }
+    }
+
+    if (search) {
+      query.orderId = { $regex: search, $options: 'i' };
+    }
 
     const [orders, total] = await Promise.all([
-      Order.find({ runnerId })
+      Order.find(query)
         .sort({ createdAt: -1 })
         .skip(skip)
         .limit(limit)
-        .select('orderId serviceType taskType status paymentStatus itemBudget itemLists deliveryFee totalAmount createdAt cancelledAt specialInstructions')
+        .select('orderId serviceType status runnerPayout marketItems pickupItems createdAt')
         .lean(),
-      Order.countDocuments({ runnerId }),
+      Order.countDocuments(query),
     ]);
 
     return {

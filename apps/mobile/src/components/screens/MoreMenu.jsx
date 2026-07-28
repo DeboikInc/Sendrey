@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Wallet, Settings, AlertTriangle  } from 'lucide-react';
+import { Wallet, Settings, AlertTriangle, History  } from 'lucide-react';
 
 export default function MoreMenu({
     isOpen,
@@ -8,6 +8,8 @@ export default function MoreMenu({
     onWallet,
     onSettings,
     onDisputes,
+    onOrderHistory,
+
     userId,
     // add more action props here as needed e.g. onSettings
 }) {
@@ -28,8 +30,13 @@ export default function MoreMenu({
             icon: <AlertTriangle className="h-6 w-6 text-primary" />,
             label: 'Disputes',
             onClick: () => { onClose(); setTimeout(() => onDisputes(), 200); },
+        },
+        {
+            icon: <History className="h-6 w-6 text-primary" />,
+            label: 'Order History',
+            onClick: () => { onClose(); setTimeout(() => onOrderHistory(), 200); },
+
         }
-        // add more items here as needed
     ];
 
     return (
