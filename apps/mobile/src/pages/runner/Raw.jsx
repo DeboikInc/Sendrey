@@ -300,9 +300,9 @@ function WhatsAppLikeChat() {
 
     const merged = Array.from(existingMap.values());
     merged.sort((a, b) => {
-      const timeA = a.lastActivity || a.time || '';
-      const timeB = b.lastActivity || b.time || '';
-      return timeB.localeCompare(timeA);
+      const timeA = new Date(a.lastActivity || a.time || 0).getTime();
+      const timeB = new Date(b.lastActivity || b.time || 0).getTime();
+      return timeB - timeA;
     });
 
     return merged;
@@ -806,6 +806,28 @@ function WhatsAppLikeChat() {
     }
   }, [kycStep, registrationComplete, isBotMode]);
 
+  useEffect(() => {
+    if (!(kycStep === 6 && registrationComplete && isBotMode && runnerId)) return;
+
+    dispatch(fetchRefreshRecentChats(runnerId))
+      .unwrap()
+      .then((res) => {
+        const serverChats = Array.isArray(res) ? res : (res?.chats || res?.data || []);
+        const cleanServerChats = serverChats.filter(c =>
+          c.id !== BOT_CHAT_ID &&
+          !c.chatId?.startsWith('bot-') &&
+          !c.id?.toString?.().startsWith?.('bot-')
+        );
+        if (cleanServerChats.length === 0) return;
+
+        setCachedRecentChats(runnerId, cleanServerChats);
+        setChatHistory(prev => mergeChatHistory(prev, cleanServerChats));
+      })
+      .catch(err => {
+        console.warn('[recent-chats] connect-screen refresh failed:', err);
+      });
+  }, [kycStep, registrationComplete, isBotMode, runnerId, dispatch, mergeChatHistory]);
+
   // ── OTP resend cooldown ──────────────────────────────────────────────────────
   useEffect(() => {
     if (needsOtpVerification) {
@@ -964,7 +986,27 @@ function WhatsAppLikeChat() {
         };
       });
 
-      chatManager.set(chatId, { messages: formatted });
+      const existingState = chatManager.get(chatId);
+      const existingOrderId =
+        existingState.currentOrder?.orderId ??
+        useOrderStore.getState().getChat(chatId).currentOrder?.orderId ??
+        null;
+
+      const sameOrder =
+        !!existingOrderId && !!latestOrder?.orderId && existingOrderId === latestOrder.orderId;
+
+      const sameMessages =
+        !!existingState.messages?.length &&
+        existingState.messages.length === formatted.length &&
+        existingState.messages.every((m, i) => m.id === formatted[i]?.id);
+
+      const skipPersist = isTerminalOrder && sameOrder && sameMessages;
+
+      if (!skipPersist) {
+        chatManager.set(chatId, { messages: formatted });
+      } else {
+        console.log('[handleChatHistory] skipping persist — same terminal order + same messages', chatId);
+      }
 
       if (activeChatIdRef.current === chatId) {
         if (activeSetMessagesRef.current) {

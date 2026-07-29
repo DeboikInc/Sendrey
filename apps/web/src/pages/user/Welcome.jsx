@@ -231,6 +231,11 @@ export const Welcome = () => {
     // Only bail on definitive local terminal states — let server validate everything else
     if (status?.taskCompleted || status?.orderCancelled) {
       console.log('[restore] local state is terminal, bailing');
+      chatStorage.clearActiveChat();
+      chatStorage.clearDeliveryConfirmations(storedChatId);
+      chatStorage.clearRunnerData();
+      chatStorage.clearChatStatus(storedChatId);
+      setCurrentScreen('service_selection');
       return;
     }
 
@@ -306,6 +311,16 @@ export const Welcome = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?._id]);
 
+  useEffect(() => {
+    if (currentScreen !== 'chat') return;
+    const t = setTimeout(() => {
+      if (!chatMounted) {
+        console.warn('[Welcome] currentScreen=chat but chatMounted=false — recovering to service_selection');
+        setCurrentScreen('service_selection');
+      }
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [currentScreen, chatMounted]);
 
   useEffect(() => {
     if (!socket || !currentUser?._id) return;
@@ -510,7 +525,11 @@ export const Welcome = () => {
 
 
   const renderScreen = () => {
-    if (currentScreen === 'chat') return null; // ChatScreen is rendered separately below so it can mount/unmount without affecting this entire tree
+    if (currentScreen === 'chat') {
+      if (!chatMounted) return null;
+      return null;
+    };
+    // ChatScreen is rendered separately below so it can mount/unmount without affecting this entire tree
     switch (currentScreen) {
       case "service_selection":
         return (
@@ -753,11 +772,11 @@ export const Welcome = () => {
 
       {showOrderHistory && currentScreen !== 'chat' && (
         <div className="fixed inset-0 z-[10001]">
-          <OrderHistory 
-          darkMode={dark} 
-          onBack={() => setShowOrderHistory(false)} 
-          userData={currentUser}
-          userId={currentUser?._id}
+          <OrderHistory
+            darkMode={dark}
+            onBack={() => setShowOrderHistory(false)}
+            userData={currentUser}
+            userId={currentUser?._id}
           />
         </div>
       )}

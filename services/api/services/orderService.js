@@ -211,6 +211,8 @@ class OrderService {
       },
     });
 
+    const escrowFlagged = order.paymentStatus === 'paid';
+
     const cancelMessage = {
       id: `cancel-${Date.now()}`,
       from: 'system',

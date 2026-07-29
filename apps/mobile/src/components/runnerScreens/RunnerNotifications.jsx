@@ -293,7 +293,7 @@ function RunnerNotifications({
           <div className="h-px bg-gray-200 dark:bg-white/10 mx-4 flex-shrink-0" />
 
           {errorMessage && (
-            <div className={`mx-4 mb-3 rounded-2xl p-4 border flex items-start justify-between gap-2 flex-shrink-0 ${darkMode ? "bg-red-950/40 border-red-800/40" : "bg-red-50 border-red-200"
+            <div className={`mx-3 mt-3 mb-3 rounded-xl p-2 border flex items-start justify-between gap-2 flex-shrink-0 ${darkMode ? "bg-red-950/40 border-red-800/40" : "bg-red-50 border-red-200"
               }`}>
               <p className={`text-sm font-semibold ${darkMode ? "text-red-300" : "text-red-700"}`}>
                 {errorMessage}

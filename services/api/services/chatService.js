@@ -117,9 +117,9 @@ class ChatService {
 
       // Sort by lastActivity
       updated.sort((a, b) => {
-        const timeA = a.lastActivity || a.time || '';
-        const timeB = b.lastActivity || b.time || '';
-        return timeB.localeCompare(timeA);
+        const timeA = new Date(a.lastActivity || a.time || 0).getTime();
+        const timeB = new Date(b.lastActivity || b.time || 0).getTime();
+        return timeB - timeA;
       });
 
       await recentChatsCache.set(runnerId, updated);
