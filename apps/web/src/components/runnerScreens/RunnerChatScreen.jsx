@@ -62,6 +62,7 @@ function RunnerChatScreen({
   setInfoOpen,
   runnerId,
   socket,
+  chatId: chatIdProp,
   onSpecialInstructions,
   onOrderCreated,
   onPaymentSuccess,
@@ -124,7 +125,7 @@ function RunnerChatScreen({
 
 }) {
 
-  const chatId = useOrderStore(s => s.activeChatId)
+  const chatId = chatIdProp
     ?? (selectedUser?._id ? `user-${selectedUser._id}-runner-${runnerId}` : null);
   const [awaitingNewOrder, setAwaitingNewOrder] = useState(false);
   const [showContactModal, setShowContactModal] = useState(false);
@@ -394,6 +395,23 @@ function RunnerChatScreen({
         m.orderId === currentOrder.orderId
     ));
 
+  // ── Fallback checks against message history — zustand may lag behind 
+  const messageTaskCompleted = useMemo(() => messages.some(m =>
+    m.type === 'task_completed' || m.messageType === 'task_completed' ||
+    (m.type === 'system' && m.text?.toLowerCase().includes('task completed'))
+  ), [messages]);
+
+  const messageOrderCancelled = useMemo(() => messages.some(m =>
+    m.type === 'system' && m.text?.toLowerCase().includes('cancelled this order')
+  ), [messages]);
+
+  const effectiveTaskCompleted = taskCompleted || messageTaskCompleted;
+  const effectiveOrderCancelled = orderCancelled || messageOrderCancelled;
+
+  const hasActiveOrder = !!currentOrder
+    && !['cancelled', 'task_completed'].includes(currentOrder?.status)
+    && !effectiveOrderCancelled
+    && !effectiveTaskCompleted;
 
   // ── Stable orderData object passed to OrderStatusFlow 
   const orderFlowData = {
@@ -636,7 +654,7 @@ function RunnerChatScreen({
     };
     const onTaskCompleted = ({ orderId }) => {
       if (!mountedRef.current) return;
-      setTaskCompleted(true);        // triggers "Back to Home" button
+      setTaskCompleted(true);
     };
 
     const onDisputeRaised = ({ orderId }) => {
@@ -1399,12 +1417,22 @@ function RunnerChatScreen({
           </div>
           <div className="items-center gap-3 flex">
             <span className="bg-gray-1000 dark:bg-black-200 rounded-full w-10 h-10 flex items-center justify-center">
-              <IconButton variant="text" className="rounded-full" onClick={() => initiateCall('video', selectedUser?._id, 'user')}>
+              <IconButton
+                variant="text"
+                className={`rounded-full ${!hasActiveOrder ? 'opacity-40 cursor-not-allowed' : ''}`}
+                disabled={!hasActiveOrder}
+                onClick={() => { if (hasActiveOrder) initiateCall('video', selectedUser?._id, 'user'); }}
+              >
                 <Video className="h-6 w-6" />
               </IconButton>
             </span>
             <span className="bg-gray-1000 dark:bg-black-200 rounded-full w-10 h-10 flex items-center justify-center">
-              <IconButton onClick={() => initiateCall('voice', selectedUser?._id, 'user')} variant="text" className="rounded-full">
+              <IconButton
+                variant="text"
+                className={`rounded-full ${!hasActiveOrder ? 'opacity-40 cursor-not-allowed' : ''}`}
+                disabled={!hasActiveOrder}
+                onClick={() => { if (hasActiveOrder) initiateCall('voice', selectedUser?._id, 'user'); }}
+              >
                 <Phone className="h-6 w-6" />
               </IconButton>
             </span>
@@ -1468,6 +1496,7 @@ function RunnerChatScreen({
                 onReact={handleMessageReact} onReply={handleMessageReply}
                 onCancelReply={handleCancelReply} messages={messages}
                 onScrollToMessage={handleScrollToMessage} showRelativeTime={true}
+                disableContextMenu={!hasActiveOrder}
               />
             })}
             {otherUserTyping && <TypingIndicator />}
@@ -1476,11 +1505,11 @@ function RunnerChatScreen({
 
         {/* Composer */}
         <div className="bg-gray-100 dark:bg-black-200">
-          {taskCompleted ? (
+          {effectiveTaskCompleted ? (
             <div className="px-4 py-4">
               <button
                 onClick={() => {
-                  if (taskCompleted || orderCancelled) {
+                  if (effectiveTaskCompleted || effectiveOrderCancelled) {
                     onBackToHome?.();
                   }
                 }}
@@ -1490,7 +1519,7 @@ function RunnerChatScreen({
                 {backHomeDisabled ? 'Returning...' : 'Back to Home'}
               </button>
             </div>
-          ) : orderCancelled ? (
+          ) : effectiveOrderCancelled ? (
             console.log('SHOWING CANCELLED VIEW - orderCancelled is TRUE') ||
             <div>
               <div className={`px-4 py-2 text-center text-sm font-medium ${dark ? 'text-gray-400 bg-black-100' : 'text-gray-500 bg-gray-100'} rounded-xl mx-4 mt-3`}>
