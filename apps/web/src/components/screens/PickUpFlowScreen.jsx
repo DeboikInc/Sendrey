@@ -1043,7 +1043,7 @@ export default function PickupFlowScreen({
                 setSelectedPlace(null);
                 pendingDeliveryButtonIdRef.current = null;
               }}
-              className="flex items-center"
+              className="flex items-center text-red-600 hover:bg-red-600/20"
             >
               <X className="h-4 w-4 mr-2" />
               Close
@@ -1051,7 +1051,7 @@ export default function PickupFlowScreen({
             <Button
               onClick={handleMapSelection}
               disabled={!selectedPlace}
-              className={`${!selectedPlace ? "opacity-50 cursor-not-allowed" : ""}`}
+              className={`${!selectedPlace ? "opacity-50 cursor-not-allowed" : "bg-primary hover:bg-primary/90"} flex items-center gap-2 text-white`}
             >
               Select Location
             </Button>
