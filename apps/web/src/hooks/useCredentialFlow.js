@@ -109,7 +109,7 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
 
   // Location state
   const [runnerLocation, setRunnerLocation] = useState(null);
-  const [_, setLocationResolved] = useState(false);
+  const [ , setLocationResolved] = useState(false);
 
   const bestPositionRef = useRef(null);
   const watchIdRef = useRef(null);
