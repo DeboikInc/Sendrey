@@ -11,9 +11,56 @@ apps/web/.env
 apps/mobile/.env
 apps/admin-dashboard/.env
 apps/ladning-page/.env
-.turbo/
+
+# build output
+apps/*/build/
 build/
-**/build/
-android/app/src/main/assets/
+dist/
+
+# turbo cache
+.turbo/
+
+# logs
 logs/
+*.log
+
+# dependencies
 node_modules/
+
+# env
+.env
+.env.local
+
+# Turborepo
+.turbo/
+
+# Build outputs
+build/
+dist/
+.next/
+out/
+
+# pnpm
+node_modules/
+.pnpm-store/
+
+# Env files
+.env
+.env.local
+.env.*.local
+
+# Logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# OS/editor
+.DS_Store
+.vscode/
+*.suo
+
+# Capacitor (you're using this for mobile)
+android/app/build/
+ios/App/build/
+ios/App/Pods/
+

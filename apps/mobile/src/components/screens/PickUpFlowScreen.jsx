@@ -783,33 +783,22 @@ export default function PickupFlowScreen({
           const normalizedMyNumber = myNumber?.replace(/^\+2340/, '+234');
           pickupPhoneMatchesUserPhone.current = formattedNumber === normalizedMyNumber;
 
-          setMessages((prev) => prev.map((msg) =>
-            msg.hasUseMyNumberButton ? { ...msg, hasUseMyNumberButton: false } : msg
-          ));
-
-          const deliveryPromptId = Date.now() + 2;
-          pendingDeliveryButtonIdRef.current = deliveryPromptId;
-
-          setMessages((prev) => prev.filter(msg => msg.text !== "In progress..."));
-
-          setTimeout(() => {
-            setMessages((p) => [
-              ...p,
-              {
-                id: deliveryPromptId,
-                from: "them",
-                text: "Set your delivery location. Choose Delivery Location",
-                time: getCurrentTime(),
-                status: "delivered",
-                hasChooseDeliveryButton: true,
-                hasViewSavedLocations: true,
-                disableUseMyNumber: pickupPhoneMatchesUserPhone.current
-              },
-            ]);
-            setCurrentStep("delivery-location");
-            setShowCustomInput(true);
-            setTimeout(() => setShowLocationButtons(true), 200);
-          }, 100);
+          setMessages((p) => [
+            ...p,
+            {
+              id: Date.now() + 2,
+              from: "them",
+              text: "Set your delivery location. Choose Delivery Location",
+              time: getCurrentTime(),
+              status: "delivered",
+              hasChooseDeliveryButton: true,
+              hasViewSavedLocations: true,
+              disableUseMyNumber: pickupPhoneMatchesUserPhone.current
+            },
+          ]);
+          setCurrentStep("delivery-location");
+          setShowCustomInput(true);
+          setTimeout(() => setShowLocationButtons(true), 200);
 
         } else if (source === "delivery" && !dropoffPhoneNumber) {
           setMessages((p) => [
@@ -1043,7 +1032,7 @@ export default function PickupFlowScreen({
                 setSelectedPlace(null);
                 pendingDeliveryButtonIdRef.current = null;
               }}
-              className="flex items-center"
+              className="flex items-center text-red-500 hover:bg-red-600/20"
             >
               <X className="h-4 w-4 mr-2" />
               Close
@@ -1051,7 +1040,7 @@ export default function PickupFlowScreen({
             <Button
               onClick={handleMapSelection}
               disabled={!selectedPlace}
-              className={`${!selectedPlace ? "opacity-50 cursor-not-allowed" : ""}`}
+              className={`${!selectedPlace ? "opacity-50 cursor-not-allowed" : "bg-primary hover:bg-primary/90"} flex items-center gap-2 text-white`}
             >
               Select Location
             </Button>

@@ -170,7 +170,7 @@ export default function HomePage() {
           </h1>
           <p className="mt-5 text-white/75 text-base sm:text-lg max-w-lg">
             Sendrey connects you to vetted local runners who queue, shop, and deliver
-            across town — so you don't have to leave your desk.
+            across town — so you do not have to leave your desk.
           </p>
 
           <div className="mt-10">

@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { X, Lock } from "lucide-react";
+import { X, Lock, ExternalLink } from "lucide-react";
 import { PaystackButton } from "react-paystack";
 
 export default function PaystackPaymentModal({
@@ -7,20 +7,31 @@ export default function PaystackPaymentModal({
   access_code,
   authorization_url,
   amount,
-  orderId,
   email,
   darkMode,
   onSuccess,
   onCancel,
 }) {
   const [isProcessing, setIsProcessing] = useState(false);
-  const [useFallback, setUseFallback] = useState(false);
+  const [showFallback, setShowFallback] = useState(false);
+  const [popupBlocked, setPopupBlocked] = useState(false);
   const publicKey = process.env.REACT_APP_PAYSTACK_PUBLIC_KEY;
 
-  if (!reference) return null;
+  // Store the fallback data when component mounts
+  const [fallbackData] = useState({
+    access_code,
+    authorization_url,
+  });
+
+  console.log('🔍 Modal mounted with:', { reference, access_code, authorization_url });
+
+  if (!reference) {
+    console.warn('🔍 No reference provided');
+    return null;
+  }
 
   if (!publicKey) {
-    console.error('REACT_APP_PAYSTACK_PUBLIC_KEY is missing at runtime');
+    console.error('REACT_APP_PAYSTACK_PUBLIC_KEY is missing');
     return (
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4">
         <div className={`${darkMode ? "bg-black-100" : "bg-white"} rounded-2xl shadow-xl w-full max-w-md p-6 text-center`}>
@@ -41,42 +52,65 @@ export default function PaystackPaymentModal({
     amount: Math.round(amount * 100),
     publicKey,
     metadata: {
-      orderId,
       custom_fields: [
-        { display_name: "Order ID", variable_name: "order_id", value: orderId }
+        { display_name: "Wallet Funding", variable_name: "type", value: "wallet_funding" }
       ]
     },
   };
 
   const handleSuccess = (reference) => {
+    console.log('🔍 Payment successful:', reference);
     setIsProcessing(false);
     onSuccess(reference);
   };
 
   const handleClose = () => {
-    // if popup closed without payment, offer fallback
-    setUseFallback(true);
+    console.log('🔍 Paystack popup closed');
+    console.log('🔍 Fallback data available:', !!fallbackData.access_code);
     setIsProcessing(false);
+    
+    // If we have fallback data, show fallback option
+    if (fallbackData.access_code || fallbackData.authorization_url) {
+      setShowFallback(true);
+    } else {
+      // If no fallback, just close
+      console.warn('🔍 No fallback URL available');
+      onCancel();
+    }
   };
 
-  const handleFallback = () => {
-    window.open(authorization_url || `https://checkout.paystack.com/${access_code}`, '_blank');
+  const handleOpenFallback = () => {
+    console.log('🔍 Opening fallback payment page');
+    const url = fallbackData.authorization_url || 
+                (fallbackData.access_code ? `https://checkout.paystack.com/${fallbackData.access_code}` : null);
+    
+    console.log('🔍 Fallback URL:', url);
+    
+    if (url) {
+      const newWindow = window.open(url, '_blank');
+      if (!newWindow || newWindow.closed || typeof newWindow.closed === 'undefined') {
+        // Popup was blocked
+        setPopupBlocked(true);
+      } else {
+        setShowFallback(false);
+        // Close the modal after opening fallback
+        setTimeout(() => onCancel(), 1000);
+      }
+    } else {
+      console.error('🔍 No fallback URL available');
+      alert('Unable to open payment page. Please try again.');
+    }
   };
-
-  if (!reference) return null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm px-4">
       <div className={`${darkMode ? "bg-black-100" : "bg-white"} rounded-2xl shadow-xl w-full max-w-md p-6`}>
-
         <div className="flex items-center justify-between mb-5">
           <div>
             <h2 className={`text-base font-semibold ${darkMode ? "text-white" : "text-gray-900"}`}>
-              Card Payment
+              {showFallback ? "Complete Payment" : "Card Payment"}
             </h2>
-            {orderId && (
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Order #{orderId}</p>
-            )}
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">Fund Your Wallet</p>
           </div>
           <button onClick={onCancel} className="p-1.5 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 transition">
             <X className="w-4 h-4 text-gray-500 dark:text-gray-400" />
@@ -95,13 +129,19 @@ export default function PaystackPaymentModal({
             <span className="text-gray-600 dark:text-gray-400">Email</span>
             <span className="text-gray-900 dark:text-white font-medium">{email}</span>
           </div>
-          {orderId && (
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-600 dark:text-gray-400">Order ID</span>
-              <span className="text-gray-900 dark:text-white font-medium">#{orderId}</span>
-            </div>
-          )}
+          <div className="flex justify-between text-sm">
+            <span className="text-gray-600 dark:text-gray-400">Reference</span>
+            <span className="text-gray-900 dark:text-white font-medium text-xs truncate max-w-[150px]">{reference}</span>
+          </div>
         </div>
+
+        {popupBlocked && (
+          <div className="mb-4 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg">
+            <p className="text-sm text-yellow-800 dark:text-yellow-200">
+              Popup was blocked. Please allow popups for this site or use the button below.
+            </p>
+          </div>
+        )}
 
         <div className="flex gap-3">
           <button
@@ -114,11 +154,12 @@ export default function PaystackPaymentModal({
             Cancel
           </button>
 
-          {useFallback ? (
+          {showFallback ? (
             <button
-              onClick={handleFallback}
-              className="flex-1 py-3 rounded-lg bg-primary text-white text-sm font-medium transition hover:opacity-90"
+              onClick={handleOpenFallback}
+              className="flex-1 py-3 rounded-lg bg-primary text-white text-sm font-medium transition hover:opacity-90 flex items-center justify-center gap-2"
             >
+              <ExternalLink className="w-4 h-4" />
               Open Payment Page
             </button>
           ) : (
@@ -133,9 +174,9 @@ export default function PaystackPaymentModal({
           )}
         </div>
 
-        {useFallback && (
+        {showFallback && (
           <p className="text-xs text-center text-amber-500 mt-3">
-            Payment popup was closed. Click "Open Payment Page" to continue in a new tab.
+            Payment popup was closed. Click "Open Payment Page" to continue.
           </p>
         )}
 

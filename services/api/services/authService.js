@@ -52,6 +52,7 @@ class AuthService {
           } else if (userData.role === 'admin') {
             role = 'admin';
           } else if (userData.role === 'super-admin') {
+            // Check if a super-admin already exists
             const existingSuperAdmin = await Model.findOne({ role: 'super-admin' });
             if (existingSuperAdmin) {
               throw new Error('Super admin already exists');
