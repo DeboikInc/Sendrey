@@ -100,12 +100,21 @@ export default function UserWallet({ darkMode, onBack, userData }) {
     setIsFunding(true);
     try {
       const result = await dispatch(fundWallet({ amount })).unwrap();
+      console.log('🔍 Fund wallet response:', result);
+
       if (!result?.reference) {
         throw new Error('No payment reference returned');
       }
-      setPaystackModal({ reference: result.reference, amount, email: userData.email });
+      setPaystackModal({
+        reference: result.reference,
+        access_code: result.access_code || result.accessCode,
+        authorization_url: result.authorizationUrl || result.authorization_url,
+        amount,
+        email: userData.email
+      });
       setFundAmount('');
     } catch (error) {
+      console.error('Funding error:', error);
       alert(error || 'Failed to initiate funding');
     } finally {
       setIsFunding(false);
@@ -352,16 +361,21 @@ export default function UserWallet({ darkMode, onBack, userData }) {
             email={paystackModal.email}
             darkMode={darkMode}
             onSuccess={async (ref) => {
+              console.log('🔍 Payment success, verifying:', ref);
               setPaystackModal(null);
               try {
                 await dispatch(verifyWalletFunding({ reference: ref.reference })).unwrap();
+                // Refresh balance and transactions
+                await Promise.all([
+                  dispatch(getWalletBalance()).unwrap(),
+                  dispatch(getTransactionHistory({ page: 1, limit: 20, replace: true })).unwrap(),
+                ]);
+                setPage(1);
+                // Show success message
+                alert('Wallet funded successfully!');
               } catch (err) {
                 console.error('Verify failed:', err);
-              } finally {
-                // Always refresh balance + history after funding attempt
-                dispatch(getWalletBalance());
-                dispatch(getTransactionHistory({ page: 1, limit: 20, replace: true }));
-                setPage(1);
+                alert('Payment was successful but verification failed. Please check your wallet balance.');
               }
             }}
             onCancel={() => setPaystackModal(null)}

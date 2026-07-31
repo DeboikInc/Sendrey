@@ -229,6 +229,13 @@ class AuthController extends BaseController {
 
   registerAdmin = async (req, res, next) => {
     try {
+      if (req.body.role === 'super-admin') {
+        const existingSuperAdmin = await User.findOne({ role: 'super-admin' });
+        if (existingSuperAdmin) {
+          throw new Error('Super admin already exists');
+        }
+      }
+
       const userData = { ...req.body, role: 'admin' };
       const { user } = await authService.register(userData, 'super-admin', 'user');
 

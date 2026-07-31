@@ -55,8 +55,10 @@ export const fundWallet = createAsyncThunk(
   async ({ amount }, { rejectWithValue }) => {
     try {
       const response = await api.post('/payments/wallet/fund', { amount });
+      console.log('🔍 API Response from /payments/wallet/fund:', response.data);
       return response.data;
     } catch (error) {
+      console.error('🔍 API Error:', error.response?.data);
       return rejectWithValue(error.response?.data?.error || 'Failed to fund wallet');
     }
   }
@@ -244,15 +246,22 @@ const paymentSlice = createSlice({
       .addCase(fundWallet.pending, (state) => {
         state.wallet.status = 'loading';
         state.loading = true;
+        state.payment.error = null;
       })
       .addCase(fundWallet.fulfilled, (state, action) => {
         state.wallet.status = 'success';
         state.wallet.balance = action.payload?.balance || state.wallet.balance;
+        state.payment.reference = action.payload?.reference || null;
+        state.payment.access_code = action.payload?.access_code || null;
+        state.payment.authorizationUrl = action.payload?.authorizationUrl || null;
+        state.loading = false;
+
         state.loading = false;
       })
       .addCase(fundWallet.rejected, (state, action) => {
         state.wallet.status = 'failed';
         state.error = action.payload;
+        state.payment.error = action.payload;
         state.loading = false;
       });
 
