@@ -106,10 +106,10 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
   } : {
     name: '', phone: '', email: '', fleetType: '', role: 'runner', serviceType: '',
   });
-  
+
   // Location state
   const [runnerLocation, setRunnerLocation] = useState(null);
-  const [locationResolved, setLocationResolved] = useState(false);
+  const [_, setLocationResolved] = useState(false);
 
   const bestPositionRef = useRef(null);
   const watchIdRef = useRef(null);
@@ -129,7 +129,6 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
       if (runner.isEmailVerified) {
         setRegistrationComplete(true);
       } else {
-        // Account exists server-side but OTP was never confirmed —
         setRegistrationComplete(false);
         setIsCollectingCredentials(false);
         setCredentialStep(null);
@@ -151,7 +150,7 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
       setIsShowingOtp(false);
       setIsSubmitting(false);
     }
-  }, [runner?._id, runner?.isEmailVerified]);
+  }, [runner?._id, runner?.isEmailVerified, runner?.phone, runner?.firstName, runner?.lastName, runner?.email]);
 
   // ── Finalise location ────────────────────────────────────────────────────
   const finaliseLocation = useCallback(() => {
@@ -667,7 +666,7 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
     };
 
     setTimeout(submitWhenReady, 800);
-  }, [credentialStep, runnerData, locationResolved, runnerLocation,
+  }, [credentialStep, runnerData, runnerLocation,
     dispatch, serviceTypeRef, showOtpVerification, requestLocationIfNeeded
   ]);
 
