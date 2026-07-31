@@ -320,7 +320,7 @@ export const Welcome = () => {
       }
     }, 1500);
     return () => clearTimeout(t);
-  }, [currentScreen, chatMounted]);
+  }, [currentScreen, chatMounted, setCurrentScreen]);
 
   useEffect(() => {
     if (!socket || !currentUser?._id) return;

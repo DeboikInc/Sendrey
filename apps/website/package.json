@@ -6,7 +6,7 @@
     "dev": "node scripts/start.js",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint . --max-warnings=0"
   },
   "dependencies": {
     "next": "16.2.11",
@@ -20,8 +20,8 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "babel-plugin-react-compiler": "1.0.0",
-    "eslint": "9.x",
-    "eslint-config-next": "16.2.11",
+    "eslint": "8.57.0",
+    "eslint-config-next": "15.0.4",
     "tailwindcss": "^4"
   }
 }
