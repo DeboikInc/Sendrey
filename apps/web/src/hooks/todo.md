@@ -23,3 +23,5 @@ MongoDB Atlas — make sure it's not on free tier either (512MB storage limit)
 "runner misconduct costs us X in Paystack fees per ban, do we absorb or pass to user?
 
 from lasu to iyana iba is under 1km - works!
+
+term modal is opening when i refresh and otp hasnt been verified

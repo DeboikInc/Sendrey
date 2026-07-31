@@ -15,6 +15,7 @@ import {
 } from "../../Redux/authSlice";
 import { authStorage } from '../../utils/authStorage';
 import { useRedirectIfAuthenticated } from '../../hooks/useRedirectIfAuthenticated';
+import RequestLocation from "../../components/common/RequestLocation";
 
 // Geolocation config
 const GEO_OPTIONS = {
@@ -43,6 +44,9 @@ export const Auth = () => {
   const [pendingServiceType, setPendingServiceType] = useState(null); // eslint-disable-line no-unused-vars
   const [returningUser, setReturningUser] = useState(null);
   const [returningUserHasTerms, setReturningUserHasTerms] = useState(false);
+  const [showLocationRequest, setShowLocationRequest] = useState(false);
+  const [pendingRegistrationData, setPendingRegistrationData] = useState(null);
+
 
   // eslint-disable-next-line no-unused-vars
   const [userLocation, setUserLocation] = useState(null);
@@ -272,6 +276,12 @@ export const Auth = () => {
       return;
     }
 
+    if (!userLocation) {
+      setPendingRegistrationData(data);
+      setShowLocationRequest(true);
+      return;
+    }
+
     // New user registration
     const { name, phone, email } = data;
     const nameParts = name ? name.trim().split(" ") : [];
@@ -369,6 +379,67 @@ export const Auth = () => {
     }
   };
 
+  const handleLocationComplete = (locationData) => {
+    setUserLocation(locationData);
+    setShowLocationRequest(false);
+    setLocationError(null);
+    setIsGettingLocation(false);
+
+    if (pendingRegistrationData) {
+      const data = pendingRegistrationData;
+      const nameParts = data.name ? data.name.trim().split(" ") : [];
+      const firstName = nameParts[0] || "";
+      const lastName = nameParts.slice(1).join(" ") || "";
+
+      const payload = {
+        role: data.role || userType || 'user',
+        phone: data.phone,
+        email: data.email,
+        firstName: firstName,
+        lastName: lastName,
+        latitude: locationData.latitude,
+        longitude: locationData.longitude,
+        ...(data.password && { password: data.password }),
+      };
+
+      // Direct dispatch
+      dispatch(register(payload))
+        .unwrap()
+        .then((result) => {
+          const token = result.token;
+          const refreshToken = result.refreshToken;
+          if (token) authStorage.setTokens(token, refreshToken);
+          setTempUserData({ phone: payload.phone, name: data.name, email: payload.email });
+          setNeedsOtpVerification(true);
+          setAllErrors([]);
+          setPendingRegistrationData(null);
+        })
+        .catch((error) => {
+          console.error("Registration failed:", error);
+          const raw = error?.errors
+            ? Object.values(error.errors).map(e => e?.message || e).join(" ")
+            : error?.message || error?.data?.message || String(error);
+
+          const isAlreadyExists = error?.status === 409 || error?.statusCode === 409 ||
+            /already exist|already registered/i.test(raw);
+
+          if (isAlreadyExists) {
+            const existingName = error?.data?.userName || error?.userName || "";
+            setReturningUser({
+              name: existingName,
+              email: payload.email,
+              phone: payload.phone,
+              userType: userType || 'user',
+            });
+            setAllErrors([]);
+          } else {
+            setAllErrors(extractAllErrors(error));
+          }
+          setPendingRegistrationData(null);
+        });
+    }
+  };
+
   // Email link flow — user is logged in but not phone verified
   if (isFromEmail && emailUser) {
     return (
@@ -420,6 +491,21 @@ export const Auth = () => {
             });
           }}
         />
+
+        {showLocationRequest && (
+          <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className={`w-full max-w-md rounded-2xl overflow-hidden ${dark ? 'bg-black-100' : 'bg-white'}`}>
+              <RequestLocation
+                darkMode={dark}
+                onLocationComplete={handleLocationComplete}
+                onCancel={() => {
+                  setShowLocationRequest(false);
+                  setPendingRegistrationData(null);
+                }}
+              />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

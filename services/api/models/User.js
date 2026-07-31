@@ -604,6 +604,16 @@ userSchema.statics.initDefaultAdmin = function () {
 userSchema.statics.findNearbyUsers = async function ({ latitude, longitude, fleetType }) {
   const matchingConfig = await distanceConfigService.getPedestrianConfig();
   const TOTAL_MAX = matchingConfig.totalMaxDistance;
+  const DELIVERY_LEG_MAX = matchingConfig.pedestrianMaxDeliveryLeg;
+
+  console.log('[findNearbyUsers] Request:', {
+    fleetType,
+    runnerLocation: { lat: latitude, lng: longitude },
+    config: {
+      totalMax: TOTAL_MAX,
+      deliveryLegMax: DELIVERY_LEG_MAX,
+    }
+  });
 
   const query = {
     role: 'user',
@@ -618,25 +628,103 @@ userSchema.statics.findNearbyUsers = async function ({ latitude, longitude, flee
     .select('firstName lastName phone currentRequest location latitude longitude avatar isPhoneVerified isEmailVerified')
     .lean();
 
+  console.log('[findNearbyUsers] Found potential users:', results.length);
+
   return results.filter((user) => {
     const req = user.currentRequest;
-    if (!req) return false;
-    if (!req.timestamp) return false;
+    if (!req) {
+      console.log('[findNearbyUsers] User has no currentRequest:', user._id);
+      return false;
+    }
+    if (!req.timestamp) {
+      console.log('[findNearbyUsers] User request has no timestamp:', user._id);
+      return false;
+    }
 
     const isErrand = req.serviceType === 'run-errand';
     const pickupCoords = isErrand ? req.marketCoordinates : req.pickupCoordinates;
 
-    if (!pickupCoords?.lat || !pickupCoords?.lng) return false;
+    if (!pickupCoords?.lat || !pickupCoords?.lng) {
+      console.log('[findNearbyUsers] User request missing pickup coordinates:', {
+        userId: user._id,
+        serviceType: req.serviceType,
+        hasMarketCoords: !!req.marketCoordinates,
+        hasPickupCoords: !!req.pickupCoordinates,
+      });
+      return false;
+    }
 
     const runnerToPickup = haversineDistance(latitude, longitude, pickupCoords.lat, pickupCoords.lng);
-    if (runnerToPickup > TOTAL_MAX) return false;
 
+    if (runnerToPickup > TOTAL_MAX) {
+      console.log('[findNearbyUsers] Runner too far from pickup:', {
+        userId: user._id,
+        runnerToPickup: Math.round(runnerToPickup),
+        maxAllowed: TOTAL_MAX,
+      });
+      return false;
+    }
+
+    // For pedestrian fleet, check if pickup to delivery is within limits
     if (req.fleetType === 'pedestrian') {
       const deliveryCoords = req.deliveryCoordinates;
-      if (!deliveryCoords?.lat || !deliveryCoords?.lng) return false;
-      const pickupToDelivery = haversineDistance(pickupCoords.lat, pickupCoords.lng, deliveryCoords.lat, deliveryCoords.lng);
-      return (runnerToPickup + pickupToDelivery) <= TOTAL_MAX;
+
+      if (!deliveryCoords?.lat || !deliveryCoords?.lng) {
+        console.log('[findNearbyUsers] Pedestrian request missing delivery coordinates:', {
+          userId: user._id,
+        });
+        return false;
+      }
+
+      const pickupToDelivery = haversineDistance(
+        pickupCoords.lat,
+        pickupCoords.lng,
+        deliveryCoords.lat,
+        deliveryCoords.lng
+      );
+
+      //  Check if pickup to delivery exceeds the delivery leg max
+      if (pickupToDelivery > DELIVERY_LEG_MAX) {
+        console.log('[findNearbyUsers] Pedestrian request exceeds delivery leg max:', {
+          userId: user._id,
+          pickupToDelivery: Math.round(pickupToDelivery),
+          maxAllowed: DELIVERY_LEG_MAX,
+          serviceType: req.serviceType,
+          fleetType: req.fleetType,
+          suggestedFleet: 'bike or car',
+        });
+        return false;
+      }
+
+      const totalDistance = runnerToPickup + pickupToDelivery;
+
+      if (totalDistance > TOTAL_MAX) {
+        console.log('[findNearbyUsers] Pedestrian request total distance exceeds max:', {
+          userId: user._id,
+          runnerToPickup: Math.round(runnerToPickup),
+          pickupToDelivery: Math.round(pickupToDelivery),
+          totalDistance: Math.round(totalDistance),
+          maxAllowed: TOTAL_MAX,
+        });
+        return false;
+      }
+
+      console.log('[findNearbyUsers] Pedestrian request accepted:', {
+        userId: user._id,
+        runnerToPickup: Math.round(runnerToPickup),
+        pickupToDelivery: Math.round(pickupToDelivery),
+        totalDistance: Math.round(totalDistance),
+      });
+
+      return true;
     }
+
+    // For non-pedestrian fleet types
+    console.log('[findNearbyUsers] Non-pedestrian request accepted:', {
+      userId: user._id,
+      fleetType: req.fleetType,
+      runnerToPickup: Math.round(runnerToPickup),
+    });
 
     return true;
   });

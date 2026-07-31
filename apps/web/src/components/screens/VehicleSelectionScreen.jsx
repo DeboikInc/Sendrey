@@ -9,6 +9,7 @@ import { FaWalking, FaMotorcycle } from "react-icons/fa";
 import { useCameraHook } from "../../hooks/useCameraHook";
 import { getPedestrianConfig } from '../../utils/pedestrianConfig';
 import { calculateRouteDistance, haversineDistance } from '../../utils/pricing';
+import RequestLocation from "../common/RequestLocation";
 
 const usePersistedState = (key, initialValue) => {
   const [state, setState] = useState(() => {
@@ -118,12 +119,14 @@ export default function VehicleSelectionScreen({
   const [specialInstructionsMedia, setSpecialInstructionsMedia] = usePersistedState(`vehicle_specialInstructionsMedia_${persistenceKey}`, []);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
+  const [showLocationModal, setShowLocationModal] = useState(false);
 
   const camera = useCameraHook();
   const fileInputRef = useRef(null);
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const recordingIntervalRef = useRef(null);
+  const pendingConnectDataRef = useRef(null);
 
   useEffect(() => {
     // Ensure messages is always an array
@@ -610,36 +613,11 @@ export default function VehicleSelectionScreen({
     });
   };
 
-  const handleConnectToRunner = async () => {
-    if (isConnectingToRunner) return;
-    if (!selectedVehicle) {
-      return;
-    }
-
-    setIsConnectingToRunner(true);
-
-    let currentLocation;
-
-    if (!serverUpdated) {
-      try {
-        const coords = await getFreshLocation();
-        const address = await reverseGeocode(coords.latitude, coords.longitude);
-        currentLocation = { ...coords, address };
-        setUserLocation(currentLocation);
-      } catch (error) {
-        console.error('Location error:', error);
-        alert(error.message);
-        setIsConnectingToRunner(false);
-        return;
-      }
-    }
-
+  const finishConnectToRunner = async (currentLocation) => {
     // Prepare media with valid previews
     const mediaWithValidPreviews = specialInstructionsMedia.map(media => ({
       ...media,
-      // Ensure preview URL is valid - recreate if needed
       preview: media.preview || (media.file ? URL.createObjectURL(media.file) : null),
-      // Keep the original file object
       file: media.file
     }));
 
@@ -654,7 +632,7 @@ export default function VehicleSelectionScreen({
           fileSize: m.size,
           type: m.type,
           preview: m.preview,
-          file: m.file,        // ← keep the File object
+          file: m.file,
         })),
       } : null,
       serviceType: selectedService,
@@ -680,14 +658,12 @@ export default function VehicleSelectionScreen({
 
     dispatch(updateOrder(serializableOrderData));
 
-    // Handle edit mode
     if (isEditing && onEditComplete) {
       onEditComplete(orderData);
       setIsConnectingToRunner(false);
       return;
     }
 
-    // Check serverUpdated state
     if (serverUpdated) {
       onFetchRunners(orderData);
     } else {
@@ -696,6 +672,57 @@ export default function VehicleSelectionScreen({
 
     setIsConnectingToRunner(false);
     setOrderSent(true);
+  };
+
+  const handleConnectToRunner = async () => {
+    if (isConnectingToRunner) return;
+    if (!selectedVehicle) {
+      return;
+    }
+
+    setIsConnectingToRunner(true);
+
+    let currentLocation;
+
+    if (!serverUpdated) {
+      try {
+        const coords = await getFreshLocation();
+        const address = await reverseGeocode(coords.latitude, coords.longitude);
+        currentLocation = { ...coords, address };
+        setUserLocation(currentLocation);
+      } catch (error) {
+        console.error('Location error:', error);
+
+        pendingConnectDataRef.current = true;
+        setIsConnectingToRunner(false);
+        setShowLocationModal(true);
+      }
+    }
+
+    await finishConnectToRunner(null);
+  };
+
+  const handleLocationModalComplete = async (locationData) => {
+    setShowLocationModal(false);
+    if (!pendingConnectDataRef.current) return;
+    pendingConnectDataRef.current = null;
+
+    setIsConnectingToRunner(true);
+    try {
+      const address = await reverseGeocode(locationData.latitude, locationData.longitude);
+      const currentLocation = { ...locationData, address };
+      setUserLocation(currentLocation);
+      await finishConnectToRunner(currentLocation);
+    } catch (error) {
+      console.error('Location error after modal retry:', error);
+      setIsConnectingToRunner(false);
+      setShowLocationModal(true);
+    }
+  };
+
+  const handleLocationModalCancel = () => {
+    setShowLocationModal(false);
+    pendingConnectDataRef.current = null;
   };
 
 
@@ -969,6 +996,18 @@ export default function VehicleSelectionScreen({
         {renderCameraUI()}
         {renderPreviewUI()}
       </div>
+
+      {showLocationModal && (
+        <div className="fixed inset-0 z-[10000] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className={`w-full max-w-md rounded-2xl overflow-hidden relative ${darkMode ? 'bg-black-100' : 'bg-white'}`}>
+            <RequestLocation
+              darkMode={darkMode}
+              onLocationComplete={handleLocationModalComplete}
+              onCancel={handleLocationModalCancel}
+            />
+          </div>
+        </div>
+      )}
     </Onboarding>
   );
 }
