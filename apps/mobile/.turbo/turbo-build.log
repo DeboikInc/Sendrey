@@ -1,0 +1,31 @@
+
+> sendrey-mobile-app@0.0.0 build C:\Users\timiv\Desktop\sendrey\apps\mobile
+> react-scripts build
+
+Creating an optimized production build...
+Compiled successfully.
+
+File sizes after gzip:
+
+  1.08 MB (+53.58 kB)  build\static\js\main.fc8bae16.js
+  22.44 kB (+2.33 kB)  build\static\css\main.876a5416.css
+  672 B                build\static\js\275.85c94972.chunk.js
+  491 B                build\static\js\296.ecee077e.chunk.js
+
+The bundle size is significantly larger than recommended.
+Consider reducing it with code splitting: https://goo.gl/9VhYWB
+You can also analyze the project dependencies: https://goo.gl/LeUzfb
+
+The project was built assuming it is hosted at /.
+You can control this with the homepage field in your package.json.
+
+The build folder is ready to be deployed.
+You may serve it with a static server:
+
+  npm install -g serve
+  serve -s build
+
+Find out more about deployment here:
+
+  https://cra.link/deployment
+
