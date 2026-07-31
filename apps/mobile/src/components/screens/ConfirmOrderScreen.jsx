@@ -214,7 +214,7 @@ export default function ConfirmOrderScreen({
   return (
     <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm">
       <div
-        className={`w-full sm:max-w-lg sm:mx-4 sm:rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto ${darkMode ? "bg-black-100 text-white" : "bg-white text-black-200"
+        className={`w-full scrollbar-hide scroll-smooth sm:max-w-lg sm:mx-4 sm:rounded-2xl shadow-2xl max-h-[90vh] overflow-y-auto ${darkMode ? "bg-black-100 text-white" : "bg-white text-black-200"
           }`}
       >
         {/* Header */}
@@ -240,14 +240,14 @@ export default function ConfirmOrderScreen({
           </div>
 
           {/* Service Type */}
-          <div className="flex items-start justify-between p-3 bg-gray-200 dark:bg-black-100 border-b border-t">
-            <div className="flex items-start gap-1 justify-center items-center">
+          <div className="flex items-start justify-between p-3 bg-gray-200 dark:bg-black-100 border-b dark:border-gray-800/40 border-t">
+            <div className="flex gap-1 justify-center items-center">
               <p className="text-sm font-medium opacity-70">Service Type: </p> <span className="text-md font-semibold capitalize">{serviceType?.replace("-", " ")}</span>
             </div>
           </div>
 
           {/* Pickup/Market Location */}
-          <div className="flex items-start justify-between p-3 bg-gray-200 dark:bg-black-100 border-b gap-2">
+          <div className="flex items-start justify-between p-3 bg-gray-200 dark:bg-black-100 border-b dark:border-gray-800/40 gap-2">
             <div className="flex items-start gap-3 flex-1 min-w-0">
               <MapPin className="h-5 w-5 mt-0.5 text-green-500" />
               <div className="flex-1 min-w-0">
@@ -267,7 +267,7 @@ export default function ConfirmOrderScreen({
 
           {/* Pickup Phone (only for pick-up service) */}
           {serviceType === "pick-up" && pickupPhone && (
-            <div className="flex items-start justify-between p-3 bg-gray-200 dark:bg-black-100 border-b">
+            <div className="flex items-start justify-between p-3 bg-gray-200 dark:bg-black-100 border-b dark:border-gray-800/40">
               <div className="flex items-start gap-3 flex-1">
                 <Phone className="h-5 w-5 mt-0.5 text-secondary" />
                 <div>
@@ -286,7 +286,7 @@ export default function ConfirmOrderScreen({
 
           {/* Pickup Items (only for pick-up service) */}
           {serviceType === "pick-up" && orderData?.pickupItems && (
-            <div className="flex items-start justify-between p-3 bg-gray-200 dark:bg-black-100 border-b">
+            <div className="flex items-start justify-between p-3 bg-gray-200 dark:bg-black-100 border-b dark:border-gray-800/40">
               <div className="flex items-start gap-3 flex-1">
                 <Package className="h-5 w-5 mt-0.5 text-orange-500" />
                 <div>
@@ -305,7 +305,7 @@ export default function ConfirmOrderScreen({
 
           {/* Market Items (only for run-errand) */}
           {serviceType === "run-errand" && marketItems && (
-            <div className="flex items-start justify-between p-3 bg-gray-200 dark:bg-black-100 border-b">
+            <div className="flex items-start justify-between p-3 bg-gray-200 dark:bg-black-100 border-b dark:border-gray-800/40">
               <div className="flex items-start gap-3 flex-1">
                 <Package className="h-5 w-5 mt-0.5 text-orange-500" />
                 <div>
@@ -324,7 +324,7 @@ export default function ConfirmOrderScreen({
 
           {/* Budget (only for run-errand) */}
           {serviceType === "run-errand" && budget && (
-            <div className="flex items-start justify-between p-3 bg-gray-200 dark:bg-black-100 border-b">
+            <div className="flex items-start justify-between p-3 bg-gray-200 dark:bg-black-100 border-b dark:border-gray-800/40">
               <div className="flex items-start gap-3 flex-1">
                 <p className="h-5 w-5 mt-0.5 text-green-600">₦</p>
                 <div>
@@ -353,7 +353,7 @@ export default function ConfirmOrderScreen({
           )}
 
           {/* Delivery Location */}
-          <div className="flex items-start justify-between p-3 bg-gray-200 dark:bg-black-100 border-b gap-2">
+          <div className="flex items-start justify-between p-3 bg-gray-200 dark:bg-black-100 border-b dark:border-gray-800/40 gap-2">
             <div className="flex items-start gap-3 flex-1 min-w-0">
               <MapPin className="h-5 w-5 mt-0.5 text-red-500" />
               <div className="flex-1 min-w-0">
@@ -371,7 +371,7 @@ export default function ConfirmOrderScreen({
 
           {/* Dropoff Phone (only for pick-up service) */}
           {(dropoffPhone || deliveryPhone)  && (
-            <div className="flex items-start justify-between p-3 bg-gray-200 dark:bg-black-100 border-b">
+            <div className="flex items-start justify-between p-3 bg-gray-200 dark:bg-black-100 border-b dark:border-gray-800/40">
               <div className="flex items-start gap-3 flex-1">
                 <Phone className="h-5 w-5 mt-0.5 text-purple-500" />
                 <div>
@@ -393,7 +393,7 @@ export default function ConfirmOrderScreen({
           )}
 
           {/* Fleet Type */}
-          <div className="flex items-start justify-between p-3 bg-gray-200 dark:bg-black-100 border-b">
+          <div className="flex items-start justify-between p-3 bg-gray-200 dark:bg-black-100 border-b dark:border-gray-800/40">
             <div className="flex items-start gap-3 flex-1">
               <Truck className="h-5 w-5 mt-0.5 text-indigo-500" />
               <div>
