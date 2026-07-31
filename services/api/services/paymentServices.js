@@ -307,6 +307,8 @@ class PaymentService {
       access_code: paystackResponse.data.access_code,
       authorizationUrl: paystackResponse.data.authorization_url,
       accessCode: paystackResponse.data.access_code,
+      authorization_url: paystackResponse.data.authorization_url,
+      accessCode: paystackResponse.data.access_code,
     };
   }
 
