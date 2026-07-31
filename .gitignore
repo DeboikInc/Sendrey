@@ -1,66 +1,44 @@
-﻿node_modules
-dist
-.next
-android
-ios
-# pnpm-lock.yaml
-docker-compose.yml
-services/api/logs/
-apps/admin-dashboard/package-lock.json
-apps/web/.env
-apps/mobile/.env
-apps/admin-dashboard/.env
-apps/ladning-page/.env
-
-# build output
-apps/*/build/
-build/
-dist/
-
-# turbo cache
-.turbo/
-
-# logs
-logs/
-*.log
-
-# dependencies
+﻿# Dependencies
 node_modules/
-
-# env
-.env
-.env.local
-
-# Turborepo
-.turbo/
+.pnpm-store/
 
 # Build outputs
 build/
 dist/
 .next/
 out/
+apps/*/build/
 
-# pnpm
-node_modules/
-.pnpm-store/
+# Turborepo
+.turbo/
 
 # Env files
 .env
 .env.local
 .env.*.local
+apps/web/.env
+apps/mobile/.env
+apps/admin-dashboard/.env
+apps/landing-page/.env
 
 # Logs
 *.log
+logs/
 npm-debug.log*
 pnpm-debug.log*
+services/api/logs/
 
-# OS/editor
-.DS_Store
-.vscode/
-*.suo
-
-# Capacitor (you're using this for mobile)
+# Mobile (Capacitor)
+android/
+ios/
 android/app/build/
 ios/App/build/
 ios/App/Pods/
 
+# OS / editor
+.DS_Store
+.vscode/
+*.suo
+
+# Lockfiles (uncomment if you intentionally don't want to track this one)
+# apps/admin-dashboard/package-lock.json
