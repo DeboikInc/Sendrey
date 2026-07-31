@@ -12,3 +12,5 @@ always ensure current status before task completed to be delievered before task 
 
 - analytics
 - join waiting list
+- what happens if my runner cant complete the task FAQ
+- improvise money transfer tracking

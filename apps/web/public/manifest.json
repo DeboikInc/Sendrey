@@ -1,6 +1,9 @@
 {
   "short_name": "Sendrey",
   "name": "Sendrey",
+  "description": "Sendrey - Your delivery service",
+  "start_url": "/",
+  "orientation": "portrait",
   "icons": [
     {
       "src": "sendrey-Logo-Variants-09.png",

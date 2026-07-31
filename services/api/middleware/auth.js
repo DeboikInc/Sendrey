@@ -155,13 +155,14 @@ const authenticate = async (req, res, next) => {
  */
 const authenticateOptional = async (req, res, next) => {
   try {
+    let token = null;
+
     const authHeader = req.headers.authorization;
-
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return next();
+    if (authHeader?.startsWith('Bearer ')) {
+      token = authHeader.split(' ')[1];
+    } else if (req.cookies?.token) {
+      token = req.cookies.token;
     }
-
-    const token = authHeader.split(' ')[1];
 
     if (!token) {
       return next();
@@ -171,7 +172,6 @@ const authenticateOptional = async (req, res, next) => {
     try {
       decoded = jwt.verify(token, config.jwt.secret);
     } catch (error) {
-      // Even if token is expired, try to decode it to get user info
       if (error.name === 'TokenExpiredError') {
         decoded = jwt.decode(token);
         if (decoded) {
@@ -204,7 +204,6 @@ const authenticateOptional = async (req, res, next) => {
 
     next();
   } catch (error) {
-    // Don't throw error for optional auth, just continue without user
     logger.debug('Optional authentication failed:', error.message);
     next();
   }

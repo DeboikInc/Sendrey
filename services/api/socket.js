@@ -31,6 +31,7 @@ const { handleCancelOrder, handleTaskCompleted, handleRunnerStartedNewOrder } = 
 const { handleGetOrderByChatId } = require('./socket/orderByChatIdHandlers');
 const { registerPresenceHandlers, handleUserDisconnect } = require('./socket/presenceHandlers');
 const { flushPendingWrites, handleGetLastSeq, handleGetMissedMessages } = require('./socket/messageHandlers');
+const { handleGetBotChatHistory, handleSaveBotChatHistory } = require('./socket/botChatHandlers');
 
 // Import models
 const { Chat } = require("./models/Chat");
@@ -394,6 +395,9 @@ async function startSocketServer(app) {
     // message handlers
     socket.on('getLastSeq', (data) => safeHandler(handleGetLastSeq, socket, data));
     socket.on('getMissedMessages', (data) => safeHandler(handleGetMissedMessages, socket, data));
+
+    socket.on('getBotChatHistory', (data, callback) => safeHandler(handleGetBotChatHistory, socket, data, callback));
+    socket.on('saveBotChatHistory', (data) => safeHandler(handleSaveBotChatHistory, socket, data));
 
     // items
     socket.on("submitItems", (data) => safeHandler(handleSubmitItems, socket, io, data));

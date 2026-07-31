@@ -179,11 +179,18 @@ class UserController extends BaseController {
 
       });
 
+      const userList = Array.isArray(users) ? users : users?.data || users?.users || [];
+
+      userList.forEach((user, index) => {
+        console.log(`User ${String.fromCharCode(65 + index)}: isAvailable: ${user.isAvailable}, isActive: ${user.isActive}`);
+      });
+
       const eligibleUsers = users.filter(user => {
         // return user.isPhoneVerified === true;
         return user.isEmailVerified === true;
       });
 
+      console.log("GETNEARBY USERS: ", eligibleUsers)
       return this.success(res, {
         success: true,
         count: eligibleUsers.length,

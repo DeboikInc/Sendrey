@@ -46,14 +46,6 @@ export default function MoreOptionsSheet({
       description: 'call the runner directly',
       onClick: () => { onClose(); onRunnerContactInfo(); }
     },
-    // ...(canRate ? [
-    //   {
-    //     icon: <Star className="w-5 h-5 text-yellow-500" />,
-    //     label: 'Rate Runner',
-    //     description: 'Leave a rating for your runner',
-    //     onClick: () => { onClose(); onRateRunner(); }
-    //   }
-    // ] : []),
     {
       icon: <Settings className="w-5 h-5 text-primary" />,
       label: 'Settings',

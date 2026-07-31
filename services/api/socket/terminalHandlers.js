@@ -14,8 +14,10 @@ const { notifyAutoConfirmWarning } = require('../services/notificationService');
 const orderStateMachine = require('../services/orderStateMachine');
 
 // Remove runner from the in-memory service pool
+const orderService = require('../services/orderService');
 const { runnersByService } = require('./socketHandlers');
-const { cancelOrder } = require('../services/orderService');
+
+const { cancelOrder, cancelStaleOrders } = orderService;
 
 const {
     notifyRatingPrompt,
@@ -24,11 +26,14 @@ const {
 } = require('../services/notificationService');
 
 const handleCancelOrder = async (socket, io, data) => {
+    console.log('[handleCancelOrder] INVOKED', { socketId: socket.id, data });
     const { chatId, orderId, runnerId, userId, reason } = data;
     try {
         const { order, cancelMessage } = await cancelOrder({
             orderId, chatId, runnerId, userId, reason, cancelledBy: 'runner'
         });
+
+        console.log('[handleCancelOrder] cancelOrder service resolved', { orderId: order?.orderId });
 
         const now = new Date().toISOString();
         const reasonSuffix = reason ? ` Reason: ${reason}` : '';
@@ -118,6 +123,16 @@ const handleCancelOrder = async (socket, io, data) => {
         }
 
     } catch (error) {
+        if (error.code === 'PAID_ORDER') {
+            socket.emit('cancelOrderError', {
+                message: 'This order has already been funded and cannot be cancelled.'
+            });
+        } else {
+            socket.emit('cancelOrderError', {
+                message: 'Failed to cancel order. Please try again.'
+            });
+        }
+        console.error('[handleCancelOrder] FAILED', { orderId, chatId, error: error.message, stack: error.stack });
         const msg = error.message === 'PAID_ORDER'
             ? 'This order has already been funded and cannot be cancelled.'
             : 'Failed to cancel order. Please try again.';
@@ -136,6 +151,26 @@ const handleTaskCompleted = async (io, data) => {
     };
 
     emitTaskCompleted();
+
+    const taskCompletedMarker = stampMessage(chatId, {
+        id: `task-completed-marker-${Date.now()}`,
+        from: 'system',
+        type: 'task_completed_marker',
+        messageType: 'task_completed_marker',
+        text: 'Task completed by runner.',
+        time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+        status: 'sent',
+        senderId: 'system',
+        senderType: 'system',
+        orderId,
+    });
+
+    io.to(chatId).emit('message', taskCompletedMarker);
+
+    Chat.findOneAndUpdate(
+        { chatId },
+        { $push: { messages: taskCompletedMarker } }
+    ).catch(err => logger.error('[taskCompleted] Marker persist failed:', err));
 
     const MAX_ATTEMPTS = 3;
     let attempt = 0;
@@ -209,9 +244,9 @@ const handleTaskCompleted = async (io, data) => {
             // Don't wipe messages — runner/user may want to browse completed chat
         );
 
-        await Order.updateMany(
-            { chatId, paymentStatus: 'unpaid', status: { $nin: ['completed', 'cancelled', 'task_completed'] }, orderId: { $ne: orderId } },
-            { $set: { status: 'cancelled', cancelledAt: new Date(), cancelReason: 'task_completed_new_order_started' } }
+        await cancelStaleOrders(
+            { chatId, paymentStatus: 'unpaid', status: { $nin: ['completed', 'cancelled'] }, orderId: { $ne: orderId } },
+            'task_completed_new_order_started'
         );
 
         // Archive session on completion
@@ -276,30 +311,15 @@ const handleTaskCompleted = async (io, data) => {
 const handleRunnerStartedNewOrder = async (socket, data) => {
     const { runnerId, previousOrderId } = data;
     try {
-        // Cancel any lingering unpaid orders for this runner
-        await Order.updateMany(
+
+        await cancelStaleOrders(
             {
                 runnerId,
                 paymentStatus: { $ne: 'paid' },
                 status: { $nin: ['completed', 'cancelled'] },
                 ...(previousOrderId ? { orderId: { $ne: previousOrderId } } : {})
             },
-            {
-                $set: {
-                    status: 'cancelled',
-                    cancelledBy: 'system',
-                    cancelledAt: new Date(),
-                    cancellationReason: 'Runner started new order',
-                },
-                $push: {
-                    statusHistory: {
-                        status: 'cancelled',
-                        timestamp: new Date(),
-                        triggeredBy: 'system',
-                        note: 'Runner started new order — stale pending order auto-cancelled',
-                    }
-                }
-            }
+            'Runner started new order — stale pending order auto-cancelled'
         );
 
         await Runner.findByIdAndUpdate(runnerId, {

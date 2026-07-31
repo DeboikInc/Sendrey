@@ -13,7 +13,7 @@ const walletSchema = new mongoose.Schema({
     enum: ['user', 'runner'],
     required: true
   },
-  _balance: {           // ← renamed, underscore signals private
+  _balance: {
     type: Number,
     default: 0,
     min: 0,
@@ -37,7 +37,7 @@ const walletSchema = new mongoose.Schema({
   toObject: { virtuals: true },
 });
 
-// ── Public read-only surface ─────────────────────────────────────────────────
+// Public read-only surface 
 walletSchema.virtual('balance').get(function () {
   return this._balance;
 });
@@ -66,7 +66,6 @@ walletSchema.methods.credit = async function (amount, reference, metadata = {}) 
 
   if (!updated) throw new Error('Wallet credit failed — wallet may be inactive');
 
-  // Sync in-memory doc so caller sees the new balance immediately
   this._balance = updated._balance;
   this.lastTransactionAt = updated.lastTransactionAt;
 
@@ -80,6 +79,7 @@ walletSchema.methods.credit = async function (amount, reference, metadata = {}) 
     balanceAfter: updated._balance,
   });
 
+  this._lastTransaction = transaction;
   return this;
 };
 
@@ -88,7 +88,7 @@ walletSchema.methods.debit = async function (amount, reference, metadata = {}) {
   if (typeof amount !== 'number' || amount <= 0) throw new Error('Debit amount must be a positive number');
   if (this.status !== 'active') throw new Error('Wallet is not active');
 
-  // Atomic decrement with floor guard — DB rejects if _balance would go below 0
+
   const updated = await this.constructor.findOneAndUpdate(
     {
       _id: this._id,
@@ -117,6 +117,35 @@ walletSchema.methods.debit = async function (amount, reference, metadata = {}) {
     balanceAfter: updated._balance,
   });
 
+  return this;
+};
+
+walletSchema.methods.unlockAndCredit = async function (amount, reference, metadata = {}) {
+  if (this.status !== 'active') throw new Error('Wallet is not active');
+
+  const safeUnlock = Math.min(amount, this.lockedBalance ?? 0);
+  const updated = await this.constructor.findOneAndUpdate(
+    { _id: this._id, status: 'active' },
+    { $inc: { lockedBalance: -safeUnlock, _balance: amount }, $set: { lastTransactionAt: new Date() } },
+    { new: true }
+  );
+  if (!updated) throw new Error('Wallet unlock-credit failed — wallet may be inactive');
+
+  this._balance = updated._balance;
+  this.lockedBalance = updated.lockedBalance;
+  this.lastTransactionAt = updated.lastTransactionAt;
+
+  const transaction = await Transaction.create({
+    walletId: this._id,
+    type: 'escrow_release',   
+    amount,
+    status: 'completed',
+    reference,
+    metadata,
+    balanceAfter: updated._balance,
+  });
+
+  this._lastTransaction = transaction;
   return this;
 };
 

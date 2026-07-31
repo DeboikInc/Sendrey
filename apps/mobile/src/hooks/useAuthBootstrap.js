@@ -50,6 +50,7 @@ export const useAuthBootstrap = () => {
       hasBootstrapped.current = true;
 
       try {
+        // eslint-disable-next-line
         const storedUser = (() => {
           try {
             const persisted = JSON.parse(localStorage.getItem('persist:auth') || '{}');
@@ -68,11 +69,9 @@ export const useAuthBootstrap = () => {
           window.location.pathname.startsWith('/payout') ||
           window.location.pathname.startsWith('/all-orders');
 
-        const userType = isRunnerPath || storedUser?.userType === 'runner' || storedUser?.role === 'runner'
-          ? 'runner'
-          : 'user';
+        const { accessToken, refreshToken, userType: storedUserType } = await authStorage.getTokens();
+        const userType = storedUserType || (isRunnerPath ? 'runner' : 'user');
 
-        const { accessToken, refreshToken } = await authStorage.getTokens();
         if (!accessToken && !refreshToken) {
           const runnerId = (() => {
             try {

@@ -3,7 +3,7 @@ const BaseController = require('./baseController');
 const runnerService = require('../services/runnerService');
 const logger = require('../utils/logger');
 const Runner = require('../models/Runner');
-
+const chatService = require('../services/chatService');
 const { MAX_DISTANCE } = require('../config/constants');
 const cloudinary = require('../config/cloudinary');
 
@@ -27,6 +27,7 @@ class RunnerController extends BaseController {
     this.updateAvatar = this.updateAvatar.bind(this);
     this.resetStrikes = this.resetStrikes.bind(this);
     this.deleteRunner = this.deleteRunner.bind(this);
+    this.getRecentChats = this.getRecentChats.bind(this);
     this._sanitizeRunner = this._sanitizeRunner.bind(this);
   }
 
@@ -108,6 +109,12 @@ class RunnerController extends BaseController {
         deliveryLng: parsedDeliveryLng,
         fleetType,
         sortBy,
+      });
+
+      const runnerList = Array.isArray(eligibleRunners) ? eligibleRunners : eligibleRunners?.data || eligibleRunners?.runners || [];
+
+      runnerList.forEach((runner, index) => {
+        console.log(`[Runner Service] Runner ${String.fromCharCode(65 + index)}: isAvailable: ${runner.isAvailable}, isActive: ${runner.isActive}`);
       });
 
       return this.success(res, {
@@ -352,6 +359,41 @@ class RunnerController extends BaseController {
     } catch (error) {
       logger.error('Update avatar error:', error);
       next(error);
+    }
+  }
+
+  async getRecentChats(req, res) {
+    try {
+      const { runnerId } = req.params;
+
+      if (req.user.id !== runnerId) {
+        return this.error(res, 'Forbidden', 403);
+      }
+      const chats = await chatService.getRecentChats(runnerId);
+      return this.success(res, { chats });
+    } catch (error) {
+
+      return this.error(res, error.message);
+    }
+  }
+
+  async refreshRecentChats(req, res) {
+    try {
+      const { runnerId } = req.params;
+      if (!runnerId) {
+        return res.status(400).json({ message: 'runnerId required' });
+      }
+
+      // Force cache invalidation
+      await chatService.invalidateForRunner(runnerId);
+
+      // Fetch fresh data
+      const recentChats = await chatService.getRecentChats(runnerId);
+
+      return res.json({ success: true, data: recentChats });
+    } catch (error) {
+      console.error('Refresh recent chats error:', error);
+      return res.status(500).json({ message: 'Failed to refresh recent chats' });
     }
   }
 
