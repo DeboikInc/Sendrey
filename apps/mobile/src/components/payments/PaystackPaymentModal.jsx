@@ -1,5 +1,4 @@
-// In PaystackPaymentModal.jsx
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { X, Lock, ExternalLink } from "lucide-react";
 import { PaystackButton } from "react-paystack";
 

@@ -13,3 +13,22 @@ apps/admin-dashboard/.env
 apps/ladning-page/.env
 .turbo/
 
+
+# build output
+apps/*/build/
+build/
+dist/
+
+# turbo cache
+.turbo/
+
+# logs
+logs/
+*.log
+
+# dependencies
+node_modules/
+
+# env
+.env
+.env.local
