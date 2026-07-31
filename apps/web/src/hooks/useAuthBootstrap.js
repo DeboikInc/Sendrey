@@ -71,19 +71,10 @@ export const useAuthBootstrap = () => {
           ? 'runner'
           : 'user';
 
-        // Cookie auth. If no stored user, skip fetch entirely.
-        if (!storedUser) {
-          setIsReady(true);
-          return;
-        }
-
-        let fetchResult;
-
-        if (userType === 'runner') {
-          fetchResult = await fetchWithRetry(() => dispatch(fetchRunnerMe()).unwrap(), 'runner');
-        } else {
-          fetchResult = await fetchWithRetry(() => dispatch(fetchUserMe()).unwrap(), 'user');
-        }
+        let fetchResult = await fetchWithRetry(
+          () => dispatch(userType === 'runner' ? fetchRunnerMe() : fetchUserMe()).unwrap(),
+          userType
+        );
 
         if (fetchResult.status === 'network_error') {
           console.warn('[Bootstrap] server unreachable after retries — proceeding anyway');

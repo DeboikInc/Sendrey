@@ -1,65 +1,170 @@
-import { useEffect, useCallback, useState } from 'react';
-import { useDispatch, useSelector, shallowEqual } from 'react-redux';
-import { ChevronLeft, ChevronDown, ChevronUp, Package } from 'lucide-react';
-import { fetchRunnerOrders, resetRunnerOrders } from '../../Redux/orderSlice';
+import React, { useState, useEffect, useMemo, useCallback } from "react";
+import { useDispatch, useSelector } from "react-redux";
+import { IconButton } from "@material-tailwind/react";
+import {
+    ArrowLeft, Search, SlidersHorizontal, X, ChevronDown, ChevronUp,
+    Package, Inbox, AlertCircle,
+} from "lucide-react";
+import { fetchRunnerOrders, resetRunnerOrders } from "../../Redux/orderSlice";
+
+const STATUS_OPTIONS = [
+    { value: "pending_payment", label: "Pending Payment" },
+    { value: "paid", label: "Paid" },
+    { value: "accepted", label: "Accepted" },
+    { value: "shopping", label: "Shopping" },
+    { value: "items_submitted", label: "Items Submitted" },
+    { value: "items_approved", label: "Items Approved" },
+    { value: "en_route_to_pickup", label: "En Route" },
+    { value: "picked_up", label: "Picked Up" },
+    { value: "en_route_to_delivery", label: "Delivering" },
+    { value: "delivered", label: "Delivered" },
+    { value: "completed", label: "Completed" },
+    { value: "cancelled", label: "Cancelled" },
+    { value: "disputed", label: "Disputed" },
+];
+
+const TASK_TYPE_OPTIONS = [
+    { value: "run-errand", label: "Run Errand" },
+    { value: "pick-up", label: "Pick-up" },
+];
 
 const STATUS_STYLES = {
-    pending_payment: { label: 'Pending Payment', color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400' },
-    payment_failed: { label: 'Payment Failed', color: 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400' },
-    paid: { label: 'Paid', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
-    accepted: { label: 'Accepted', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
-    shopping: { label: 'Shopping', color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' },
-    items_submitted: { label: 'Items Submitted', color: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400' },
-    items_approved: { label: 'Items Approved', color: 'bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400' },
-    en_route_to_pickup: { label: 'En Route', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
-    arrived_at_pickup: { label: 'Arrived', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
-    picked_up: { label: 'Picked Up', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' },
-    en_route_to_delivery: { label: 'Delivering', color: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400' },
-    arrived_at_delivery: { label: 'Arrived', color: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400' },
-    delivered: { label: 'Delivered', color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
-    completed: { label: 'Completed', color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400' },
-    cancelled: { label: 'Cancelled', color: 'bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400' },
-    disputed: { label: 'Disputed', color: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400' },
+    pending_payment: "bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-400",
+    payment_failed: "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400",
+    paid: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+    accepted: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+    shopping: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
+    items_submitted: "bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400",
+    items_approved: "bg-teal-100 text-teal-700 dark:bg-teal-900/30 dark:text-teal-400",
+    en_route_to_pickup: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+    arrived_at_pickup: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+    picked_up: "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400",
+    en_route_to_delivery: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400",
+    arrived_at_delivery: "bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-400",
+    delivered: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+    completed: "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400",
+    cancelled: "bg-red-100 text-red-600 dark:bg-red-900/30 dark:text-red-400",
+    disputed: "bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400",
 };
 
-const formatDate = (dateStr) => {
-    if (!dateStr) return '—';
-    return new Date(dateStr).toLocaleDateString('en-NG', {
-        day: 'numeric', month: 'short', year: 'numeric'
-    });
+const STATUS_LABEL = STATUS_OPTIONS.reduce((acc, s) => ({ ...acc, [s.value]: s.label }), {});
+
+const DEFAULT_FILTERS = { status: "", taskType: "", dateFrom: "", dateTo: "" };
+
+const formatDate = (d) => {
+    if (!d) return "—";
+    return new Date(d).toLocaleDateString("en-NG", { day: "numeric", month: "short", year: "numeric" });
 };
 
-const formatAmount = (amount) => {
-    if (!amount && amount !== 0) return '—';
-    return `₦${Number(amount).toLocaleString()}`;
-};
+const formatNaira = (n) => `₦${Number(n || 0).toLocaleString("en-NG")}`;
 
 const shortOrderId = (orderId) => {
-    if (!orderId) return '—';
-    return orderId.split('-').slice(-2).join('-');
+    if (!orderId) return "—";
+    return orderId.split("-").slice(-2).join("-");
 };
+
+function FilterPanel({ filters, onChange, onClear, darkMode, onClose }) {
+    return (
+        <div className={`rounded-2xl p-4 border ${darkMode ? "bg-black-100 border-white/10" : "bg-white border-gray-200"}`}>
+            <div className="flex items-center justify-between mb-4">
+                <h3 className={`font-bold text-sm ${darkMode ? "text-white" : "text-black-200"}`}>Filters</h3>
+                <div className="flex items-center gap-2">
+                    <button onClick={onClear} className="text-xs font-medium text-primary">Clear all</button>
+                    {onClose && (
+                        <IconButton variant="text" size="sm" className="rounded-full lg:hidden" onClick={onClose}>
+                            <X className="h-4 w-4" />
+                        </IconButton>
+                    )}
+                </div>
+            </div>
+
+            <div className="space-y-4">
+                <div>
+                    <label className={`text-xs font-semibold mb-1.5 block ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                        Status
+                    </label>
+                    <select
+                        value={filters.status}
+                        onChange={(e) => onChange({ status: e.target.value })}
+                        className={`w-full rounded-lg px-3 py-2 text-sm border ${darkMode ? "bg-black-200 border-white/10 text-white" : "bg-gray-50 border-gray-200 text-black-200"}`}
+                    >
+                        <option value="">All statuses</option>
+                        {STATUS_OPTIONS.map((s) => (
+                            <option key={s.value} value={s.value}>{s.label}</option>
+                        ))}
+                    </select>
+                </div>
+
+                <div>
+                    <label className={`text-xs font-semibold mb-1.5 block ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                        Task type
+                    </label>
+                    <select
+                        value={filters.taskType}
+                        onChange={(e) => onChange({ taskType: e.target.value })}
+                        className={`w-full rounded-lg px-3 py-2 text-sm border ${darkMode ? "bg-black-200 border-white/10 text-white" : "bg-gray-50 border-gray-200 text-black-200"}`}
+                    >
+                        <option value="">All task types</option>
+                        {TASK_TYPE_OPTIONS.map((s) => (
+                            <option key={s.value} value={s.value}>{s.label}</option>
+                        ))}
+                    </select>
+                </div>
+
+                <div>
+                    <label className={`text-xs font-semibold mb-1.5 block ${darkMode ? "text-gray-400" : "text-gray-500"}`}>
+                        Date range
+                    </label>
+                    <div className="flex flex-col sm:flex-row gap-2">
+                        <div className="flex-1 min-w-0">
+                            <span className={`text-[10px] font-medium mb-1 block ${darkMode ? "text-gray-500" : "text-gray-400"}`}>From</span>
+                            <input
+                                type="date"
+                                value={filters.dateFrom}
+                                onChange={(e) => onChange({ dateFrom: e.target.value })}
+                                className={`w-full rounded-lg px-3 py-2 text-sm border ${darkMode ? "bg-black-200 border-white/10 text-white" : "bg-gray-50 border-gray-200 text-black-200"}`}
+                            />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                            <span className={`text-[10px] font-medium mb-1 block ${darkMode ? "text-gray-500" : "text-gray-400"}`}>To</span>
+                            <input
+                                type="date"
+                                value={filters.dateTo}
+                                onChange={(e) => onChange({ dateTo: e.target.value })}
+                                className={`w-full rounded-lg px-3 py-2 text-sm border ${darkMode ? "bg-black-200 border-white/10 text-white" : "bg-gray-50 border-gray-200 text-black-200"}`}
+                            />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+}
 
 const OrderCard = ({ order, darkMode }) => {
     const [expanded, setExpanded] = useState(false);
 
-    const statusInfo = STATUS_STYLES[order.status] || {
-        label: order.status,
-        color: 'bg-gray-100 text-gray-600 dark:bg-gray-900/30 dark:text-gray-400'
+    const statusInfo = {
+        label: STATUS_LABEL[order.status] || order.status,
+        color: STATUS_STYLES[order.status] || "bg-gray-100 text-gray-600 dark:bg-gray-900/30 dark:text-gray-400",
     };
 
-    const isErrand = order.serviceType === 'run-errand';
+    const isErrand = order.serviceType === "run-errand";
 
-    // marketItems for errand, pickupItems for pickup — both are plain strings
     const rawItems = isErrand ? order.marketItems : order.pickupItems;
     const itemsText = Array.isArray(rawItems) && rawItems.length > 0
-        ? rawItems.map(i => typeof i === 'object' ? i.name : i).join('\n')
+        ? rawItems.map((i) => (typeof i === "object" ? i.name : i)).join("\n")
         : null;
 
     const hasItems = !!itemsText;
 
+    const formatAmount = (order) => {
+        if (order.status === "cancelled") return "—";
+        return formatNaira(order.runnerPayout);
+    };
+
     return (
-        <div className="px-4 py-4 border-b border-gray-100 dark:border-white/5">
-            {/* Top row */}
+        <div className={`rounded-xl border px-4 py-4 ${darkMode ? "border-white/5 bg-black-100" : "border-gray-100 bg-white"}`}>
             <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2 mb-1">
@@ -71,7 +176,7 @@ const OrderCard = ({ order, darkMode }) => {
                         </span>
                     </div>
                     <p className="text-sm font-medium text-black-200 dark:text-gray-200 capitalize">
-                        {isErrand ? 'Run Errand' : 'Pick Up'}
+                        {isErrand ? "Run Errand" : "Pick Up"}
                     </p>
                     <p className="text-xs text-black-100/80 dark:text-gray-500 mt-0.5">
                         {formatDate(order.createdAt)}
@@ -79,36 +184,28 @@ const OrderCard = ({ order, darkMode }) => {
                 </div>
 
                 <div className="text-right flex-shrink-0 flex flex-col items-end gap-1">
-                    {isErrand && (
-                        <p className="text-sm font-semibold text-black-200 dark:text-white">
-                            {formatAmount(order.itemBudget)}
-                        </p>
-                    )}
+                    <p className={`text-sm font-semibold ${order.status === "cancelled" ? "text-black-100/60 dark:text-red-500" : "text-green-600 dark:text-green-400"}`}>
+                        {formatAmount(order)}
+                    </p>
                     {hasItems && (
                         <button
-                            onClick={() => setExpanded(prev => !prev)}
+                            onClick={() => setExpanded((prev) => !prev)}
                             className="flex items-center gap-1 text-xs text-primary font-medium"
                         >
                             <Package className="w-3 h-3" />
                             Items
-                            {expanded
-                                ? <ChevronUp className="w-3 h-3" />
-                                : <ChevronDown className="w-3 h-3" />
-                            }
+                            {expanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
                         </button>
                     )}
                 </div>
             </div>
 
-            {/* Expandable items */}
             {expanded && hasItems && (
-                <div className={`mt-3 rounded-xl p-3 border
-                    ${darkMode ? 'border-black-200 bg-black-200' : 'border-gray-100 bg-gray-50'}`}>
-                    <p className={`text-xs font-semibold mb-1 text-black-100/80 dark:text-gray-400`}>
-                        {isErrand ? 'Market Items' : 'Pickup Items'}
+                <div className={`mt-3 rounded-xl p-3 border ${darkMode ? "border-black-200 bg-black-200" : "border-gray-100 bg-gray-50"}`}>
+                    <p className="text-xs font-semibold mb-1 text-black-100/80 dark:text-gray-400">
+                        {isErrand ? "Market Items" : "Pickup Items"}
                     </p>
-                    <p className={`text-sm whitespace-pre-wrap leading-relaxed
-                        ${darkMode ? 'text-gray-200' : 'text-black-200'}`}>
+                    <p className={`text-sm whitespace-pre-wrap leading-relaxed ${darkMode ? "text-gray-200" : "text-black-200"}`}>
                         {itemsText}
                     </p>
                 </div>
@@ -119,22 +216,64 @@ const OrderCard = ({ order, darkMode }) => {
 
 export const Orders = ({ darkMode, onBack, runnerId, registrationComplete }) => {
     const dispatch = useDispatch();
-    const runnerOrders = useSelector(state => state.order.runnerOrders, shallowEqual); // array → shallowEqual
-    const ordersLoading = useSelector(state => state.order.ordersLoading);
-    const ordersError = useSelector(state => state.order.ordersError);
-    const ordersHasMore = useSelector(state => state.order.ordersHasMore);
-    const ordersPage = useSelector(state => state.order.ordersPage);
+    const runnerOrders = useSelector((s) => s.order.runnerOrders);
+    const ordersLoading = useSelector((s) => s.order.ordersLoading);
+    const ordersError = useSelector((s) => s.order.ordersError);
+    const ordersHasMore = useSelector((s) => s.order.ordersHasMore);
+    const ordersPage = useSelector((s) => s.order.ordersPage);
+
+    const [searchInput, setSearchInput] = useState("");
+    const [debouncedSearch, setDebouncedSearch] = useState("");
+    const [filters, setFilters] = useState(DEFAULT_FILTERS);
+    const [showFilters, setShowFilters] = useState(false);
+
+    const activeFilterCount = useMemo(
+        () => Object.values(filters).filter(Boolean).length,
+        [filters]
+    );
+
+    const updateFilters = useCallback((patch) => {
+        setFilters((prev) => ({ ...prev, ...patch }));
+    }, []);
+
+    const clearFilters = useCallback(() => {
+        setFilters(DEFAULT_FILTERS);
+        setSearchInput("");
+    }, []);
+
+    useEffect(() => {
+        const t = setTimeout(() => setDebouncedSearch(searchInput.trim()), 400);
+        return () => clearTimeout(t);
+    }, [searchInput]);
 
     useEffect(() => {
         if (!registrationComplete || !runnerId) return;
         dispatch(resetRunnerOrders());
-        dispatch(fetchRunnerOrders({ runnerId, page: 1 }));
-    }, [runnerId, registrationComplete, dispatch]);
+        dispatch(fetchRunnerOrders({
+            runnerId,
+            page: 1,
+            status: filters.status || undefined,
+            taskType: filters.taskType || undefined,
+            dateFrom: filters.dateFrom || undefined,
+            dateTo: filters.dateTo || undefined,
+            search: debouncedSearch || undefined,
+        }));
+    }, [runnerId, registrationComplete, filters.status, filters.taskType, filters.dateFrom, filters.dateTo, debouncedSearch, dispatch]);
 
     const handleLoadMore = useCallback(() => {
         if (ordersLoading || !ordersHasMore) return;
-        dispatch(fetchRunnerOrders({ runnerId, page: ordersPage + 1 }));
-    }, [ordersLoading, ordersHasMore, ordersPage, runnerId, dispatch]);
+        dispatch(fetchRunnerOrders({
+            runnerId,
+            page: ordersPage + 1,
+            status: filters.status || undefined,
+            taskType: filters.taskType || undefined,
+            dateFrom: filters.dateFrom || undefined,
+            dateTo: filters.dateTo || undefined,
+            search: debouncedSearch || undefined,
+        }));
+    }, [ordersLoading, ordersHasMore, ordersPage, runnerId, filters, debouncedSearch, dispatch]);
+
+    const isInitialLoading = ordersLoading && runnerOrders.length === 0;
 
     const renderContent = () => {
         if (!registrationComplete) {
@@ -145,7 +284,7 @@ export const Orders = ({ darkMode, onBack, runnerId, registrationComplete }) => 
             );
         }
 
-        if (ordersLoading && runnerOrders.length === 0) {
+        if (isInitialLoading) {
             return (
                 <div className="flex-1 flex items-center justify-center py-20">
                     <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
@@ -155,7 +294,8 @@ export const Orders = ({ darkMode, onBack, runnerId, registrationComplete }) => 
 
         if (ordersError && runnerOrders.length === 0) {
             return (
-                <div className="flex-1 flex flex-col items-center justify-center text-center px-6 py-20">
+                <div className="flex-1 flex flex-col items-center justify-center text-center px-6 py-20 gap-2">
+                    <AlertCircle className="h-8 w-8 text-red-400" />
                     <p className="text-black-100/80 dark:text-gray-400">Something went wrong, come back later</p>
                 </div>
             );
@@ -163,15 +303,22 @@ export const Orders = ({ darkMode, onBack, runnerId, registrationComplete }) => 
 
         if (runnerOrders.length === 0) {
             return (
-                <div className="flex-1 flex flex-col items-center justify-center text-center px-6 py-20">
-                    <p className="text-black-100/80 dark:text-gray-400 font-medium">No orders yet</p>
-                    <p className="text-sm text-black-100/80 dark:text-gray-500 mt-1">Pick a service to get started</p>
+                <div className="flex-1 flex flex-col items-center justify-center text-center px-6 py-16 gap-2">
+                    <Inbox className={`h-10 w-10 ${darkMode ? "text-gray-700" : "text-gray-300"}`} />
+                    <p className="text-black-100/80 dark:text-gray-400 font-medium">
+                        {activeFilterCount > 0 || debouncedSearch ? "No orders match your filters" : "No orders yet"}
+                    </p>
+                    {(activeFilterCount > 0 || debouncedSearch) && (
+                        <button onClick={clearFilters} className="text-xs font-semibold text-primary">
+                            Clear filters
+                        </button>
+                    )}
                 </div>
             );
         }
 
         return (
-            <div className="flex-1 overflow-y-auto">
+            <div className="flex-1 overflow-y-auto px-4 pb-4 space-y-2">
                 {runnerOrders.map((order) => (
                     <OrderCard key={order.orderId} order={order} darkMode={darkMode} />
                 ))}
@@ -183,7 +330,7 @@ export const Orders = ({ darkMode, onBack, runnerId, registrationComplete }) => 
                             disabled={ordersLoading}
                             className="text-sm text-primary font-medium disabled:opacity-50"
                         >
-                            {ordersLoading ? 'Loading...' : 'Load more'}
+                            {ordersLoading ? "Loading..." : "Load more"}
                         </button>
                     </div>
                 )}
@@ -198,12 +345,45 @@ export const Orders = ({ darkMode, onBack, runnerId, registrationComplete }) => 
     };
 
     return (
-        <div className={`h-full flex flex-col bg-white dark:bg-black-100 ${darkMode ? 'dark' : ''}`}>
+        <div className={`h-full flex flex-col bg-white dark:bg-black-100 ${darkMode ? "dark" : ""}`}>
             <div className="flex items-center border-b border-gray-100 dark:border-white/10 p-3">
                 <div onClick={onBack} className="cursor-pointer text-black-200 dark:text-gray-300">
-                    <ChevronLeft />
+                    <ArrowLeft />
                 </div>
                 <h1 className="text-lg font-bold mx-auto text-black-200 dark:text-gray-300">Orders</h1>
+            </div>
+
+            <div className="p-4 space-y-3 flex-shrink-0">
+                <div className="relative">
+                    <Search className={`absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 ${darkMode ? "text-gray-500" : "text-gray-400"}`} />
+                    <input
+                        type="text"
+                        placeholder="Search by order ID"
+                        value={searchInput}
+                        onChange={(e) => setSearchInput(e.target.value)}
+                        className={`w-full pl-10 pr-4 py-2.5 rounded-xl text-sm border ${darkMode ? "bg-black-100 border-white/10 text-white placeholder:text-gray-500" : "bg-gray-50 border-gray-200 text-black-200 placeholder:text-gray-400"}`}
+                    />
+                </div>
+
+                <button
+                    onClick={() => setShowFilters((v) => !v)}
+                    className={`w-full flex items-center justify-between px-4 py-2.5 rounded-xl text-sm font-medium border ${darkMode ? "bg-black-100 border-white/10 text-gray-200" : "bg-gray-50 border-gray-200 text-black-200"}`}
+                >
+                    <span className="flex items-center gap-2">
+                        <SlidersHorizontal className="h-4 w-4" />
+                        Filters
+                        {activeFilterCount > 0 && (
+                            <span className="bg-primary text-white text-[10px] font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                                {activeFilterCount}
+                            </span>
+                        )}
+                    </span>
+                    <ChevronDown className={`h-4 w-4 transition-transform ${showFilters ? "rotate-180" : ""}`} />
+                </button>
+
+                {showFilters && (
+                    <FilterPanel filters={filters} onChange={updateFilters} onClear={clearFilters} darkMode={darkMode} />
+                )}
             </div>
 
             {renderContent()}

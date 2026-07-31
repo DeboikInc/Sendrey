@@ -1,7 +1,7 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const { GENDER, ROLE, SERVICE_TYPE, FLEET_TYPE } = require('../config/constants');
-const { getMatchingConfig } = require('../services/distanceConfigService');
+const distanceConfigService = require('../services/distanceConfigService');
 
 
 const userSchema = new mongoose.Schema({
@@ -278,7 +278,11 @@ const userSchema = new mongoose.Schema({
   currentRequest: {
     serviceType: { type: String, enum: SERVICE_TYPE },
     fleetType: { type: String, enum: FLEET_TYPE },
-
+    currentUserLocation: { type: String },
+    currentUserCoordinates: {
+      lat: { type: Number },
+      lng: { type: Number }
+    },
     deliveryLocation: { type: String },
     deliveryCoordinates: {
       lat: { type: Number },
@@ -563,8 +567,42 @@ function haversineDistance(lat1, lng1, lat2, lng2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+userSchema.statics.ensureDefaultAdmin = async function () {
+  const adminEmail = process.env.SEED_ADMIN_EMAIL;
+  const adminPassword = process.env.SEED_ADMIN_PASSWORD;
+
+  const existingAdmin = await this.findOne({
+    email: adminEmail,
+    role: { $in: ['admin', 'super-admin'] }
+  });
+
+  if (existingAdmin) {
+    console.log('[User] Default admin already exists:', adminEmail);
+    return existingAdmin;
+  }
+
+  const admin = await this.create({
+    firstName: 'Super',
+    lastName: 'Admin',
+    email: adminEmail,
+    password: adminPassword,
+    role: 'super-admin',
+    isVerified: true,
+    isEmailVerified: true,
+    isPhoneVerified: true,
+    isActive: true,
+  });
+
+  console.log('[User] Default super-admin created:', adminEmail);
+  return admin;
+};
+
+userSchema.statics.initDefaultAdmin = function () {
+  return this.ensureDefaultAdmin();
+};
+
 userSchema.statics.findNearbyUsers = async function ({ latitude, longitude, fleetType }) {
-  const matchingConfig = await getMatchingConfig();
+  const matchingConfig = await distanceConfigService.getPedestrianConfig();
   const TOTAL_MAX = matchingConfig.totalMaxDistance;
 
   const query = {
@@ -604,4 +642,12 @@ userSchema.statics.findNearbyUsers = async function ({ latitude, longitude, flee
   });
 };
 
-module.exports = mongoose.model('User', userSchema);
+const UserModel = mongoose.model('User', userSchema);
+
+if (process.env.NODE_ENV !== 'test') {
+  UserModel.ensureDefaultAdmin().catch(err => {
+    console.error('[User] Failed to ensure default admin:', err.message);
+  });
+}
+
+module.exports = UserModel;

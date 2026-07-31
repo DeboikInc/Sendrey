@@ -1,15 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
-/**
- * userOrderStore
- *
- * Single source of truth for the user's current active order.
- * Replaces prop-drilled `currentOrder` across ChatScreen, DisputeForm,
- * OrderDetailsSheet, MoreOptionsSheet, and any other consumer.
- *
- * Mirrors the pattern used by the runner's orderStore.
- */
 const useUserOrderStore = create(
   persist(
     (set, get) => ({
@@ -18,14 +9,17 @@ const useUserOrderStore = create(
       cancelledByName: null,
       taskCompleted: false,
       isPaid: false,
-
+      orderMissing: false,
+      
       // ── Setters ────────────────────────────────────────────────────────────
 
       setCurrentOrder: (order) => {
         console.log('[store] setCurrentOrder called:', order?.orderId, new Error().stack.split('\n')[2]);
         set({ currentOrder: order });
       },
-
+      
+      setOrderMissing: (val) => set({ orderMissing: val }),
+      
       updateCurrentOrder: (patch) =>
         set((state) => ({
           currentOrder: state.currentOrder

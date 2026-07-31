@@ -12,6 +12,7 @@ const { logSocketAudit } = require('../utils/socketAudit');
 
 const { computeDeliveryFeeFromDocs, calculateFeeSplit } = require('../config/pricing');
 const { getPricingConfig } = require('../services/pricingService');
+const chatService = require('../services/chatService');
 
 const {
   socketMessageSnapshot,
@@ -702,7 +703,6 @@ const initializeChatAndProceed = async (io, chatId, state) => {
     let chat;
 
     if (existingChat) {
-      // 1. Archive in background
       const archivePromise = lastOrder?.orderId
         ? archiveCurrentSession(
           chatId,
@@ -711,7 +711,7 @@ const initializeChatAndProceed = async (io, chatId, state) => {
         ).catch(err => console.error('[archive] bg failed:', err.message))
         : Promise.resolve();
 
-      // 2. Reset chat document (THIS MUST WAIT - chat needs fresh state)
+      // Reset chat document
       existingChat.messages = [...initialMessages];
       existingChat.specialInstructions = specialInstructions || null;
       existingChat.lastActivity = new Date();
@@ -720,7 +720,7 @@ const initializeChatAndProceed = async (io, chatId, state) => {
       existingChat.taskId = null;
       existingChat.orderSessionId = orderSessionId;
 
-      // 3. Save chat + cancel stale orders in parallel (both required before proceeding)
+      // Save chat + cancel stale orders in parallel (both required before proceeding)
       await Promise.all([
         existingChat.save(),
         Order.updateMany(
@@ -741,9 +741,10 @@ const initializeChatAndProceed = async (io, chatId, state) => {
             },
           }
         ),
+        await chatService.updateRecentChats(runnerId, existingChat)
       ]);
 
-      // 4. Reset socket state in background (doesn't need to block proceedToChat)
+      // Reset socket state in background 
       const resetSocketState = async () => {
         for (const roomName of [chatId, `runner-${runnerId}`, `user-${userId}`]) {
           const room = io.sockets.adapter.rooms.get(roomName);
@@ -778,6 +779,9 @@ const initializeChatAndProceed = async (io, chatId, state) => {
         createdAt: new Date(),
         specialInstructions: specialInstructions || null,
       });
+
+      await chatService.saveChatHistory(chatId, chat.messages);
+      await chatService.updateRecentChats(runnerId, chat);
       console.log('[initializeChat] New chat created');
     }
 

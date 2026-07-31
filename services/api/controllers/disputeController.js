@@ -41,6 +41,15 @@ class DisputeController extends BaseController {
         return this.error(res, `Unsupported service type for disputes: ${order.serviceType}`);
       }
 
+      const POST_COMPLETION_STATUSES = new Set(['completed']);
+      const isPostCompletion = POST_COMPLETION_STATUSES.has(order.status);
+
+      if (isPostCompletion) {
+        if (!order.disputeWindowExpiresAt || Date.now() > order.disputeWindowExpiresAt.getTime()) {
+          return this.error(res, 'The dispute window for this order has closed.');
+        }
+      }
+
       // ── Choose reason set based on who is raising the dispute ──────────────
       let isValid = false;
       let allowedReasons = [];

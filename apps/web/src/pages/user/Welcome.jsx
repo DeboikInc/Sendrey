@@ -15,6 +15,7 @@ import Settings from "./settings/Settings";
 import UserWallet from "../../components/screens/UserWallet";
 import MoreMenu from "../../components/screens/MoreMenu";
 import UserDisputes from "../../components/screens/UserDisputes";
+import OrderHistory from "../../components/screens/OrderHistory";
 
 import ChatScreen from "../../components/screens/ChatScreen";
 import { useDispatch } from "react-redux";
@@ -33,31 +34,60 @@ import { authStorage } from '../../utils/authStorage';
 
 import useUserOrderStore from '../../store/userOrderStore';
 
+const usePersistedState = (key, initialValue) => {
+  const [state, setState] = useState(() => {
+    try {
+      const stored = localStorage.getItem(key);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        // If initialValue is an array and parsed is not an array, return initialValue
+        if (Array.isArray(initialValue) && !Array.isArray(parsed)) {
+          return initialValue;
+        }
+        return parsed;
+      }
+      return initialValue;
+    } catch {
+      return initialValue;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(key, JSON.stringify(state));
+    } catch {
+
+    }
+  }, [key, state]);
+
+  return [state, setState];
+};
+
 export const Welcome = () => {
   const [dark, setDark] = useDarkMode();
   const serviceTypeRef = useRef(null);
   const [runnerId, setRunnerId] = useState(null); // eslint-disable-line no-unused-vars
+  const dispatch = useDispatch();
+  const navigate = useNavigate();
+
+  const { socket, joinUserRoom } = useSocket();
 
   const { runnerLocation } = useCredentialFlow(serviceTypeRef, (runnerData) => {
     setRunnerId(runnerData._id || runnerData.id);
   });
 
   const [userData, setUserData] = useState({});
-  const [currentScreen, setCurrentScreen] = useState("service_selection");
+  const [currentScreen, setCurrentScreen] = usePersistedState('welcome_currentScreen', "service_selection");
   const [selectedRunner, setSelectedRunner] = useState(null);
   const [showRunnerSheet, setShowRunnerSheet] = useState(false);
-  const [selectedService, setSelectedService] = useState("");
-  const dispatch = useDispatch();
-  const navigate = useNavigate();
-
-  const { socket, joinUserRoom } = useSocket();
+  const [selectedService, setSelectedService] = usePersistedState('welcome_selectedService', "");
   const [schedulePrompt, setSchedulePrompt] = useState(null);
 
   const [chatReady, setChatReady] = useState(false);
-  const [selectedMarket, setSelectedMarket] = useState("");
-  const [selectedFleetType, setSelectedFleetType] = useState("");
+  const [selectedMarket, setSelectedMarket] = usePersistedState('welcome_selectedMarket', "");
+  const [selectedFleetType, setSelectedFleetType] = usePersistedState('welcome_selectedFleetType', "");
   const [showConnecting, setShowConnecting] = useState(false);
-  const [serverUpdated, setServerUpdated] = useState(false);
+  const [serverUpdated, setServerUpdated] = usePersistedState('welcome_serverUpdated', false);
 
   const [settingsEditScheduleId, setSettingsEditScheduleId] = useState(null);
 
@@ -70,15 +100,17 @@ export const Welcome = () => {
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showWallet, setShowWallet] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showOrderHistory, setShowOrderHistory] = useState(false);
   const [showDisputes, setShowDisputes] = useState(false);
 
   // state declarations for marketscreen
   const [marketScreenMessages, setMarketScreenMessages] = useState([]);
-  const [pickupLocation, setPickupLocation] = useState(null);
-  const [deliveryLocation, setDeliveryLocation] = useState(null);
+  const [pickupLocation, setPickupLocation] = usePersistedState('welcome_pickupLocation', null);
+  const [deliveryLocation, setDeliveryLocation] = usePersistedState('welcome_deliveryLocation', null);
 
-  const [showConfirmModal, setShowConfirmModal] = useState(false);
-  const [confirmOrderData, setConfirmOrderData] = useState(null);
+
+  const [showConfirmModal, setShowConfirmModal] = usePersistedState('welcome_showConfirmModal', false);
+  const [confirmOrderData, setConfirmOrderData] = usePersistedState('welcome_confirmOrderData', null);
   const [chatMounted, setChatMounted] = useState(false);
 
   const currentUser = useSelector(s => s.auth.user);
@@ -133,6 +165,7 @@ export const Welcome = () => {
         setShowMoreMenu(false);
         setShowWallet(false);
         setShowSettings(false);
+        setShowOrderHistory(false);
         setShowDisputes(false);
         setChatReady(true);
         setShowConnecting(false);
@@ -198,6 +231,11 @@ export const Welcome = () => {
     // Only bail on definitive local terminal states — let server validate everything else
     if (status?.taskCompleted || status?.orderCancelled) {
       console.log('[restore] local state is terminal, bailing');
+      chatStorage.clearActiveChat();
+      chatStorage.clearDeliveryConfirmations(storedChatId);
+      chatStorage.clearRunnerData();
+      chatStorage.clearChatStatus(storedChatId);
+      setCurrentScreen('service_selection');
       return;
     }
 
@@ -264,14 +302,25 @@ export const Welcome = () => {
     setShowConnecting(true);
     setChatMounted(true);
 
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
     if (!currentUser?._id) return;
-    const timer = setTimeout(restoreIfActive, socket?.connected);
-    return () => clearTimeout(timer);
+    restoreIfActive();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?._id]);
+
+  useEffect(() => {
+    if (currentScreen !== 'chat') return;
+    const t = setTimeout(() => {
+      if (!chatMounted) {
+        console.warn('[Welcome] currentScreen=chat but chatMounted=false — recovering to service_selection');
+        setCurrentScreen('service_selection');
+      }
+    }, 1500);
+    return () => clearTimeout(t);
+  }, [currentScreen, chatMounted, setCurrentScreen]);
 
   useEffect(() => {
     if (!socket || !currentUser?._id) return;
@@ -476,7 +525,11 @@ export const Welcome = () => {
 
 
   const renderScreen = () => {
-    if (currentScreen === 'chat') return null; // ChatScreen is rendered separately below so it can mount/unmount without affecting this entire tree
+    if (currentScreen === 'chat') {
+      if (!chatMounted) return null;
+      return null;
+    };
+    // ChatScreen is rendered separately below so it can mount/unmount without affecting this entire tree
     switch (currentScreen) {
       case "service_selection":
         return (
@@ -707,6 +760,7 @@ export const Welcome = () => {
         onWallet={() => setShowWallet(true)}
         onSettings={() => setShowSettings(true)}
         onDisputes={() => setShowDisputes(true)}
+        onOrderHistory={() => setShowOrderHistory(true)}
       // others
       />
 
@@ -715,6 +769,18 @@ export const Welcome = () => {
           <UserWallet darkMode={dark} onBack={() => setShowWallet(false)} userData={currentUser} />
         </div>
       )}
+
+      {showOrderHistory && currentScreen !== 'chat' && (
+        <div className="fixed inset-0 z-[10001]">
+          <OrderHistory
+            darkMode={dark}
+            onBack={() => setShowOrderHistory(false)}
+            userData={currentUser}
+            userId={currentUser?._id}
+          />
+        </div>
+      )}
+
       {showSettings && currentScreen !== 'chat' && (
         <div className="fixed inset-0 z-[10001]">
           <Settings darkMode={dark}

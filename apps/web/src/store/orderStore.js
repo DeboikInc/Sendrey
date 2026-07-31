@@ -12,6 +12,7 @@ const DEFAULT_CHAT = () => ({
   //  terminal flags live here so ALL consumers react ──────────────────
   taskCompleted: false,
   orderCancelled: false,
+  orderMissing: false,
   cancellationReason: null,
   deliveryDisputeWindowOpen: false,
 });

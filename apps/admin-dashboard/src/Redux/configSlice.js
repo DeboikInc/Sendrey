@@ -1,10 +1,11 @@
+// Redux/configSlice.js
 import { createSlice, createAsyncThunk } from '@reduxjs/toolkit';
 import api from '../utils/api';
 
 // Pricing config
 export const fetchPricingConfig = createAsyncThunk('config/fetchPricing', async (_, { rejectWithValue }) => {
     try {
-        const res = await api.get('/pricing/pricing-config');
+        const res = await api.get('/pricing/get-pricing-config');
         return res.data;
     } catch (err) {
         return rejectWithValue(err.response?.data?.message || 'Failed to load pricing config');
@@ -13,7 +14,7 @@ export const fetchPricingConfig = createAsyncThunk('config/fetchPricing', async 
 
 export const savePricingConfig = createAsyncThunk('config/savePricing', async (config, { rejectWithValue }) => {
     try {
-        const res = await api.put('/pricing/pricing-config', config);
+        const res = await api.put('/pricing/update-pricing-config', config);
         return res.data;
     } catch (err) {
         return rejectWithValue(err.response?.data?.message || 'Failed to save pricing config');
@@ -58,19 +59,27 @@ export const savePlatformConfig = createAsyncThunk('config/savePlatform', async 
     }
 });
 
-// pedestrian config 
-export const fetchPedestrianConfig = createAsyncThunk('config/fetchPedestrian', async (_, { rejectWithValue }) => {
-    try {
-        const res = await api.get('/pedestrian/get-pedestrian-config');
-        return res.data;
-    } catch (err) {
-        return rejectWithValue(err.response?.data?.message || 'Failed to load pedestrian config');
+// Pedestrian config
+export const fetchPedestrianConfig = createAsyncThunk(
+    'config/fetchPedestrian',
+    async (_, { rejectWithValue }) => {
+        try {
+            console.log('Fetching pedestrian config...');
+            const res = await api.get('/distance/get-pedestrian-config');
+            console.log('Pedestrian config response:', res.data);
+            console.log('Response status:', res.status);
+            console.log('Response data keys:', Object.keys(res.data));
+            return res.data.data || res.data;
+        } catch (err) {
+            console.error('Error fetching pedestrian config:', err);
+            return rejectWithValue(err.response?.data?.message || 'Failed to load pedestrian config');
+        }
     }
-});
+);
 
 export const savePedestrianConfig = createAsyncThunk('config/savePedestrian', async (config, { rejectWithValue }) => {
     try {
-        const res = await api.put('/pedestrian/update-pedestrian-config', config);
+        const res = await api.put('/distance/update-pedestrian-config', config);
         return res.data;
     } catch (err) {
         return rejectWithValue(err.response?.data?.message || 'Failed to save pedestrian config');
@@ -93,6 +102,17 @@ const configSlice = createSlice({
         updateField(state, action) {
             const { resource, field, value } = action.payload;
             state[resource].data[field] = value;
+        },
+
+        updatePedestrianLeg(state, action) {
+            const { field, value } = action.payload;
+            // set the value directly without clamping
+            state.pedestrian.data[field] = value;
+
+            // Recalculate total
+            const runnerLeg = Number(state.pedestrian.data.pedestrianMaxRunnerLeg) || 0;
+            const deliveryLeg = Number(state.pedestrian.data.pedestrianMaxDeliveryLeg) || 0;
+            state.pedestrian.data.pedestrianTotalMax = runnerLeg + deliveryLeg;
         },
         updateFleetRule(state, action) {
             const { fleetKey, field, value } = action.payload;
@@ -139,7 +159,7 @@ const configSlice = createSlice({
                 state.pricing.original = action.payload;
             })
             .addCase(savePricingConfig.rejected, (state, action) => {
-                state.pricing.saving = false; 
+                state.pricing.saving = false;
                 state.pricing.error = action.payload;
             })
 
@@ -154,7 +174,6 @@ const configSlice = createSlice({
             .addCase(fetchMatchingConfig.rejected, (state, action) => {
                 state.matching.error = action.payload;
             })
-
             .addCase(saveMatchingConfig.pending, (state) => {
                 state.matching.saving = true;
                 state.matching.error = null;
@@ -221,5 +240,13 @@ const configSlice = createSlice({
     },
 });
 
-export const { updateField, updateFleetRule, updateTier, addTier, removeTier, discardChanges } = configSlice.actions;
+export const {
+    updateField,
+    updatePedestrianLeg,
+    updateFleetRule,
+    updateTier,
+    addTier,
+    removeTier,
+    discardChanges,
+} = configSlice.actions;
 export default configSlice.reducer;

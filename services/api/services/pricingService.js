@@ -1,62 +1,89 @@
 const PricingConfig = require('../models/PricingConfig');
 const redis = require('../config/redis');
 
-let cachedConfig = null;
-let loadingPromise = null;
-
-async function loadFromDb() {
-  const doc = await PricingConfig.findOne({ key: 'active' }).lean();
-  if (!doc) {
-    throw new Error('[pricingService] No active PricingConfig found in DB — run the seed script.');
+class PricingConfigService {
+  constructor() {
+    this.cachedPricingConfig = null;
+    this.pricingLoadingPromise = null;
   }
-  return doc;
-}
 
-async function getPricingConfig() {
-  if (cachedConfig) return cachedConfig;
+  getOrCreatePricingConfig = async () => {
+    return PricingConfig.findOneAndUpdate(
+      { key: 'active' },
+      { $setOnInsert: { key: 'active' } },
+      { new: true, upsert: true, setDefaultsOnInsert: true }
+    ).lean();
+  };
 
-  // Avoid duplicate concurrent DB reads if many requests hit this before the first resolves
-  if (!loadingPromise) {
-    loadingPromise = loadFromDb()
-      .then((doc) => {
-        cachedConfig = doc;
-        return doc;
-      })
-      .finally(() => {
-        loadingPromise = null;
-      });
-  }
-  return loadingPromise;
-}
+  loadPricingConfigFromDb = async () => {
+    return this.getOrCreatePricingConfig();
+  };
 
-function invalidatePricingConfig() {
-  cachedConfig = null;
-  console.log('[pricingService] Cache invalidated — next call will refetch from DB');
-}
+  getPricingConfig = async () => {
+    if (this.cachedPricingConfig) return this.cachedPricingConfig;
 
-// Call once at server startup, after redis.connect()
-async function initPricingConfigSubscriber() {
-  await getPricingConfig(); // warm the cache on boot
-
-  const subscriber = redis.getSubscriber();
-  await subscriber.subscribe('pricing:updated', (err, count) => {
-    if (err) {
-      console.error('[pricingService] Failed to subscribe to pricing:updated:', err);
-    } else {
-      console.log(`✅ Subscribed to pricing:updated (${count} channels)`);
+    if (!this.pricingLoadingPromise) {
+      this.pricingLoadingPromise = this.loadPricingConfigFromDb()
+        .then((doc) => {
+          this.cachedPricingConfig = doc;
+          return doc;
+        })
+        .finally(() => {
+          this.pricingLoadingPromise = null;
+        });
     }
-  });
+    return this.pricingLoadingPromise;
+  };
 
-  subscriber.on('message', (channel) => {
-    if (channel === 'pricing:updated') {
-      console.log('[pricingService] Received pricing:updated — invalidating cache');
-      invalidatePricingConfig();
-    }
-  });
+  invalidatePricingConfig = () => {
+    this.cachedPricingConfig = null;
+    console.log('[pricingConfigCache] Cache invalidated — next call will refetch from DB');
+  };
+
+  // Call once at server startup, after redis.connect()
+  initPricingConfigSubscriber = async () => {
+    await this.getPricingConfig();
+
+    const subscriber = redis.getSubscriber();
+    await subscriber.subscribe('pricing:updated', (err, count) => {
+      if (err) {
+        console.error('[pricingConfigCache] Failed to subscribe to pricing:updated:', err);
+      } else {
+        console.log(`✅ Subscribed to pricing:updated (${count} channels)`);
+      }
+    });
+
+    subscriber.on('message', (channel) => {
+      if (channel === 'pricing:updated') {
+        console.log('[pricingConfigCache] Received pricing:updated — invalidating cache');
+        this.invalidatePricingConfig();
+      }
+    });
+  };
+
+  // Expects already-validated, already-sorted input — validation lives in the controller
+  updatePricingConfig = async (updates, adminId) => {
+    const set = {
+      platformFeePercentage: updates.platformFeePercentage,
+      platformFeePercentagePedestrian: updates.platformFeePercentagePedestrian,
+      paystackFeePercent: updates.paystackFeePercent,
+      paystackFeeCap: updates.paystackFeeCap,
+      pedestrianTiers: updates.pedestrianTiers,
+      fleetRules: updates.fleetRules,
+    };
+    if (adminId) set.updatedBy = adminId;
+
+    const config = await PricingConfig.findOneAndUpdate(
+      { key: 'active' },
+      { $set: set, $inc: { version: 1 }, $setOnInsert: { key: 'active' } },
+      { new: true, runValidators: true, upsert: true, setDefaultsOnInsert: true }
+    );
+
+    this.invalidatePricingConfig();
+    await redis.getPublisher().publish('pricing:updated', JSON.stringify({ version: config.version }));
+
+    return config;
+  };
 }
 
-module.exports = {
-  getPricingConfig,
-  invalidatePricingConfig,
-  initPricingConfigSubscriber,
-};
+module.exports = new PricingConfigService();

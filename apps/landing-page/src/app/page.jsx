@@ -6,11 +6,7 @@ import { FiMail, FiInstagram, FiFacebook } from 'react-icons/fi'
 import { FaLinkedinIn, FaXTwitter } from 'react-icons/fa6'
 import { FaApple, FaGooglePlay } from 'react-icons/fa'
 import { motion } from 'framer-motion'
-import { Space_Grotesk, Inter, JetBrains_Mono } from 'next/font/google'
-
-const display = Space_Grotesk({ subsets: ['latin'], weight: ['500', '700'], variable: '--font-display' })
-const body = Inter({ subsets: ['latin'], variable: '--font-body' })
-const mono = JetBrains_Mono({ subsets: ['latin'], weight: ['400', '600'], variable: '--font-mono' })
+import { display, body, mono } from '@/app/lib/fonts'
 
 const StartShot = '/Start-portrait.png'
 const RunnerHomeShot = '/Mockup1.png'
@@ -174,7 +170,7 @@ export default function HomePage() {
           </h1>
           <p className="mt-5 text-white/75 text-base sm:text-lg max-w-lg">
             Sendrey connects you to vetted local runners who queue, shop, and deliver
-            across town — so you don't have to leave your desk.
+            across town — so you do not have to leave your desk.
           </p>
 
           <div className="mt-10">

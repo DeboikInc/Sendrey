@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Button, IconButton, Tooltip } from "@material-tailwind/react";
 import { Bike, Car, Truck, Mic, Square, Paperclip, Camera, Music } from "lucide-react";
 import Message from "../common/Message";
@@ -9,6 +9,36 @@ import { FaWalking, FaMotorcycle } from "react-icons/fa";
 import { useCameraHook } from "../../hooks/useCameraHook";
 import { getPedestrianConfig } from '../../utils/pedestrianConfig';
 import { calculateRouteDistance, haversineDistance } from '../../utils/pricing';
+
+const usePersistedState = (key, initialValue) => {
+  const [state, setState] = useState(() => {
+    try {
+      const stored = localStorage.getItem(key);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        // If initialValue is an array and parsed is not an array, return initialValue
+        if (Array.isArray(initialValue) && !Array.isArray(parsed)) {
+          return initialValue;
+        }
+        return parsed;
+      }
+      return initialValue;
+    } catch {
+      return initialValue;
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(key, JSON.stringify(state));
+    } catch {
+
+    }
+  }, [key, state]);
+
+  return [state, setState];
+};
+
 
 const getCurrentTime = () => {
   return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -60,21 +90,32 @@ export default function VehicleSelectionScreen({
   showBack,
   onBack,
 }) {
-  const [messages, setMessages] = useState(getInitialMessages);
   const dispatch = useDispatch();
-  const [showConnectButton, setShowConnectButton] = useState(false);
-  const [selectedVehicle, setSelectedVehicle] = useState(null);
-  const [text, setText] = useState("");
-  const [specialInstructions, setSpecialInstructions] = useState("");
-  const [, setUserLocation] = useState(null);
+  const persistenceKey = useRef(
+    (() => {
+      const STORAGE_ID_KEY = "vehicle_persistence_active_id";
+      const stored = localStorage.getItem(STORAGE_ID_KEY);
+      if (stored) return stored;
+      const newId = `vehicle_${Date.now()}`;
+      localStorage.setItem(STORAGE_ID_KEY, newId);
+      return newId;
+    })()
+  ).current;
 
+  const [messages, setMessages] = usePersistedState(`vehicle_messages_${persistenceKey}`, getInitialMessages);
+  const [showConnectButton, setShowConnectButton] = usePersistedState(`vehicle_showConnectButton_${persistenceKey}`, false);
+  const [selectedVehicle, setSelectedVehicle] = usePersistedState(`vehicle_selectedVehicle_${persistenceKey}`, null);
+  const [text, setText] = usePersistedState(`vehicle_text_${persistenceKey}`, "");
+  const [specialInstructions, setSpecialInstructions] = usePersistedState(`vehicle_specialInstructions_${persistenceKey}`, "");
+  const [, setUserLocation] = useState(null);
+  const [isConnectingToRunner, setIsConnectingToRunner] = useState(false);
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
-  const [orderSent, setOrderSent] = useState(false);
+  const [orderSent, setOrderSent] = usePersistedState(`vehicle_orderSent_${persistenceKey}`, false);
 
   // Media states
-  const [selectedFiles, setSelectedFiles] = useState([]);
-  const [specialInstructionsMedia, setSpecialInstructionsMedia] = useState([]);
+  const [selectedFiles, setSelectedFiles] = usePersistedState(`vehicle_selectedFiles_${persistenceKey}`, []);
+  const [specialInstructionsMedia, setSpecialInstructionsMedia] = usePersistedState(`vehicle_specialInstructionsMedia_${persistenceKey}`, []);
   const [isRecording, setIsRecording] = useState(false);
   const [recordingTime, setRecordingTime] = useState(0);
 
@@ -84,14 +125,16 @@ export default function VehicleSelectionScreen({
   const audioChunksRef = useRef([]);
   const recordingIntervalRef = useRef(null);
 
-  console.log('VEHICLE SCREEN RENDER:', {
-    serverUpdated,
-    orderSent,
-    showConnectButton,
-    selectedVehicle,
-    messagesCount: messages.length,
-    lastMessageText: messages[messages.length - 1]?.text?.slice(0, 50)
-  });
+  useEffect(() => {
+    // Ensure messages is always an array
+    if (!Array.isArray(messages)) {
+      console.warn('messages is not an array, resetting to initial messages');
+      setMessages(getInitialMessages());
+      // Clear the corrupted localStorage entry
+      localStorage.removeItem(`vehicle_messages_${persistenceKey}`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Auto-scroll to bottom when messages change
   useEffect(() => {
@@ -144,6 +187,7 @@ export default function VehicleSelectionScreen({
         }
       ]);
       setShowConnectButton(true);
+      localStorage.setItem(`vehicle_showConnectButton_${persistenceKey}`, JSON.stringify(true));
 
       if (currentOrder?.specialInstructions) {
         const existing = currentOrder.specialInstructions;
@@ -156,9 +200,19 @@ export default function VehicleSelectionScreen({
         }
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isEditing, editingField, currentOrder]);
 
-
+  useEffect(() => {
+    // If there's a selected vehicle and messages contain the connect button message
+    if (selectedVehicle && Array.isArray(messages)) {
+      const hasConnectMessage = messages.some(msg => msg.hasConnectRunnerButton);
+      if (hasConnectMessage) {
+        setShowConnectButton(true);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedVehicle, messages]);
 
   useEffect(() => {
     if ('geolocation' in navigator) {
@@ -176,36 +230,51 @@ export default function VehicleSelectionScreen({
     }
   }, []);
 
+  useEffect(() => {
+    if (showConnectButton) {
+      localStorage.setItem(`vehicle_showConnectButton_${persistenceKey}`, JSON.stringify(true));
+    }
+  }, [showConnectButton, persistenceKey]);
+
+  useEffect(() => {
+    // Restore the connect button state on mount
+    try {
+      const stored = localStorage.getItem(`vehicle_showConnectButton_${persistenceKey}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        if (parsed === true) {
+          setShowConnectButton(true);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, [persistenceKey, setShowConnectButton]);
+
   // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (recordingIntervalRef.current) {
         clearInterval(recordingIntervalRef.current);
       }
-      selectedFiles.forEach(file => {
-        if (file.preview) {
-          URL.revokeObjectURL(file.preview);
-        }
-      });
+      if (Array.isArray(selectedFiles)) {
+        selectedFiles.forEach(file => {
+          if (file.preview) {
+            URL.revokeObjectURL(file.preview);
+          }
+        });
+      }
 
-      messages.forEach(msg => {
-        if (msg.fileUrl && msg.fileUrl.startsWith('blob:')) {
-          URL.revokeObjectURL(msg.fileUrl);
-        }
-      });
+      if (Array.isArray(messages)) {
+        messages.forEach(msg => {
+          if (msg.fileUrl && msg.fileUrl.startsWith('blob:')) {
+            URL.revokeObjectURL(msg.fileUrl);
+          }
+        });
+      }
     };
   }, [selectedFiles, messages]);
 
-
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  // const fileToBase64 = (file) => {
-  //   return new Promise((resolve, reject) => {
-  //     const reader = new FileReader();
-  //     reader.readAsDataURL(file);
-  //     reader.onload = () => resolve(reader.result);
-  //     reader.onerror = error => reject(error);
-  //   });
-  // };
 
   const handleFileSelect = (event) => {
     const files = Array.from(event.target.files);
@@ -307,19 +376,32 @@ export default function VehicleSelectionScreen({
   };
 
   const handleAfterVehicleSelect = (type) => {
+    console.log('[VehicleSelection] handleAfterVehicleSelect called with type:', type);
     setMessages(prev => {
-      const filtered = prev.filter(msg => msg.text !== "In progress...");
-      return [...filtered, {
-        id: Date.now(),
-        from: "them",
-        text: `Make your request detailed enough for your runner to understand (Type a message, snap a picture or record a voice note). Press the Connect To Runner button when you are done. Connect To Runner`,
-        time: getCurrentTime(),
-        status: "delivered",
-        hasConnectRunnerButton: true,
-        isConnectToRunner: true
-      }];
+      const prevArray = Array.isArray(prev) ? prev : [];
+      const filtered = prevArray.filter(msg => msg.text !== "In progress...");
+      return filtered;
     });
+
+    const hasConnectMessage = Array.isArray(messages) && messages.some(msg => msg.hasConnectRunnerButton);
+
+    if (!hasConnectMessage) {
+      setMessages(prev => {
+        const prevArray = Array.isArray(prev) ? prev : [];
+        return [...prevArray, {
+          id: Date.now(),
+          from: "them",
+          text: `Make your request detailed enough for your runner to understand (Type a message, snap a picture or record a voice note). Press the Connect To Runner button when you are done. Connect To Runner`,
+          time: getCurrentTime(),
+          status: "delivered",
+          hasConnectRunnerButton: true,
+          isConnectToRunner: true
+        }];
+      });
+    }
+
     setShowConnectButton(true);
+    console.log('[VehicleSelection] showConnectButton set to true');
   };
 
 
@@ -335,8 +417,11 @@ export default function VehicleSelectionScreen({
       status: "sent",
       isFleetSelection: true,
     };
+    setMessages(prev => {
+      const prevArray = Array.isArray(prev) ? prev : [];
+      return [...prevArray, newMsg];
+    });
 
-    setMessages(prev => [...prev, newMsg]);
 
     if (type === 'pedestrian') {
       const origin = selectedService === 'run-errand'
@@ -378,6 +463,7 @@ export default function VehicleSelectionScreen({
     }
 
     setSelectedVehicle(type);
+    localStorage.setItem(`vehicle_selectedVehicle_${persistenceKey}`, JSON.stringify(type));
 
     const botResponse = {
       id: now + 1,
@@ -386,13 +472,13 @@ export default function VehicleSelectionScreen({
       status: "delivered",
       isSystemPrompt: true,
     };
-    setMessages(prev => [...prev, botResponse]);
+    setMessages(prev => {
+      const prevArray = Array.isArray(prev) ? prev : [];
+      return [...prevArray, botResponse];
+    });
+
 
     setTimeout(() => {
-      if (selectedService === "pick-up" && !service?.pickupLocation) {
-        console.error('Pickup location is missing for pickup service');
-        return;
-      }
       handleAfterVehicleSelect(type);
     }, 800);
   };
@@ -443,18 +529,39 @@ export default function VehicleSelectionScreen({
   };
 
   useEffect(() => {
-    console.log('serverUpdated CHANGED:', { serverUpdated, currentOrderSent: orderSent });
-
     if (serverUpdated) {
-      console.log('Setting orderSent to TRUE');
       setOrderSent(true);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serverUpdated, orderSent]);
+
+  const clearVehiclePersistence = useCallback(() => {
+    const keys = [
+      `vehicle_messages_${persistenceKey}`,
+      `vehicle_showConnectButton_${persistenceKey}`,
+      `vehicle_selectedVehicle_${persistenceKey}`,
+      `vehicle_text_${persistenceKey}`,
+      `vehicle_specialInstructions_${persistenceKey}`,
+      `vehicle_selectedFiles_${persistenceKey}`,
+      `vehicle_specialInstructionsMedia_${persistenceKey}`,
+      `vehicle_orderSent_${persistenceKey}`,
+    ];
+    keys.forEach(key => localStorage.removeItem(key));
+    localStorage.removeItem("vehicle_persistence_active_id");
+  }, [persistenceKey]);
+
+  useEffect(() => {
+    return () => {
+      if (orderSent) {
+        clearVehiclePersistence();
+      }
+    };
+  }, [orderSent, clearVehiclePersistence]);
 
   const getFreshLocation = () => {
     return new Promise((resolve, reject) => {
       if (!navigator.geolocation) {
-        reject(new Error('Geolocation not supported'));
+        reject(new Error('Geolocation not supported on this device.'));
         return;
       }
       navigator.geolocation.getCurrentPosition(
@@ -464,32 +571,65 @@ export default function VehicleSelectionScreen({
             longitude: position.coords.longitude
           });
         },
-        (error) => reject(error),
+        (error) => {
+          let message;
+          switch (error.code) {
+            case error.PERMISSION_DENIED:
+              message = 'Location access was denied. Please enable location permissions for this site and try again.';
+              break;
+            case error.POSITION_UNAVAILABLE:
+              message = 'Your current location could not be determined. Please check your device settings and try again.';
+              break;
+            case error.TIMEOUT:
+              message = 'Getting your location took too long. Please try again, ideally with a clear view of the sky or a stronger signal.';
+              break;
+            default:
+              message = 'Unable to get your current location. Please try again.';
+          }
+          reject(new Error(message));
+        },
         { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
       );
     });
   };
 
-  const handleConnectToRunner = async () => {
-    console.log('[VehicleSelection] handleConnectToRunner called', {
-      selectedVehicle,
-      service: service,
-      selectedService
+  const reverseGeocode = (lat, lng) => {
+    return new Promise((resolve) => {
+      if (!window.google) {
+        resolve(`Location (${lat.toFixed(6)}, ${lng.toFixed(6)})`);
+        return;
+      }
+      const geocoder = new window.google.maps.Geocoder();
+      geocoder.geocode({ location: { lat, lng } }, (results, status) => {
+        if (status === 'OK' && results[0]) {
+          resolve(results[0].formatted_address);
+        } else {
+          resolve(`Location (${lat.toFixed(6)}, ${lng.toFixed(6)})`);
+        }
+      });
     });
+  };
 
+  const handleConnectToRunner = async () => {
+    if (isConnectingToRunner) return;
     if (!selectedVehicle) {
       return;
     }
+
+    setIsConnectingToRunner(true);
 
     let currentLocation;
 
     if (!serverUpdated) {
       try {
-        currentLocation = await getFreshLocation();
+        const coords = await getFreshLocation();
+        const address = await reverseGeocode(coords.latitude, coords.longitude);
+        currentLocation = { ...coords, address };
         setUserLocation(currentLocation);
       } catch (error) {
         console.error('Location error:', error);
-        alert('Unable to get your current location. Please enable location services and try again.');
+        alert(error.message);
+        setIsConnectingToRunner(false);
         return;
       }
     }
@@ -518,7 +658,10 @@ export default function VehicleSelectionScreen({
         })),
       } : null,
       serviceType: selectedService,
-      userLocation: currentLocation
+      currentUserLocation: currentLocation?.address || null,
+      currentUserCoordinates: currentLocation
+        ? { lat: currentLocation.latitude, lng: currentLocation.longitude }
+        : null,
     };
 
     const serializableOrderData = {
@@ -540,21 +683,18 @@ export default function VehicleSelectionScreen({
     // Handle edit mode
     if (isEditing && onEditComplete) {
       onEditComplete(orderData);
+      setIsConnectingToRunner(false);
       return;
     }
 
     // Check serverUpdated state
     if (serverUpdated) {
-      // Server already updated - directly fetch runners (retry mode)
-      // console.log('etry mode: Fetching runners directly...');
-
       onFetchRunners(orderData);
     } else {
-      // First time - show confirm modal
-      // console.log('First time: Showing confirm modal...');
       onShowConfirmOrder(orderData);
     }
 
+    setIsConnectingToRunner(false);
     setOrderSent(true);
   };
 
@@ -671,13 +811,14 @@ export default function VehicleSelectionScreen({
         <div className="flex-1 overflow-hidden relative">
           <div ref={messagesEndRef} className="absolute inset-0 overflow-y-auto scrollbar-hide scroll-smooth">
             <div className="min-h-full p-4 pb-[280px] marketSelection">
-              {messages.map(m => (
+              {(Array.isArray(messages) ? messages : []).map(m => (
                 <Message
                   key={m.id}
                   m={m}
                   showCursor={false}
                   showStatusIcons={false}
                   onConnectButtonClick={m.hasConnectRunnerButton ? handleConnectToRunner : undefined}
+                  connectButtonDisabled={m.hasConnectRunnerButton ? isConnectingToRunner : undefined}
                   disableContextMenu={m.isFleetSelection || m.isConnectToRunner || m.isSystemPrompt ? true : false}
                   alwaysAllowEdit={
                     m.from === "me" &&
