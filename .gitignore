@@ -10,4 +10,22 @@ apps/admin-dashboard/package-lock.json
 apps/web/.env
 apps/mobile/.env
 apps/admin-dashboard/.env
-apps/ladning-page/.env
+apps/landing-page/.env
+
+apps/*/build/
+build/
+dist/
+
+# turbo cache
+.turbo/
+
+# logs
+logs/
+*.log
+
+# dependencies
+node_modules/
+
+# env
+.env
+.env.local
