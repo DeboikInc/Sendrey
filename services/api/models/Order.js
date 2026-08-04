@@ -1,6 +1,6 @@
 const mongoose = require('mongoose');
 const { TASK_TYPES, SERVICE_TYPE, CANCELLABLE_STATES_BY_SERVICE, DISPUTE_WINDOW_HOURS } = require('../config/constants');
-const OrderActivityLog = require('./orderActivityLog');
+const OrderActivityLog = require('./OrderActivityLog');
 const orderHistoryCache = require('../cache/orderHistoryCache');
 
 //  Valid status transitions 
