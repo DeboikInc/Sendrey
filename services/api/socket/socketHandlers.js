@@ -1428,6 +1428,7 @@ module.exports = {
   handleGetOrderSession,
   handleGetArchivedMessages,
   createOrder,
+  lockAndProceed,
   requestSessionRefresh,
 
   handleGetSpecialInstructions,

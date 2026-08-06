@@ -60,6 +60,40 @@ export const fetchUserOrderHistory = createAsyncThunk(
   }
 );
 
+export const cancelOrderByUser = createAsyncThunk(
+  'order/cancelOrderByUser',
+  async ({ userId, chatId, orderId, reason }, { rejectWithValue }) => {
+    try {
+      const params = new URLSearchParams();
+      if (orderId) params.set('orderId', orderId);
+      if (chatId) params.set('chatId', chatId);
+      if (reason) params.set('reason', reason);
+
+      const response = await api.post(`/orders/cancel-order/${userId}?${params.toString()}`);
+      return response.data;
+    } catch (err) {
+      console.error('[cancelOrderByUser] failed:', err.response?.status, err.response?.data)
+      return rejectWithValue({
+        code: err.response?.data?.code,
+        message: err.response?.data?.message || 'Failed to cancel order',
+      });
+    }
+  }
+);
+
+export const getUserCancellationReasons = createAsyncThunk(
+  'order/getUserCancellationReasons',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await api.get('/orders/user-cancellation-reasons');
+      return response.data;
+    } catch (err) {
+      console.error('[cancelOrderByUser] failed:', err.response?.status, err.response?.data)
+      return rejectWithValue(null);
+    }
+  }
+);
+
 // ─── Slice
 
 const initialState = {
@@ -81,6 +115,14 @@ const initialState = {
   userOrdersNextCursor: null,
   userOrdersLoading: false,
   userOrdersError: null,
+
+  cancelling: false,
+  cancelError: null,
+  cancelledOrder: null,
+
+  cancellationReasons: [],
+  reasonsLoading: false,
+  reasonsError: null,
 };
 
 const orderSlice = createSlice({
@@ -194,8 +236,42 @@ const orderSlice = createSlice({
       .addCase(fetchUserOrderHistory.rejected, (state, action) => {
         state.userOrdersLoading = false;
         state.userOrdersError = action.payload;
-      });
+      })
 
+      .addCase(cancelOrderByUser.pending, (state) => {
+        state.cancelling = true;
+        state.cancelError = null;
+      })
+      .addCase(cancelOrderByUser.fulfilled, (state, action) => {
+        state.cancelling = false;
+        const { order } = action.payload?.data ?? action.payload;
+        state.cancelledOrder = order;
+
+        // reflect cancellation in userOrders list if present
+        const idx = state.userOrders.findIndex((o) => o.orderId === order.orderId);
+        if (idx !== -1) state.userOrders[idx].status = 'cancelled';
+
+        if (state.currentOrder?.orderId === order.orderId) {
+          state.currentOrder.status = 'cancelled';
+        }
+      })
+      .addCase(cancelOrderByUser.rejected, (state, action) => {
+        state.cancelling = false;
+        state.cancelError = action.payload?.message || 'Failed to cancel order';
+      })
+
+      .addCase(getUserCancellationReasons.pending, (state) => {
+        state.reasonsLoading = true;
+        state.reasonsError = null;
+      })
+      .addCase(getUserCancellationReasons.fulfilled, (state, action) => {
+        state.reasonsLoading = false;
+        state.cancellationReasons = action.payload?.data ?? action.payload;
+      })
+      .addCase(getUserCancellationReasons.rejected, (state, action) => {
+        state.reasonsLoading = false;
+        state.reasonsError = action.payload;
+      })
   },
 });
 

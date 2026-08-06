@@ -13,7 +13,6 @@ import { TrackDeliveryScreen } from "./TrackDeliveryScreen";
 import ProfileCardMessage from "../runnerScreens/ProfileCardMessage";
 import ItemSubmissionMessage from "./ItemSubmissionMessage";
 import PickupItemSubmissionMessage from './PickupItemSubmissionMessage';
-
 import DeliveryConfirmationMessage from './DeliveryConfirmationMessage';
 import DeliveryDeniedMessage from './DeliveryDeniedMessage';
 import DeliveryConfirmedMessage from './DeliveryConfirmedMessage';
@@ -32,6 +31,7 @@ import PaystackPaymentModal from "../payments/PaystackPaymentModal";
 
 import MoreOptionsSheet from './MoreOptionsSheet';
 import UserWallet from './UserWallet';
+import CancelOrderModal from './CancelOrderModal';
 
 import TeamNotifyPrompt from './TeamNotifyPrompt'
 import Settings from "../../pages/user/settings/Settings";
@@ -39,16 +39,17 @@ import DisputeForm from '../common/DisputeForm';
 import RatingModal from '../common/RatingModal';
 import RunnerContactInformation from './RunnerContactInformation'
 
-import { checkCanRate } from '../../Redux/ratingSlice';
 import OrderDetailsSheet from '../common/OrderDetailsSheet';
 import { PinPad } from '../common/PinPad';
 import chatStorage from '../../utils/chatStorage';
 import { getAvailableReasons } from '../../utils/disputeReasons';
 
+import { checkCanRate } from '../../Redux/ratingSlice';
+import { cancelOrderByUser } from '../../Redux/orderSlice';
 import { createPaymentIntent } from '../../Redux/paymentSlice';
 import { fetchOrderByChatId } from '../../Redux/orderSlice';
-import { enqueueSocketEvent, flushSocketQueue } from '../../utils/socketQueue';
 
+import { enqueueSocketEvent, flushSocketQueue } from '../../utils/socketQueue';
 import useUserOrderStore from '../../store/userOrderStore';
 
 import { useCheckOrderExist } from '../../hooks/useCheckOrderExist';
@@ -84,6 +85,8 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
   const [showMoreSheet, setShowMoreSheet] = useState(false);
   const [showWallet, setShowWallet] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [ , setCancellingOrder] = useState(false);
   const [showDisputeForm, setShowDisputeForm] = useState(false);
   const [showRatingModal, setShowRatingModal] = useState(false);
   const [showRunnerContactInfo, setShowRunnerContactInfo] = useState(false);
@@ -603,6 +606,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
       setCurrentOrder(null);
       currentOrderRef.current = null;
       setTaskCompleted(false);
+      setOrderCancelled(false, null);
       setOrderMissing(false);
       setPaidChatIds(prev => { const n = new Set(prev); n.delete(chatId); return n; });
       lastProcessedSystemMsgRef.current = null;
@@ -1933,6 +1937,94 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
     return availableDisputeReasons.length > 0;
   }, [currentOrder, orderCancelled, availableDisputeReasons]);
 
+  const handleCancelOrder = async (reason) => {
+    if (!currentOrder?.orderId && !chatId) return;
+    setCancellingOrder(true);
+
+    try {
+      const result = await dispatch(cancelOrderByUser({
+        userId: userData?._id,
+        orderId: currentOrder?.orderId,
+        chatId,
+        reason,
+      })).unwrap();
+
+      const payload = result?.data ?? result;
+      const { order, cancelMessage } = payload ?? {};
+
+      if (!order || order.status !== 'cancelled') {
+        throw new Error('Order was not confirmed as cancelled');
+      }
+
+      if (cancelMessage) {
+        setMessages(prev => {
+          if (prev.some(m => m.id === cancelMessage.id)) return prev;
+          return [...prev, cancelMessage];
+        });
+      }
+
+      updateCurrentOrder({ status: 'cancelled' });
+      setOrderCancelled(true);
+      setCancelledByName('You');
+      setTaskCompleted(false);
+
+      chatStorage.saveChatStatus(chatId, {
+        orderCancelled: true,
+        cancelledByName: 'You',
+        taskCompleted: false,
+        currentOrder: currentOrderRef.current
+          ? { ...currentOrderRef.current, status: 'cancelled' }
+          : null,
+      });
+
+      const cancelPayload = {
+        chatId,
+        orderId: currentOrder?.orderId,
+        runnerId: runner?._id,
+        userId: userData?._id,
+        reason,
+        cancelledByName: userData?.firstName || 'User',
+      };
+      if (socket?.connected) {
+        socket.emit('orderCancelledByUser', cancelPayload);
+      } else {
+        enqueueSocketEvent('orderCancelledByUser', cancelPayload);
+      }
+
+      setShowCancelModal(false);
+    } catch (err) {
+      console.error('[handleCancelOrder] failed:', err);
+      setShowCancelModal(false);
+
+      const code = err?.code;
+      const failText =
+        code === 'ALREADY_CANCELLED'
+          ? 'This order has already been cancelled.'
+          : code === 'NOT_CANCELLABLE'
+            ? 'This order can no longer be cancelled at its current stage.'
+            : code === 'PAID_ORDER'
+              ? 'This order has already been funded and cannot be cancelled.'
+              : 'Failed to cancel order. Please try again.';
+
+      if (code === 'ALREADY_CANCELLED') {
+        updateCurrentOrder({ status: 'cancelled' });
+        setOrderCancelled(true);
+        setTaskCompleted(false);
+      }
+
+      setMessages(prev => [...prev, {
+        id: `cancel-failed-${Date.now()}`,
+        from: 'system',
+        type: 'system',
+        messageType: 'system',
+        text: failText,
+        time: getCurrentTime(),
+      }]);
+    } finally {
+      setCancellingOrder(false);
+    }
+  };
+
   return (
     <>
       {/* onSettings */}
@@ -1942,6 +2034,16 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
             darkMode={darkMode}
             onBack={() => setShowSettings(false)}
             onToggleDarkMode={toggleDarkMode}
+          />
+        </div>
+      )}
+
+      {showCancelModal && (
+        <div className="fixed inset-0 z-[999]">
+          <CancelOrderModal
+            darkMode={darkMode}
+            onBack={() => setShowCancelModal(false)}
+            onConfirm={handleCancelOrder}
           />
         </div>
       )}
@@ -2009,6 +2111,8 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
         serviceType={serviceType}
         onWallet={() => { setShowMoreSheet(false); setShowWallet(true); }}
         onSettings={() => { setShowMoreSheet(false); setShowSettings(true); }}
+        onCancelOrder={() => { setShowMoreSheet(false); setShowCancelModal(true); }}
+        canCancelOrder={!!currentOrder?.orderId && !orderCancelled}
         hasActiveOrder={canRaiseDispute}
         onRaiseDispute={() => { setShowMoreSheet(false); setShowDisputeForm(true); }}
         onOrderDetails={() => { setShowMoreSheet(false); setShowOrderDetails(true); }}

@@ -33,7 +33,6 @@ const locationCleanup = require('./services/locationTracking/locationCleanup');
 
 const { startSocketServer, shutdownSocketServer } = require('./socket');
 const { initPricingConfigSubscriber } = require('./services/pricingService');
-const { initMatchingConfigSubscriber } = require('./services/distanceConfigService');
 const { startRetryLoop } = require('./utils/paymentRetryQueue');
 
 require("dotenv").config();
@@ -111,9 +110,6 @@ const startServer = async () => {
     // start redis
     try {
       await redis.connect();
-
-      await initPricingConfigSubscriber();
-      await initMatchingConfigSubscriber();
       locationCleanup.start();
     } catch (err) {
       console.error('Redis unavailable — skipping location cleanup:', err.message);

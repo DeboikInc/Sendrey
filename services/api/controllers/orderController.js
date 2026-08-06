@@ -10,6 +10,8 @@ class OrderController extends BaseController {
     this.getOrderByChatId = this.getOrderByChatId.bind(this);
     this.adminGetAllOrders = this.adminGetAllOrders.bind(this);
     this.cancelOrder = this.cancelOrder.bind(this);
+    this.cancelOrderByUser = this.cancelOrderByUser.bind(this);
+    this.getCancellationReasons = this.getCancellationReasons.bind(this);
   }
 
   async getUserOrderHistory(req, res) {
@@ -111,6 +113,40 @@ class OrderController extends BaseController {
       return this.success(res, result);
     } catch (err) {
       logger.error('cancelOrder error:', err);
+      return this.error(res, err.message);
+    }
+  }
+
+  async cancelOrderByUser(req, res) {
+
+    try {
+      const userId = req.user.id || req.userId;
+
+      if (!userId) {
+        return this.error(res, 'User ID not found', 401);
+      }
+      const { orderId, chatId, reason } = req.query;
+
+      if (!orderId && !chatId) {
+        return this.error(res, 'orderId or chatId is required', 400);
+      }
+
+      const result = await orderService.cancelOrderByUser({ orderId, chatId, userId, reason });
+      return this.success(res, result);
+    } catch (err) {
+      logger.error('cancelOrder (user) error:', err);
+      const status = err.code === 'NOT_CANCELLABLE' ? 409
+        : err.code === 'FORBIDDEN' ? 403
+          : 400;
+      return this.error(res, err.message, status);
+    }
+  }
+
+  async getCancellationReasons(req, res) {
+    try {
+      return this.success(res, orderService.getCancellationReasons());
+    } catch (err) {
+      logger.error('getCancellationReasons error:', err);
       return this.error(res, err.message);
     }
   }

@@ -191,6 +191,12 @@ class OrderService {
 
     if (!order) throw new Error('Order not found');
 
+    if (order.status === 'cancelled') {
+      const err = new Error('Order already cancelled');
+      err.code = 'ALREADY_CANCELLED';
+      throw err;
+    }
+
     if (!order.canBeCancelled()) {
       const err = new Error(`Order in status "${order.status}" (${order.serviceType}) cannot be cancelled.`);
       err.code = 'NOT_CANCELLABLE';
@@ -237,6 +243,69 @@ class OrderService {
     );
 
     return { order, cancelMessage, escrowFlagged };
+  }
+
+  async cancelOrderByUser({ orderId, chatId, userId, reason }) {
+    const order = await Order.findOne({
+      ...(orderId ? { orderId } : {}),
+      ...(chatId ? { chatId } : {}),
+    }).sort({ createdAt: -1 });
+
+    if (!order) throw new Error('Order not found');
+
+    if (order.status === 'cancelled') {
+      const err = new Error('Order already cancelled');
+      err.code = 'ALREADY_CANCELLED';
+      throw err;
+    }
+
+    if (!userId || order.userId.toString() !== userId.toString()) {
+      const err = new Error('Not authorized to cancel this order');
+      err.code = 'FORBIDDEN';
+      throw err;
+    }
+
+    if (!order.canUserCancel()) {
+      const err = new Error(`Order in status "${order.status}" cannot be cancelled by user.`);
+      err.code = 'NOT_CANCELLABLE';
+      throw err;
+    }
+
+    await order.updateStatus('cancelled', 'user', {
+      note: reason || 'Cancelled by user',
+      triggeredById: userId.toString(),
+    });
+
+    await Order.findByIdAndUpdate(order._id, {
+      $set: { cancelledBy: 'user', cancellationReason: reason || 'other' },
+    });
+
+    const formatReason = (r) => r.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
+
+    const cancelMessage = {
+      id: `cancel-${Date.now()}`,
+      from: 'system',
+      type: 'system',
+      messageType: 'system',
+      text: reason ? `Order cancelled — Reason: ${formatReason(reason)}` : 'You cancelled this order.',
+      time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true }),
+      senderId: 'system',
+      senderType: 'system',
+      status: 'sent',
+    };
+
+    await orderHistoryCache.invalidate(order.userId.toString());
+
+    await Chat.findOneAndUpdate(
+      { chatId: chatId || order.chatId },
+      { $push: { messages: cancelMessage } }
+    );
+
+    return { order, cancelMessage };
+  }
+
+  getCancellationReasons() {
+    return Order.schema.path('cancellationReason').enumValues;
   }
 
   async cancelStaleOrders({ filter, reason }) {

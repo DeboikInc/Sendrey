@@ -25,15 +25,25 @@ const {
     notifyOrderCancelled
 } = require('../services/notificationService');
 
+const REASON_LABELS = {
+    created_by_mistake: 'Created by mistake',
+    no_longer_needed: 'No Longer Needed',
+    wrong_information: 'Wrong Information',
+    taking_too_long: 'Taking too long',
+};
+
+const formatCancelReason = (reason) => {
+    if (!reason) return null;
+    return REASON_LABELS[reason] || reason;
+};
+
 const handleCancelOrder = async (socket, io, data) => {
-    console.log('[handleCancelOrder] INVOKED', { socketId: socket.id, data });
+
     const { chatId, orderId, runnerId, userId, reason } = data;
     try {
         const { order, cancelMessage } = await cancelOrder({
             orderId, chatId, runnerId, userId, reason, cancelledBy: 'runner'
         });
-
-        console.log('[handleCancelOrder] cancelOrder service resolved', { orderId: order?.orderId });
 
         const now = new Date().toISOString();
         const reasonSuffix = reason ? ` Reason: ${reason}` : '';
@@ -42,7 +52,7 @@ const handleCancelOrder = async (socket, io, data) => {
         const runnerMessage = {
             id: `cancel-runner-${Date.now()}`,
             chatId,
-            text: `You cancelled this order.${reasonSuffix}`,
+            text: `You cancelled this order. ${reasonSuffix}`,
             type: 'system',
             from: 'system',
             senderId: 'system',
@@ -59,7 +69,7 @@ const handleCancelOrder = async (socket, io, data) => {
         const userMessage = {
             id: `cancel-user-${Date.now()}`,
             chatId,
-            text: `${runnerName} cancelled this order.${reasonSuffix}`,
+            text: `${runnerName} cancelled this order. ${reasonSuffix}`,
             type: 'system',
             from: 'system',
             senderId: 'system',
@@ -81,7 +91,7 @@ const handleCancelOrder = async (socket, io, data) => {
         });
 
         notifyOrderCancelled(userId, {
-            orderId: order.orderId,
+            orderId,
             cancelledBy: 'runner',
             runnerName,
             reason,
@@ -127,12 +137,14 @@ const handleCancelOrder = async (socket, io, data) => {
             socket.emit('cancelOrderError', {
                 message: 'This order has already been funded and cannot be cancelled.'
             });
+        }
+        else if (error.code === 'ALREADY_CANCELLED') {
+            logger.info('[handleCancelOrder] order already cancelled', { orderId, chatId });
         } else {
             socket.emit('cancelOrderError', {
                 message: 'Failed to cancel order. Please try again.'
             });
         }
-        console.error('[handleCancelOrder] FAILED', { orderId, chatId, error: error.message, stack: error.stack });
         const msg = error.message === 'PAID_ORDER'
             ? 'This order has already been funded and cannot be cancelled.'
             : 'Failed to cancel order. Please try again.';
@@ -140,6 +152,111 @@ const handleCancelOrder = async (socket, io, data) => {
     }
 };
 
+
+const handleOrderCancelledByUser = async (socket, io, data) => {
+    const { chatId, orderId, runnerId, userId, reason, cancelledByName, serviceType } = data;
+
+    try {
+        const order = await Order.findOne({ orderId }).select('serviceType').lean();
+
+        // order has been cancelled via api already
+        const label = formatCancelReason(reason);
+        const name = cancelledByName || 'User';
+        const text = label
+            ? `Order cancelled by ${name} — Reason: ${label}`
+            : `Order cancelled by ${name}`;
+
+        const systemMessage = {
+            id: `order-cancelled-user-${Date.now()}`,
+            chatId,
+            orderId,
+            type: 'system',
+            messageType: 'system',
+            from: 'system',
+            senderId: 'system',
+            senderType: 'system',
+            text,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            createdAt: new Date().toISOString(),
+        };
+
+        // Same "everyone in room clears state" broadcast handleCancelOrder does
+        io.to(chatId).emit('orderCancelled', {
+            orderId,
+            chatId,
+            message: text,
+            cancelledBy: 'user',
+            clearChat: true,
+        });
+
+        // Runner-specific event carrying the personalised message your client listens for
+        io.to(`runner-${runnerId}`).emit('orderCancelledByUser', {
+            orderId,
+            reason,
+            cancelledBy: 'user',
+            cancelledByName: name,
+            systemMessage,
+        });
+
+        socket.to(chatId).emit('orderCancelledByUser', {
+            orderId,
+            reason,
+            cancelledBy: 'user',
+            cancelledByName: name,
+            systemMessage,
+        });
+
+        notifyOrderCancelled(runnerId, {
+            orderId,
+            cancelledBy: 'user',
+            reason,
+        }).catch(err => console.warn('[orderCancelledByUser] Runner notify failed:', err.message));
+
+        Chat.updateOne(
+            { chatId },
+            { $push: { messages: systemMessage } },
+            { upsert: true }
+        ).catch(err => console.error('[handleOrderCancelledByUser] failed to persist message:', err.message));
+
+        // fire and forget
+        Promise.all([
+            Runner.findByIdAndUpdate(runnerId, { isAvailable: true, activeOrderId: null, currentUserId: null }),
+            User.findByIdAndUpdate(userId, { isAvailable: true, activeOrderId: null, currentRunnerId: null }),
+            Chat.findOneAndUpdate({ chatId }, { $set: { lastActivity: new Date() } }),
+            archiveCurrentSession(chatId, orderId, 'cancelled'),
+        ]).catch(err => logger.error('handleOrderCancelledByUser post-emit ops failed:', err));
+
+        if (order.serviceType && runnersByService[order.serviceType]) {
+            runnersByService[order.serviceType].delete(socket.id);
+        }
+
+        const room = io.sockets.adapter.rooms.get(chatId);
+        if (room) {
+            for (const socketId of room) {
+                const s = io.sockets.sockets.get(socketId);
+                if (s) s.leave(chatId);
+            }
+        }
+
+        try {
+            await locationStore.removeLocation(orderId);
+            arrivedAtSourceSet.delete(orderId);
+            arrivedAtDeliverySet.delete(orderId);
+
+            io.to(`tracking:${orderId}`).emit('runner:offline', { orderId });
+            logger.info(`[orderCancelledByUser] Cleared tracking for order ${orderId}`);
+        } catch (err) {
+            logger.warn('[orderCancelledByUser] Tracking cleanup failed:', err.message);
+        }
+
+    } catch (error) {
+        logger.error('[handleOrderCancelledByUser] FAILED', { orderId, chatId, error: error.message, stack: error.stack });
+        const msg = error.code === 'PAID_ORDER' || error.message === 'PAID_ORDER'
+            ? 'This order has already been funded and cannot be cancelled.'
+            : 'Failed to cancel order. Please try again.';
+        socket.emit('cancelOrderError', { message: msg });
+    }
+};
 
 const handleTaskCompleted = async (io, data) => {
     const { chatId, orderId, runnerId, userId } = data;
@@ -470,4 +587,10 @@ const scheduleAutoConfirm = (io, chatId, orderId, escrowId) => {
     }, AUTO_CONFIRM_DELAY);
 };
 
-module.exports = { handleCancelOrder, handleTaskCompleted, handleRunnerStartedNewOrder, scheduleAutoConfirm };
+module.exports = {
+    handleCancelOrder,
+    handleOrderCancelledByUser,
+    handleTaskCompleted,
+    handleRunnerStartedNewOrder,
+    scheduleAutoConfirm
+};

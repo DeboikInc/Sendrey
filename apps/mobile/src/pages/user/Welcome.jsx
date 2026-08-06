@@ -69,7 +69,6 @@ export const Welcome = () => {
   const [runnerId, setRunnerId] = useState(null); // eslint-disable-line no-unused-vars
   const dispatch = useDispatch();
   const navigate = useNavigate();
-
   const { socket, joinUserRoom } = useSocket();
 
   const { runnerLocation } = useCredentialFlow(serviceTypeRef, (runnerData) => {
@@ -320,6 +319,7 @@ export const Welcome = () => {
       }
     }, 1500);
     return () => clearTimeout(t);
+    
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentScreen, chatMounted]);
 
@@ -806,7 +806,7 @@ export const Welcome = () => {
 
 
       {showConnecting && (
-        <div className="fixed inset-0 flex flex-col justify-end items-center bg-black-100 bg-opacity-80 z-[10001] pb-6 px-4 sm:pb-10"
+        <div className="fixed inset-0 flex flex-col justify-end items-center bg-black-100/90 bg-opacity-80 z-[10001] pb-6 px-4 sm:pb-10"
           style={{ pointerEvents: 'all' }}
         >
           <div className="flex flex-col items-center justify-center gap-2 w-full max-w-md">

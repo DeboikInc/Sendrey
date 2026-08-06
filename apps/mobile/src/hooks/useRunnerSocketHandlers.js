@@ -166,7 +166,7 @@ export function useRunnerSocketHandlers({
       const chatId = resolveChatId(data ?? {});
       if (!chatId) return;
 
-      const cancelledBy = data?.cancelledBy ?? data?.reason ?? 'Unknown';
+      const cancelledBy = data?.cancelledBy ?? 'unknown';
 
       setOrderCancelled(chatId, cancelledBy);
       mergeCurrentOrder(chatId, { status: 'cancelled' });
@@ -182,18 +182,18 @@ export function useRunnerSocketHandlers({
       const cancelMsg = {
         id: `cancel-${Date.now()}`,
         from: 'system', type: 'system', messageType: 'system',
-        text: cancelledBy === 'runner' ? 'You cancelled this order.' : 'The user cancelled this order.',
+        text: data?.message ?? (cancelledBy === 'runner' ? 'You cancelled this order.' : 'The user cancelled this order.'),
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         senderId: 'system', senderType: 'system',
       };
 
       stablePushToActiveScreen(prev => {
-        const alreadyHas = prev.some(m => m.text?.toLowerCase().includes('cancelled this order'));
+        const alreadyHas = prev.some(m => m.text?.toLowerCase().includes('cancelled'));
         return alreadyHas ? prev : [...prev, cancelMsg];
       });
 
       chatManager.updateMessages(chatId, prev => {
-        const alreadyHas = prev.some(m => m.text?.toLowerCase().includes('cancelled this order'));
+        const alreadyHas = prev.some(m => m.text?.toLowerCase().includes('cancelled'));
         return alreadyHas ? prev : [...prev, cancelMsg];
       });
     };

@@ -1,15 +1,6 @@
 import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 
-/**
- * userOrderStore
- *
- * Single source of truth for the user's current active order.
- * Replaces prop-drilled `currentOrder` across ChatScreen, DisputeForm,
- * OrderDetailsSheet, MoreOptionsSheet, and any other consumer.
- *
- * Mirrors the pattern used by the runner's orderStore.
- */
 const useUserOrderStore = create(
   persist(
     (set, get) => ({
@@ -86,6 +77,10 @@ const useUserOrderStore = create(
       partialize: (state) => ({
         // Don't persist taskCompleted / orderCancelled — rehydrated from chat history
         currentOrder: state.currentOrder,
+        orderCancelled: state.orderCancelled,
+        cancelledByName: state.cancelledByName,
+        taskCompleted: state.taskCompleted,
+        isPaid: state.isPaid,
       }),
     }
   )

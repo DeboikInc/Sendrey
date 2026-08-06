@@ -573,18 +573,22 @@ userSchema.statics.findNearbyUsers = async function ({ latitude, longitude, flee
 
   const query = {
     role: 'user',
-    isActive: true,
-    isAvailable: { $ne: false },
     'currentRequest.status': 'awaiting_runner_connection',
   };
 
   if (fleetType) query['currentRequest.fleetType'] = fleetType;
 
   const results = await this.find(query)
-    .select('firstName lastName phone currentRequest location latitude longitude avatar isPhoneVerified isEmailVerified')
+    .select('firstName lastName phone currentRequest location latitude longitude avatar isPhoneVerified isEmailVerified isActive isAvailable')
     .lean();
 
+  console.log('[findNearbyUsers] query:', query, 'latitude:', latitude, 'longitude:', longitude, 'fleetType:', fleetType);
+
   return results.filter((user) => {
+    console.log('[findNearbyUsers] user:', user._id, 'isActive:', user.isActive, 'isAvailable:', user.isAvailable);
+
+    if (!user.isActive || user.isAvailable === false) return false;
+
     const req = user.currentRequest;
     if (!req) return false;
     if (!req.timestamp) return false;
@@ -603,6 +607,7 @@ userSchema.statics.findNearbyUsers = async function ({ latitude, longitude, flee
       const pickupToDelivery = haversineDistance(pickupCoords.lat, pickupCoords.lng, deliveryCoords.lat, deliveryCoords.lng);
       return (runnerToPickup + pickupToDelivery) <= TOTAL_MAX;
     }
+
 
     return true;
   });

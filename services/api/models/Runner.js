@@ -652,7 +652,6 @@ runnerSchema.statics.findNearbyRunners = async function ({
     const DELIVERY_LEG_MAX = matchingConfig.pedestrianMaxDeliveryLeg;
     const TOTAL_MAX = matchingConfig.pedestrianTotalMax;
 
-    // Guard: pickup → delivery must be ≤ pedestrianMaxDeliveryLeg
     if (deliveryLat && deliveryLng) {
       const pickupToDelivery = haversineDistance(pickupLat, pickupLng, deliveryLat, deliveryLng);
       if (pickupToDelivery > DELIVERY_LEG_MAX) {
@@ -662,16 +661,15 @@ runnerSchema.statics.findNearbyRunners = async function ({
 
     const results = await this.find({
       role: 'runner',
-      isActive: true,
-      isAvailable: true,
       fleetType: 'pedestrian',
     })
       .select('firstName lastName phone currentRequest location latitude longitude avatar ' +
         'kycStatus verificationDocuments biometricVerification isOnline isAvailable ' +
-        'fleetType isPhoneVerified isEmailVerified rating totalRatings totalRuns')
+        'fleetType isPhoneVerified isEmailVerified rating totalRatings totalRuns isActive')
       .lean();
 
     return results.filter((runner) => {
+      if (!runner.isActive || !runner.isAvailable) return false;
       if (!runner.latitude || !runner.longitude) return false;
 
       const runnerToPickup = haversineDistance(
@@ -680,7 +678,6 @@ runnerSchema.statics.findNearbyRunners = async function ({
 
       if (runnerToPickup > RUNNER_LEG_MAX) return false;
 
-      // Dynamic delivery leg budget
       const deliveryLegBudget = TOTAL_MAX - runnerToPickup;
 
       if (deliveryLat && deliveryLng) {
@@ -688,7 +685,6 @@ runnerSchema.statics.findNearbyRunners = async function ({
         if (pickupToDelivery > deliveryLegBudget) return false;
       }
 
-      // Attach computed distances for use in matching/sorting
       runner._runnerToPickup = Math.round(runnerToPickup);
       runner._deliveryLegBudget = Math.round(deliveryLegBudget);
 
@@ -697,24 +693,22 @@ runnerSchema.statics.findNearbyRunners = async function ({
   }
 
   // ── Non-pedestrian ────────────────────────────────────────────────────────
-  const query = {
+  const results = await this.find({
     role: 'runner',
-    isActive: true,
-    isAvailable: true,
     fleetType,
-  };
-
-  const results = await this.find(query)
+  })
     .select('firstName lastName phone currentRequest location latitude longitude avatar ' +
       'kycStatus verificationDocuments biometricVerification isOnline isAvailable ' +
-      'fleetType isPhoneVerified isEmailVerified rating totalRatings totalRuns')
+      'fleetType isPhoneVerified isEmailVerified rating totalRatings totalRuns isActive')
     .lean();
 
   return results.filter((runner) => {
+    if (!runner.isActive || !runner.isAvailable) return false;
     if (!runner.latitude || !runner.longitude) return false;
     const runnerToPickup = haversineDistance(
       runner.latitude, runner.longitude, pickupLat, pickupLng
     );
+    
     return runnerToPickup <= PICKUP_MAX;
   });
 };
