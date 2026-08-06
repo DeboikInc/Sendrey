@@ -682,6 +682,12 @@ runnerSchema.statics.findNearbyRunners = async function ({
       isActive: true,
       isAvailable: true,
       fleetType: 'pedestrian',
+      location: {
+        $nearSphere: {
+          $geometry: { type: 'Point', coordinates: [pickupLng, pickupLat] },
+          $maxDistance: PICKUP_MAX, // meters
+        },
+      },
     })
       .select('firstName lastName phone currentRequest location latitude longitude avatar ' +
         'kycStatus verificationDocuments biometricVerification isOnline isAvailable ' +
