@@ -17,7 +17,7 @@ export const getDispute = createAsyncThunk(
   'dispute/get',
   async (orderId, { rejectWithValue }) => {
     try {
-      const response = await api.get(`/disputes/order/${orderId}`);
+      const response = await api.get(`/disputes/get-disputes/${orderId}`);
       return response.data;
     } catch (error) {
       return rejectWithValue(error.response?.data?.error || 'Failed to get dispute');
@@ -29,7 +29,7 @@ export const getRunnerDisputes = createAsyncThunk(
   'dispute/getRunnerDisputes',
   async (runnerId, { rejectWithValue }) => {
     try {
-      const response = await api.get(`/disputes/runner/${runnerId}`);
+      const response = await api.get(`/disputes/get-runner-disputes/${runnerId}`);
       return response.data?.disputes || response.data || [];
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || 'Failed to fetch disputes');
@@ -41,12 +41,83 @@ export const getUserDisputes = createAsyncThunk(
   'dispute/getUserDisputes',
   async (userId, { rejectWithValue }) => {
     try {
-      console.log('Making API call to:', `/disputes/user/${userId}`);
-      const response = await api.get(`/disputes/user/${userId}`);
-      console.log('API response:', response.data);
+
+      const response = await api.get(`/disputes/get-user-disputes/${userId}`);
       return response.data?.disputes || response.data || [];
     } catch (error) {
       return rejectWithValue(error.response?.data?.message || 'Failed to fetch disputes');
+    }
+  }
+);
+
+const toTitleCase = (s) =>
+  String(s).replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+
+const normalizeCategories = (raw) => {
+  const list = Array.isArray(raw?.categories)
+    ? raw.categories
+    : Array.isArray(raw?.data)
+      ? raw.data
+      : Array.isArray(raw)
+        ? raw
+        : [];
+
+  return list.map((item) =>
+    typeof item === 'string'
+      ? { value: item, label: toTitleCase(item) }
+      : { value: item.value ?? item.category, label: item.label ?? toTitleCase(item.value ?? item.category) }
+  );
+};
+
+
+export const getUserDisputeCategories = createAsyncThunk(
+  'dispute/getUserDisputeCategories',
+  async (userId, { rejectWithValue }) => {
+    try {
+
+      const response = await api.get(`/disputes/order/get-user-dispute-categories`);
+      return normalizeCategories(response.data || response.data?.disputes);
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to fetch disputes');
+    }
+  }
+);
+
+export const getRunnerDisputeCategories = createAsyncThunk(
+  'dispute/getRunnerDisputeCategories',
+  async (userId, { rejectWithValue }) => {
+    try {
+
+      const response = await api.get(`/disputes/order/get-runner-dispute-categories`);
+      return normalizeCategories(response.data || response.data?.disputes);
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to fetch disputes');
+    }
+  }
+);
+
+export const getRunnerDisputableOrders = createAsyncThunk(
+  'dispute/getRunnerDisputableOrders',
+  async (runnerId, { rejectWithValue }) => {
+    try {
+      const response = await api.get('/disputes/order/get-runner-disputable-orders');
+      const list = response.data?.data?.orders ?? response.data?.orders ?? [];
+      return Array.isArray(list) ? list : [];
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to fetch disputable orders');
+    }
+  }
+);
+
+export const getUserDisputableOrders = createAsyncThunk(
+  'dispute/getUserDisputableOrders',
+  async (userId, { rejectWithValue }) => {
+    try {
+      const response = await api.get('/disputes/order/get-user-disputable-orders');
+      const list = response.data?.data?.orders ?? response.data?.orders ?? [];
+      return Array.isArray(list) ? list : [];
+    } catch (error) {
+      return rejectWithValue(error.response?.data?.message || 'Failed to fetch disputable orders');
     }
   }
 );
@@ -56,6 +127,8 @@ const disputeSlice = createSlice({
   initialState: {
     currentDispute: null,
     disputes: [],
+    disputableOrders: [],
+    disputableOrdersLoading: false,
     status: 'idle',
     loading: false,
     error: null
@@ -82,6 +155,8 @@ const disputeSlice = createSlice({
         state.loading = false;
         state.error = action.payload;
       })
+
+      // get disputes
       .addCase(getDispute.pending, (state) => {
         state.loading = true;
       })
@@ -93,6 +168,8 @@ const disputeSlice = createSlice({
         state.loading = false;
         state.error = action.payload;
       })
+
+      // get runner disputes
       .addCase(getRunnerDisputes.pending, (state) => {
         state.loading = true;
         state.error = null;
@@ -116,6 +193,62 @@ const disputeSlice = createSlice({
       })
       .addCase(getUserDisputes.rejected, (state, action) => {
         state.loading = false;
+        state.error = action.payload;
+      })
+
+      // getUserDisputeCategories
+      .addCase(getUserDisputeCategories.pending, (state) => {
+        state.categoriesLoading = true;
+        state.error = null;
+      })
+      .addCase(getUserDisputeCategories.fulfilled, (state, action) => {
+        state.categoriesLoading = false;
+        state.categories = action.payload;
+      })
+      .addCase(getUserDisputeCategories.rejected, (state, action) => {
+        state.categoriesLoading = false;
+        state.error = action.payload;
+      })
+
+      // getRunnerDisputeCategories
+      .addCase(getRunnerDisputeCategories.pending, (state) => {
+        state.categoriesLoading = true;
+        state.error = null;
+      })
+      .addCase(getRunnerDisputeCategories.fulfilled, (state, action) => {
+        state.categoriesLoading = false;
+        state.categories = action.payload;
+      })
+      .addCase(getRunnerDisputeCategories.rejected, (state, action) => {
+        state.categoriesLoading = false;
+        state.error = action.payload;
+      })
+
+      // getRunnerDisputableOrders
+      .addCase(getRunnerDisputableOrders.pending, (state) => {
+        state.disputableOrdersLoading = true;
+        state.error = null;
+      })
+      .addCase(getRunnerDisputableOrders.fulfilled, (state, action) => {
+        state.disputableOrdersLoading = false;
+        state.disputableOrders = action.payload;
+      })
+      .addCase(getRunnerDisputableOrders.rejected, (state, action) => {
+        state.disputableOrdersLoading = false;
+        state.error = action.payload;
+      })
+
+      // getUserDisputableOrders
+      .addCase(getUserDisputableOrders.pending, (state) => {
+        state.disputableOrdersLoading = true;
+        state.error = null;
+      })
+      .addCase(getUserDisputableOrders.fulfilled, (state, action) => {
+        state.disputableOrdersLoading = false;
+        state.disputableOrders = action.payload;
+      })
+      .addCase(getUserDisputableOrders.rejected, (state, action) => {
+        state.disputableOrdersLoading = false;
         state.error = action.payload;
       });
   }
