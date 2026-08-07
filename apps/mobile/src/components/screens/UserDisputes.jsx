@@ -16,10 +16,17 @@ export default function UserDisputes({ darkMode, onBack, userId }) {
     const error = useSelector(s => s.dispute.error);
 
     const rawCategories = useSelector(s => s.dispute.categories, shallowEqual);
-    const availableReasons = Array.isArray(rawCategories) ? rawCategories : [];
+    const availableReasons = useMemo(() =>
+        Array.isArray(rawCategories) ? rawCategories : [],
+        [rawCategories]
+    );
 
     const rawDisputableOrders = useSelector(s => s.dispute.disputableOrders, shallowEqual);
-    const disputableOrders = Array.isArray(rawDisputableOrders) ? rawDisputableOrders : [];
+    const disputableOrders = useMemo(() =>
+        Array.isArray(rawDisputableOrders) ? rawDisputableOrders : [],
+        [rawDisputableOrders]
+    );
+
     const disputableOrdersLoading = useSelector(s => s.dispute.disputableOrdersLoading);
 
     const [showForm, setShowForm] = useState(false);
