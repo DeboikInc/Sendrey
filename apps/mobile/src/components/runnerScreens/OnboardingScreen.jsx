@@ -67,12 +67,14 @@ function OnboardingScreen({
   botRefreshTrigger,
   onBannedDetected,
   isVerified,
+  onTrainingContinueClick,
 
   isReturningUser,
   onReturningUserChoice,
   returningUserData,
   isVerifyingOtp,
-  effectiveReturningKycStatus
+  effectiveReturningKycStatus,
+  isTrainingCompleted,
 }) {
 
   // ADD at the top of OnboardingScreen function, after the props destructure:
@@ -303,6 +305,7 @@ function OnboardingScreen({
                 canResendOtp={registrationComplete ? false : canResendOtp}
                 isActiveResend={registrationComplete ? false : canResendOtp}
                 onMessageClick={() => handleMessageClick(m)}
+                onTrainingContinueClick={onTrainingContinueClick}   
                 showCursor={false}
                 showStatusIcons={false}
                 userType="runner"
@@ -370,6 +373,7 @@ function OnboardingScreen({
               newOrderComplete={syncedNewOrderComplete}
               // onServiceChoice={handleServiceChoice}
               isUpdatingServer={isUpdatingServer}
+              isTrainingCompleted={isTrainingCompleted}
             />
           </div>
         )}

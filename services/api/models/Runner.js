@@ -387,7 +387,7 @@ const runnerSchema = new mongoose.Schema({
       lng: { type: Number }
     },
   },
-
+  isTrainingCompleted: { type: Boolean, default: false},
   whatsappOptIn: { type: Boolean, default: false },
   whatsappOptInSource: { type: String },
   whatsappOptInTimestamp: { type: Date },

@@ -29,22 +29,22 @@ export const getUserById = createAsyncThunk("users/getUserById", async (userId, 
 
 export const updateProfile = createAsyncThunk("users/updateProfile", async (profileData, { rejectWithValue }) => {
   try {
-    const res = await api.put('/users/profile', profileData);
+    const res = await api.put('/users/update-user-profile', profileData);
     console.log("updating profile", profileData)
     return res.data;
   } catch (error) { return rejectWithValue(getErrorMessage(error)); }
 });
 
 export const fetchProfile = createAsyncThunk(
-    'auth/fetchProfile',
-    async (_, thunkAPI) => {
-        try {
-            const response = await api.get('/users/profile');
-            return response.data;
-        } catch (error) {
-            return thunkAPI.rejectWithValue(error.response?.data?.message);
-        }
+  'auth/fetchProfile',
+  async (_, thunkAPI) => {
+    try {
+      const response = await api.get('/users/profile');
+      return response.data;
+    } catch (error) {
+      return thunkAPI.rejectWithValue(error.response?.data?.message);
     }
+  }
 );
 
 export const updateUserById = createAsyncThunk("users/updateUserById", async ({ userId, profileData }, { rejectWithValue }) => {
@@ -83,7 +83,7 @@ export const searchUsers = createAsyncThunk("users/searchUsers", async (queryPar
 export const fetchNearbyUserRequests = createAsyncThunk("users/fetchNearby", async (coords, { rejectWithValue }) => {
   try {
     const params = new URLSearchParams(coords);
-    const res = await api.get(`/users/nearby-users?${params.toString()}`); 
+    const res = await api.get(`/users/nearby-users?${params.toString()}`);
 
     const data = res.data; // unwrap axios response first
 
@@ -234,9 +234,17 @@ const userSlice = createSlice({
 
     builder
       // Update Actions
+      .addCase(updateProfile.pending, (state) => {
+        state.loading = true;
+        state.error = null;
+      })
       .addCase(updateProfile.fulfilled, (state, action) => {
         state.loading = false;
         state.profile = action.payload.data?.user || action.payload.user || action.payload.data;
+      })
+      .addCase(updateProfile.rejected, (state, action) => {
+        state.loading = false;
+        state.error = action.payload;
       })
       .addCase(updateUserById.fulfilled, (state, action) => {
         state.loading = false;

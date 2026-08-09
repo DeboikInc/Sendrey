@@ -15,7 +15,13 @@ git merge staging
 
 https://sendrey.netlify.app
 
-analytics
-join waiting list
-what happens if my runner cant complete the task FAQ
-improvise money transfer tracking
+1. put training after kyc submitted, 
+2. always verify training for returning users too
+3. training and test should be full screen, test is objective based, answers will live in a util/ trainingAnswers.js, 
+4.if runner scores 80% and above, proceed and call updateProfile to update isTrainingCompleted to true also show success message and continue button, else show training failure message and render two buttons, start training again and retake test resp. 
+
+<!-- server -->
+add isTrainingCompleted to the model
+call update profile 
+add to isReturning user payload
+if there are any users before this fix, set them to true 

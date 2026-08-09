@@ -18,7 +18,7 @@ export const fetchAllRunners = createAsyncThunk(
 export const updateProfile = createAsyncThunk("runners/updateProfile", async (profileData, { rejectWithValue }) => {
   console.log("profile data", profileData)
   try {
-    const res = await api.put('/runners/update-profile', profileData);
+    const res = await api.put('/runners/update-runner-profile', profileData);
 
     console.log("updating runner profile", profileData)
     return res.data;
@@ -163,7 +163,6 @@ export const getProfile = createAsyncThunk("runners/getProfile", async (_, { rej
   }
 });
 
-// ===== REDUX SLICE =====
 
 const runnerSlice = createSlice({
   name: "runners",

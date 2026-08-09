@@ -58,7 +58,6 @@ export default function ProjectedRoutes() {
         </ProtectedRoute>
       } />
 
-
       {/* Public routes - no authentication required */}
       <Route path="/" element={<Home />} />
       <Route path="/auth" element={<Auth />} />

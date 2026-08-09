@@ -35,7 +35,9 @@ import { useKycHook } from '../../hooks/useKycHook';
 import { useCameraHook } from "../../hooks/useCameraHook";
 import { useCallHook } from "../../hooks/useCallHook";
 import { useMessageQueue } from '../../hooks/useMessageQueue';
+import { useRunnerTraining } from '../../hooks/useRunnerTraining';
 
+import RunnerTraining from '../../components/runnerScreens/RunnerTraining';
 import TermsAcceptanceModal from '../../components/common/TermsAcceptanceModal';
 import { RUNNER_TERMS } from '../../constants/terms';
 import { fetchOrderByChatId } from '../../Redux/orderSlice';
@@ -183,7 +185,7 @@ function WhatsAppLikeChat() {
     if (serverKycStatus?.overallVerified || serverKycStatus?.selfieVerified) {
       isFreshRegistrationRef.current = false; // not a fresh reg
       setTimeout(() => {
-        resumeKycFlow(serverKycStatus, botMessagesUpdater);
+        resumeKycFlow(serverKycStatus, botMessagesUpdater, rd?.isTrainingCompleted ?? false);
       }, 100);
     }
 
@@ -217,10 +219,17 @@ function WhatsAppLikeChat() {
   const botStoreMessages = useOrderStore(selectBotMessages);
 
   const {
+    showTrainingScreen, isSubmittingTraining,
+    promptTraining, openTrainingScreen, closeTrainingScreen,
+    completeTraining,
+  } = useRunnerTraining(runnerId);
+
+  const {
     kycStep, kycStatus, startKycFlow, onIdVerified,
     handleSelfieResponse, handleIDTypeSelection, onSelfieVerified,
     checkVerificationStatus, resumeKycFlow
-  } = useKycHook(runnerId, runnerData?.fleetType);
+  } = useKycHook(runnerId, runnerData?.fleetType, { onTrainingCheckpoint: promptTraining });
+
 
   const handleSelfieResponseRef = useRef(handleSelfieResponse);
   useEffect(() => { handleSelfieResponseRef.current = handleSelfieResponse; }, [handleSelfieResponse]);
@@ -593,6 +602,9 @@ function WhatsAppLikeChat() {
       localStorage.setItem(`kyc_flow_started_${runnerId}`, 'true');
       localStorage.setItem(`kyc_verified_shown_${runnerId}`, '1');
       chatManager.set(BOT_CHAT_ID, { kycStep: 1 });
+      if (!runner?.isTrainingCompleted) {
+        promptTraining(botMessagesUpdater, false);
+      }
       return;
     }
 
@@ -620,7 +632,11 @@ function WhatsAppLikeChat() {
         }
         // Returning user with incomplete KYC — resume
         localStorage.setItem(`kyc_flow_started_${runnerId}`, 'true');
-        setTimeout(() => resumeKycFlow(returningUserData.kycStatus, botMessagesUpdater), 1500);
+        setTimeout(() => resumeKycFlow(
+          returningUserData.kycStatus,
+          botMessagesUpdater,
+          returningUserData.isTrainingCompleted ?? false
+        ), 1500);
       } else if (!alreadyAccepted) {
         // New user — show terms first
         setShowTerms(true);
@@ -788,6 +804,7 @@ function WhatsAppLikeChat() {
       localStorage.removeItem(`kyc_doc_type_${runnerId}`);
       localStorage.removeItem(`terms_accepted_${runnerId}`);
       localStorage.removeItem(`kyc_status_${runnerId}`);
+      localStorage.removeItem(`training_progress_${runnerId}`);
 
       clearCachedRecentChats(runnerId);
     }
@@ -1394,7 +1411,10 @@ function WhatsAppLikeChat() {
       if (message.selfieChoice === 'okay') openCamera();
     }
 
-  }, [canResendOtp, handleResendOtp, openCamera.apply,]);
+    if (message.trainingPromptButton) {
+      openTrainingScreen();
+    }
+  }, [canResendOtp, handleResendOtp, openCamera.apply, openTrainingScreen]);
 
   const pickUp = useCallback(() => {
     serviceTypeRef.current = "pick-up";
@@ -1616,6 +1636,10 @@ function WhatsAppLikeChat() {
             effectiveReturningKycStatus={effectiveReturningKycStatus}
             forceShowNotifications={showNotifications}
             onNotificationsShown={() => setShowNotifications(false)}
+
+            // training
+            isTrainingCompleted={runner?.isTrainingCompleted ?? false}
+            onTrainingContinueClick={openTrainingScreen}
           />
 
           {awaitingChatReady && (
@@ -1930,6 +1954,16 @@ function WhatsAppLikeChat() {
         reason={verificationState?.reason || verificationState?.message || null}
         darkMode={dark}
       />
+
+      {showTrainingScreen && (
+        <RunnerTraining
+          submitting={isSubmittingTraining}
+          onComplete={(score) => completeTraining(score, isBotMode ? botMessagesUpdater : chatMessagesUpdater)}
+          darkMode={dark}
+          onExit={closeTrainingScreen}
+          runnerId={runnerId}
+        />
+      )}
     </div>
   );
 }

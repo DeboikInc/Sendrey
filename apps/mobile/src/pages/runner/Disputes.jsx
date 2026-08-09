@@ -15,10 +15,17 @@ export function Disputes({ darkMode, onBack, runnerId, currentOrder: currentOrde
   const disputeError = useSelector(s => s.dispute.error);
 
   const rawCategories = useSelector(s => s.dispute.categories, shallowEqual);
-  const availableReasons = Array.isArray(rawCategories) ? rawCategories : [];
+  const availableReasons = useMemo(
+    () => (Array.isArray(rawCategories) ? rawCategories : []),
+    [rawCategories]
+  );
 
   const rawDisputableOrders = useSelector(s => s.dispute.disputableOrders, shallowEqual);
-  const disputableOrders = Array.isArray(rawDisputableOrders) ? rawDisputableOrders : [];
+  const disputableOrders = useMemo(
+    () => (Array.isArray(rawDisputableOrders) ? rawDisputableOrders : []),
+    [rawDisputableOrders]
+  );
+
   const disputableOrdersLoading = useSelector(s => s.dispute.disputableOrdersLoading);
 
   const dispatch = useDispatch();
@@ -29,7 +36,7 @@ export function Disputes({ darkMode, onBack, runnerId, currentOrder: currentOrde
   const [formError, setFormError] = useState("");
 
   // ── Chat-aware order resolution
-  const [fetchedOrder, setFetchedOrder] = useState(null); // reserved for future chat-scoped lookup if needed
+  const [fetchedOrder] = useState(null); // reserved for future chat-scoped lookup if needed
   const currentOrder = currentOrderProp?.orderId ? currentOrderProp : fetchedOrder;
 
   const getReasonLabel = (value) => {
@@ -66,9 +73,8 @@ export function Disputes({ darkMode, onBack, runnerId, currentOrder: currentOrde
   const card = darkMode ? "bg-black-100 border-white/10" : "bg-white border-gray-100";
   const heading = darkMode ? "text-white" : "text-black-200";
   const ghost = darkMode ? "border-white/10 text-gray-300" : "border-gray-200 text-black-200";
-  const inputCls = `w-full rounded-2xl px-5 py-4 text-sm focus:outline-none placeholder:text-black-100/80 border ${
-    darkMode ? "bg-black-200 border-white/10 text-white placeholder:text-gray-400" : "bg-white border-gray-200 text-black-200 placeholder:text-black-100/80"
-  }`;
+  const inputCls = `w-full rounded-2xl px-5 py-4 text-sm focus:outline-none placeholder:text-black-100/80 border ${darkMode ? "bg-black-200 border-white/10 text-white placeholder:text-gray-400" : "bg-white border-gray-200 text-black-200 placeholder:text-black-100/80"
+    }`;
 
   useEffect(() => {
     if (runnerId) {
@@ -91,7 +97,6 @@ export function Disputes({ darkMode, onBack, runnerId, currentOrder: currentOrde
     }
   }, [disputableOrders, form.orderId]);
 
-  // If we're opening the form from the chat's "Raise dispute" action, and the
   // chat's own order is disputable, preselect it for convenience.
   useEffect(() => {
     if (!showForm) return;
@@ -99,7 +104,7 @@ export function Disputes({ darkMode, onBack, runnerId, currentOrder: currentOrde
     if (currentOrder?.orderId && disputableOrders.some(o => o.orderId === currentOrder.orderId)) {
       setForm(p => ({ ...p, orderId: currentOrder.orderId }));
     }
-  }, [showForm, currentOrder?.orderId, disputableOrders]);
+  }, [showForm, currentOrder?.orderId, disputableOrders, form.orderId]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -176,9 +181,8 @@ export function Disputes({ darkMode, onBack, runnerId, currentOrder: currentOrde
     <div className={`h-screen flex flex-col transition-colors duration-300 ${page}`}>
 
       {/* Header */}
-      <div className={`flex items-center gap-3 px-4 py-4 border-b flex-shrink-0 ${
-        darkMode ? "border-white/10" : "border-gray-100"
-      }`}>
+      <div className={`flex items-center gap-3 px-4 py-4 border-b flex-shrink-0 ${darkMode ? "border-white/10" : "border-gray-100"
+        }`}>
         <button
           onClick={onBack}
           className={`p-2 rounded-full transition-colors ${darkMode ? "hover:bg-black-200" : "hover:bg-gray-100"}`}
@@ -233,11 +237,10 @@ export function Disputes({ darkMode, onBack, runnerId, currentOrder: currentOrde
 
         {/* ── Resolved dispute for current chat's order ──────────────────── */}
         {hasResolvedDispute && !showForm && (
-          <div className={`rounded-3xl p-5 border ${
-            currentOrderDispute.status === 'dismissed'
-              ? 'border-orange-500/20 bg-orange-500/5'
-              : 'border-green-500/20 bg-green-500/5'
-          }`}>
+          <div className={`rounded-3xl p-5 border ${currentOrderDispute.status === 'dismissed'
+            ? 'border-orange-500/20 bg-orange-500/5'
+            : 'border-green-500/20 bg-green-500/5'
+            }`}>
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
                 {currentOrderDispute.status === 'dismissed'
@@ -262,9 +265,8 @@ export function Disputes({ darkMode, onBack, runnerId, currentOrder: currentOrde
             </div>
 
             {currentOrderDispute.resolution && (
-              <div className={`mt-3 pt-3 border-t ${
-                currentOrderDispute.status === 'dismissed' ? 'border-orange-500/10' : 'border-green-500/10'
-              } space-y-1.5`}>
+              <div className={`mt-3 pt-3 border-t ${currentOrderDispute.status === 'dismissed' ? 'border-orange-500/10' : 'border-green-500/10'
+                } space-y-1.5`}>
                 <p className="text-[10px] text-black-100/80 dark:text-gray-400 uppercase tracking-widest font-bold">Resolution</p>
                 {currentOrderDispute.resolution.outcome && (
                   <p className="text-xs text-black-100/80 dark:text-gray-400 capitalize">
@@ -307,9 +309,8 @@ export function Disputes({ darkMode, onBack, runnerId, currentOrder: currentOrde
         )}
 
         {showForm && (
-          <div className={`rounded-3xl p-6 border-2 border-dashed space-y-3 ${
-            darkMode ? "border-white/10" : "border-gray-200"
-          }`}>
+          <div className={`rounded-3xl p-6 border-2 border-dashed space-y-3 ${darkMode ? "border-white/10" : "border-gray-200"
+            }`}>
             <div className="p-3 rounded-xl border border-red-500/20 bg-red-500/5">
               <p className="text-xs text-black-100/80 dark:text-gray-400">
                 ⚠️ Raising a dispute will pause all escrow releases until resolved by admin.

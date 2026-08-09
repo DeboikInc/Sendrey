@@ -61,6 +61,7 @@ export default function ChatComposer({
   newOrderComplete,
   isUpdatingServer,
   isVerified,
+  isTrainingCompleted,
 
   isReturningUser,
   onReturningUserChoice,
@@ -397,11 +398,21 @@ export default function ChatComposer({
   // ── KYC Step 6 - Connect to Service ──────────────────────────────────────
   if (!newOrderComplete && registrationComplete && !isChatActive && kycStep === 6) {
 
-    if (!isVerified ) {
+    if (!isVerified) {
       return (
         <div className="p-4 py-6 flex justify-center">
           <p className="text-sm text-center text-gray-500 dark:text-gray-400">
             Your documents are currently under review, we will get back to you soon.
+          </p>
+        </div>
+      );
+    }
+
+    if (!isTrainingCompleted) {   
+      return (
+        <div className="p-4 py-6 flex justify-center">
+          <p className="text-sm text-center text-gray-500 dark:text-gray-400">
+            Runner training ongoing. Complete the training to proceed.
           </p>
         </div>
       );

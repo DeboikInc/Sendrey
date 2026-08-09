@@ -50,7 +50,7 @@ export default function Message({
   isActiveResend,
   onBudgetConfirmClick,
   showStatusIcons = true,
-
+  onTrainingContinueClick
 }) {
 
   const [showContextMenu, setShowContextMenu] = useState(false);
@@ -356,6 +356,7 @@ export default function Message({
             </div>
           );
         }
+
       }
 
       // Text message (default)
@@ -761,7 +762,24 @@ export default function Message({
       );
     }
 
-
+    if (m.trainingPromptButton) {
+      return (
+        <div>
+          {m.text}
+          <div className="mt-3">
+            <Button
+              className="w-full bg-primary text-white"
+              onClick={(e) => {
+                e.stopPropagation();
+                onTrainingContinueClick && onTrainingContinueClick();
+              }}
+            >
+              Continue
+            </Button>
+          </div>
+        </div>
+      );
+    }
 
     // Text message (default)
     return <div>{m.text}</div>;

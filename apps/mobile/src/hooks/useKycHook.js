@@ -32,9 +32,7 @@ const resolveResumeStep = (kycStatus = {}, fleetType) => {
   return null;
 };
 
-
-
-export const useKycHook = (runnerId, fleetType) => {
+export const useKycHook = (runnerId, fleetType, { onTrainingCheckpoint } = {}) => {
   const dispatch = useDispatch();
   const [kycStep, setKycStep] = useState(null);
 
@@ -178,7 +176,7 @@ export const useKycHook = (runnerId, fleetType) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const resumeKycFlow = useCallback((serverKycStatus, setMessages) => {
+  const resumeKycFlow = useCallback((serverKycStatus, setMessages, isTrainingCompleted = false) => {
     isReturningUserRef.current = true;
     console.log('[KYC] resumeKycFlow called', { serverKycStatus, kycInitiated: kycInitiated.current, fleetType: fleetTypeRef.current });
     if (kycInitiated.current) {
@@ -194,6 +192,7 @@ export const useKycHook = (runnerId, fleetType) => {
       kycInitiated.current = true;
       setKycStatus({ documentVerified: true, selfieVerified: true, overallVerified: true });
       setKycStep(6);
+      onTrainingCheckpoint?.(setMessages, isTrainingCompleted);
       return;
     }
 
@@ -231,6 +230,8 @@ export const useKycHook = (runnerId, fleetType) => {
         status: "delivered",
         isKyc: true,
       }]);
+
+      onTrainingCheckpoint?.(setMessages, isTrainingCompleted);
       return; // ← exit early, never reaches checkVerificationStatus path
     }
 
@@ -251,7 +252,7 @@ export const useKycHook = (runnerId, fleetType) => {
     }]);
 
     setKycStep(6);
-  }, [startKycFlow, setDocType]);
+  }, [startKycFlow, setDocType, onTrainingCheckpoint]);
 
   const onIdVerified = useCallback((photo, setMessages) => {
     capturedIdPhotoRef.current = photo;
@@ -358,6 +359,7 @@ export const useKycHook = (runnerId, fleetType) => {
             status: "delivered",
             isKyc: true
           }]);
+
 
           if (fleetTypeRef.current === 'pedestrian') {
             // Pedestrian — NIN only, proceed to selfie
@@ -493,6 +495,8 @@ export const useKycHook = (runnerId, fleetType) => {
             setKycStatus({ documentVerified: true, selfieVerified: true, overallVerified: false });
             setKycStep(6);
 
+            onTrainingCheckpoint?.(setMessages);
+
             localStorage.removeItem(`kyc_step_${runnerId}`);
             localStorage.removeItem(`kyc_doc_type_${runnerId}`);
           } else {
@@ -513,7 +517,7 @@ export const useKycHook = (runnerId, fleetType) => {
         }
       }, 700);
     }, 500);
-  }, [dispatch, runnerId]);
+  }, [dispatch, runnerId, onTrainingCheckpoint]);
 
   const checkVerificationStatus = useCallback(async (setMessages, onBanned, isReturning = false) => {
     console.log('[KYC] checkVerificationStatus called', { runnerId });
@@ -575,7 +579,7 @@ export const useKycHook = (runnerId, fleetType) => {
         // push verified state into Redux so raw.jsx re-renders with isVerified=true
         dispatch(updateRunner({
           isVerifiedKyc: true,
-          kycStatus: kycStatus  
+          kycStatus: kycStatus
         }));
 
         setTimeout(() => setKycStep(6), 800);
