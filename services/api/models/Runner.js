@@ -387,7 +387,7 @@ const runnerSchema = new mongoose.Schema({
       lng: { type: Number }
     },
   },
-  isTrainingCompleted: { type: Boolean, default: false},
+
   whatsappOptIn: { type: Boolean, default: false },
   whatsappOptInSource: { type: String },
   whatsappOptInTimestamp: { type: Date },
@@ -647,70 +647,148 @@ runnerSchema.statics.findNearbyRunners = async function ({
   const PICKUP_MAX = matchingConfig.pickupMaxDistance;
   const isPedestrian = fleetType?.toLowerCase() === 'pedestrian';
 
+  console.log('[findNearbyRunners] Request:', {
+    fleetType,
+    isPedestrian,
+    pickup: { lat: pickupLat, lng: pickupLng },
+    delivery: deliveryLat ? { lat: deliveryLat, lng: deliveryLng } : null,
+    config: {
+      pickupMax: PICKUP_MAX,
+      pedestrianRunnerLeg: matchingConfig.pedestrianMaxRunnerLeg,
+      pedestrianDeliveryLeg: matchingConfig.pedestrianMaxDeliveryLeg,
+      pedestrianTotal: matchingConfig.pedestrianTotalMax,
+    }
+  });
+
   if (isPedestrian) {
     const RUNNER_LEG_MAX = matchingConfig.pedestrianMaxRunnerLeg;
     const DELIVERY_LEG_MAX = matchingConfig.pedestrianMaxDeliveryLeg;
     const TOTAL_MAX = matchingConfig.pedestrianTotalMax;
 
+    // Guard: pickup → delivery must be ≤ pedestrianMaxDeliveryLeg
     if (deliveryLat && deliveryLng) {
       const pickupToDelivery = haversineDistance(pickupLat, pickupLng, deliveryLat, deliveryLng);
       if (pickupToDelivery > DELIVERY_LEG_MAX) {
+        console.log('[findNearbyRunners] Pickup to delivery distance exceeds max:', {
+          pickupToDelivery: Math.round(pickupToDelivery),
+          maxAllowed: DELIVERY_LEG_MAX,
+        });
         return [];
       }
     }
 
     const results = await this.find({
       role: 'runner',
+      isActive: true,
+      isAvailable: true,
       fleetType: 'pedestrian',
+      location: {
+        $nearSphere: {
+          $geometry: { type: 'Point', coordinates: [pickupLng, pickupLat] },
+          $maxDistance: PICKUP_MAX, // meters
+        },
+      },
     })
       .select('firstName lastName phone currentRequest location latitude longitude avatar ' +
         'kycStatus verificationDocuments biometricVerification isOnline isAvailable ' +
-        'fleetType isPhoneVerified isEmailVerified rating totalRatings totalRuns isActive')
+        'fleetType isPhoneVerified isEmailVerified rating totalRatings totalRuns')
       .lean();
 
-    return results.filter((runner) => {
-      if (!runner.isActive || !runner.isAvailable) return false;
-      if (!runner.latitude || !runner.longitude) return false;
+    console.log('[findNearbyRunners] Pedestrian runners found:', results.length);
+
+    const filtered = results.filter((runner) => {
+      if (!runner.latitude || !runner.longitude) {
+        console.log('[findNearbyRunners] Runner missing coordinates:', runner._id);
+        return false;
+      }
 
       const runnerToPickup = haversineDistance(
         runner.latitude, runner.longitude, pickupLat, pickupLng
       );
 
-      if (runnerToPickup > RUNNER_LEG_MAX) return false;
+      if (runnerToPickup > RUNNER_LEG_MAX) {
+        console.log('[findNearbyRunners] Runner too far from pickup:', {
+          runnerId: runner._id,
+          runnerToPickup: Math.round(runnerToPickup),
+          maxAllowed: RUNNER_LEG_MAX,
+        });
+        return false;
+      }
 
+      // Dynamic delivery leg budget
       const deliveryLegBudget = TOTAL_MAX - runnerToPickup;
 
       if (deliveryLat && deliveryLng) {
         const pickupToDelivery = haversineDistance(pickupLat, pickupLng, deliveryLat, deliveryLng);
-        if (pickupToDelivery > deliveryLegBudget) return false;
+        if (pickupToDelivery > deliveryLegBudget) {
+          console.log('[findNearbyRunners] Delivery leg exceeds budget:', {
+            runnerId: runner._id,
+            runnerToPickup: Math.round(runnerToPickup),
+            pickupToDelivery: Math.round(pickupToDelivery),
+            deliveryBudget: Math.round(deliveryLegBudget),
+            totalAllowed: TOTAL_MAX,
+          });
+          return false;
+        }
       }
 
+      // Attach computed distances for use in matching/sorting
       runner._runnerToPickup = Math.round(runnerToPickup);
       runner._deliveryLegBudget = Math.round(deliveryLegBudget);
 
+      console.log('[findNearbyRunners] Runner accepted:', {
+        runnerId: runner._id,
+        distanceToPickup: Math.round(runnerToPickup),
+        deliveryBudget: Math.round(deliveryLegBudget),
+      });
+
       return true;
     });
+
+    console.log('[findNearbyRunners] Final pedestrian count:', filtered.length);
+    return filtered;
   }
 
-  // ── Non-pedestrian ────────────────────────────────────────────────────────
-  const results = await this.find({
+  const query = {
     role: 'runner',
+    isActive: true,
+    isAvailable: true,
     fleetType,
-  })
+  };
+
+  const results = await this.find(query)
     .select('firstName lastName phone currentRequest location latitude longitude avatar ' +
       'kycStatus verificationDocuments biometricVerification isOnline isAvailable ' +
-      'fleetType isPhoneVerified isEmailVerified rating totalRatings totalRuns isActive')
+      'fleetType isPhoneVerified isEmailVerified rating totalRatings totalRuns')
     .lean();
 
-  return results.filter((runner) => {
-    if (!runner.isActive || !runner.isAvailable) return false;
-    if (!runner.latitude || !runner.longitude) return false;
+  console.log('[findNearbyRunners] Non-pedestrian runners found:', results.length);
+
+  const filtered = results.filter((runner) => {
+    if (!runner.latitude || !runner.longitude) {
+      console.log('[findNearbyRunners] Runner missing coordinates:', runner._id);
+      return false;
+    }
+
     const runnerToPickup = haversineDistance(
       runner.latitude, runner.longitude, pickupLat, pickupLng
     );
-    
-    return runnerToPickup <= PICKUP_MAX;
+
+    if (runnerToPickup > PICKUP_MAX) {
+      console.log('[findNearbyRunners] Runner too far from pickup:', {
+        runnerId: runner._id,
+        fleetType: runner.fleetType,
+        distanceToPickup: Math.round(runnerToPickup),
+        maxAllowed: PICKUP_MAX,
+      });
+      return false;
+    }
+
+    return true;
   });
+
+  console.log('[findNearbyRunners] Final non-pedestrian count:', filtered.length);
+  return filtered;
 };
 
 module.exports = mongoose.model('Runner', runnerSchema);

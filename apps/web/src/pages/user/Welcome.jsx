@@ -319,7 +319,6 @@ export const Welcome = () => {
       }
     }, 1500);
     return () => clearTimeout(t);
-    
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentScreen, chatMounted]);
 

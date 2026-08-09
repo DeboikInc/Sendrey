@@ -99,7 +99,7 @@ export default function JoinTheList() {
       {submitted && (
         <div className="w-full max-w-2xl mb-6 rounded-2xl bg-emerald-500/15 border border-emerald-500/30 px-6 py-5 text-center">
           <div className="text-2xl mb-1">🎉</div>
-          <p className="text-emerald-300 font-semibold text-sm">You're on the list!</p>
+          <p className="text-emerald-300 font-semibold text-sm">You&apos;re on the list!</p>
           <p className="text-white/60 text-xs mt-1">Heading back to home in {countdown}s…</p>
         </div>
       )}

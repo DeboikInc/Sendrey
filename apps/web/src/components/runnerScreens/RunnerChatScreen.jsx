@@ -121,8 +121,6 @@ function RunnerChatScreen({
   initialUserConfirmedDelivery,
   initialSpecialInstructions,
   sessionKey,
-
-
 }) {
 
   const chatId = chatIdProp
