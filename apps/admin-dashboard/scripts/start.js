@@ -2,7 +2,7 @@ const net = require('net');
 const path = require('path');
 const { spawn } = require('child_process');
 
-const startPort = Number(process.env.ADMINAPP_PORT || 3002);
+const startPort = Number(process.env.REACT_APP_ADMINAPP_PORT || 3002);
 const maxAttempts = 20;
 
 function getAvailablePort(port, attempt = 1) {

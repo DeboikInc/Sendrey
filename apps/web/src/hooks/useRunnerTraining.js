@@ -37,7 +37,7 @@ export const useRunnerTraining = (runnerId) => {
       return [...prev, {
         id: `training-prompt-${Date.now()}`,
         from: 'them',
-        text: "One last step \u2014 complete your runner training and pass a short test to start accepting errands.",
+        text: "Next, complete your runner training and pass a short test to start accepting errands.",
         time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         status: 'delivered',
         isTraining: true,

@@ -32,7 +32,7 @@ const resolveResumeStep = (kycStatus = {}, fleetType) => {
   return null;
 };
 
-export const useKycHook = (runnerId, fleetType, { onTrainingCheckpoint } = {}) => {
+export const useKycHook = (runnerId, fleetType, ) => {
   const dispatch = useDispatch();
   const [kycStep, setKycStep] = useState(null);
 
@@ -176,7 +176,7 @@ export const useKycHook = (runnerId, fleetType, { onTrainingCheckpoint } = {}) =
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const resumeKycFlow = useCallback((serverKycStatus, setMessages, isTrainingCompleted = false) => {
+  const resumeKycFlow = useCallback((serverKycStatus, setMessages) => {
     isReturningUserRef.current = true;
     console.log('[KYC] resumeKycFlow called', { serverKycStatus, kycInitiated: kycInitiated.current, fleetType: fleetTypeRef.current });
     if (kycInitiated.current) {
@@ -192,7 +192,6 @@ export const useKycHook = (runnerId, fleetType, { onTrainingCheckpoint } = {}) =
       kycInitiated.current = true;
       setKycStatus({ documentVerified: true, selfieVerified: true, overallVerified: true });
       setKycStep(6);
-      onTrainingCheckpoint?.(setMessages, isTrainingCompleted);
       return;
     }
 
@@ -231,7 +230,6 @@ export const useKycHook = (runnerId, fleetType, { onTrainingCheckpoint } = {}) =
         isKyc: true,
       }]);
 
-      onTrainingCheckpoint?.(setMessages, isTrainingCompleted);
       return; // ← exit early, never reaches checkVerificationStatus path
     }
 
@@ -252,7 +250,7 @@ export const useKycHook = (runnerId, fleetType, { onTrainingCheckpoint } = {}) =
     }]);
 
     setKycStep(6);
-  }, [startKycFlow, setDocType, onTrainingCheckpoint]);
+  }, [startKycFlow, setDocType]);
 
   const onIdVerified = useCallback((photo, setMessages) => {
     capturedIdPhotoRef.current = photo;
@@ -495,8 +493,6 @@ export const useKycHook = (runnerId, fleetType, { onTrainingCheckpoint } = {}) =
             setKycStatus({ documentVerified: true, selfieVerified: true, overallVerified: false });
             setKycStep(6);
 
-            onTrainingCheckpoint?.(setMessages);
-
             localStorage.removeItem(`kyc_step_${runnerId}`);
             localStorage.removeItem(`kyc_doc_type_${runnerId}`);
           } else {
@@ -517,7 +513,7 @@ export const useKycHook = (runnerId, fleetType, { onTrainingCheckpoint } = {}) =
         }
       }, 700);
     }, 500);
-  }, [dispatch, runnerId, onTrainingCheckpoint]);
+  }, [dispatch, runnerId]);
 
   const checkVerificationStatus = useCallback(async (setMessages, onBanned, isReturning = false) => {
     console.log('[KYC] checkVerificationStatus called', { runnerId });

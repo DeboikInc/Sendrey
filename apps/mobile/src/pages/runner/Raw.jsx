@@ -156,6 +156,7 @@ function WhatsAppLikeChat() {
   const activeChatIdRef = useRef(BOT_CHAT_ID);
   const activeScreenIdRef = useRef(saved.activeChatId || BOT_CHAT_ID);
   const kycStartedRef = useRef(false);
+  const pendingKycResumeRef = useRef(null);
   const searchIntervalRef = useRef(null);
   const botSaveTimerRef = useRef(null);
   // Each child screen registers its setMessages here so raw.jsx can push
@@ -170,7 +171,6 @@ function WhatsAppLikeChat() {
     onPaymentSuccess, onDeliveryConfirmed, onMessageDeleted, reconnect,
   } = useSocket();
 
-
   const {
     isCollectingCredentials, credentialStep, credentialQuestions,
     startCredentialFlow, needsOtpVerification, handleCredentialAnswer,
@@ -184,11 +184,16 @@ function WhatsAppLikeChat() {
 
     if (serverKycStatus?.overallVerified || serverKycStatus?.selfieVerified) {
       isFreshRegistrationRef.current = false; // not a fresh reg
+      pendingKycResumeRef.current = serverKycStatus;
+
       setTimeout(() => {
-        resumeKycFlow(serverKycStatus, botMessagesUpdater, rd?.isTrainingCompleted ?? false);
+        if (rd?.isTrainingCompleted) {
+          resumeKycFlow(serverKycStatus, botMessagesUpdater);
+        } else {
+          promptTraining(botMessagesUpdater);
+        }
       }, 100);
     }
-
   });
 
   const effectiveReturningKycStatus = useMemo(() => {
@@ -228,7 +233,7 @@ function WhatsAppLikeChat() {
     kycStep, kycStatus, startKycFlow, onIdVerified,
     handleSelfieResponse, handleIDTypeSelection, onSelfieVerified,
     checkVerificationStatus, resumeKycFlow
-  } = useKycHook(runnerId, runnerData?.fleetType, { onTrainingCheckpoint: promptTraining });
+  } = useKycHook(runnerId, runnerData?.fleetType);
 
 
   const handleSelfieResponseRef = useRef(handleSelfieResponse);
@@ -553,7 +558,13 @@ function WhatsAppLikeChat() {
       localStorage.setItem(`terms_accepted_${runnerId}`, 'true');
       localStorage.setItem(`kyc_flow_started_${runnerId}`, 'true');
       setShowTerms(false);
-      startKycFlow(botMessagesUpdater);
+      pendingKycResumeRef.current = null;
+
+      if (runner?.isTrainingCompleted) {
+        startKycFlow(botMessagesUpdater);
+      } else {
+        promptTraining(botMessagesUpdater);
+      }
     } catch (error) {
       console.error('Failed to save terms acceptance:', error);
     }
@@ -566,54 +577,32 @@ function WhatsAppLikeChat() {
   }, [silentRefreshKey]);
 
   // ── KYC started effect ───────────────────────────────────────────────────────
-
-
-
-  // REPLACE the existing KYC started effect with:
-
   useEffect(() => {
-    console.log('[KYC TRIGGER] deps fired:', {
-      registrationComplete,
-      runnerId,
-      needsOtpVerification,
-      isCollectingCredentials,
-      isReturningUser,
-      kycOverallVerified: kycStatus.overallVerified,
-      kycStep,
-      isFreshReg: isFreshRegistrationRef.current,
-      runnerIsVerified: runner?.isVerified,
-      kycStatus: runner?.kycStatus,
-      kycFlowStartedLS: localStorage.getItem(`kyc_flow_started_${runnerId}`),
-      returningUserData: returningUserData?.kycStatus ?? null,
-    });
-
     if (!runnerId) return;
     const isFreshReg = isFreshRegistrationRef.current || sessionStorage.getItem(`fresh_reg_${runnerId}`) === 'true';
-    if (!registrationComplete && !isFreshReg) { console.log('[RAW] KYC BLOCKED — not registered and not fresh reg'); return; }
-    if (needsOtpVerification) { console.log('[RAW] KYC effect BLOCKED — needsOtpVerification'); return; }
-    if (isCollectingCredentials) { console.log('[RAW] KYC effect BLOCKED — isCollectingCredentials'); return; }
-    if (kycStartedRef.current) { console.log('[RAW] KYC effect BLOCKED — kycStartedRef already true'); return; }
-    if (kycStatus.overallVerified || kycStep === 6) { console.log('[RAW] KYC effect BLOCKED — already verified'); return; }
-    if (isReturningUser) { console.log('[RAW] KYC effect BLOCKED — isReturningUser still true (waiting for choice)'); return; }
+    if (!registrationComplete && !isFreshReg) return;
+    if (needsOtpVerification) return;
+    if (isCollectingCredentials) return;
+    if (kycStartedRef.current) return;
+    if (kycStatus.overallVerified || kycStep === 6) return;
+    if (isReturningUser) return;
 
     if (runner?.isVerifiedKyc && !isFreshRegistrationRef.current) {
-      console.log('[RAW] KYC effect BLOCKED — runner already verified server-side (preexisting session)');
+      // preexisting fully-verified session
       kycStartedRef.current = true;
       localStorage.setItem(`kyc_flow_started_${runnerId}`, 'true');
       localStorage.setItem(`kyc_verified_shown_${runnerId}`, '1');
       chatManager.set(BOT_CHAT_ID, { kycStep: 1 });
       if (!runner?.isTrainingCompleted) {
-        promptTraining(botMessagesUpdater, false);
+        promptTraining(botMessagesUpdater);
       }
       return;
     }
 
     const kycFlowStarted = localStorage.getItem(`kyc_flow_started_${runnerId}`);
-    if (kycFlowStarted) { console.log('[RAW] KYC effect BLOCKED — kyc_flow_started in localStorage'); return; }
+    if (kycFlowStarted) return;
 
     const timer = setTimeout(() => {
-      console.log('[RAW] KYC timer fired', { kycStartedRef: kycStartedRef.current, isReturningUser, returningUserKycStatus: returningUserData?.kycStatus });
-      // Re-check gates inside timeout (state may have changed)
       if (kycStartedRef.current) return;
       if (kycStatus.overallVerified || kycStep === 6) return;
       if (isReturningUser) return;
@@ -624,26 +613,39 @@ function WhatsAppLikeChat() {
       const alreadyAccepted = localStorage.getItem(`terms_accepted_${runnerId}`);
 
       if (returningUserData?.kycStatus) {
-        // Returning user: check if selfie already submitted — skip KYC entirely
         const { selfieVerified, selfieStatus, overallVerified } = returningUserData.kycStatus;
+        const returningTrainingDone = returningUserData.isTrainingCompleted ?? false;
+
         if (selfieVerified || selfieStatus === 'pending_review' || overallVerified) {
+          // KYC already done from a prior session — still must clear training
           localStorage.setItem(`kyc_flow_started_${runnerId}`, 'true');
+          if (!returningTrainingDone) {
+            promptTraining(botMessagesUpdater);
+          }
           return;
         }
-        // Returning user with incomplete KYC — resume
+
+        // Returning user with incomplete KYC — training gate first, KYC resumes after
         localStorage.setItem(`kyc_flow_started_${runnerId}`, 'true');
-        setTimeout(() => resumeKycFlow(
-          returningUserData.kycStatus,
-          botMessagesUpdater,
-          returningUserData.isTrainingCompleted ?? false
-        ), 1500);
+        pendingKycResumeRef.current = returningUserData.kycStatus;
+
+        setTimeout(() => {
+          if (returningTrainingDone) {
+            resumeKycFlow(returningUserData.kycStatus, botMessagesUpdater);
+          } else {
+            promptTraining(botMessagesUpdater);
+          }
+        }, 1500);
       } else if (!alreadyAccepted) {
-        // New user — show terms first
         setShowTerms(true);
       } else {
-        // New user, terms already accepted
         localStorage.setItem(`kyc_flow_started_${runnerId}`, 'true');
-        startKycFlow(botMessagesUpdater);
+        pendingKycResumeRef.current = null;
+        if (runner?.isTrainingCompleted) {
+          startKycFlow(botMessagesUpdater);
+        } else {
+          promptTraining(botMessagesUpdater);
+        }
       }
     }, 2000);
 
@@ -651,7 +653,7 @@ function WhatsAppLikeChat() {
   }, [
     registrationComplete, runnerId, needsOtpVerification, isCollectingCredentials,
     isReturningUser, kycStatus.overallVerified, kycStep, returningUserData,
-    resumeKycFlow, startKycFlow, botMessagesUpdater,
+    resumeKycFlow, startKycFlow, promptTraining, botMessagesUpdater, runner?.isTrainingCompleted, runner?.isVerifiedKyc,
   ]);
 
   // ── KYC nudge ────────────────────────────────────────────────────────────────
@@ -1958,7 +1960,17 @@ function WhatsAppLikeChat() {
       {showTrainingScreen && (
         <RunnerTraining
           submitting={isSubmittingTraining}
-          onComplete={(score) => completeTraining(score, isBotMode ? botMessagesUpdater : chatMessagesUpdater)}
+          onComplete={async (score) => {
+            const updater = isBotMode ? botMessagesUpdater : chatMessagesUpdater;
+            const success = await completeTraining(score, updater);
+            if (!success) return;
+
+            if (pendingKycResumeRef.current) {
+              resumeKycFlow(pendingKycResumeRef.current, updater);
+            } else {
+              startKycFlow(updater);
+            }
+          }}
           darkMode={dark}
           onExit={closeTrainingScreen}
           runnerId={runnerId}
