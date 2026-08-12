@@ -9,6 +9,7 @@ export const useRunnerTraining = (runnerId) => {
   const [trainingStep, setTrainingStep] = useState('idle'); // idle | prompt | active | complete
   const [showTrainingScreen, setShowTrainingScreen] = useState(false);
   const [isSubmittingTraining, setIsSubmittingTraining] = useState(false);
+  const trainingPromptedRef = useRef(false);
 
   useEffect(() => {
     if (!runnerId) return;
@@ -23,8 +24,6 @@ export const useRunnerTraining = (runnerId) => {
       }
     } catch (_) { /* no-op */ }
   }, [runnerId]);
-
-  const trainingPromptedRef = useRef(false);
 
   const promptTraining = useCallback((setMessages, isTrainingCompleted = false) => {
     if (isTrainingCompleted) return;
@@ -77,9 +76,11 @@ export const useRunnerTraining = (runnerId) => {
         status: 'delivered',
         isTraining: true,
       }]);
+
+      return true; 
     } catch (error) {
       console.error('Failed to save training completion:', error);
-
+      return false;
     } finally {
       setIsSubmittingTraining(false);
     }

@@ -50,7 +50,8 @@ export default function Message({
   isActiveResend,
   onBudgetConfirmClick,
   showStatusIcons = true,
-  onTrainingContinueClick
+  onTrainingContinueClick,
+  isTrainingCompleted = false,
 }) {
 
   const [showContextMenu, setShowContextMenu] = useState(false);
@@ -768,13 +769,19 @@ export default function Message({
           {m.text}
           <div className="mt-3">
             <Button
-              className="w-full bg-primary text-white"
+              className={`w-full text-white ${isTrainingCompleted
+                  ? 'bg-gray-400 cursor-not-allowed opacity-70'
+                  : 'bg-primary'
+                }`}
+              disabled={isTrainingCompleted}
               onClick={(e) => {
                 e.stopPropagation();
-                onTrainingContinueClick && onTrainingContinueClick();
+                if (!isTrainingCompleted) {
+                  onTrainingContinueClick && onTrainingContinueClick();
+                }
               }}
             >
-              Continue
+              {isTrainingCompleted ? 'Training Completed' : 'Continue'}
             </Button>
           </div>
         </div>
