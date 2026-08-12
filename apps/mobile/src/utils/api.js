@@ -65,6 +65,11 @@ api.interceptors.response.use(
 
 
     if (error.response?.status === 401 && original.url?.includes('refresh-token')) {
+      // Only treat this as a real logout if we're actually online.
+      if (navigator.onLine === false) {
+        return Promise.reject(error);
+      }
+
       await clearSession();
       return Promise.reject(error);
     }

@@ -614,7 +614,7 @@ function WhatsAppLikeChat() {
 
       if (returningUserData?.kycStatus) {
         const { selfieVerified, selfieStatus, overallVerified } = returningUserData.kycStatus;
-        const returningTrainingDone = returningUserData.isTrainingCompleted ?? false;
+        const returningTrainingDone = runner.isTrainingCompleted ?? false;
 
         if (selfieVerified || selfieStatus === 'pending_review' || overallVerified) {
           // KYC already done from a prior session — still must clear training
@@ -794,26 +794,43 @@ function WhatsAppLikeChat() {
     if (!runner?._id && !runnerId) return; // not authenticated, nothing to clear
     if (runner?._id) return; // still authenticated, do nothing
 
-    // runner just became null — auth was wiped
-    chatManager.set(BOT_CHAT_ID, { messages: [] });
-    useOrderStore.getState().setMessages(BOT_CHAT_ID, []);
-    setInitialMessagesComplete(false);
-    // Clear any stale runnerId-keyed localStorage
-    if (runnerId) {
-      localStorage.removeItem(`bot_messages_${runnerId}`);
-      localStorage.removeItem(`kyc_flow_started_${runnerId}`);
-      localStorage.removeItem(`kyc_step_${runnerId}`);
-      localStorage.removeItem(`kyc_doc_type_${runnerId}`);
-      localStorage.removeItem(`terms_accepted_${runnerId}`);
-      localStorage.removeItem(`kyc_status_${runnerId}`);
-      localStorage.removeItem(`training_progress_${runnerId}`);
+    // Confirm tokens are actually gone before nuking chat state.
+    let cancelled = false;
 
-      clearCachedRecentChats(runnerId);
-    }
+    const confirmAndWipe = async () => {
+      const { accessToken, refreshToken } = await authStorage.getTokens();
+      if (cancelled) return;
 
-    useOrderStore.getState()._reset();
-    localStorage.removeItem('sendrey-order-store');
-    setRunnerId(null);
+      if (accessToken || refreshToken) {
+        // tokens still exist, transient null, not a real logout. Do nothing.
+        console.warn('[raw.jsx] runner went null but tokens still present — ignoring transient blip');
+        return;
+      }
+
+      // real logout — safe to wipe
+      chatManager.set(BOT_CHAT_ID, { messages: [] });
+      useOrderStore.getState().setMessages(BOT_CHAT_ID, []);
+      setInitialMessagesComplete(false);
+
+      if (runnerId) {
+        localStorage.removeItem(`bot_messages_${runnerId}`);
+        localStorage.removeItem(`kyc_flow_started_${runnerId}`);
+        localStorage.removeItem(`kyc_step_${runnerId}`);
+        localStorage.removeItem(`kyc_doc_type_${runnerId}`);
+        localStorage.removeItem(`terms_accepted_${runnerId}`);
+        localStorage.removeItem(`kyc_status_${runnerId}`);
+        localStorage.removeItem(`training_progress_${runnerId}`);
+        clearCachedRecentChats(runnerId);
+      }
+
+      useOrderStore.getState()._reset();
+      localStorage.removeItem('sendrey-order-store');
+      setRunnerId(null);
+    };
+
+    // small delay lets a reconnecting socket / rehydrating Redux settle
+    const t = setTimeout(confirmAndWipe, 800);
+    return () => { cancelled = true; clearTimeout(t); };
   }, [runner?._id]);
 
   // ── canShowNotifications ─────────────────────────────────────────────────────
