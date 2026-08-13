@@ -3,11 +3,13 @@ import { useState, useEffect, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
     ChevronLeft, ChevronRight, User, Trash2, Camera,
-    Star, Phone, Shield, KeyRound, Clock, XCircle, CheckCircle
+    Star, Phone, Shield, KeyRound, Clock, XCircle, CheckCircle,
+    Bell, BellOff, Moon, Sun
 } from 'lucide-react';
 import { getRunnerRatings } from '../../Redux/ratingSlice';
 import { setPin, resetPin, setPinSet } from '../../Redux/pinSlice';
 import { updateProfile, getProfile } from '../../Redux/runnerSlice';
+import { optInNotifications, optOutNotifications, getNotificationPreferences } from '../../Redux/notificationSlice';
 import { PinPad } from '../../components/common/PinPad';
 
 const ConfirmModal = ({ field, value, onConfirm, onCancel, dark }) => (
@@ -41,12 +43,13 @@ const StarDisplay = ({ rating }) => {
     );
 };
 
-export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runnerData: initialRunnerData }) => {
+export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runnerData: initialRunnerData, onToggleDarkMode }) => {
     const dispatch = useDispatch();
     const averageRating = useSelector(s => s.rating.averageRating);
     const totalRatings = useSelector(s => s.rating.totalRatings);
     const isPinSet = useSelector(s => s.pin.isPinSet);
     const profileFromStore = useSelector(s => s.runners.profile);
+    const notificationPrefs = useSelector(s => s.notification?.preferences);
 
     const [runnerData, setRunnerData] = useState(initialRunnerData || {});
     const [editingField, setEditingField] = useState(null);
@@ -62,7 +65,21 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
     const [pinSaveError, setPinSaveError] = useState(null);
     const [pinSuccess, setPinSuccess] = useState(null);
 
+    const [notificationLoading, setNotificationLoading] = useState(false);
+    const [notificationError, setNotificationError] = useState(null);
+    const [notificationSuccess, setNotificationSuccess] = useState(null);
+
     const hasPinSet = isPinSet || runnerData?.hasPin === true;
+
+    // Check if notifications are opted in
+    const isOptedIn = notificationPrefs?.push?.messages === true && 
+                      notificationPrefs?.push?.updates === true && 
+                      notificationPrefs?.push?.promotions === true;
+
+    // Check if notifications are fully opted out
+    const isOptedOut = notificationPrefs?.push?.messages === false && 
+                       notificationPrefs?.push?.updates === false && 
+                       notificationPrefs?.push?.promotions === false;
 
     // Fetch fresh profile + ratings on mount
     useEffect(() => {
@@ -71,7 +88,6 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
         const fetchData = async () => {
             try {
                 const result = await dispatch(getProfile()).unwrap();
-                // Handle different response structures
                 const runner = result?.data?.runner || result?.runner || result?.data || result;
                 if (runner) {
                     setRunnerData(runner);
@@ -86,6 +102,7 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
 
         fetchData();
         dispatch(getRunnerRatings({ runnerId, page: 1 }));
+        dispatch(getNotificationPreferences({ userId: runnerId, userType: 'runner' }));
     }, [runnerId, dispatch]);
 
     // Update local state when store profile changes
@@ -124,7 +141,6 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
 
         try {
             const updated = await dispatch(updateProfile({ [field]: value })).unwrap();
-            // Handle different response structures
             const updatedRunner = updated?.data?.runner || updated?.runner || updated?.data || updated;
             if (updatedRunner) {
                 setRunnerData(updatedRunner);
@@ -157,6 +173,28 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
         } finally {
             setAvatarUploading(false);
             if (fileInputRef.current) fileInputRef.current.value = '';
+        }
+    };
+
+    const handleNotificationToggle = async () => {
+        setNotificationLoading(true);
+        setNotificationError(null);
+        setNotificationSuccess(null);
+        try {
+            if (isOptedIn) {
+                await dispatch(optOutNotifications({ userId: runnerId, userType: 'runner' })).unwrap();
+                setNotificationSuccess('Notifications disabled');
+            } else {
+                await dispatch(optInNotifications({ userId: runnerId, userType: 'runner' })).unwrap();
+                setNotificationSuccess('Notifications enabled');
+            }
+            await dispatch(getNotificationPreferences({ userId: runnerId, userType: 'runner' }));
+            setTimeout(() => setNotificationSuccess(null), 3000);
+        } catch (err) {
+            setNotificationError(err || 'Failed to update notifications');
+            setTimeout(() => setNotificationError(null), 3000);
+        } finally {
+            setNotificationLoading(false);
         }
     };
 
@@ -309,7 +347,6 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
                             const license = runnerData.verificationDocuments?.driverLicense;
                             const selfie = runnerData.biometricVerification;
 
-                            // Docs actually submitted (not_submitted means runner didn't provide it)
                             const submittedDocs = [
                                 nin?.status && nin.status !== 'not_submitted' ? 'ID (NIN)' : null,
                                 license?.status && license.status !== 'not_submitted' ? 'Driver\'s License' : null,
@@ -360,7 +397,6 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
                                 );
                             }
 
-                            // not_submitted / pending_verification initial state
                             return (
                                 <div className="flex items-center gap-2">
                                     <div className="w-6 h-6 rounded-full bg-gray-1000 dark:bg-white/5 flex items-center justify-center flex-shrink-0">
@@ -383,10 +419,69 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
                     )}
                 </div>
 
+                {/* Preferences Section */}
+                <div className="px-4 pb-4">
+                    <p className={`text-xs font-semibold uppercase tracking-widest mb-3 
+                        ${darkMode ? 'text-gray-500' : 'text-black-100/80'}`}>
+                        Preferences
+                    </p>
+
+                    {/* Dark Mode Toggle */}
+                    <button
+                        onClick={() => onToggleDarkMode && onToggleDarkMode()}
+                        className={`w-full flex items-center justify-between border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 mb-3`}
+                    >
+                        <div className="flex items-center gap-3">
+                            {darkMode
+                                ? <Moon className="h-4 w-4 text-black-100/80 dark:text-gray-400" />
+                                : <Sun className="h-4 w-4 text-black-100/80 dark:text-gray-400" />
+                            }
+                            <p className={`text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-black-200'}`}>
+                                {darkMode ? "Dark Mode" : "Light Mode"}
+                            </p>
+                        </div>
+                        <div className={`w-11 h-6 rounded-full transition-colors duration-300 relative ${darkMode ? "bg-primary" : "bg-gray-200"}`}>
+                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all duration-300 ${darkMode ? "left-6" : "left-1"}`} />
+                        </div>
+                    </button>
+
+                    {/* Notifications */}
+                    <button
+                        onClick={handleNotificationToggle}
+                        disabled={notificationLoading}
+                        className={`w-full flex items-center justify-between border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 disabled:opacity-50`}
+                    >
+                        <div className="flex items-center gap-3">
+                            {isOptedIn ? (
+                                <Bell className="h-4 w-4 text-black-100/80 dark:text-gray-400" />
+                            ) : (
+                                <BellOff className="h-4 w-4 text-black-100/80 dark:text-gray-400" />
+                            )}
+                            <div className="text-left">
+                                <p className={`text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-black-200'}`}>
+                                    {isOptedIn ? 'Notifications On' : isOptedOut ? 'Notifications Off' : 'Notifications'}
+                                </p>
+                                {(notificationSuccess || notificationError) ? (
+                                    <p className={`text-xs font-medium ${notificationError ? 'text-red-500' : 'text-green-500'}`}>
+                                        {notificationError || notificationSuccess}
+                                    </p>
+                                ) : (
+                                    <p className="text-xs text-black-100/80 dark:text-gray-400">
+                                        {isOptedIn ? 'All notifications enabled' : isOptedOut ? 'All notifications disabled' : 'Tap to manage'}
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                        <div className={`w-11 h-6 rounded-full transition-colors duration-300 relative ${isOptedIn ? "bg-primary" : "bg-gray-200"}`}>
+                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all duration-300 ${isOptedIn ? "left-6" : "left-1"}`} />
+                        </div>
+                    </button>
+                </div>
+
                 {/* PIN Management */}
                 <div className="px-4 pb-4">
                     <p className={`text-xs font-semibold uppercase tracking-widest mb-3 
-    ${darkMode ? 'text-gray-500' : 'text-black-100/80'}`}>
+                        ${darkMode ? 'text-gray-500' : 'text-black-100/80'}`}>
                         Security
                     </p>
 

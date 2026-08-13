@@ -8,10 +8,12 @@ const controller = require('../controllers/businessController');
 router.use(authenticate);
 // prefix /business
 // ── Conversion ────────────────────────────────────────────────────────────────
-router.post('/convert',
+router.post(
+  '/convert',
   userRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 3 }),
   auditLog('CONVERT_TO_BUSINESS'),
-  controller.convertToBusiness);
+  controller.convertToBusiness
+);
 
 // ── Suggestions
 router.get('/suggestion/status',

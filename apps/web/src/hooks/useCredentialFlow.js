@@ -18,7 +18,7 @@ const GEO_OPTIONS = {
 const MAX_WATCH_DURATION = 15000;
 
 const CREDENTIAL_QUESTIONS = [
-  { question: "What's your name?", field: "name" },
+  { question: "What's your name? (first Name and last Name only)", field: "name" },
   { question: "What's your phone number?", field: "phone" },
   { question: "What's your email address?", field: "email" },
   { question: "What's your fleet type? (bike, car, motorcycle, van)", field: "fleetType", isFleetSelection: true },
