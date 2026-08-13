@@ -30,10 +30,19 @@ const clearProgress = (runnerId) => {
   } catch (_) { /* no-op */ }
 };
 
+const shuffleArray = (arr) => {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+};
 
 const TRAINING_MODULES = [
   {
-    title: 'Welcome to Sendrey Runner Academy',
+    title: 'Welcome to Sendrey Runner Course',
+    overview: 'Why this training matters and what\u2019s expected of you as a runner.',
     sections: [
       {
         paragraphs: [
@@ -46,6 +55,7 @@ const TRAINING_MODULES = [
   {
     title: 'Module 1: Understanding Customer Relationships',
     objective: 'Learn how to build trust, deliver excellent customer service, and create positive customer experiences.',
+    overview: 'How to build trust, behave professionally, and recover well from mistakes.',
     sections: [
       {
         heading: 'Understanding the Customer',
@@ -87,6 +97,7 @@ const TRAINING_MODULES = [
   {
     title: 'Module 2: Professional Communication',
     objective: 'Learn how to communicate professionally before, during, and after every errand.',
+    overview: 'Keeping customers informed, handling upset customers, and communication dos and don\u2019ts.',
     sections: [
       {
         paragraphs: [
@@ -136,6 +147,7 @@ const TRAINING_MODULES = [
   {
     title: 'Module 3: Your Health, Safety & Well-being',
     objective: 'Understand how to protect your health and work safely while completing errands.',
+    overview: 'Staying healthy on shift, riding safely, and knowing when to stop working.',
     sections: [
       {
         paragraphs: [
@@ -163,6 +175,7 @@ const TRAINING_MODULES = [
   {
     title: 'Module 4: Professional Conduct & Disciplinary Policy',
     objective: 'Understand the standards expected of every runner and the consequences of misconduct.',
+    overview: 'What counts as minor, major, and gross misconduct, and what\u2019s expected of you.',
     sections: [
       {
         paragraphs: [
@@ -195,11 +208,13 @@ const TRAINING_MODULES = [
   },
   {
     title: 'Final Declaration',
+    overview: 'What you\u2019re agreeing to by accepting errands on Sendrey.',
     sections: [
       {
         paragraphs: [
           'By completing this training and accepting errands on Sendrey, you agree to uphold the standards outlined in this handbook. You understand that maintaining professionalism, respecting customers, protecting their property, communicating effectively, and following Sendrey\u2019s policies are essential responsibilities of every runner.',
-          'Failure to comply with these standards may result in warnings, suspension, permanent removal from the platform, or legal action where applicable.'
+          'Failure to comply with these standards may result in warnings, suspension, permanent removal from the platform, or legal action where applicable.',
+          'When you are done, click the button below to begin your assessment.'
         ]
       }
     ]
@@ -242,7 +257,7 @@ const ExitConfirmModal = ({ darkMode, onCancel, onConfirm }) => (
       <h3 className={`text-base font-bold mb-2 ${darkMode ? 'text-white' : 'text-black-100'}`}>
         Exit training?
       </h3>
-      <p className={`text-sm mb-5 ${darkMode ? 'text-gray-300' : 'text-gray-400'}`}>
+      <p className={`text-sm mb-5 ${darkMode ? 'text-gray-300' : 'text-black-100/70'}`}>
         Your progress will be saved. You can pick up right where you left off.
       </p>
       <div className="flex gap-3">
@@ -265,78 +280,146 @@ const ExitConfirmModal = ({ darkMode, onCancel, onConfirm }) => (
   </div>
 );
 
-// Training
-const TrainingView = ({ module, moduleIndex, totalModules, onNext, onBack, onExit, isFirstModule, isLastModule, darkMode }) => (
+// Intro / overview
+const IntroView = ({ onStart, onExit, darkMode }) => (
   <div className="flex flex-col h-full">
-    <ScreenHeader label="Module" current={moduleIndex} total={totalModules} onExit={onExit} />
+    <div className="px-5 pt-6 pb-4 bg-secondary flex items-center justify-between">
+      <p className="text-gray-300 text-xs font-medium tracking-wide uppercase">Runner Course</p>
+      <button
+        type="button"
+        onClick={onExit}
+        className="p-1 -mr-1 text-primary transition-colors"
+        aria-label="Exit training"
+      >
+        <X size={20} />
+      </button>
+    </div>
 
     <div className={`flex-1 overflow-y-auto px-5 py-6 ${darkMode ? 'bg-black-100' : 'bg-white'}`}>
-      <h1 className={`text-xl font-bold mb-1 ${darkMode ? 'text-white' : 'text-black-100'}`}>{module.title}</h1>
-      {module.objective && (
-        <p className={`text-sm mb-6 ${darkMode ? 'text-gray-400' : 'text-gray-400'}`}>{module.objective}</p>
-      )}
+      <h1 className={`text-xl font-bold mb-1 ${darkMode ? 'text-white' : 'text-black-100'}`}>What will I Learn?</h1>
+      <p className={`text-sm mb-6 ${darkMode ? 'text-gray-400' : 'text-black-100/60'}`}>
+        About Sendrey and other guidelines
+      </p>
 
-      <div className="space-y-6">
-        {module.sections.map((section, i) => (
-          <div key={i}>
-            {section.heading && (
-              <h2 className={`font-semibold text-base mb-2 ${darkMode ? 'text-primary' : 'text-secondary'}`}>{section.heading}</h2>
-            )}
-
-            {section.paragraphs?.map((p, pi) => (
-              <p key={pi} className={`text-sm leading-relaxed mb-2 ${darkMode ? 'text-gray-200' : 'text-black-100'}`}>{p}</p>
-            ))}
-
-            {section.bullets && (
-              <ul className="space-y-1.5 mt-2">
-                {section.bullets.map((b, bi) => (
-                  <li key={bi} className={`flex items-start text-sm ${darkMode ? 'text-gray-200' : 'text-black-100'}`}>
-                    <span className="text-primary mr-2 mt-0.5">&#8226;</span>
-                    <span>{b}</span>
-                  </li>
-                ))}
-              </ul>
-            )}
-
-            {section.examples && (
-              <div className="space-y-2 mt-2">
-                {section.examples.map((ex, ei) => (
-                  <div
-                    key={ei}
-                    className={`rounded-lg px-3 py-2 text-sm border ${
-                      ex.label === 'good'
-                        ? darkMode
-                          ? 'bg-primary/10 border-primary/30 text-gray-100'
-                          : 'bg-flash-white border-primary/30 text-black-100'
-                        : darkMode
-                          ? 'bg-white/5 border-white/10 text-gray-400'
-                          : 'bg-gray-100 border-gray-300 text-gray-400'
-                    }`}
-                  >
-                    <span className={`font-semibold mr-1 ${ex.label === 'good' ? 'text-primary' : 'text-gray-400'}`}>
-                      {ex.label === 'good' ? 'Good example:' : 'Poor example:'}
-                    </span>
-                    {ex.text}
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {section.tip && (
-              <div className={`mt-3 rounded-lg border px-3 py-2 ${darkMode ? 'bg-secondary/30 border-white/10' : 'bg-secondary/5 border-secondary/10'}`}>
-                <p className={`text-sm font-medium ${darkMode ? 'text-primary' : 'text-secondary'}`}>
-                  <span className="font-bold">Sendrey Tip: </span>
-                  {section.tip}
-                </p>
-              </div>
-            )}
+      <div className="space-y-3">
+        {TRAINING_MODULES.map((m, i) => (
+          <div
+            key={i}
+            className={`rounded-xl border px-4 py-3 flex items-start gap-3 ${
+              darkMode ? 'border-white/10 bg-white/5' : 'border-gray-200 bg-gray-50'
+            }`}
+          >
+            <div>
+              <p className={`text-sm font-semibold ${darkMode ? 'text-white' : 'text-black-100'}`}>{m.title}</p>
+              {m.overview && (
+                <p className={`text-xs mt-0.5 ${darkMode ? 'text-gray-400' : 'text-black-100/60'}`}>{m.overview}</p>
+              )}
+            </div>
           </div>
         ))}
       </div>
     </div>
 
-    <div className={`px-5 py-4 border-t flex gap-3 ${darkMode ? 'bg-black-100 border-white/10' : 'bg-white border-gray-200'}`}>
-      {!isFirstModule && (
+    <div className={`px-5 py-4 border-t ${darkMode ? 'bg-black-100 border-white/10' : 'bg-white border-gray-200'}`}>
+      <button
+        type="button"
+        onClick={onStart}
+        className="w-full py-3 rounded-xl text-sm font-semibold text-white bg-primary active:opacity-90"
+      >
+        Start Training
+      </button>
+    </div>
+  </div>
+);
+
+// Training
+const TrainingView = ({ module, moduleIndex, totalModules, onNext, onBack, onExit, isLastModule, darkMode }) => {
+  // Check if this is the Final Declaration module
+  const isFinalDeclaration = module.title === 'Final Declaration';
+  
+  return (
+    <div className="flex flex-col h-full">
+      <ScreenHeader label="Module" current={moduleIndex} total={totalModules} onExit={onExit} />
+
+      <div className={`flex-1 overflow-y-auto px-5 py-6 ${darkMode ? 'bg-black-100' : 'bg-white'}`}>
+        <h1 className={`text-xl font-bold mb-1 ${darkMode ? 'text-white' : 'text-black-100'}`}>{module.title}</h1>
+        {module.objective && (
+          <p className={`text-sm mb-6 ${darkMode ? 'text-gray-400' : 'text-black-100/60'}`}>{module.objective}</p>
+        )}
+
+        <div className="space-y-6">
+          {module.sections.map((section, i) => (
+            <div key={i}>
+              {section.heading && (
+                <h2 className={`font-semibold text-base mb-2 ${darkMode ? 'text-primary' : 'text-secondary'}`}>{section.heading}</h2>
+              )}
+
+              {section.paragraphs?.map((p, pi) => {
+                // Check if this is the "When you are done" paragraph in Final Declaration
+                const isCallToAction = isFinalDeclaration && p.includes('click the button below');
+                return (
+                  <p 
+                    key={pi} 
+                    className={`leading-relaxed mb-2 ${
+                      isCallToAction 
+                        ? `text-xl flex justify-center font-semibold ${darkMode ? 'text-primary' : 'text-secondary'} mt-10` 
+                        : `text-sm ${darkMode ? 'text-gray-200' : 'text-black-100'}`
+                    }`}
+                  >
+                    {p}
+                  </p>
+                );
+              })}
+
+              {section.bullets && (
+                <ul className="space-y-1.5 mt-2">
+                  {section.bullets.map((b, bi) => (
+                    <li key={bi} className={`flex items-start text-sm ${darkMode ? 'text-gray-200' : 'text-black-100'}`}>
+                      <span className="text-primary mr-2 mt-0.5">&#8226;</span>
+                      <span>{b}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {section.examples && (
+                <div className="space-y-2 mt-2">
+                  {section.examples.map((ex, ei) => (
+                    <div
+                      key={ei}
+                      className={`rounded-lg px-3 py-2 text-sm border ${
+                        ex.label === 'good'
+                          ? darkMode
+                            ? 'bg-primary/10 border-primary/30 text-gray-100'
+                            : 'bg-flash-white border-primary/30 text-black-100'
+                          : darkMode
+                            ? 'bg-white/5 border-white/10 text-gray-400'
+                            : 'bg-gray-100 border-gray-300 text-black-100/70'
+                      }`}
+                    >
+                      <span className={`font-semibold mr-1 ${ex.label === 'good' ? 'text-primary' : darkMode ? 'text-gray-500' : 'text-black-100/60'}`}>
+                        {ex.label === 'good' ? 'Good example:' : 'Poor example:'}
+                      </span>
+                      {ex.text}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {section.tip && (
+                <div className={`mt-3 rounded-lg border px-3 py-2 ${darkMode ? 'bg-secondary/30 border-white/10' : 'bg-secondary/5 border-secondary/10'}`}>
+                  <p className={`text-sm font-medium ${darkMode ? 'text-primary' : 'text-secondary'}`}>
+                    <span className="font-bold">Sendrey Tip: </span>
+                    {section.tip}
+                  </p>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className={`px-5 py-4 border-t flex gap-3 ${darkMode ? 'bg-black-100 border-white/10' : 'bg-white border-gray-200'}`}>
         <button
           type="button"
           onClick={onBack}
@@ -344,13 +427,99 @@ const TrainingView = ({ module, moduleIndex, totalModules, onNext, onBack, onExi
         >
           Back
         </button>
-      )}
+        <button
+          type="button"
+          onClick={onNext}
+          className="flex-1 py-3 rounded-xl text-sm font-semibold text-white bg-primary active:opacity-90"
+        >
+          {/* {isLastModule ? 'Start Test' : 'Continue'} */}
+          continue
+        </button>
+      </div>
+    </div>
+  );
+};
+
+// Pre-test instruction page
+const PreTestView = ({ onStartTest, onBack, onExit, darkMode }) => (
+  <div className="flex flex-col h-full">
+    <ScreenHeader label="Pre-Test" current={0} total={1} onExit={onExit} />
+
+    <div className={`flex-1 overflow-y-auto px-5 py-6 ${darkMode ? 'bg-black-100' : 'bg-white'}`}>
+      <div className="max-w-2xl mx-auto">
+        <h1 className={`text-xl font-bold mb-2 ${darkMode ? 'text-white' : 'text-black-100'}`}>
+          Ready for the Test?
+        </h1>
+        <p className={`text-sm mb-6 ${darkMode ? 'text-gray-400' : 'text-black-100/60'}`}>
+          Test your knowledge before you start accepting errands
+        </p>
+
+        <div className={`rounded-xl border p-5 mb-6 ${darkMode ? 'border-white/10 bg-white/5' : 'border-gray-200 bg-gray-50'}`}>
+          <h2 className={`font-semibold text-base mb-3 ${darkMode ? 'text-primary' : 'text-secondary'}`}>
+            What to expect
+          </h2>
+          <ul className="space-y-2">
+            <li className={`flex items-start text-sm ${darkMode ? 'text-gray-200' : 'text-black-100'}`}>
+              <span className="text-primary mr-2">•</span>
+              <span><strong className="font-semibold">Questions:</strong> 25 multiple-choice questions covering all six modules</span>
+            </li>
+            <li className={`flex items-start text-sm ${darkMode ? 'text-gray-200' : 'text-black-100'}`}>
+              <span className="text-primary mr-2">•</span>
+              <span><strong className="font-semibold">Passing score:</strong> 80% </span>
+            </li>
+            <li className={`flex items-start text-sm ${darkMode ? 'text-gray-200' : 'text-black-100'}`}>
+              <span className="text-primary mr-2">•</span>
+              <span><strong className="font-semibold">Time limit:</strong> No time limit — take your time</span>
+            </li>
+            <li className={`flex items-start text-sm ${darkMode ? 'text-gray-200' : 'text-black-100'}`}>
+              <span className="text-primary mr-2">•</span>
+              <span><strong className="font-semibold">Retakes:</strong> You can retake the test if you don't pass</span>
+            </li>
+          </ul>
+        </div>
+
+        <div className={`rounded-xl border p-5 mb-6 ${darkMode ? 'border-white/10 bg-white/5' : 'border-gray-200 bg-gray-50'}`}>
+          <h2 className={`font-semibold text-base mb-3 ${darkMode ? 'text-primary' : 'text-secondary'}`}>
+            Tips before you start
+          </h2>
+          <ul className="space-y-2">
+            <li className={`flex items-start text-sm ${darkMode ? 'text-gray-200' : 'text-black-100'}`}>
+              <span className="text-primary mr-2">•</span>
+              <span>Review the training modules if you need a refresher</span>
+            </li>
+            <li className={`flex items-start text-sm ${darkMode ? 'text-gray-200' : 'text-black-100'}`}>
+              <span className="text-primary mr-2">•</span>
+              <span>Read each question carefully before answering</span>
+            </li>
+            <li className={`flex items-start text-sm ${darkMode ? 'text-gray-200' : 'text-black-100'}`}>
+              <span className="text-primary mr-2">•</span>
+              <span>You can go back and change your answers before submitting</span>
+            </li>
+          </ul>
+        </div>
+
+        <div className={`rounded-lg border px-4 py-3 ${darkMode ? 'bg-secondary/30 border-white/10' : 'bg-secondary/5 border-secondary/10'}`}>
+          <p className={`text-sm ${darkMode ? 'text-primary' : 'text-secondary'}`}>
+            <span className="font-bold">💡 Note:</span> This test helps ensure you understand the key concepts needed to be a successful Sendrey Runner.
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <div className={`px-5 py-4 border-t flex gap-3 ${darkMode ? 'bg-black-100 border-white/10' : 'bg-white border-gray-200'}`}>
       <button
         type="button"
-        onClick={onNext}
+        onClick={onBack}
+        className={`px-5 py-3 rounded-xl text-sm font-semibold border ${darkMode ? 'text-gray-200 border-white/20' : 'text-secondary border-gray-300'}`}
+      >
+        Back
+      </button>
+      <button
+        type="button"
+        onClick={onStartTest}
         className="flex-1 py-3 rounded-xl text-sm font-semibold text-white bg-primary active:opacity-90"
       >
-        {isLastModule ? 'Start Test' : 'Continue'}
+        Start Test
       </button>
     </div>
   </div>
@@ -432,7 +601,7 @@ const ResultView = ({ score, passed, submitting, onContinue, onRetakeTraining, o
       {passed ? 'Training Complete!' : "You didn't pass this time"}
     </h1>
 
-    <p className={`text-sm mb-1 ${darkMode ? 'text-gray-400' : 'text-gray-400'}`}>You scored</p>
+    <p className={`text-sm mb-1 ${darkMode ? 'text-gray-400' : 'text-black-100/60'}`}>You scored</p>
     <p className={`text-3xl font-bold mb-4 ${passed ? 'text-primary' : darkMode ? 'text-gray-200' : 'text-secondary'}`}>{score}%</p>
 
     <p className={`text-sm mb-8 max-w-xs ${darkMode ? 'text-gray-200' : 'text-black-100'}`}>
@@ -475,35 +644,60 @@ const ResultView = ({ score, passed, submitting, onContinue, onRetakeTraining, o
 const RunnerTraining = ({ onComplete, submitting = false, darkMode = false, runnerId, onExit }) => {
   const persisted = loadProgress(runnerId);
 
-  const [stage, setStage] = useState(() => persisted?.stage ?? 'training'); // 'training' | 'test' | 'result'
+  const [stage, setStage] = useState(() => persisted?.stage ?? 'intro'); // 'intro' | 'training' | 'pre-test' | 'test' | 'result'
   const [moduleIndex, setModuleIndex] = useState(() => persisted?.moduleIndex ?? 0);
   const [questionIndex, setQuestionIndex] = useState(() => persisted?.questionIndex ?? 0);
   const [answers, setAnswers] = useState(() => persisted?.answers ?? {});
   const [score, setScore] = useState(() => persisted?.score ?? null);
+  const [questionOrder, setQuestionOrder] = useState(() => persisted?.questionOrder ?? null); // array of question ids, shuffled per test attempt
   const [showExitConfirm, setShowExitConfirm] = useState(false);
 
   // Persist on every change
   useEffect(() => {
-    saveProgress(runnerId, { stage, moduleIndex, questionIndex, answers, score, isOpen: true });
-  }, [runnerId, stage, moduleIndex, questionIndex, answers, score]);
+    saveProgress(runnerId, { stage, moduleIndex, questionIndex, answers, score, questionOrder, isOpen: true });
+  }, [runnerId, stage, moduleIndex, questionIndex, answers, score, questionOrder]);
 
   const currentModule = TRAINING_MODULES[moduleIndex];
-  const isFirstModule = moduleIndex === 0;
   const isLastModule = moduleIndex === TRAINING_MODULES.length - 1;
+
+  const handleStartTraining = () => setStage('training');
 
   const handleNextModule = () => {
     if (isLastModule) {
-      setQuestionIndex(0);
-      setStage('test');
+      setStage('pre-test');
     } else {
       setModuleIndex((i) => i + 1);
     }
   };
-  const handleBackModule = () => setModuleIndex((i) => Math.max(0, i - 1));
+  
+  const handleBackModule = () => {
+    if (moduleIndex === 0) {
+      setStage('intro');
+    } else {
+      setModuleIndex((i) => i - 1);
+    }
+  };
 
-  const currentQuestion = runnerAssessment[questionIndex];
+  const handleStartTest = () => {
+    setQuestionOrder(shuffleArray(runnerAssessment.map((q) => q.id)));
+    setQuestionIndex(0);
+    setAnswers({});
+    setScore(null);
+    setStage('test');
+  };
+
+  const handleBackToTraining = () => {
+    setStage('training');
+  };
+
+  // Questions in this attempt's shuffled order (falls back to natural order if none set yet)
+  const orderedQuestions = questionOrder
+    ? questionOrder.map((id) => runnerAssessment.find((q) => q.id === id)).filter(Boolean)
+    : runnerAssessment;
+
+  const currentQuestion = orderedQuestions[questionIndex];
   const isFirstQuestion = questionIndex === 0;
-  const isLastQuestion = questionIndex === runnerAssessment.length - 1;
+  const isLastQuestion = questionIndex === orderedQuestions.length - 1;
 
   const handleSelectAnswer = (optionIndex) => {
     setAnswers((prev) => ({ ...prev, [currentQuestion.id]: optionIndex }));
@@ -519,11 +713,11 @@ const RunnerTraining = ({ onComplete, submitting = false, darkMode = false, runn
   const handleBackQuestion = () => setQuestionIndex((i) => Math.max(0, i - 1));
 
   const submitTest = () => {
-    const correct = runnerAssessment.reduce(
+    const correct = orderedQuestions.reduce(
       (count, q) => (answers[q.id] === q.correctIndex ? count + 1 : count),
       0
     );
-    const percentage = Math.round((correct / runnerAssessment.length) * 100);
+    const percentage = Math.round((correct / orderedQuestions.length) * 100);
     setScore(percentage);
     setStage('result');
   };
@@ -532,14 +726,16 @@ const RunnerTraining = ({ onComplete, submitting = false, darkMode = false, runn
     setModuleIndex(0);
     setAnswers({});
     setScore(null);
+    setQuestionOrder(null);
     setStage('training');
   };
 
   const handleRetakeTest = () => {
+    setQuestionOrder(shuffleArray(runnerAssessment.map((q) => q.id)));
     setQuestionIndex(0);
     setAnswers({});
     setScore(null);
-    setStage('test');
+    setStage('pre-test');
   };
 
   const handleContinue = () => {
@@ -547,17 +743,20 @@ const RunnerTraining = ({ onComplete, submitting = false, darkMode = false, runn
     clearProgress(runnerId);
   };
 
-  // resumes here without auto-popping back open on the next refresh.
   const handleExitClick = () => setShowExitConfirm(true);
   const handleExitCancel = () => setShowExitConfirm(false);
   const handleExitConfirm = () => {
-    saveProgress(runnerId, { stage, moduleIndex, questionIndex, answers, score, isOpen: false });
+    saveProgress(runnerId, { stage, moduleIndex, questionIndex, answers, score, questionOrder, isOpen: false });
     setShowExitConfirm(false);
     onExit?.();
   };
 
   return (
     <div className={`fixed inset-0 z-50 flex flex-col ${darkMode ? 'bg-black-100' : 'bg-white'}`}>
+      {stage === 'intro' && (
+        <IntroView onStart={handleStartTraining} onExit={handleExitClick} darkMode={darkMode} />
+      )}
+
       {stage === 'training' && (
         <TrainingView
           module={currentModule}
@@ -566,8 +765,16 @@ const RunnerTraining = ({ onComplete, submitting = false, darkMode = false, runn
           onNext={handleNextModule}
           onBack={handleBackModule}
           onExit={handleExitClick}
-          isFirstModule={isFirstModule}
           isLastModule={isLastModule}
+          darkMode={darkMode}
+        />
+      )}
+
+      {stage === 'pre-test' && (
+        <PreTestView
+          onStartTest={handleStartTest}
+          onBack={handleBackToTraining}
+          onExit={handleExitClick}
           darkMode={darkMode}
         />
       )}
@@ -576,7 +783,7 @@ const RunnerTraining = ({ onComplete, submitting = false, darkMode = false, runn
         <TestView
           question={currentQuestion}
           questionIndex={questionIndex}
-          totalQuestions={runnerAssessment.length}
+          totalQuestions={orderedQuestions.length}
           selected={answers[currentQuestion.id]}
           onSelect={handleSelectAnswer}
           onNext={handleNextQuestion}
