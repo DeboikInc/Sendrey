@@ -1835,7 +1835,7 @@ function WhatsAppLikeChat() {
 
     switch (currentView) {
       case 'profile':
-        return <Profile darkMode={dark} onBack={handleBack} runnerId={runnerId} registrationComplete={registrationComplete} runnerData={runnerData} />;
+        return <Profile darkMode={dark} onBack={handleBack} runnerId={runnerId} registrationComplete={registrationComplete} runnerData={runnerData} onToggleDarkMode={() => setDark(!dark)} />;
       case 'wallet':
         return <Wallet darkMode={dark} onBack={handleBack} runnerId={runnerId} />;
       case 'orders':

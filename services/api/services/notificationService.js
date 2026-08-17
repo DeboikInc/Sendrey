@@ -8,8 +8,30 @@ const Runner = require('../models/Runner');
  * OR a raw FCM token as the first argument (legacy internal usage).
  */
 const sendPushNotification = async (recipientIdOrToken, optionsOrUndefined) => {
-  // Support legacy call style: sendPushNotification(fcmToken, { title, body, data })
-  // used internally by the presence handler for offline/online pushes
+
+  const shouldSendPush = async (recipientId, recipientType) => {
+    try {
+      const Model = recipientType === 'runner' ? Runner : User;
+      const recipient = await Model.findById(recipientId)
+        .select('notificationPreferences fcmToken');
+
+      if (!recipient || !recipient.fcmToken) return false;
+
+      // Check if any push notification is enabled
+      const prefs = recipient.notificationPreferences?.push || {};
+      return prefs.messages === true || prefs.updates === true || prefs.promotions === true;
+    } catch (error) {
+      console.error('Error checking notification opt-in:', error);
+      return false;
+    }
+  };
+
+  const shouldSend = await shouldSendPush(recipientId, recipientType);
+  if (!shouldSend) {
+    console.log(`[Notification] Skipped - user ${recipientId} has not opted in`);
+    return null;
+  }
+
   let token, title, body, data;
 
   if (optionsOrUndefined !== undefined) {
