@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { IconButton, Drawer } from "@material-tailwind/react";
 import { Menu, MoreHorizontal, X, Sun, Moon } from "lucide-react";
 import { Modal } from "../../components/common/Modal";
+import RequestLocation from "../../components/common/RequestLocation";
 import { useDispatch, useSelector, shallowEqual } from "react-redux";
 import { shallow } from 'zustand/shallow';
 import RunnerChatScreen from "../../components/runnerScreens/RunnerChatScreen";
@@ -174,7 +175,9 @@ function WhatsAppLikeChat() {
     startCredentialFlow, needsOtpVerification, handleCredentialAnswer,
     registrationComplete, handleOtpVerification, runnerData, handleResendOtp: resendOtpFromHook,
     isReturningUser, returningUserData, handleReturningUserChoice, isSubmitting,
-    isVerifyingOtp
+    isVerifyingOtp, showLocationModal,
+    handleLocationComplete,
+    handleLocationCancel,
   } = useCredentialFlow(serviceTypeRef, (rd, serverKycStatus) => {
     setRunnerId(rd._id || rd.id);
     isFreshRegistrationRef.current = true;
@@ -1930,6 +1933,20 @@ function WhatsAppLikeChat() {
         reason={verificationState?.reason || verificationState?.message || null}
         darkMode={dark}
       />
+
+      {showLocationModal && (
+        <div className="fixed inset-0 z-[10000] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className={`w-full max-w-md rounded-2xl overflow-hidden relative ${dark ? 'bg-black-100' : 'bg-white'}`}>
+            <RequestLocation
+              darkMode={dark}
+              onLocationComplete={handleLocationComplete}
+              onCancel={handleLocationCancel}
+              initialError={null}
+              initialLoading={false}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

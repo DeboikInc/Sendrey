@@ -24,7 +24,6 @@ const CREDENTIAL_QUESTIONS = [
   { question: "What's your fleet type? (bike, car, motorcycle, van)", field: "fleetType", isFleetSelection: true },
 ];
 
-
 // Greeting builder
 const buildReturningUserGreeting = (name, kycStatus = {}, fleetType = '') => {
   const {
@@ -94,6 +93,8 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
   const [isShowingOtp, setIsShowingOtp] = useState(false);
   const [lastValidatedField, setLastValidatedField] = useState(null); // eslint-disable-line no-unused-vars
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showLocationModal, setShowLocationModal] = useState(false);
+  const [pendingLocationData, setPendingLocationData] = useState(null);
 
   const [runnerData, setRunnerData] = useState(() => runner ? {
     name: `${runner.firstName || ''} ${runner.lastName || ''}`.trim(),
@@ -108,7 +109,7 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
 
   // Location state
   const [runnerLocation, setRunnerLocation] = useState(null);
-  const [locationResolved, setLocationResolved] = useState(false);
+  const [ , setLocationResolved] = useState(false);
 
   const bestPositionRef = useRef(null);
   const watchIdRef = useRef(null);
@@ -116,6 +117,7 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
   const attemptCountRef = useRef(0);
   const resolvedRef = useRef(false);
   const isAnsweringRef = useRef(false);
+  const pendingSetMessagesRef = useRef(null);
 
   const [isReturningUser, setIsReturningUser] = useState(false);
   const [returningUserData, setReturningUserData] = useState(null);
@@ -124,9 +126,20 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
 
   useEffect(() => {
     if (runner?._id) {
-      setRegistrationComplete(true);
+      if (runner.isEmailVerified) {
+        setRegistrationComplete(true);
+      } else {
+        setRegistrationComplete(false);
+        setIsCollectingCredentials(false);
+        setCredentialStep(null);
+        setNeedsOtpVerification(true);
+        setTempUserData({
+          phone: runner.phone,
+          name: `${runner.firstName || ''} ${runner.lastName || ''}`.trim(),
+          email: runner.email,
+        });
+      }
     } else {
-      // Redux wiped the runner — reset all local credential state
       setRegistrationComplete(false);
       setIsCollectingCredentials(false);
       setCredentialStep(null);
@@ -137,7 +150,7 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
       setIsShowingOtp(false);
       setIsSubmitting(false);
     }
-  }, [runner?._id]);
+  }, [runner?._id, runner?.isEmailVerified, runner?.phone, runner?.firstName, runner?.lastName, runner?.email]);
 
   // ── Finalise location ────────────────────────────────────────────────────
   const finaliseLocation = useCallback(() => {
@@ -187,6 +200,21 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
     }
 
     setLocationResolved(true);
+  }, []);
+
+  const requestLocationIfNeeded = useCallback((data, setMessages) => {
+    if (runnerLocation) {
+      return { hasLocation: true, location: runnerLocation };
+    }
+    pendingSetMessagesRef.current = setMessages;
+    setPendingLocationData(data);
+    setShowLocationModal(true);
+    return { hasLocation: false };
+  }, [runnerLocation]);
+
+  const handleLocationCancel = useCallback(() => {
+    setShowLocationModal(false);
+    setPendingLocationData(null);
   }, []);
 
   // ── Start location acquisition when credential flow begins ───────────────
@@ -282,6 +310,67 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
       }]);
     }, 1000);
   }, [isShowingOtp, runnerData.email]);
+
+
+  const handleLocationComplete = useCallback((locationData) => {
+    setRunnerLocation(locationData);
+    setLocationResolved(true);
+    setShowLocationModal(false);
+
+    if (pendingLocationData) {
+      const data = pendingLocationData;
+      const setMessages = pendingSetMessagesRef.current;
+      setPendingLocationData(null);
+      pendingSetMessagesRef.current = null;
+
+      setIsSubmitting(true);
+
+      const nameParts = data.name.trim().split(" ");
+      const firstName = nameParts[0] || "";
+      const lastName = nameParts.slice(1).join(" ");
+
+      const payload = {
+        phone: data.phone,
+        email: data.email,
+        fleetType: data.fleetType,
+        role: "runner",
+        isOnline: true,
+        isAvailable: true,
+        ...(firstName && { firstName }),
+        ...(lastName && { lastName }),
+        latitude: locationData.latitude,
+        longitude: locationData.longitude,
+      };
+
+      dispatch(register(payload))
+        .unwrap()
+        .then((result) => {
+          const token = result.token;
+          const refreshToken = result.refreshToken;
+          if (token) authStorage.setTokens(token, refreshToken);
+          setTempUserData({ phone: data.phone, name: data.name, email: data.email });
+
+          setMessages?.(prev => prev.filter(m => m.text !== "In progress..."));
+          setNeedsOtpVerification(true);
+          setIsCollectingCredentials(false);
+          setCredentialStep(null);
+          if (setMessages) showOtpVerification(setMessages, data.phone, data.email);
+        })
+        .catch((err) => {
+          console.error("Registration failed:", err);
+          setMessages?.(prev => prev.filter(m => m.text !== "In progress..."));
+          setMessages?.(prev => [...prev, {
+            id: Date.now(),
+            from: "them",
+            text: "Something went wrong completing registration. Please try again.",
+            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            status: "delivered",
+            isError: true,
+          }]);
+        })
+        .finally(() => setIsSubmitting(false));
+    }
+  }, [pendingLocationData, dispatch, showOtpVerification]);
 
   const handleCredentialAnswer = useCallback(async (answer, setText, setMessages) => {
     if (isAnsweringRef.current) return;
@@ -434,11 +523,12 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
       console.warn('User check failed, proceeding with registration:', checkErr);
     }
 
-    // ── PROCEED WITH REGISTRATION (only if user doesn't exist or check failed) ──
     const submitWhenReady = async () => {
-      if (!locationResolved) {
-        setTimeout(submitWhenReady, 500);
-        return;
+      if (!runnerLocation) {
+        const result = requestLocationIfNeeded(updatedRunnerData, setMessages);
+        if (!result.hasLocation) {
+          return;
+        }
       }
 
       setIsSubmitting(true);
@@ -576,7 +666,9 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
     };
 
     setTimeout(submitWhenReady, 800);
-  }, [credentialStep, runnerData, locationResolved, runnerLocation, dispatch, serviceTypeRef, showOtpVerification]);
+  }, [credentialStep, runnerData, runnerLocation,
+    dispatch, serviceTypeRef, showOtpVerification, requestLocationIfNeeded
+  ]);
 
   const handleOtpVerification = useCallback(async (otp, setMessages) => {
     if (!otp || !tempUserData) return;
@@ -865,6 +957,12 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
     returningUserData,
     handleReturningUserChoice,
     collectedFleetType: runnerData.fleetType || null,
-    isVerifyingOtp
+    isVerifyingOtp,
+
+    showLocationModal,
+    pendingLocationData,
+    requestLocationIfNeeded,
+    handleLocationComplete,
+    handleLocationCancel,
   };
 };
