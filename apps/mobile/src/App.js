@@ -19,7 +19,7 @@ export default function App() {
   const [splashDone, setSplashDone] = useState(
     () => safeSession.get('splash_done') === 'true'
   );
-  const runnerInStore = useSelector(s => s.auth.runner);
+  // const runnerInStore = useSelector(s => s.auth.runner);
   const authStatus = useSelector(s => s.auth.status);
   const [minTimePassed, setMinTimePassed] = useState(false);
 
@@ -40,7 +40,7 @@ export default function App() {
   }, [socket]);
 
   useEffect(() => {
-    const t = setTimeout(() => setMinTimePassed(true), 2000); // min 2s
+    const t = setTimeout(() => setMinTimePassed(true), 2000); 
     return () => clearTimeout(t);
   }, []);
 
