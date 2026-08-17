@@ -15,14 +15,24 @@ export function Disputes({ darkMode, onBack, runnerId, currentOrder: currentOrde
   const disputeError = useSelector(s => s.dispute.error);
 
   const rawCategories = useSelector(s => s.dispute.categories, shallowEqual);
+<<<<<<< HEAD
   const availableReasons = useMemo(
     () => (Array.isArray(rawCategories) ? rawCategories : []),
+=======
+  const availableReasons = useMemo(() =>
+    Array.isArray(rawCategories) ? rawCategories : [],
+>>>>>>> feature/prd/order-management
     [rawCategories]
   );
 
   const rawDisputableOrders = useSelector(s => s.dispute.disputableOrders, shallowEqual);
+<<<<<<< HEAD
   const disputableOrders = useMemo(
     () => (Array.isArray(rawDisputableOrders) ? rawDisputableOrders : []),
+=======
+  const disputableOrders = useMemo(() =>
+    Array.isArray(rawDisputableOrders) ? rawDisputableOrders : [],
+>>>>>>> feature/prd/order-management
     [rawDisputableOrders]
   );
 
@@ -36,7 +46,12 @@ export function Disputes({ darkMode, onBack, runnerId, currentOrder: currentOrde
   const [formError, setFormError] = useState("");
 
   // ── Chat-aware order resolution
+<<<<<<< HEAD
   const [fetchedOrder] = useState(null); // reserved for future chat-scoped lookup if needed
+=======
+  // eslint-disable-next-line 
+  const [fetchedOrder, setFetchedOrder] = useState(null);
+>>>>>>> feature/prd/order-management
   const currentOrder = currentOrderProp?.orderId ? currentOrderProp : fetchedOrder;
 
   const getReasonLabel = (value) => {
@@ -238,8 +253,13 @@ export function Disputes({ darkMode, onBack, runnerId, currentOrder: currentOrde
         {/* ── Resolved dispute for current chat's order ──────────────────── */}
         {hasResolvedDispute && !showForm && (
           <div className={`rounded-3xl p-5 border ${currentOrderDispute.status === 'dismissed'
+<<<<<<< HEAD
             ? 'border-orange-500/20 bg-orange-500/5'
             : 'border-green-500/20 bg-green-500/5'
+=======
+              ? 'border-orange-500/20 bg-orange-500/5'
+              : 'border-green-500/20 bg-green-500/5'
+>>>>>>> feature/prd/order-management
             }`}>
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
