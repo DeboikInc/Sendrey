@@ -4,13 +4,3 @@ guard clicking accross all buttons
 npx cap run android
 
 C:\platform-tools\adb devices
-
-socket.emit = private, socket.to() = broadcast minus me, io.to() = system announcement to the whole room.
-
-always ensure current status before task completed to be delievered before task completed cus they are not optimistic, task completed is
-
-
-- analytics
-- join waiting list
-- what happens if my runner cant complete the task FAQ
-- improvise money transfer tracking

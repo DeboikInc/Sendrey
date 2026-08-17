@@ -12,10 +12,3 @@ git merge dev
 # tested on staging? push to main
 git checkout main
 git merge staging
-
-https://sendrey.netlify.app
-
-analytics
-join waiting list
-what happens if my runner cant complete the task FAQ
-improvise money transfer tracking
