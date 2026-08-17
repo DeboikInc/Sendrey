@@ -350,6 +350,7 @@ const userValidation = {
     }).optional().allow(null),
 
     isActive: Joi.boolean().optional(),
+    isTrainingCompleted: Joi.boolean().optional(),
     isAvailable: Joi.boolean().optional(),
     isOnline: Joi.boolean().optional(),
     reason: Joi.string().optional().max(500)

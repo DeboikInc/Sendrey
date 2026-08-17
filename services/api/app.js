@@ -33,8 +33,9 @@ const locationCleanup = require('./services/locationTracking/locationCleanup');
 
 const { startSocketServer, shutdownSocketServer } = require('./socket');
 const { initPricingConfigSubscriber } = require('./services/pricingService');
-const { initMatchingConfigSubscriber } = require('./services/distanceConfigService');
 const { startRetryLoop } = require('./utils/paymentRetryQueue');
+
+const webhookHealth = require('./utils/webhookHealth');
 
 require("dotenv").config();
 
@@ -55,7 +56,7 @@ const startServer = async () => {
     // 1. Await the database connection first
     await connectDb();
     console.log(' Database connected');
-    
+
     // restore any scheduled cron jobs that were active before the server restarted
     await startExpenseReportJobs();
 
@@ -75,6 +76,26 @@ const startServer = async () => {
 
     // webhooks
     app.use('/payments/webhook', express.raw({ type: 'application/json' }));
+    app.get('/health/payments/webhook', (req, res) => {
+      const status = webhookHealth.getStatus();
+
+      let state = 'OK';
+      if (!status.lastSuccessAt && !status.lastFailureAt) {
+        state = 'UNKNOWN'; 
+      } else if (status.consecutiveFailures >= 3) {
+        state = 'DOWN';
+      } else if (status.lastSuccessAt && Date.now() - new Date(status.lastSuccessAt).getTime() > 24 * 60 * 60 * 1000) {
+        state = 'STALE';
+      }
+
+      const httpCode = state === 'DOWN' ? 503 : 200;
+
+      res.status(httpCode).json({
+        status: state,
+        ...status,
+        timestamp: new Date().toISOString(),
+      });
+    });
 
     app.use(express.json({ limit: '10mb' }));
     app.use(express.urlencoded({ extended: true }));
@@ -111,9 +132,6 @@ const startServer = async () => {
     // start redis
     try {
       await redis.connect();
-
-      await initPricingConfigSubscriber();
-      await initMatchingConfigSubscriber();
       locationCleanup.start();
     } catch (err) {
       console.error('Redis unavailable — skipping location cleanup:', err.message);

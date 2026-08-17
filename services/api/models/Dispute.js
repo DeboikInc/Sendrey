@@ -1,5 +1,23 @@
 const mongoose = require('mongoose');
 
+const USER_DISPUTE_CATEGORIES = [
+  'wrong_item',
+  'missing_item',
+  'damaged_item',
+  'delivery_issue',
+  'incorrect_charge',
+  'runner_conduct',
+  'other',
+];
+
+const RUNNER_DISPUTE_CATEGORIES = [
+  'user_misconduct',
+  'user_stopped_responding_mid_order',
+  'other'
+];
+
+const ALL_DISPUTE_CATEGORIES = [...new Set([...USER_DISPUTE_CATEGORIES, ...RUNNER_DISPUTE_CATEGORIES])];
+
 const disputeSchema = new mongoose.Schema({
   disputeId: {
     type: String,
@@ -42,26 +60,13 @@ const disputeSchema = new mongoose.Schema({
     ref: 'Runner',
     required: true
   },
-  reason: {
-    type: String,
-    required: true,
-    enum: [
-      'runner_misconduct',
-      'runner_unresponsive',
-      'user_misconduct',
-      'wrong_item',
-      'missing_item',
-      'damaged_item',
-      'delivery_issue',
-      'incorrect_charge',
-      'other',
-    ]
-  },
+
   category: {
     type: String,
-    enum: ['wrong_item', 'missing_item', 'damaged_item', 'delivery_issue', 'incorrect_charge', 'runner_conduct', 'other'],
-    required: function () { return this.isPostCompletion; }
+    required: true,
+    enum: ALL_DISPUTE_CATEGORIES,
   },
+
   description: {
     type: String,
     required: true
@@ -154,6 +159,17 @@ disputeSchema.statics.generateDisputeId = function () {
   const timestamp = Date.now().toString(36).toUpperCase();
   const random = Math.random().toString(36).substring(2, 6).toUpperCase();
   return `DSP-${timestamp}-${random}`;
+};
+
+disputeSchema.statics.USER_DISPUTE_CATEGORIES = USER_DISPUTE_CATEGORIES;
+disputeSchema.statics.RUNNER_DISPUTE_CATEGORIES = RUNNER_DISPUTE_CATEGORIES;
+
+disputeSchema.statics.getCategoriesFor = function (raisedBy) {
+  return raisedBy === 'runner' ? RUNNER_DISPUTE_CATEGORIES : USER_DISPUTE_CATEGORIES;
+};
+
+disputeSchema.statics.isCategoryValid = function (raisedBy, category) {
+  return this.getCategoriesFor(raisedBy).includes(category);
 };
 
 // Indexes

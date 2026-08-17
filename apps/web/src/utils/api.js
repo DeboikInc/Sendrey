@@ -1,7 +1,7 @@
 // utils/api.js - web-app
 import axios from "axios";
-import { 
-  clearCredentials, 
+import {
+  clearCredentials,
   // setToken 
 } from "../Redux/authSlice";
 
@@ -62,6 +62,11 @@ api.interceptors.response.use(
 
     // Refresh call itself failed — session is genuinely gone (revoked or truly expired)
     if (error.response?.status === 401 && original.url?.includes('refresh-token')) {
+      // Only treat this as a real logout if we're actually online.
+      if (navigator.onLine === false) {
+        return Promise.reject(error);
+      }
+
       await clearSession();
       return Promise.reject(error);
     }

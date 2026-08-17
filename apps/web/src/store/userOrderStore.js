@@ -10,16 +10,16 @@ const useUserOrderStore = create(
       taskCompleted: false,
       isPaid: false,
       orderMissing: false,
-      
+
       // ── Setters ────────────────────────────────────────────────────────────
 
       setCurrentOrder: (order) => {
         console.log('[store] setCurrentOrder called:', order?.orderId, new Error().stack.split('\n')[2]);
         set({ currentOrder: order });
       },
-      
+
       setOrderMissing: (val) => set({ orderMissing: val }),
-      
+
       updateCurrentOrder: (patch) =>
         set((state) => ({
           currentOrder: state.currentOrder
@@ -77,6 +77,10 @@ const useUserOrderStore = create(
       partialize: (state) => ({
         // Don't persist taskCompleted / orderCancelled — rehydrated from chat history
         currentOrder: state.currentOrder,
+        orderCancelled: state.orderCancelled,
+        cancelledByName: state.cancelledByName,
+        taskCompleted: state.taskCompleted,
+        isPaid: state.isPaid,
       }),
     }
   )

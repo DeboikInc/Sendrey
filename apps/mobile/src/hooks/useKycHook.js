@@ -32,9 +32,7 @@ const resolveResumeStep = (kycStatus = {}, fleetType) => {
   return null;
 };
 
-
-
-export const useKycHook = (runnerId, fleetType) => {
+export const useKycHook = (runnerId, fleetType, ) => {
   const dispatch = useDispatch();
   const [kycStep, setKycStep] = useState(null);
 
@@ -231,6 +229,7 @@ export const useKycHook = (runnerId, fleetType) => {
         status: "delivered",
         isKyc: true,
       }]);
+
       return; // ← exit early, never reaches checkVerificationStatus path
     }
 
@@ -358,6 +357,7 @@ export const useKycHook = (runnerId, fleetType) => {
             status: "delivered",
             isKyc: true
           }]);
+
 
           if (fleetTypeRef.current === 'pedestrian') {
             // Pedestrian — NIN only, proceed to selfie
@@ -575,7 +575,7 @@ export const useKycHook = (runnerId, fleetType) => {
         // push verified state into Redux so raw.jsx re-renders with isVerified=true
         dispatch(updateRunner({
           isVerifiedKyc: true,
-          kycStatus: kycStatus  
+          kycStatus: kycStatus
         }));
 
         setTimeout(() => setKycStep(6), 800);

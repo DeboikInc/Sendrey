@@ -375,6 +375,15 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
                         })()}
                     </div>
 
+                    <div className="border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3">
+                        <p className="text-xs text-black-100/80 dark:text-gray-500 mb-1">Training Status</p>
+                        <div className="flex items-center justify-between">
+                            <p className="text-sm text-black-200 dark:text-gray-200 capitalize">
+                                {runnerData.isTrainingCompleted ? 'Completed' : 'Pending..'}
+                            </p>
+                        </div>
+                    </div>
+
                     {saveError && (
                         <p className="text-xs text-red-500 text-center">{saveError}</p>
                     )}

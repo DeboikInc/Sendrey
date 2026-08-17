@@ -21,4 +21,7 @@ router.get(
     auditLog('GET_ORDERS_BY_CHAT_ID'),
     orderController.getOrderByChatId);
 
+router.post('/cancel-order/:userId', authenticate, orderController.cancelOrderByUser);
+router.get('/user-cancellation-reasons', orderController.getCancellationReasons);
+
 module.exports = router;

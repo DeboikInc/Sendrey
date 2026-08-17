@@ -27,7 +27,7 @@ const callHandlers = require("./socket/callHandlers");
 const { handlePaymentSuccess } = require('./socket/paymentHandlers');
 const { handleGetRunnerPayout, handleSubmitPayoutReceipt } = require('./socket/payoutHandlers');
 const { registerTrackingHandlers } = require('./socket/trackingHandlers');
-const { handleCancelOrder, handleTaskCompleted, handleRunnerStartedNewOrder } = require('./socket/terminalHandlers');
+const { handleCancelOrder, handleTaskCompleted, handleRunnerStartedNewOrder, handleOrderCancelledByUser } = require('./socket/terminalHandlers');
 const { handleGetOrderByChatId } = require('./socket/orderByChatIdHandlers');
 const { registerPresenceHandlers, handleUserDisconnect } = require('./socket/presenceHandlers');
 const { flushPendingWrites, handleGetLastSeq, handleGetMissedMessages } = require('./socket/messageHandlers');
@@ -196,11 +196,14 @@ async function startSocketServer(app) {
 
     );
 
+    socket.on("lockAndProceed", (data) =>
+      safeHandler(socketHandlers.handleRejoinChat, socket, io, data)
+    )
+
     socket.on("runnerReconnect", (data) =>
       safeHandler(socketHandlers.handleRunnerReconnect, socket, io, data)
 
     );
-
 
     socket.on('getOrderSession', (data) =>
       safeHandler(socketHandlers.handleGetOrderSession, socket, data)
@@ -435,6 +438,11 @@ async function startSocketServer(app) {
 
     // cancel an order
     socket.on('cancelOrder', (data) => safeHandler(handleCancelOrder, socket, io, data));
+    socket.on('orderCancelledByUser', (data) =>
+      safeHandler(handleOrderCancelledByUser, socket, io, data)
+    );
+
+
     socket.on('runnerStartedNewOrder', (data) => safeHandler(handleRunnerStartedNewOrder, socket, data));
     socket.on('taskCompleted', (data) => safeHandler(handleTaskCompleted, io, data))
 

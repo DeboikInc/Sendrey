@@ -239,7 +239,6 @@ function RunnerChatScreen({
     }
   }, [sessionKey]);
 
-
   useEffect(() => {
     if (!socket || !chatId || !runnerId) return;
 
@@ -329,6 +328,30 @@ function RunnerChatScreen({
       return next;
     });
   }, [chatId])
+
+  useEffect(() => {
+    if (!socket || !chatId) return;
+
+    const onUserCancelledOrder = ({ orderId, systemMessage }) => {
+      if (currentOrder?.orderId && orderId && currentOrder.orderId !== orderId) return;
+
+      useOrderStore.getState()._patch(chatId, {
+        orderCancelled: true,
+        cancellationReason: 'user',
+      });
+      setTaskCompleted(false);
+
+      if (systemMessage) {
+        setMessagesAndSync(prev => {
+          if (prev.some(m => m.id === systemMessage.id)) return prev;
+          return [...prev, systemMessage];
+        });
+      }
+    };
+
+    socket.on('orderCancelledByUser', onUserCancelledOrder);
+    return () => socket.off('orderCancelledByUser', onUserCancelledOrder);
+  }, [socket, chatId, currentOrder?.orderId, setTaskCompleted, setMessagesAndSync]);
 
   useEffect(() => {
     if (!socket || !chatId) return;
@@ -1521,7 +1544,7 @@ function RunnerChatScreen({
             console.log('SHOWING CANCELLED VIEW - orderCancelled is TRUE') ||
             <div>
               <div className={`px-4 py-2 text-center text-sm font-medium ${dark ? 'text-gray-400 bg-black-100' : 'text-gray-500 bg-gray-100'} rounded-xl mx-4 mt-3`}>
-                {cancellationReason === 'runner' ? 'You cancelled this order' : 'Order was cancelled'}
+                {cancellationReason === 'runner' ? 'You cancelled this order' : 'Order was cancelled by customer'}
               </div>
               <div className="px-4 py-4">
                 <button

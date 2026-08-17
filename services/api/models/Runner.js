@@ -388,6 +388,7 @@ const runnerSchema = new mongoose.Schema({
     },
   },
 
+  isTrainingCompleted: {type: Boolean, default: false},
   whatsappOptIn: { type: Boolean, default: false },
   whatsappOptInSource: { type: String },
   whatsappOptInTimestamp: { type: Date },
@@ -749,10 +750,6 @@ runnerSchema.statics.findNearbyRunners = async function ({
     return filtered;
   }
 
-
-  console.log('[findNearbyRunners] Non-pedestrian fleet:', fleetType);
-  console.log('[findNearbyRunners] Pickup max distance:', PICKUP_MAX);
-
   const query = {
     role: 'runner',
     isActive: true,
@@ -787,12 +784,6 @@ runnerSchema.statics.findNearbyRunners = async function ({
       });
       return false;
     }
-
-    console.log('[findNearbyRunners] Runner accepted:', {
-      runnerId: runner._id,
-      fleetType: runner.fleetType,
-      distanceToPickup: Math.round(runnerToPickup),
-    });
 
     return true;
   });

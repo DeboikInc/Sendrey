@@ -500,7 +500,8 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
         setReturningUserData({
           ...updatedRunnerData,
           firstName: checkResult.firstName,
-          kycStatus: checkResult.kycStatus
+          kycStatus: checkResult.kycStatus,
+          isTrainingCompleted: checkResult.isTrainingCompleted ?? false,
         });
         setTempUserData(updatedRunnerData);
         setIsReturningUser(true);
@@ -588,6 +589,7 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
           const serverName = err?.data?.userName || err?.userName || updatedRunnerData.name.trim().split(" ")[0];
           const kycStatus = err?.data?.kycStatus || err?.kycStatus || {};
           const fleetType = err?.data?.fleetType || err?.fleetType || {};
+          const isTrainingCompleted = err?.data?.isTrainingCompleted ?? err?.isTrainingCompleted ?? false;
           const greetingText = buildReturningUserGreeting(serverName, kycStatus, fleetType || updatedRunnerData.fleetType);
 
           setReturningUserData({
@@ -600,7 +602,8 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
               selfieVerified: kycStatus?.selfieVerified ?? false,
               selfieStatus: kycStatus?.selfieStatus ?? 'not_submitted',
               overallVerified: kycStatus?.overallVerified ?? false,
-            }
+            },
+            isTrainingCompleted,
           });
           persistReturningKycStatus(updatedRunnerData.email, kycStatus);
           setTempUserData(updatedRunnerData);

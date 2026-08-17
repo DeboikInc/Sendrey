@@ -68,7 +68,5 @@ export default function App() {
     return <BarLoader fullScreen />;
   }
 
-  console.log('[APP] rendering routes, isReady:', isReady, 'runner in store:', runnerInStore);
-
   return <ProjectedRoutes />;
 }

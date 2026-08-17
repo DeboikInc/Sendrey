@@ -617,20 +617,20 @@ userSchema.statics.findNearbyUsers = async function ({ latitude, longitude, flee
 
   const query = {
     role: 'user',
-    isActive: true,
-    isAvailable: { $ne: false },
     'currentRequest.status': 'awaiting_runner_connection',
   };
 
   if (fleetType) query['currentRequest.fleetType'] = fleetType;
 
   const results = await this.find(query)
-    .select('firstName lastName phone currentRequest location latitude longitude avatar isPhoneVerified isEmailVerified')
+    .select('firstName lastName phone currentRequest location latitude longitude avatar isPhoneVerified isEmailVerified isActive isAvailable')
     .lean();
 
-  console.log('[findNearbyUsers] Found potential users:', results.length);
-
   return results.filter((user) => {
+    console.log('[findNearbyUsers] user:', user._id, 'isActive:', user.isActive, 'isAvailable:', user.isAvailable);
+
+    if (!user.isActive || user.isAvailable === false) return false;
+
     const req = user.currentRequest;
     if (!req) {
       console.log('[findNearbyUsers] User has no currentRequest:', user._id);
@@ -718,13 +718,6 @@ userSchema.statics.findNearbyUsers = async function ({ latitude, longitude, flee
 
       return true;
     }
-
-    // For non-pedestrian fleet types
-    console.log('[findNearbyUsers] Non-pedestrian request accepted:', {
-      userId: user._id,
-      fleetType: req.fleetType,
-      runnerToPickup: Math.round(runnerToPickup),
-    });
 
     return true;
   });
