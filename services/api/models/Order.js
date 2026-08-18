@@ -78,6 +78,7 @@ const orderSchema = new mongoose.Schema({
   },
 
   // ── Locations 
+  currentUserLocation: { type: String },
   pickupLocation: { address: String, contactName: String, pickupPhone: String },
   deliveryLocation: { address: String, contactName: String, deliveryPhone: String },
   marketLocation: { address: String },

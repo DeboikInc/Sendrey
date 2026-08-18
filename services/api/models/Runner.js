@@ -170,6 +170,7 @@ const runnerSchema = new mongoose.Schema({
     enum: RUNNER_STATUS,
     default: 'pending_verification'
   },
+  
   verificationDocuments: {
     nin: {
       number: String,
