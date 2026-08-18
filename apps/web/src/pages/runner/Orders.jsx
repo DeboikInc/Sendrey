@@ -122,7 +122,7 @@ function FilterPanel({ filters, onChange, onClear, darkMode, onClose }) {
                                 type="date"
                                 value={filters.dateFrom}
                                 onChange={(e) => onChange({ dateFrom: e.target.value })}
-                                className={`w-full rounded-lg px-3 py-2 text-sm border ${darkMode ? "bg-black-200 border-white/10 text-white" : "bg-gray-50 border-gray-200 text-black-200"}`}
+                                className={`w-full min-w-0 max-w-full box-border rounded-lg px-2 sm:px-3 py-2 text-xs sm:text-sm ${darkMode ? "bg-black-200 border-white/10 text-white [color-scheme:dark]" : "bg-gray-50 border-gray-200 text-black-200"} border`}
                             />
                         </div>
                         <div className="flex-1 min-w-0">
@@ -131,7 +131,7 @@ function FilterPanel({ filters, onChange, onClear, darkMode, onClose }) {
                                 type="date"
                                 value={filters.dateTo}
                                 onChange={(e) => onChange({ dateTo: e.target.value })}
-                                className={`w-full rounded-lg px-3 py-2 text-sm border ${darkMode ? "bg-black-200 border-white/10 text-white" : "bg-gray-50 border-gray-200 text-black-200"}`}
+                                className={`w-full min-w-0 max-w-full box-border rounded-lg px-2 sm:px-3 py-2 text-xs sm:text-sm ${darkMode ? "bg-black-200 border-white/10 text-white [color-scheme:dark]" : "bg-gray-50 border-gray-200 text-black-200"} border`}
                             />
                         </div>
                     </div>
