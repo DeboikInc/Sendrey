@@ -4,7 +4,7 @@ const KYCService = require('../services/kycService');
 const Runner = require('../models/Runner');
 const { sendPushNotification } = require('../services/notificationService');
 const redis = require('../config/redis');
-
+// PREMBLY for automation
 class KYCController extends BaseController {
     constructor() {
         super(new KYCService());

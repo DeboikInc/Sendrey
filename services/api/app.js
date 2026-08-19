@@ -35,6 +35,7 @@ const { startSocketServer, shutdownSocketServer } = require('./socket');
 const { initPricingConfigSubscriber } = require('./services/pricingService');
 const { initMatchingConfigSubscriber } = require('./services/distanceConfigService');
 const { startRetryLoop } = require('./utils/paymentRetryQueue');
+const metricsMiddleware = require("./middleware/metrics");
 
 require("dotenv").config();
 
@@ -58,9 +59,9 @@ const startServer = async () => {
     
     // restore any scheduled cron jobs that were active before the server restarted
     await startExpenseReportJobs();
-
+    
     app.set('trust proxy', 1);
-
+    
     // 2. Middlewares
     app.use(helmet(
       {
@@ -72,21 +73,21 @@ const startServer = async () => {
     app.options('*', cors(corsOptions));
     app.use(compression());
     app.use(cookieParser());
-
+    
     // webhooks
     app.use('/payments/webhook', express.raw({ type: 'application/json' }));
-
+    
     app.use(express.json({ limit: '10mb' }));
     app.use(express.urlencoded({ extended: true }));
-
+    
     app.use(requestLogger);
     app.use(enhancedRequestLogger);
-
+    
     app.use('/uploads', (req, res, next) => {
       res.header('Cross-Origin-Resource-Policy', 'cross-origin');
       next();
     }, express.static(path.join(__dirname, 'uploads')));
-
+    
     // Start all Kafka consumers
     if (process.env.KAFKA_ENABLED === 'true') {
       await startAllConsumers();
@@ -94,7 +95,7 @@ const startServer = async () => {
     } else {
       console.log('Kafka disabled — running in direct mode');
     }
-
+    
     // ping socket every 5 mins
     if (process.env.NODE_ENV === 'production') {
       setInterval(async () => {
@@ -107,21 +108,22 @@ const startServer = async () => {
         }
       }, 5 * 60 * 1000); // every 5 minutes
     }
-
+    
     // start redis
     try {
       await redis.connect();
-
+      
       await initPricingConfigSubscriber();
       await initMatchingConfigSubscriber();
       locationCleanup.start();
     } catch (err) {
       console.error('Redis unavailable — skipping location cleanup:', err.message);
     }
+    
 
+    app.use(metricsMiddleware);
     // 3. Routes
     app.use('/api/v1', routes);
-
     // admin routes
     app.use('/api/v1/admin', adminRoutes)
 
