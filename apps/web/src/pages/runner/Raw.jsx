@@ -1234,12 +1234,24 @@ function WhatsAppLikeChat() {
 
   // ── Runner room join ─────────────────────────────────────────────────────────
   useEffect(() => {
-    console.log("raw CALLING JOIN RUNNER ROOM....")
     if (!registrationComplete || !runnerId || !socket) return;
-    if (!socket.connected) return;
-    joinRunnerRoom(runnerId, null);
 
-    console.log("raw JOIN RUNNER ROOM called", socket.connected ? true : false,)
+    const rejoin = () => {
+      console.log('[raw.jsx] (re)joining runner room after connect:', runnerId);
+      joinRunnerRoom(runnerId, null);
+    };
+
+    if (socket.connected) rejoin();
+    socket.on('connect', rejoin);
+    
+    socket.on('connect', () => {
+      rejoin();
+      if (!kycStatus.overallVerified) {
+        checkVerificationStatus(botMessagesUpdater, () => { }, false);
+      }
+    });
+
+    return () => socket.off('connect', rejoin);
   }, [registrationComplete, runnerId, socket, joinRunnerRoom]);
 
   useEffect(() => {
@@ -1988,7 +2000,7 @@ function WhatsAppLikeChat() {
           </div>
         </div>
       )}
-      
+
       {showTrainingScreen && (
         <RunnerTraining
           submitting={isSubmittingTraining}
