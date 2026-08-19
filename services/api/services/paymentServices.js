@@ -82,13 +82,6 @@ class PaymentService {
       }
 
       return withTransaction(async (session) => {
-        const lockedOrder = await Order.findOneAndUpdate(
-          { orderId, paymentStatus: { $ne: 'paid' } },
-          { $set: { paymentStatus: 'processing' } },
-          { new: true, session }
-        );
-        if (!lockedOrder) throw new Error('Order already paid or not found');
-
         const wallet = await Wallet.findOne({ userId }).session(session);
         if (!wallet || wallet._balance < order.totalAmount) {
           throw new Error('Insufficient wallet balance');
@@ -119,11 +112,12 @@ class PaymentService {
 
         const [escrow] = await Escrow.create([escrowDoc], { session });
 
-        await Order.findOneAndUpdate(
-          { orderId },
+        const lockedOrder = await Order.findOneAndUpdate(
+          { orderId, paymentStatus: { $ne: 'paid' } },
           { $set: { escrowId: escrow._id, paymentStatus: 'paid', status: 'paid' } },
           { session }
         );
+        if (!lockedOrder) throw new Error('Order already paid or not found');
 
         await LedgerEntry.create([{
           userId: order.userId,
@@ -205,21 +199,14 @@ class PaymentService {
 
     const result = await withTransaction(async (session) => {
       const order = await Order.findOneAndUpdate(
-        { orderId, paymentStatus: { $ne: 'paid' } },
-        { $set: { paymentStatus: 'processing' } },
-        { new: true, session }
+        { orderId },
+        { $set: { escrowId: escrow._id, paymentStatus: 'paid', status: 'paid', paymentMethod: 'card' } },
+        { session }
       );
+
       if (!order) return { alreadyPaid: true };
 
       const feeSplit = calculateFeeSplit(order.deliveryFee, order.fleetType, pricingConfig);
-
-      console.log('[verifyPayment] Starting ledger creation', {
-        orderId,
-        userId: order.userId,
-        totalAmount: order.totalAmount,
-        reference,
-        timestamp: new Date().toISOString()
-      });
 
       const [escrow] = await Escrow.create([{
         taskId: order.orderId,
@@ -1115,47 +1102,40 @@ class PaymentService {
   }
 
   async refundToUser({ escrowId, userId, amount, reason, orderId }) {
+    const claimed = await Escrow.findOneAndUpdate(
+      { _id: escrowId, status: 'funded' },
+      { $set: { status: 'refund_processing' } },
+      { new: false }
+    );
+
+    if (!claimed) return { alreadyRefunded: true };
+
     return withTransaction(async (session) => {
       const escrow = await Escrow.findById(escrowId).session(session);
-      if (!escrow) throw new Error('Escrow not found');
+      const order = await Order.findOne({ orderId }).session(session);
 
-      // Credit user wallet
       const userWallet = await Wallet.findOne({ userId, userType: 'user' }).session(session);
       if (!userWallet) throw new Error('User wallet not found');
 
-      await userWallet.credit(
-        amount,
-        `refund-ban-${orderId}-${Date.now()}`,
-        { type: 'refund', orderId }
-      );
+      if (order?.paymentMethod === 'wallet') {
+        await userWallet.unlockAndCredit(amount, `refund-${orderId}-${Date.now()}`, { type: 'refund', orderId });
+      } else {
+        await userWallet.credit(amount, `refund-${orderId}-${Date.now()}`, { type: 'refund', orderId });
+      }
 
-      // Ledger entry
+      // const transactionId = userWallet._lastTransaction._id;
+
       await LedgerEntry.create([{
-        userId,
-        userModel: 'User',
-        type: 'escrow_refund',
-        grossAmount: amount,
-        netAmount: amount,
-        providerFee: 0,
-        platformFee: 0,
-        netPlatformFee: 0,
-        runnerFee: 0,
-        provider: 'system',
-        orderId,
-        escrowId,
-        description: reason,
-        status: 'completed',
+        userId, userModel: 'User', type: 'escrow_refund',
+        grossAmount: amount, netAmount: amount,
+        providerFee: 0, platformFee: 0, netPlatformFee: 0, runnerFee: 0,
+        provider: 'system', orderId, escrowId,
+        description: reason, status: 'completed',
       }], { session });
 
-      // Mark escrow released
-      await Escrow.findByIdAndUpdate(escrowId,
-        { $set: { status: 'refunded' } },
-        { session }
-      );
+      await Escrow.findByIdAndUpdate(escrowId, { $set: { status: 'refunded' } }, { session });
 
-      console.log(`[refundToUser] NGN ${amount} refunded to user ${userId} for order ${orderId}`);
-
-
+      // console.log(`[refundToUser] NGN ${amount} refunded to user ${userId} for order ${orderId} (method=${order?.paymentMethod || 'card'})`);
     });
   }
 }

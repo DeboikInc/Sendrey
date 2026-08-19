@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useSelector } from "react-redux";
 import useDarkMode from "../../hooks/useDarkMode";
 import { useNavigate } from "react-router-dom";
+import { XCircle } from 'lucide-react';
 
 import ServiceSelectionScreen from "../../components/screens/ServiceSelectionScreen";
 import VehicleSelectionScreen from "../../components/screens/VehicleSelectionScreen";
@@ -15,6 +16,7 @@ import Settings from "./settings/Settings";
 import UserWallet from "../../components/screens/UserWallet";
 import MoreMenu from "../../components/screens/MoreMenu";
 import UserDisputes from "../../components/screens/UserDisputes";
+import OrderHistory from "../../components/screens/OrderHistory";
 
 import ChatScreen from "../../components/screens/ChatScreen";
 import { useDispatch } from "react-redux";
@@ -68,8 +70,8 @@ export const Welcome = () => {
   const [runnerId, setRunnerId] = useState(null); // eslint-disable-line no-unused-vars
   const dispatch = useDispatch();
   const navigate = useNavigate();
-
   const { socket, joinUserRoom } = useSocket();
+  const [bannedInfo, setBannedInfo] = useState(null);
 
   const { runnerLocation } = useCredentialFlow(serviceTypeRef, (runnerData) => {
     setRunnerId(runnerData._id || runnerData.id);
@@ -99,6 +101,7 @@ export const Welcome = () => {
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showWallet, setShowWallet] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showOrderHistory, setShowOrderHistory] = useState(false);
   const [showDisputes, setShowDisputes] = useState(false);
 
   // state declarations for marketscreen
@@ -163,6 +166,7 @@ export const Welcome = () => {
         setShowMoreMenu(false);
         setShowWallet(false);
         setShowSettings(false);
+        setShowOrderHistory(false);
         setShowDisputes(false);
         setChatReady(true);
         setShowConnecting(false);
@@ -172,6 +176,19 @@ export const Welcome = () => {
 
     },
   });
+
+  useEffect(() => {
+    if (!socket || !currentUser?._id) return;
+    const handler = (data) => {
+      if (data.event === 'user_banned') {
+        setBannedInfo({ isBanned: true, reason: data.reason });
+      } else if (data.event === 'user_unbanned') {
+        setBannedInfo(null);
+      }
+    };
+    socket.on('accountStatus', handler);
+    return () => socket.off('accountStatus', handler);
+  }, [socket, currentUser?._id]);
 
   useEffect(() => {
     if (currentUser?._id && socket && permission !== 'denied') {
@@ -228,6 +245,11 @@ export const Welcome = () => {
     // Only bail on definitive local terminal states — let server validate everything else
     if (status?.taskCompleted || status?.orderCancelled) {
       console.log('[restore] local state is terminal, bailing');
+      chatStorage.clearActiveChat();
+      chatStorage.clearDeliveryConfirmations(storedChatId);
+      chatStorage.clearRunnerData();
+      chatStorage.clearChatStatus(storedChatId);
+      setCurrentScreen('service_selection');
       return;
     }
 
@@ -303,6 +325,17 @@ export const Welcome = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser?._id]);
 
+  useEffect(() => {
+    if (currentScreen !== 'chat') return;
+    const t = setTimeout(() => {
+      if (!chatMounted) {
+        console.warn('[Welcome] currentScreen=chat but chatMounted=false — recovering to service_selection');
+        setCurrentScreen('service_selection');
+      }
+    }, 1500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentScreen, chatMounted]);
 
   useEffect(() => {
     if (!socket || !currentUser?._id) return;
@@ -507,7 +540,11 @@ export const Welcome = () => {
 
 
   const renderScreen = () => {
-    if (currentScreen === 'chat') return null; // ChatScreen is rendered separately below so it can mount/unmount without affecting this entire tree
+    if (currentScreen === 'chat') {
+      if (!chatMounted) return null;
+      return null;
+    };
+    // ChatScreen is rendered separately below so it can mount/unmount without affecting this entire tree
     switch (currentScreen) {
       case "service_selection":
         return (
@@ -738,6 +775,7 @@ export const Welcome = () => {
         onWallet={() => setShowWallet(true)}
         onSettings={() => setShowSettings(true)}
         onDisputes={() => setShowDisputes(true)}
+        onOrderHistory={() => setShowOrderHistory(true)}
       // others
       />
 
@@ -746,6 +784,18 @@ export const Welcome = () => {
           <UserWallet darkMode={dark} onBack={() => setShowWallet(false)} userData={currentUser} />
         </div>
       )}
+
+      {showOrderHistory && currentScreen !== 'chat' && (
+        <div className="fixed inset-0 z-[10001]">
+          <OrderHistory
+            darkMode={dark}
+            onBack={() => setShowOrderHistory(false)}
+            userData={currentUser}
+            userId={currentUser?._id}
+          />
+        </div>
+      )}
+
       {showSettings && currentScreen !== 'chat' && (
         <div className="fixed inset-0 z-[10001]">
           <Settings darkMode={dark}
@@ -770,7 +820,7 @@ export const Welcome = () => {
 
 
       {showConnecting && (
-        <div className="fixed inset-0 flex flex-col justify-end items-center bg-black-100 bg-opacity-80 z-[10001] pb-6 px-4 sm:pb-10"
+        <div className="fixed inset-0 flex flex-col justify-end items-center bg-black-100/90 bg-opacity-80 z-[10001] pb-6 px-4 sm:pb-10"
           style={{ pointerEvents: 'all' }}
         >
           <div className="flex flex-col items-center justify-center gap-2 w-full max-w-md">
@@ -966,6 +1016,32 @@ export const Welcome = () => {
               >
                 Skip This Time
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {bannedInfo?.isBanned && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm">
+          <div className={`max-w-md w-full mx-4 p-6 rounded-2xl ${dark ? 'bg-black-200' : 'bg-white'}`}>
+            <div className="flex flex-col items-center text-center gap-4">
+              <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center">
+                <XCircle className="w-8 h-8 text-red-500" />
+              </div>
+
+              <h2 className={`text-xl font-bold ${dark ? 'text-white' : 'text-black-200'}`}>
+                Account Suspended
+              </h2>
+
+              <p className={`text-sm ${dark ? 'text-gray-300' : 'text-gray-600'}`}>
+                {bannedInfo.reason || 'Your account has been suspended. Please contact support for assistance.'}
+              </p>
+
+              <a href="mailto:support@sendrey.com"
+                className="w-full py-3 px-4 bg-primary text-white rounded-lg font-medium hover:opacity-90 transition-opacity text-center"
+              >
+                Contact Support
+              </a>
             </div>
           </div>
         </div>

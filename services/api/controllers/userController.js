@@ -7,6 +7,8 @@ const logger = require('../utils/logger');
 const User = require('../models/User');
 const cloudinary = require('../config/cloudinary');
 const runnerService = require('../services/runnerService');
+const redis = require('../config/redis');
+const { sendPushNotification } = require('../services/notificationService');
 
 class UserController extends BaseController {
   constructor() {
@@ -16,6 +18,7 @@ class UserController extends BaseController {
 
     // Bind all methods
     this.getProfile = this.getProfile.bind(this);
+    this.publishToSocket = this.publishToSocket.bind(this);
     this.getPublicProfile = this.getPublicProfile.bind(this);
     this.updateProfile = this.updateProfile.bind(this);
     this.listUsers = this.listUsers.bind(this);
@@ -43,6 +46,17 @@ class UserController extends BaseController {
     } catch (error) {
       logger.error('Get user profile error:', error);
       next(error);
+    }
+  }
+
+  async publishToSocket(userId, payload) {
+    try {
+      const client = redis.getClient();
+      await client.publish('user:events', JSON.stringify({ userId, data: payload }));
+      return true;
+    } catch (error) {
+      logger.error('[Redis] Failed to publish user event:', error.message);
+      return false;
     }
   }
 
@@ -255,7 +269,6 @@ class UserController extends BaseController {
 
   // Update user status
   async updateUserStatus(req, res, next) {
-
     try {
       const { userId } = req.params;
       const { isActive, reason, isAvailable, isOnline } = req.body;
@@ -267,6 +280,25 @@ class UserController extends BaseController {
 
       const user = await userService.updateUserStatus(userId, statusUpdates, reason);
       logger.info(`User status updated: ${user.email} -> ${isActive ? 'active' : 'inactive'}, available: ${isAvailable}, online: ${isOnline}`);
+
+      if (isActive !== undefined) {
+        const isBanned = isActive === false;
+        await this.publishToSocket(userId, {
+          isBanned,
+          event: isBanned ? 'user_banned' : 'user_unbanned',
+          reason: isBanned ? (reason || null) : null,
+        });
+
+        sendPushNotification({
+          recipientId: userId,
+          recipientType: 'user',
+          title: isBanned ? '🚫 Account Suspended' : '✅ Account Reinstated',
+          body: isBanned
+            ? `Your account has been suspended.${reason ? ` Reason: ${reason}` : ''}. please contact support for assistance`
+            : 'Your account has been reinstated.',
+          data: { type: isBanned ? 'user_banned' : 'user_unbanned' },
+        });
+      }
 
       this.success(res, {
         user: this._sanitizeUser(user),

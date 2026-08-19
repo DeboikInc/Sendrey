@@ -6,7 +6,7 @@ const Escrow = require('../models/Escrows');
 const Order = require('../models/Order');
 const User = require('../models/User');
 const { sendPaymentEvent } = require('../kafka/producers/paymentProducer');
-
+const webhookHealth = require('../utils/webhookHealth');
 const {
     notifyPaymentSuccess,
     notifyEscrowReleased,
@@ -173,62 +173,64 @@ class PaymentController extends BaseController {
         const secret = process.env.PAYSTACK_SECRET_KEY;
         const crypto = require('crypto');
 
-        // const body = req.body instanceof Buffer ? req.body : Buffer.from(JSON.stringify(req.body));
-
         const computedHash = crypto
             .createHmac('sha512', secret)
-            .update(JSON.stringify(req.body))
+            .update(req.body) // raw buffer, not JSON.stringify(req.body)
             .digest('hex');
 
         if (hash !== computedHash) {
             console.error('⚠️ Webhook signature verification failed');
+            webhookHealth.recordFailure('invalid_signature');
             return res.status(400).send('Invalid signature');
         }
 
-        const event = req.body;
-
+        const event = JSON.parse(req.body); 
         switch (event.event) {
             case 'charge.success': {
                 const { reference, metadata } = event.data;
 
                 try {
-                if (metadata.type === 'wallet_funding') {
-                    const result = await paymentService.verifyWalletFunding(reference);
-                    sendPaymentEvent('wallet.funded', {
-                        userId: metadata.userId,
-                        userEmail: metadata.userEmail,
-                        userName: metadata.userName,
-                        amount: result?.amount,
-                        newBalance: result?.balance,
-                        reference,
-                    });
-                } else if (metadata.orderId) {
-                    await paymentService.verifyPayment(reference);
-                    if (!result.alreadyPaid) {
-                        const user = await User.findById(result.order.userId).select('firstName lastName email').lean();
-
-                        sendPaymentEvent('order.paid', {
-                            orderId: result.order.orderId,
-                            userId: result.order.userId,
-                            userEmail: user?.email,
-                            userName: user ? `${user.firstName} ${user.lastName}` : 'user',
-                            amount: result.order.totalAmount,
-                            paymentMethod: 'card',
+                    if (metadata.type === 'wallet_funding') {
+                        const result = await paymentService.verifyWalletFunding(reference);
+                        sendPaymentEvent('wallet.funded', {
+                            userId: metadata.userId,
+                            userEmail: metadata.userEmail,
+                            userName: metadata.userName,
+                            amount: result?.amount,
+                            newBalance: result?.balance,
                             reference,
                         });
+                    } else if (metadata.orderId) {
+                        const result = await paymentService.verifyPayment(reference);
+                        if (!result.alreadyPaid) {
+                            const user = await User.findById(result.order.userId).select('firstName lastName email').lean();
+
+                            sendPaymentEvent('order.paid', {
+                                orderId: result.order.orderId,
+                                userId: result.order.userId,
+                                userEmail: user?.email,
+                                userName: user ? `${user.firstName} ${user.lastName}` : 'user',
+                                amount: result.order.totalAmount,
+                                paymentMethod: 'card',
+                                reference,
+                            });
+                        }
                     }
-                }
+                    webhookHealth.recordSuccess();
                 } catch (err) {
                     console.error(`Webhook charge.success failed for ref ${reference}:`, err.message);
+                    webhookHealth.recordFailure(err.message);
                 }
 
                 break;
             }
             case 'transfer.success':
                 console.log('Transfer successful');
+                webhookHealth.recordSuccess();
                 break;
             case 'transfer.failed':
                 console.log('Transfer failed');
+                webhookHealth.recordFailure('transfer_failed');
                 break;
             default:
                 console.log(`Unhandled event type ${event.event}`);

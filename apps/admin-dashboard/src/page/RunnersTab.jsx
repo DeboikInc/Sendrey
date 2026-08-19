@@ -35,13 +35,12 @@ function ConfirmModal({ isOpen, title, message, confirmLabel = 'Confirm', confir
                     </button>
                     <button
                         onClick={onConfirm}
-                        className={`flex-1 py-2.5 rounded-xl text-white text-sm font-bold transition-all ${
-                            confirmVariant === 'destructive'
-                                ? 'bg-red-500 hover:bg-red-600'
-                                : confirmVariant === 'warning'
-                                    ? 'bg-orange hover:bg-orange/80'
-                                    : 'bg-green-600 hover:bg-green-700'
-                        }`}
+                        className={`flex-1 py-2.5 rounded-xl text-white text-sm font-bold transition-all ${confirmVariant === 'destructive'
+                            ? 'bg-red-500 hover:bg-red-600'
+                            : confirmVariant === 'warning'
+                                ? 'bg-orange hover:bg-orange/80'
+                                : 'bg-green-600 hover:bg-green-700'
+                            }`}
                     >
                         {confirmLabel}
                     </button>
@@ -54,22 +53,12 @@ function ConfirmModal({ isOpen, title, message, confirmLabel = 'Confirm', confir
 function RunnerActions({ runner, onBan, onUnban, onResetStrikes, onDelete, isMobile }) {
     return (
         <div className={`flex items-center gap-2 ${isMobile ? 'w-full' : 'justify-end'}`}>
-            {runner.runnerStatus === 'banned' ? (
-                <Button
-                    onClick={() => onUnban(runner)}
-                    variant="outline"
-                    size="xs"
-                    className={isMobile ? 'flex-1' : ''}
-                >
+            {!runner.isActive ? (
+                <Button onClick={() => onUnban(runner)} variant="outline" size="xs" className={isMobile ? 'flex-1' : ''}>
                     <CheckCircle size={13} className="mr-1" /> Lift Ban
                 </Button>
             ) : (
-                <Button
-                    onClick={() => onBan(runner)}
-                    variant="destructive"
-                    size="xs"
-                    className={isMobile ? 'flex-1' : ''}
-                >
+                <Button onClick={() => onBan(runner)} variant="destructive" size="xs" className={isMobile ? 'flex-1' : ''}>
                     Ban Runner
                 </Button>
             )}
@@ -217,9 +206,12 @@ export default function RunnersTab() {
     const getStatusStyle = (status) => {
         switch (status) {
             case 'banned': return 'bg-red-500/10 text-red-500 border-red-500/20';
+            case 'suspended': return 'bg-red-500/10 text-red-500 border-red-500/20';
+            case true: return 'bg-green-500/10 text-green-500 border-green-500/20';
+            case false: return 'bg-red-500/10 text-red-500 border-red-500/20';
             case 'approved_full': return 'bg-green-500/10 text-green-500 border-green-500/20';
             case 'approved_limited': return 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20';
-            default: return 'bg-white/5 text-white/40 border-white/10';
+            default: return 'bg-green-500/10 text-green-500 border-green-500/20';
         }
     };
 
@@ -355,6 +347,8 @@ export default function RunnersTab() {
                                         <th className="px-5 py-3 text-[10px] text-white/30 tracking-widest uppercase font-medium">Runner</th>
                                         <th className="px-5 py-3 text-[10px] text-white/30 tracking-widest uppercase font-medium">Performance</th>
                                         <th className="px-5 py-3 text-[10px] text-white/30 tracking-widest uppercase font-medium">Status</th>
+                                        <th className="px-5 py-3 text-[10px] text-white/30 tracking-widest uppercase font-medium">kycStatus</th>
+                                        <th className="px-5 py-3 text-[10px] text-white/30 tracking-widest uppercase font-medium">fleetType</th>
                                         <th className="px-5 py-3 text-[10px] text-white/30 tracking-widest uppercase font-medium text-right">Actions</th>
                                     </tr>
                                 </thead>
@@ -378,14 +372,24 @@ export default function RunnersTab() {
                                                 <div className="text-white/70 text-xs mt-0.5">{runner.completedOrders || 0} trips</div>
                                             </td>
                                             <td className="px-5 py-4">
-                                                <span className={`px-2.5 py-1 rounded-lg text-[10px] font-medium border ${getStatusStyle(runner.runnerStatus)}`}>
-                                                    {runner.runnerStatus?.replace(/_/g, ' ') || '—'}
+                                                <span className={`px-2.5 py-1 rounded-lg text-[10px] font-medium border ${getStatusStyle(runner.isActive)}`}>
+                                                    {runner.isActive ? 'Active' : 'Suspended'}
                                                 </span>
                                                 {runner.itemRejectionCount > 0 && (
                                                     <div className="text-[10px] text-red-500/70 mt-1">
                                                         {runner.itemRejectionCount} strike{runner.itemRejectionCount !== 1 ? 's' : ''}
                                                     </div>
                                                 )}
+                                            </td>
+                                            <td>
+                                                <span className={`px-2.5 py-1 rounded-lg text-[10px] font-medium border ${getStatusStyle(runner.kycStatus)}`}>
+                                                    {runner.kycStatus}
+                                                </span>
+                                            </td>
+                                            <td>
+                                                <span className="flex justify-center text-sm text-white/70">
+                                                    {runner.fleetType}
+                                                </span>
                                             </td>
                                             <td className="px-5 py-4 text-right">
                                                 <RunnerActions
@@ -412,16 +416,29 @@ export default function RunnersTab() {
                                             <div className="text-white font-medium text-sm">{runner.firstName} {runner.lastName}</div>
                                             <div className="text-white/35 text-xs mt-0.5">{runner.email}</div>
                                             <div className="text-white/25 text-xs mt-0.5">{runner.phone}</div>
+                                            {runner.createdAt && (
+                                                <div className="text-white/25 text-[9px] mt-0.5">
+                                                    Joined: {new Date(runner.createdAt).toLocaleDateString()}
+                                                </div>
+                                            )}
                                         </div>
-                                        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-medium border shrink-0 ${getStatusStyle(runner.runnerStatus)}`}>
-                                            {runner.runnerStatus?.replace(/_/g, ' ') || '—'}
-                                        </span>
+                                        <div className="flex flex-col items-end gap-1.5 shrink-0">
+                                            <span className={`px-2.5 py-1 rounded-lg text-[10px] font-medium border ${getStatusStyle(runner.isActive)}`}>
+                                                {runner.isActive ? 'Active' : 'Suspended'}
+                                            </span>
+                                            <span className={`px-2.5 py-1 rounded-lg text-[10px] font-medium border ${getStatusStyle(runner.kycStatus)}`}>
+                                                {runner.kycStatus?.replace(/_/g, ' ') || '—'}
+                                            </span>
+                                        </div>
                                     </div>
                                     <div className="flex items-center gap-4 text-xs flex-wrap">
                                         <div className="flex items-center gap-1 text-primary font-medium">
                                             <Star size={12} fill="currentColor" /> {runner.rating || 'N/A'}
                                         </div>
                                         <div className="text-white/35">{runner.completedOrders || 0} trips</div>
+                                        {runner.fleetType && (
+                                            <div className="text-white/35 capitalize">{runner.fleetType}</div>
+                                        )}
                                         {runner.itemRejectionCount > 0 && (
                                             <div className="text-red-500/70">
                                                 {runner.itemRejectionCount} strike{runner.itemRejectionCount !== 1 ? 's' : ''}

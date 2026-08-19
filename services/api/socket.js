@@ -27,7 +27,7 @@ const callHandlers = require("./socket/callHandlers");
 const { handlePaymentSuccess } = require('./socket/paymentHandlers');
 const { handleGetRunnerPayout, handleSubmitPayoutReceipt } = require('./socket/payoutHandlers');
 const { registerTrackingHandlers } = require('./socket/trackingHandlers');
-const { handleCancelOrder, handleTaskCompleted, handleRunnerStartedNewOrder } = require('./socket/terminalHandlers');
+const { handleCancelOrder, handleTaskCompleted, handleRunnerStartedNewOrder, handleOrderCancelledByUser } = require('./socket/terminalHandlers');
 const { handleGetOrderByChatId } = require('./socket/orderByChatIdHandlers');
 const { registerPresenceHandlers, handleUserDisconnect } = require('./socket/presenceHandlers');
 const { flushPendingWrites, handleGetLastSeq, handleGetMissedMessages } = require('./socket/messageHandlers');
@@ -116,6 +116,7 @@ async function startSocketServer(app) {
     await redis.connect();
 
     const subscriber = redis.getSubscriber();
+    const userSubscriber = redis.getSubscriber();
     await subscriber.subscribe('kyc:events', (err, count) => {
       if (err) {
         console.error('Failed to subscribe to kyc:events:', err);
@@ -132,11 +133,29 @@ async function startSocketServer(app) {
           const { runnerId, data } = payload;
           const room = `runner-${runnerId}`;
           console.log(`[Redis] Emitting to room: ${room}`, data);
+
           ioInstance.to(room).emit('verificationStatus', data);
           console.log(`[Redis] Emitted to ${room}`);
         } catch (error) {
           console.error('[Redis] Failed to process KYC event:', error);
         }
+      }
+    });
+
+    // user
+    await userSubscriber.subscribe('user:events', (err) => {
+      if (err) console.error('Failed to subscribe to user:events:', err);
+      else console.log('✅ Subscribed to user:events');
+    });
+
+    userSubscriber.on('message', (channel, message) => {
+      if (channel !== 'user:events') return;
+      try {
+        const { userId, data } = JSON.parse(message);
+        const room = `user-${userId}`;
+        ioInstance.to(room).emit('accountStatus', data);
+      } catch (error) {
+        console.error('[Redis] Failed to process user event:', error);
       }
     });
 
@@ -196,11 +215,14 @@ async function startSocketServer(app) {
 
     );
 
+    socket.on("lockAndProceed", (data) =>
+      safeHandler(socketHandlers.handleRejoinChat, socket, io, data)
+    )
+
     socket.on("runnerReconnect", (data) =>
       safeHandler(socketHandlers.handleRunnerReconnect, socket, io, data)
 
     );
-
 
     socket.on('getOrderSession', (data) =>
       safeHandler(socketHandlers.handleGetOrderSession, socket, data)
@@ -435,6 +457,11 @@ async function startSocketServer(app) {
 
     // cancel an order
     socket.on('cancelOrder', (data) => safeHandler(handleCancelOrder, socket, io, data));
+    socket.on('orderCancelledByUser', (data) =>
+      safeHandler(handleOrderCancelledByUser, socket, io, data)
+    );
+
+
     socket.on('runnerStartedNewOrder', (data) => safeHandler(handleRunnerStartedNewOrder, socket, data));
     socket.on('taskCompleted', (data) => safeHandler(handleTaskCompleted, io, data))
 

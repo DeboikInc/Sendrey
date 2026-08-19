@@ -8,8 +8,8 @@ BUSINESS_STATUS = ['active', 'suspended', 'banned']
 
 const RUNNER_STATUS = [
   'pending_verification',
-  'approved_limited', 
-  'approved_full', 
+  'approved_limited',
+  'approved_full',
   'suspended',
   'banned',
 ]
@@ -23,7 +23,7 @@ const VERIFICATION_STATUS = [
 ];
 
 const TASK_TYPES = {
-  RUN_ERRAND: 'run-errand', 
+  RUN_ERRAND: 'run-errand',
   PICK_UP: 'pick-up'
 };
 
@@ -53,6 +53,33 @@ const ALL_STATUSES = [
     ...STATUS_FLOWS[TASK_TYPES.PICK_UP]
   ])
 ];
+
+const STATUS_GROUPS = {
+  payment_pending: ['pending_payment', 'payment_failed'],
+  awaiting_runner: ['paid'],
+  in_progress: ['accepted', 'shopping', 'items_submitted', 'items_approved',
+    'purchase_in_progress', 'purchase_completed', 'en_route_to_pickup',
+    'arrived_at_pickup', 'picked_up', 'en_route_to_delivery',
+    'arrived_at_delivery', 'delivered', 'active', 'item_delivered', 'in_progress'],
+  completed: ['completed'],
+  cancelled: ['cancelled'],
+  disputed: ['disputed'],
+};
+
+const CANCELLABLE_STATES_BY_SERVICE = {
+  [TASK_TYPES.PICK_UP]: new Set([
+    'pending_payment', 'paid', 'accepted',
+    'en_route_to_pickup', 'arrived_at_pickup', 'picked_up',
+    // NOT en_route_to_delivery — runner has left pickup location
+  ]),
+  [TASK_TYPES.RUN_ERRAND]: new Set([
+    'pending_payment', 'paid', 'accepted', 'shopping',
+    'items_submitted', 'items_approved', 'purchase_in_progress',
+    // NOT purchase_completed — vendor paid
+  ]),
+};
+
+const DISPUTE_WINDOW_HOURS = parseInt(process.env.DISPUTE_WINDOW_HOURS || '72', 10);
 
 const ACTIVITIES = ['login',
   'logout',
@@ -92,5 +119,8 @@ module.exports = {
   ALL_STATUSES,
   TASK_TYPES,
   STATUS_FLOWS,
-  BUSINESS_STATUS
+  BUSINESS_STATUS,
+  STATUS_GROUPS,
+  CANCELLABLE_STATES_BY_SERVICE,
+  DISPUTE_WINDOW_HOURS
 }

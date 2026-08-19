@@ -28,9 +28,8 @@ function ConfirmModal({ isOpen, title, message, confirmLabel = 'Confirm', confir
                     </button>
                     <button
                         onClick={onConfirm}
-                        className={`flex-1 py-2.5 rounded-xl text-white text-sm font-bold transition-all ${
-                            confirmVariant === 'destructive' ? 'bg-red-500 hover:bg-red-600' : 'bg-orange hover:bg-orange/80'
-                        }`}
+                        className={`flex-1 py-2.5 rounded-xl text-white text-sm font-bold transition-all ${confirmVariant === 'destructive' ? 'bg-red-500 hover:bg-red-600' : 'bg-orange hover:bg-orange/80'
+                            }`}
                     >
                         {confirmLabel}
                     </button>
@@ -142,7 +141,7 @@ export default function UsersTab() {
     const handleDelete = useCallback((user) => {
         setConfirm({
             title: 'Delete User',
-            message: `Permanently delete ${user.firstName} ${user.lastName}? This cannot be undone.`,
+            message: `Permanently delete ${user.firstName || ''} ${user.lastName || ''}? This cannot be undone.`.trim().replace(/\s+/g, ' '),
             confirmLabel: 'Delete',
             confirmVariant: 'destructive',
             onConfirm: () => { dispatch(deleteUser(user._id)); setConfirm(null); }

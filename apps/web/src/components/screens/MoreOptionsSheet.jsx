@@ -15,9 +15,11 @@ export default function MoreOptionsSheet({
   onWallet,
   onRaiseDispute,
   onSettings,
+  onCancelOrder,
   onRateRunner,
   canRate,
   onRunnerContactInfo,
+  canCancelOrder
 }) {
   if (!isOpen) return null;
 
@@ -42,18 +44,10 @@ export default function MoreOptionsSheet({
     },
     {
       icon: <Phone className="w-5 h-5 text-primary" />,
-      label: 'Runner Contact Info',
+      label: 'Runner Contact Information',
       description: 'call the runner directly',
       onClick: () => { onClose(); onRunnerContactInfo(); }
     },
-    // ...(canRate ? [
-    //   {
-    //     icon: <Star className="w-5 h-5 text-yellow-500" />,
-    //     label: 'Rate Runner',
-    //     description: 'Leave a rating for your runner',
-    //     onClick: () => { onClose(); onRateRunner(); }
-    //   }
-    // ] : []),
     {
       icon: <Settings className="w-5 h-5 text-primary" />,
       label: 'Settings',
@@ -93,7 +87,7 @@ export default function MoreOptionsSheet({
                   <button
                     key={index}
                     onClick={option.onClick}
-                    className={`w-full flex items-center gap-4 p-4 rounded-xl transition-colors ${darkMode
+                    className={`w-full flex items-center gap-4 p-3 rounded-xl transition-colors ${darkMode
                       ? 'bg-black-200 hover:bg-black-200/80'
                       : 'bg-gray-1001 hover:bg-gray-100'
                       }`}
@@ -102,7 +96,7 @@ export default function MoreOptionsSheet({
                       {option.icon}
                     </div>
                     <div className="text-left">
-                      <p className={`font-semibold ${darkMode ? 'text-white' : 'text-black-200'}`}>
+                      <p className={`font-semibold text-sm ${darkMode ? 'text-white' : 'text-black-200'}`}>
                         {option.label}
                       </p>
                       {option.description ? (
@@ -118,12 +112,22 @@ export default function MoreOptionsSheet({
 
             <div className="h-4" />
 
-            <button
-              onClick={onClose}
-              className={`w-full text-center p-4 rounded-xl border border-red-600 ${darkMode ? 'bg-black-100' : 'bg-white'}`}
-            >
-              <p className="font-medium text-red-600">Cancel</p>
-            </button>
+            <div className='flex gap-3'>
+              <button
+                onClick={onCancelOrder}
+                disabled={!canCancelOrder}
+                className={`w-full text-center p-4 rounded-xl bg-black-100 border border-red-600 ${darkMode ? 'bg-black-100' : 'bg-white'} ${!canCancelOrder ? 'opacity-40 pointer-events-none' : ''}`}
+              >
+                <p className="font-medium text-red-600">Cancel this order</p>
+              </button>
+
+              <button
+                onClick={onClose}
+                className={`w-full text-center p-4 rounded-xl border border-red-600 ${darkMode ? 'bg-black-100' : 'bg-white'}`}
+              >
+                <p className="font-medium text-red-600">Exit</p>
+              </button>
+            </div>
           </motion.div>
         </motion.div>
       )}

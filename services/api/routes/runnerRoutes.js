@@ -22,7 +22,7 @@ router.get('/profile',
 );
 
 
-router.put('/update-profile',
+router.put('/update-runner-profile',
   authorize(['runner']),
   upload.single('avatar'),
   validate(userValidation.updateProfile),

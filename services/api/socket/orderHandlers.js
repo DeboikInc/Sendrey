@@ -3,22 +3,8 @@ const Order = require('../models/Order');
 const User = require('../models/User');
 const Runner = require('../models/Runner');
 const { logSocketAudit } = require('../utils/socketAudit');
+const preRoomState = new Map();
 
-// ─── handleRunnerAccept ───────────────────────────────────────────────────────
-//
-// Called alongside handleAcceptRunnerRequest (in server.js) when a runner taps Accept.
-//
-// Responsibilities:
-//   1. Cancel any stale unpaid / non-terminal orders for this chat so there is
-//      no zombie order lying around when the new session initialises.
-//   2. Cross-link runner ↔ user on their documents so both know who they are
-//      paired with before the chat room is initialised.
-//
-// NOTE: Order *creation* is intentionally NOT done here.
-//       createOrder() in socketHandlers.js is the single source of truth for
-//       that — it is called inside handleUserJoinChat (CASE C) once both parties
-//       have confirmed they are in the chat room.
-//
 const handleRunnerAccept = async (io, socket, data) => {
   try {
     const { runnerId, userId, chatId, serviceType } = data;
@@ -65,4 +51,28 @@ const handleRunnerAccept = async (io, socket, data) => {
   }
 };
 
-module.exports = { handleRunnerAccept };
+const releaseLockAndAbort = async (io, { chatId, userId, runnerId, reason }) => {
+  try {
+    await Promise.all([
+      runnerId ? Runner.findByIdAndUpdate(runnerId, { isAvailable: true, activeOrderId: null }) : null,
+      userId ? User.findByIdAndUpdate(userId, { isAvailable: true, activeOrderId: null }) : null,
+    ]);
+  } catch (err) {
+    console.error('[releaseLockAndAbort] failed to reset availability:', err.message);
+  }
+
+  preRoomState.delete(chatId);
+
+  const abortPayload = {
+    chatId,
+    code: 'ORDER_CREATE_FAILED',
+    message: reason || 'This session could not be started. Please try again.',
+  };
+
+  if (userId) io.to(`user-${userId}`).emit('sessionAborted', abortPayload);
+  if (runnerId) io.to(`runner-${runnerId}`).emit('sessionAborted', abortPayload);
+
+  logSocketAudit('SESSION_ABORTED', { chatId, userId, runnerId, reason });
+};
+
+module.exports = { handleRunnerAccept, releaseLockAndAbort };

@@ -28,28 +28,16 @@ class SessionController extends BaseController {
   async validateSession(req, res) {
     try {
       const { chatId } = req.body;
-      const userId = req.user?._id;
 
       if (!chatId) {
         return res.status(400).json({ success: false, message: 'chatId is required' });
       }
 
-      // If no userId (expired token, not decoded), try to get it from the token directly
-      let resolvedUserId = userId;
-      if (!resolvedUserId) {
-        try {
-          const authHeader = req.headers.authorization;
-          const token = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
-          if (token) {
-            const decoded = jwt.decode(token); // decode without verify
-            resolvedUserId = decoded?.id || decoded?.userId || decoded?._id;
-          }
-        } catch (_) { }
-      }
-
-      if (!resolvedUserId) {
+      if (!req.user) {
         return res.status(401).json({ success: false, message: 'Unauthorized' });
       }
+
+      const resolvedUserId = req.user._id;
 
       const activeOrder = await Order.findOne({
         $or: [{ userId: resolvedUserId }, { runnerId: resolvedUserId }],
@@ -65,7 +53,7 @@ class SessionController extends BaseController {
         });
       }
 
-      const tokenExpired = req.tokenExpired === true || !userId;
+      const tokenExpired = req.tokenExpired === true;
 
       return res.status(200).json({
         success: true,
@@ -92,21 +80,7 @@ class SessionController extends BaseController {
         return res.status(400).json({ success: false, message: 'chatId is required' });
       }
 
-      let resolvedUserId = userId;
-      if (!resolvedUserId) {
-        try {
-          const authHeader = req.headers.authorization;
-          const token = authHeader?.startsWith('Bearer ') ? authHeader.split(' ')[1] : null;
-          if (token) {
-            const decoded = jwt.decode(token);
-            resolvedUserId = decoded?.id || decoded?.userId || decoded?._id;
-          }
-        } catch (_) { }
-      }
-
-      if (!resolvedUserId) {
-        return res.status(401).json({ success: false, message: 'Unauthorized' });
-      }
+      let resolvedUserId = req.user._id;
 
       const activeOrder = await Order.findOne({
         $or: [{ userId: resolvedUserId }, { runnerId: resolvedUserId }], // ← was userId (unresolved)

@@ -836,7 +836,7 @@ export default function VehicleSelectionScreen({
     <Onboarding darkMode={darkMode} toggleDarkMode={toggleDarkMode} onMore={onMore} showBack={showBack} onBack={onBack}>
       <div className="h-full flex flex-col ">
         <div className="flex-1 overflow-hidden relative">
-          <div ref={messagesEndRef} className="absolute inset-0 overflow-y-auto">
+          <div ref={messagesEndRef} className="absolute inset-0 overflow-y-auto scrollbar-hide scroll-smooth">
             <div className="min-h-full p-4 pb-[280px] marketSelection">
               {(Array.isArray(messages) ? messages : []).map(m => (
                 <Message
