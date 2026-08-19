@@ -53,22 +53,12 @@ function ConfirmModal({ isOpen, title, message, confirmLabel = 'Confirm', confir
 function RunnerActions({ runner, onBan, onUnban, onResetStrikes, onDelete, isMobile }) {
     return (
         <div className={`flex items-center gap-2 ${isMobile ? 'w-full' : 'justify-end'}`}>
-            {runner.runnerStatus === 'banned' ? (
-                <Button
-                    onClick={() => onUnban(runner)}
-                    variant="outline"
-                    size="xs"
-                    className={isMobile ? 'flex-1' : ''}
-                >
+            {!runner.isActive ? (
+                <Button onClick={() => onUnban(runner)} variant="outline" size="xs" className={isMobile ? 'flex-1' : ''}>
                     <CheckCircle size={13} className="mr-1" /> Lift Ban
                 </Button>
             ) : (
-                <Button
-                    onClick={() => onBan(runner)}
-                    variant="destructive"
-                    size="xs"
-                    className={isMobile ? 'flex-1' : ''}
-                >
+                <Button onClick={() => onBan(runner)} variant="destructive" size="xs" className={isMobile ? 'flex-1' : ''}>
                     Ban Runner
                 </Button>
             )}
@@ -216,8 +206,9 @@ export default function RunnersTab() {
     const getStatusStyle = (status) => {
         switch (status) {
             case 'banned': return 'bg-red-500/10 text-red-500 border-red-500/20';
-            case 'isActive': return 'bg-green-500/10 text-green-500 border-green-500/20';
             case 'suspended': return 'bg-red-500/10 text-red-500 border-red-500/20';
+            case true: return 'bg-green-500/10 text-green-500 border-green-500/20';
+            case false: return 'bg-red-500/10 text-red-500 border-red-500/20';
             case 'approved_full': return 'bg-green-500/10 text-green-500 border-green-500/20';
             case 'approved_limited': return 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20';
             default: return 'bg-green-500/10 text-green-500 border-green-500/20';
@@ -420,8 +411,8 @@ export default function RunnersTab() {
                                             <div className="text-white/35 text-xs mt-0.5">{runner.email}</div>
                                             <div className="text-white/25 text-xs mt-0.5">{runner.phone}</div>
                                         </div>
-                                        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-medium border shrink-0 ${getStatusStyle(runner.runnerStatus)}`}>
-                                            {runner.runnerStatus?.replace(/_/g, ' ') || '—'}
+                                        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-medium border shrink-0 ${getStatusStyle(runner.kycStatus)}`}>
+                                            {runner.kycStatus?.replace(/_/g, ' ') || '—'}
                                         </span>
                                     </div>
                                     <div className="flex items-center gap-4 text-xs flex-wrap">
