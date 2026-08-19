@@ -8,20 +8,38 @@ const Runner = require('../models/Runner');
  * OR a raw FCM token as the first argument (legacy internal usage).
  */
 const sendPushNotification = async (recipientIdOrToken, optionsOrUndefined) => {
-  // Support legacy call style: sendPushNotification(fcmToken, { title, body, data })
-  // used internally by the presence handler for offline/online pushes
-  let token, title, body, data;
+
+  const shouldSendPush = async (recipientId, recipientType) => {
+    try {
+      const Model = recipientType === 'runner' ? Runner : User;
+      const recipient = await Model.findById(recipientId)
+        .select('notificationPreferences fcmToken');
+
+      if (!recipient || !recipient.fcmToken) return false;
+
+      const prefs = recipient.notificationPreferences?.push || {};
+      return prefs.messages === true || prefs.updates === true || prefs.promotions === true;
+    } catch (error) {
+      console.error('Error checking notification opt-in:', error);
+      return false;
+    }
+  };
+
+  let token, title, body, data, recipientId, recipientType;
 
   if (optionsOrUndefined !== undefined) {
-    // Legacy: first arg is a raw FCM token string
+    // Legacy: first arg is a raw FCM token string, no recipientId to check opt-in against
     token = recipientIdOrToken;
     ({ title, body, data = {} } = optionsOrUndefined);
   } else {
     // Standard: first arg is an options object
-    const { recipientId, recipientType, title: t, body: b, data: d = {} } = recipientIdOrToken;
-    title = t;
-    body = b;
-    data = d;
+    ({ recipientId, recipientType, title, body, data = {} } = recipientIdOrToken);
+
+    const shouldSend = await shouldSendPush(recipientId, recipientType);
+    if (!shouldSend) {
+      console.log(`[Notification] Skipped - user ${recipientId} has not opted in`);
+      return null;
+    }
 
     try {
       const Model = recipientType === 'runner' ? Runner : User;

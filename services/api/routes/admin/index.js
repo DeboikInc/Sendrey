@@ -6,9 +6,12 @@ const { isAdmin } = require('../../middleware/roleCheck');
 // login
 router.use('/auth', require('./authAdminRoutes'));
 
+router.use('/metrics', require('./metricsRoutes'));
+router.use('/logs', require('./serverlogs'));
+
 
 // all admin routes require auth + admin role
-// router.use(authenticate, isAdmin);
+router.use(authenticate, isAdmin);
 
 // ── mount admin sub-routers here 
 // full url - "/api/admin/v1" join each router and routes
@@ -24,8 +27,6 @@ router.use('/pricing',  require('./priceConfigRoutes'));
 router.use('/distance', require('./distanceAdminRoutes'))
 router.use('/platform', require('./platformFeeAdminRoutes'))
 
-router.use('/metrics', require('./metricsRoutes'));
-router.use('/logs', require('./serverlogs'));
 
 
 module.exports = router;
