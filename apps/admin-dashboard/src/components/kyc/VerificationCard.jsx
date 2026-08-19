@@ -49,7 +49,8 @@ export default function VerificationCard({
           <img
             src={imageUrl}
             alt={title}
-            className="w-full h-48 object-cover opacity-90"
+            onClick={() => window.open(imageUrl, '_blank', 'noopener,noreferrer')}
+            className="cursor-pointer w-full h-48 object-cover opacity-90"
             onError={e => { e.target.style.display = 'none'; }}
           />
           <div className="absolute inset-0 bg-gradient-to-t from-black-200/40 to-transparent pointer-events-none" />
