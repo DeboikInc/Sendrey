@@ -2,29 +2,29 @@
 import { FileText, Camera, CheckCircle, XCircle } from 'lucide-react';
 import Button from '../ui/Button';
 
-export default function VerificationCard({ 
-  title, 
-  data, 
-  type, 
-  onApprove, 
-  onReject, 
-  rejectionReason, 
-  setRejectionReason, 
-  isReadOnly = false 
+export default function VerificationCard({
+  title,
+  data,
+  type,
+  onApprove,
+  onReject,
+  rejectionReason,
+  setRejectionReason,
+  isReadOnly = false
 }) {
   const isPending = data?.status === 'pending_review';
   const isApproved = data?.status === 'approved';
   const isRejected = data?.status === 'rejected';
 
   const borderClass = isPending ? 'border-primary/30'
-                    : isApproved ? 'border-green-500/20'
-                    : isRejected ? 'border-red-500/20'
-                    : 'border-white/10';
+    : isApproved ? 'border-green-500/20'
+      : isRejected ? 'border-red-500/20'
+        : 'border-white/10';
 
   const pillClass = isPending ? 'text-primary bg-primary/10 border-primary/20'
-                    : isApproved ? 'text-green-600 bg-green-50 border-green-200'
-                    : isRejected ? 'text-red-600 bg-red-50 border-red-200'
-                    : 'text-gray-500 bg-gray-100 border-gray-300';
+    : isApproved ? 'text-green-600 bg-green-50 border-green-200'
+      : isRejected ? 'text-red-600 bg-red-50 border-red-200'
+        : 'text-gray-500 bg-gray-100 border-gray-300';
 
   const imageUrl = type === 'selfie' ? data?.selfieImage : data?.documentPath;
 

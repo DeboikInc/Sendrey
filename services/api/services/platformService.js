@@ -2,8 +2,14 @@ const { resolveBankCode } = require('../utils/platformBankResolver');
 const PlatformSettings = require('../models/PlatformSettings');
 
 class PlatformService {
+  
   async getActive() {
-    return PlatformSettings.findOne({ key: 'active' }).lean();
+    const settings = await PlatformSettings.findOneAndUpdate(
+      { key: 'active' },
+      { $setOnInsert: { key: 'active' } },
+      { new: true, upsert: true }
+    ).lean();
+    return settings;
   }
 
   async updateBankAccount(accountNumber) {
