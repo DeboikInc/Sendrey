@@ -12,7 +12,7 @@ class PlatformService {
     return PlatformSettings.findOneAndUpdate(
       { key: 'active' },
       { $set: { platformBankAccount: accountNumber, bankName, accountName } },
-      { new: true }
+      { new: true, upsert: true }
     );
   }
 }
