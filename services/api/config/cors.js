@@ -54,7 +54,7 @@ const corsOptions = {
   exposedHeaders: ['Content-Type', 'Content-Length', 'Authorization', 'Set-Cookie'],
   credentials: true,
   optionsSuccessStatus: 200,
-  maxAge: 86400 // 24 hours - cache preflight requests
+  maxAge: 0 // 24 hours - cache preflight requests
 };
 
 module.exports = corsOptions;
