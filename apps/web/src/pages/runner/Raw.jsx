@@ -603,7 +603,7 @@ function WhatsAppLikeChat() {
     }
 
     const kycFlowStarted = localStorage.getItem(`kyc_flow_started_${runnerId}`);
-    if (kycFlowStarted) return;
+    if (kycFlowStarted && !returningUserData?.kycStatus) return;
 
     const timer = setTimeout(() => {
       if (kycStartedRef.current) return;

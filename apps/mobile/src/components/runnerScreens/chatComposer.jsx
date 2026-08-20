@@ -408,7 +408,7 @@ export default function ChatComposer({
       );
     }
 
-    if (!isTrainingCompleted) {   
+    if (!isTrainingCompleted) {
       return (
         <div className="p-4 py-6 flex justify-center">
           <p className="text-sm text-center text-gray-500 dark:text-gray-400">
@@ -479,6 +479,16 @@ export default function ChatComposer({
           accept="image/*,video/*,audio/*,.pdf,.doc,.docx"
           multiple
         />
+      </div>
+    );
+  }
+
+  if (registrationComplete && !isChatActive && !isCollectingCredentials && !needsOtpVerification) {
+    return (
+      <div className="p-4 py-6 flex justify-center">
+        <p className="text-sm text-center text-gray-500 dark:text-gray-400">
+          Your documents are currently under review, we will get back to you soon.
+        </p>
       </div>
     );
   }

@@ -673,7 +673,7 @@ export const useKycHook = (runnerId, fleetType,) => {
     } catch (error) {
       console.error('Error checking verification status:', error);
     }
-  }, [dispatch, runnerId]);
+  }, [dispatch, runnerId, setDocType]);
 
   const SELFIE_TRIGGERS = ['okay', 'alright', 'sure', 'yes', 'ok'];
 
