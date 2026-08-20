@@ -83,7 +83,7 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
   const dispatch = useDispatch();
   const { runner } = useSelector((s) => s.auth);
   const [_localRegistrationComplete, setRegistrationComplete] = useState(false);
-  const registrationComplete = !!runner?._id || _localRegistrationComplete;
+  const registrationComplete = (!!runner?._id && runner?.isEmailVerified) || _localRegistrationComplete;
 
   const [isCollectingCredentials, setIsCollectingCredentials] = useState(false);
   const [credentialStep, setCredentialStep] = useState(null);

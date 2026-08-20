@@ -1271,7 +1271,6 @@ function WhatsAppLikeChat() {
       setVerificationState(data);
       setShowBannedModal(!!data.isBanned);
 
-      // Post a message into the chat for ban/unban events specifically
       if (data.event === 'runner_banned' || data.event === 'runner_unbanned') {
         const banMsg = {
           id: `${data.event}-${Date.now()}`,
@@ -1288,20 +1287,25 @@ function WhatsAppLikeChat() {
         }
       }
 
+      const isKycDocEvent = [
+        'kyc_document_approved', 'kyc_document_rejected',
+        'kyc_selfie_approved', 'kyc_selfie_rejected',
+      ].includes(data.event);
+
+      if (isKycDocEvent) {
+        const updater = isBotMode ? botMessagesUpdater : chatMessagesUpdater;
+        checkVerificationStatus(updater, () => { }, false);
+      }
+
       if (data.isVerifiedKyc === true) {
         dispatch(updateRunner({ isVerifiedKyc: true, kycStatus: data.kycStatus }));
-        if (isBotMode) {
-          checkVerificationStatus(botMessagesUpdater, () => { }, false);
-        } else {
-          checkVerificationStatus(chatMessagesUpdater, () => { }, false);
-        }
       } else if (data.isVerifiedKyc === false) {
         dispatch(updateRunner({ isVerifiedKyc: false, kycStatus: data.kycStatus }));
       }
     };
     socket.on('verificationStatus', handler);
     return () => socket.off('verificationStatus', handler);
-  }, [socket, runnerId, isBotMode, botMessagesUpdater, chatMessagesUpdater]);
+  }, [socket, runnerId, isBotMode, botMessagesUpdater, chatMessagesUpdater, checkVerificationStatus, dispatch]);
 
   useEffect(() => {
     if (!activeChatId || activeChatId === BOT_CHAT_ID) return;

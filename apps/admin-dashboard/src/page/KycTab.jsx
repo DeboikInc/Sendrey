@@ -40,16 +40,16 @@ export default function KycTab() {
   // Filter and sort runners
   const displayedRunners = useMemo(() => {
     const baseData = (currentView === 'pending' ? pendingRunners : verifiedRunners) || [];
-    
+
     // Apply search filter
     let filtered = baseData;
     if (searchQuery.trim()) {
       const query = searchQuery.toLowerCase();
       filtered = baseData.filter(runner =>
-        `${runner.firstName} ${runner.lastName} ${runner.email} ${runner.phone} ${runner._id}`.toLowerCase().includes(query)
+        `${runner.firstName} ${runner.lastName} ${runner.email} ${runner.phone} ${runner.fleetType} ${runner._id}`.toLowerCase().includes(query)
       );
     }
-    
+
     // Apply sorting
     const sorted = [...filtered];
     switch (sortBy) {
@@ -73,27 +73,31 @@ export default function KycTab() {
   const handleRefresh = async () => {
     setIsRefreshing(true);
     try {
-      await dispatch(getPendingKYC());
-      await dispatch(getVerifiedRunners());
+      await refreshData();
     } finally {
       setIsRefreshing(false);
     }
   };
 
-  const handleApproveDocument = (runnerId, documentType) => 
-    dispatch(approveDocument({ runnerId, documentType }));
-  
+  const refreshData = useCallback(() => {
+    dispatch(getPendingKYC());
+    dispatch(getVerifiedRunners());
+  }, [dispatch]);
+
+  const handleApproveDocument = (runnerId, documentType) =>
+    dispatch(approveDocument({ runnerId, documentType })).then(refreshData);
+
   const handleRejectDocument = (runnerId, documentType, reason) => {
     if (!reason?.trim()) return alert('Please provide a rejection reason');
-    dispatch(rejectDocument({ runnerId, documentType, reason }));
+    dispatch(rejectDocument({ runnerId, documentType, reason })).then(refreshData);
   };
-  
-  const handleApproveSelfie = (runnerId) => 
-    dispatch(approveSelfie({ runnerId }));
-  
+
+  const handleApproveSelfie = (runnerId) =>
+    dispatch(approveSelfie({ runnerId })).then(refreshData);
+
   const handleRejectSelfie = (runnerId, reason) => {
     if (!reason?.trim()) return alert('Please provide a rejection reason');
-    dispatch(rejectSelfie({ runnerId, reason }));
+    dispatch(rejectSelfie({ runnerId, reason })).then(refreshData);
   };
 
   // Handle search input change without losing focus
@@ -222,8 +226,8 @@ export default function KycTab() {
   // Error display
   if (error) {
     return (
-      <PageLayout 
-        title="KYC Verification" 
+      <PageLayout
+        title="KYC Verification"
         description="Runner identity & document compliance"
         stats={stats}
         onRefresh={handleRefresh}
@@ -239,8 +243,8 @@ export default function KycTab() {
   // Loading state
   if (status === 'loading' && displayedRunners.length === 0) {
     return (
-      <PageLayout 
-        title="KYC Verification" 
+      <PageLayout
+        title="KYC Verification"
         description="Runner identity & document compliance"
         stats={stats}
         onRefresh={handleRefresh}
@@ -256,8 +260,8 @@ export default function KycTab() {
 
   return (
     <>
-      <PageLayout 
-        title="KYC Verification" 
+      <PageLayout
+        title="KYC Verification"
         description="Runner identity & document compliance"
         stats={stats}
         onRefresh={handleRefresh}
@@ -268,7 +272,7 @@ export default function KycTab() {
           <div className="py-16 flex flex-col items-center gap-3 text-white/20">
             <Shield size={28} className="opacity-30" />
             <p className="text-xs">
-              {searchQuery 
+              {searchQuery
                 ? `No ${currentView} runners match "${searchQuery}"`
                 : `No ${currentView} runners found`
               }
@@ -290,7 +294,7 @@ export default function KycTab() {
                 Found {displayedRunners.length} runner{displayedRunners.length !== 1 ? 's' : ''} matching "{searchQuery}"
               </div>
             )}
-            
+
             {/* Runner cards grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               {displayedRunners.map((runner) => (
