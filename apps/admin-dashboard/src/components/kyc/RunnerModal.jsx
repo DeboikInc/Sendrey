@@ -1,17 +1,17 @@
 // src/components/kyc/RunnerModal.jsx
 import { useState, useEffect } from 'react';
-import { ChevronLeft, X, CheckCircle, XCircle } from 'lucide-react';
+import { ChevronLeft, X, CheckCircle, XCircle, AlertTriangle } from 'lucide-react';
 import Button from '../ui/Button';
 import StatusIndicator from './StatusIndicator';
 import VerificationCard from './VerificationCard';
 
-export default function RunnerModal({ 
-  runner, 
-  onClose, 
-  onApproveDocument, 
-  onRejectDocument, 
-  onApproveSelfie, 
-  onRejectSelfie 
+export default function RunnerModal({
+  runner,
+  onClose,
+  onApproveDocument,
+  onRejectDocument,
+  onApproveSelfie,
+  onRejectSelfie
 }) {
   const [rejectionReason, setRejectionReason] = useState('');
   const [confirmingAction, setConfirmingAction] = useState(null);
@@ -37,19 +37,41 @@ export default function RunnerModal({
   if (documents.passport) identityDocuments.push({ title: 'Passport', data: documents.passport, type: 'passport' });
 
   const hasSelfie = biometrics?.status && biometrics.status !== 'not_submitted';
-  
+
   // Check if any document is still pending
   const hasPendingDocuments = identityDocuments.some(doc => doc.data?.status === 'pending_review') ||
     (hasSelfie && biometrics?.status === 'pending_review');
-  
+
   // Check if all documents are approved
-  const allDocumentsApproved = identityDocuments.length > 0 && 
+  const allDocumentsApproved = identityDocuments.length > 0 &&
     identityDocuments.every(doc => doc.data?.status === 'approved') &&
     (!hasSelfie || biometrics?.status === 'approved');
-  
+
   // Check if any document is rejected
   const hasRejectedDocuments = identityDocuments.some(doc => doc.data?.status === 'rejected') ||
     (hasSelfie && biometrics?.status === 'rejected');
+
+
+  const isPedestrian = runner?.fleetType === 'pedestrian';
+
+  const ninSubmitted = documents.nin?.status && documents.nin.status !== 'not_submitted';
+  const licenseSubmitted = documents.driverLicense?.status && documents.driverLicense.status !== 'not_submitted';
+
+  const allThreeSubmitted = isPedestrian
+    ? true
+    : ninSubmitted && licenseSubmitted && hasSelfie;
+
+  const anyDocRejectedBlocking = !isPedestrian && (
+    documents.nin?.status === 'rejected' ||
+    documents.driverLicense?.status === 'rejected' ||
+    (hasSelfie && biometrics?.status === 'rejected')
+  );
+
+  const actionsLocked = !isPedestrian && (!allThreeSubmitted || anyDocRejectedBlocking);
+
+  const lockedReason = anyDocRejectedBlocking
+    ? "A document was rejected — all actions are locked until the runner resubmits it."
+    : "All three documents (NIN, Driver's License, Selfie) must be submitted before any can be reviewed.";
 
   const handleApproveDocument = async (docType) => {
     setIsSubmitting(true);
@@ -206,9 +228,10 @@ export default function RunnerModal({
         {/* Info strip */}
         <div className="flex items-center gap-4 sm:gap-8 px-4 sm:px-6 py-3 bg-white/[0.02] border-b border-white/5 shrink-0 overflow-x-auto">
           {[
-            ['Phone', runner.phone], 
-            ['ID', runner._id?.slice(-8)], 
-            ['Email', runner.email]
+            ['Phone', runner.phone],
+            ['ID', runner._id?.slice(-8)],
+            ['Email', runner.email],
+            ['FleetType', runner.fleetType]
           ].map(([label, value]) => (
             <div key={label} className="shrink-0">
               <p className="text-[9px] text-white/30 uppercase tracking-widest">{label}</p>
@@ -219,6 +242,13 @@ export default function RunnerModal({
 
         {/* Body */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-secondary/30">
+          {actionsLocked && (
+            <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg bg-yellow-500/10 border border-yellow-500/20 text-yellow-500 text-xs">
+              <AlertTriangle size={13} className="shrink-0" />
+              {lockedReason}
+            </div>
+          )}
+
           {identityDocuments.length > 0 && (
             <div>
               <p className="text-[10px] text-white/30 uppercase tracking-widest mb-3">Identity Documents</p>
@@ -233,7 +263,7 @@ export default function RunnerModal({
                     onReject={() => handleRejectDocument(doc.type, rejectionReason)}
                     rejectionReason={rejectionReason}
                     setRejectionReason={setRejectionReason}
-                    isReadOnly={doc.data?.status !== 'pending_review'}
+                    isReadOnly={doc.data?.status !== 'pending_review' || actionsLocked}
                   />
                 ))}
               </div>
@@ -252,7 +282,7 @@ export default function RunnerModal({
                   onReject={() => handleRejectSelfie(rejectionReason)}
                   rejectionReason={rejectionReason}
                   setRejectionReason={setRejectionReason}
-                  isReadOnly={biometrics?.status !== 'pending_review'}
+                  isReadOnly={biometrics?.status !== 'pending_review' || actionsLocked}
                 />
               </div>
             </div>
@@ -286,7 +316,7 @@ export default function RunnerModal({
                   variant="destructive"
                   fullWidth
                   leftIcon={<XCircle size={13} />}
-                  disabled={allDocumentsApproved}
+                  disabled={allDocumentsApproved || actionsLocked}
                 >
                   Reject All Pending
                 </Button>
@@ -295,7 +325,7 @@ export default function RunnerModal({
                   variant="success"
                   fullWidth
                   leftIcon={<CheckCircle size={13} />}
-                  disabled={allDocumentsApproved}
+                  disabled={allDocumentsApproved || actionsLocked}
                 >
                   Approve All Pending
                 </Button>
@@ -327,21 +357,20 @@ export default function RunnerModal({
         {/* Show completion message when all documents are processed */}
         {!hasPendingDocuments && (identityDocuments.length > 0 || hasSelfie) && (
           <div className="px-4 sm:px-6 py-4 border-t border-white/5 shrink-0 bg-secondary/30">
-            <div className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-medium ${
-              allDocumentsApproved
-                ? 'bg-green-500/10 text-green-500 border border-green-500/20'
-                : hasRejectedDocuments
+            <div className={`flex items-center justify-center gap-2 px-4 py-3 rounded-lg text-sm font-medium ${allDocumentsApproved
+              ? 'bg-green-500/10 text-green-500 border border-green-500/20'
+              : hasRejectedDocuments
                 ? 'bg-red-500/10 text-red-500 border border-red-500/20'
                 : 'bg-white/5 text-white/40 border border-white/10'
-            }`}>
+              }`}>
               {allDocumentsApproved && <CheckCircle size={16} />}
               {hasRejectedDocuments && <XCircle size={16} />}
               <span>
-                {allDocumentsApproved 
-                  ? 'All documents have been approved' 
-                  : hasRejectedDocuments 
-                  ? 'Some documents have been rejected'
-                  : 'All documents have been reviewed'}
+                {allDocumentsApproved
+                  ? 'All documents have been approved'
+                  : hasRejectedDocuments
+                    ? 'Some documents have been rejected'
+                    : 'All documents have been reviewed'}
               </span>
             </div>
             <Button onClick={onClose} variant="primary" fullWidth className="mt-3">
