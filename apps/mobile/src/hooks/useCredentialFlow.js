@@ -68,7 +68,7 @@ const buildReturningUserGreeting = (name, kycStatus = {}, fleetType = '') => {
       : null;
 
   if (idPending) {
-    return `Hi ${name}, welcome back! Your ID is still being reviewed. Continue as ${name}?`;
+    return `Hi ${name}, welcome back!.Would you like to Continue as ${name}?`;
   }
 
   if (idSubmitted && missingId) {
