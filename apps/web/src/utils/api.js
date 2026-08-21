@@ -48,6 +48,24 @@ const processQueue = (error) => {
   refreshQueue = [];
 };
 
+export const refreshSession = () => {
+  if (isRefreshing) {
+    return new Promise((resolve, reject) => {
+      refreshQueue.push({ resolve, reject });
+    });
+  }
+  isRefreshing = true;
+  return axios.post(`${BASE_URL}/auth/refresh-token`, {}, { withCredentials: true })
+    .then((res) => { processQueue(null); return res; })
+    .catch((err) => {
+      processQueue(err);
+      const status = err.response?.status;
+      if (status === 401 || status === 403) clearSession();
+      throw err;
+    })
+    .finally(() => { isRefreshing = false; });
+};
+
 api.interceptors.response.use(
   (response) => {
     if (response.data && response.data.data !== undefined) {

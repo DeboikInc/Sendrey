@@ -45,6 +45,9 @@ export const useKycHook = (runnerId, fleetType) => {
   });
   const lastCheckedStatusRef = useRef(null);
   const [showConnectButton, setShowConnectButton] = useState(false);
+
+  // bump this string any time kyc_* localStorage shape/logic changes again
+  const KYC_STORAGE_VERSION = '2';
   const isReturningUserRef = useRef(false);
 
   const isAlreadyVerifiedRef = useRef(false);
@@ -54,6 +57,19 @@ export const useKycHook = (runnerId, fleetType) => {
   const verifyInProgress = useRef(false);
   // Track which doc is currently being collected: 'nin' | 'driverLicense'
   const currentDocTypeRef = useRef('nin');
+
+
+  useEffect(() => {
+    const currentVersion = localStorage.getItem('kyc_storage_version');
+    if (currentVersion !== KYC_STORAGE_VERSION) {
+      Object.keys(localStorage).forEach((key) => {
+        if (key.startsWith('kyc_')) {
+          localStorage.removeItem(key);
+        }
+      });
+      localStorage.setItem('kyc_storage_version', KYC_STORAGE_VERSION);
+    }
+  }, []);
 
   useEffect(() => {
     kycInitiated.current = false;
@@ -215,7 +231,10 @@ export const useKycHook = (runnerId, fleetType) => {
     const step = typeof resume === 'object' ? resume.step : resume;
     const docType = typeof resume === 'object' ? resume.nextDoc : null;
 
-    if (docType) setDocType(docType);
+    if (docType) {
+      setDocType(docType);
+      capturedIdPhotoRef.current = null; // clear any stale capture from a prior session
+    }
 
     // ── Fully verified: set status + step silently, one clean message ────────
     if (step === 6) {
@@ -234,7 +253,12 @@ export const useKycHook = (runnerId, fleetType) => {
       return; // ← exit early, never reaches checkVerificationStatus path
     }
 
-    // ── Partial progress 
+    // ── Partial progress — resume into the SAME step the prompt describes,
+    // so the matching capture UI (ID upload / selfie) actually renders.
+    if (step === 3) {
+      capturedSelfiePhotoRef.current = null; // clear any stale capture from a prior session
+    }
+
     const promptText = step === 3
       ? "Welcome back! You just need to take your selfie to complete verification."
       : docType === 'driverLicense'
@@ -250,7 +274,7 @@ export const useKycHook = (runnerId, fleetType) => {
       isKyc: true,
     }]);
 
-    setKycStep(6);
+    setKycStep(step);
   }, [startKycFlow, setDocType]);
 
   const onIdVerified = useCallback((photo, setMessages) => {
@@ -575,7 +599,7 @@ export const useKycHook = (runnerId, fleetType) => {
         // push verified state into Redux so raw.jsx re-renders with isVerified=true
         dispatch(updateRunner({
           isVerifiedKyc: true,
-          kycStatus: kycStatus  
+          kycStatus: kycStatus
         }));
 
         setTimeout(() => setKycStep(6), 800);

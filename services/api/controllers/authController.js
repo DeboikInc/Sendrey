@@ -316,18 +316,30 @@ class AuthController extends BaseController {
 
   refreshToken = async (req, res, next) => {
     try {
-      console.log('[Refresh] Cookies received:', req.cookies);
-      console.log('[Refresh] Refresh token from cookie:', req.cookies?.refreshToken);
-
+      
       const incomingToken = req.cookies.refreshToken || req.body.refreshToken;
       if (!incomingToken) return this.error(res, 'No refresh token provided', 401);
 
       const tokenHash = this._hashToken(incomingToken);
-      const session = await AuthSession.findOne({ tokenHash });
 
-      if (!session || session.expiresAt < new Date()) {
-        if (session) await session.deleteOne();
+      let session = await AuthSession.findOne({ tokenHash });
+
+      if (!session) {
+        // Might be a token that was just rotated out from under a racing
+        // request — check the grace window before treating this as revoked.
+        session = await AuthSession.findOne({
+          previousTokenHash: tokenHash,
+          previousTokenExpiresAt: { $gt: new Date() },
+        });
+      }
+
+      if (!session) {
         return this.error(res, 'Session expired or revoked', 401);
+      }
+
+      if (session.expiresAt < new Date()) {
+        await session.deleteOne();
+        return this.error(res, 'Session expired', 401);
       }
 
       const Model = session.userType === 'runner' ? Runner : User;
@@ -340,6 +352,8 @@ class AuthController extends BaseController {
       const accessToken = this.service.generateToken(account);
       const newRefreshToken = this._generateOpaqueToken();
 
+      session.previousTokenHash = session.tokenHash;
+      session.previousTokenExpiresAt = new Date(Date.now() + 30 * 1000);
       session.tokenHash = this._hashToken(newRefreshToken);
       session.lastUsedAt = new Date();
       session.expiresAt = new Date(Date.now() + SESSION_TTL_MS);

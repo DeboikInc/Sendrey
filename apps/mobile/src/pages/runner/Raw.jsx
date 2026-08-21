@@ -18,10 +18,9 @@ import { useRunnerSocketHandlers } from '../../hooks/useRunnerSocketHandlers';
 
 import chatManager from '../../utils/chatStateManager';
 import { enqueueSocketEvent } from '../../utils/socketQueue';
-import { authStorage } from '../../utils/authStorage';
 import { getCachedRecentChats, setCachedRecentChats, clearCachedRecentChats } from '../../utils/recentChatsCache';
 import { getPersistedReturningKycStatus } from '../../utils/returningUserKycUtils';
-import api from '../../utils/api';
+import api, { refreshSession } from '../../utils/api';
 
 // import PhoneVerificationPrompt from "../../components/common/PhoneVerificationPrompt";
 import { Profile } from './Profile';
@@ -1265,18 +1264,8 @@ function WhatsAppLikeChat() {
           console.log('[raw.jsx] Session valid, token expired:', tokenExpired);
           if (tokenExpired) {
             try {
-              const { refreshToken } = await authStorage.getTokens();
-              const refreshRes = await api.post(
-                '/sessions/refresh',
-                { chatId: savedChatId, refreshToken },
-                { _skipInterceptor: true }
-              );
-              const { accessToken, refreshToken: newRefresh } = refreshRes.data.data;
-              if (accessToken) {
-                await authStorage.setTokens(accessToken, newRefresh);
-              }
+              await refreshSession();
               console.log('[raw.jsx] session refreshed after expired token');
-
             } catch (_) {
               // Grace access still applies
             }
