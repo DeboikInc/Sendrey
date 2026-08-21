@@ -11,6 +11,7 @@ import OnboardingScreen from "../../components/runnerScreens/OnboardingScreen";
 import Sidebar from "../../components/runnerScreens/Sidebar";
 import { updateRunner } from '../../Redux/authSlice';
 
+import { authStorage } from '../../utils/authStorage'
 import { useSocket } from "../../hooks/useSocket";
 import useDarkMode from "../../hooks/useDarkMode";
 import { useRunnerChatHandlers } from '../../hooks/useRunnerChatHandlers';
@@ -18,10 +19,9 @@ import { useRunnerSocketHandlers } from '../../hooks/useRunnerSocketHandlers';
 
 import chatManager from '../../utils/chatStateManager';
 import { enqueueSocketEvent } from '../../utils/socketQueue';
-import { authStorage } from '../../utils/authStorage';
 import { getCachedRecentChats, setCachedRecentChats, clearCachedRecentChats } from '../../utils/recentChatsCache';
 import { getPersistedReturningKycStatus } from '../../utils/returningUserKycUtils';
-import api from '../../utils/api';
+import api, { refreshSession } from '../../utils/api';
 
 // import PhoneVerificationPrompt from "../../components/common/PhoneVerificationPrompt";
 import { Profile } from './Profile';
@@ -147,6 +147,7 @@ function WhatsAppLikeChat() {
   const [botRefreshTrigger, setBotRefreshTrigger] = useState(0);
   const [canResendOtp, setCanResendOtp] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  
 
   // ── Refs ────────────────────────────────────────────────────────────────────
   const pendingChatSwitchRef = useRef(null);
@@ -1366,18 +1367,8 @@ function WhatsAppLikeChat() {
           console.log('[raw.jsx] Session valid, token expired:', tokenExpired);
           if (tokenExpired) {
             try {
-              const { refreshToken } = await authStorage.getTokens();
-              const refreshRes = await api.post(
-                '/sessions/refresh',
-                { chatId: savedChatId, refreshToken },
-                { _skipInterceptor: true }
-              );
-              const { accessToken, refreshToken: newRefresh } = refreshRes.data.data;
-              if (accessToken) {
-                await authStorage.setTokens(accessToken, newRefresh);
-              }
+              await refreshSession();
               console.log('[raw.jsx] session refreshed after expired token');
-
             } catch (_) {
               // Grace access still applies
             }
