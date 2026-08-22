@@ -247,23 +247,26 @@ class KYCController extends BaseController {
                         verified: docs.nin?.verified || false,
                         status: docs.nin?.status || 'not_submitted',
                         submittedAt: docs.nin?.submittedAt || null,
-                        rejectionReason: docs.nin?.rejectionReason,
+                        rejectionReason: docs.nin?.rejectionReason || null,
                         rejectedAt: docs.nin?.rejectedAt
+
                     },
                     driverLicense: {
                         verified: docs.driverLicense?.verified || false,
                         status: docs.driverLicense?.status || 'not_submitted',
                         submittedAt: docs.driverLicense?.submittedAt || null,
-                        rejectionReason: docs.driverLicense?.rejectionReason,
-                        rejectedAt: docs.driverLicence?.rejectedAt
+                        rejectionReason: docs.driverLicense?.rejectionReason || null,
+                        rejectedAt: docs.driverLicense?.rejectedAt
+
                     }
                 },
                 biometrics: {
                     selfieVerified: biometrics.selfieVerified || false,
                     status: biometrics.status || 'not_submitted',
                     submittedAt: biometrics.submittedAt || null,
-                    rejectionReason: biometrics.rejectionReason,
+                    rejectionReason: biometrics.rejectionReason || null,
                     rejectedAt: biometrics.rejectedAt
+
                 },
                 canAcceptJobs: runner.kycStatus === 'approved_full',
                 canAcceptLimitedJobs: runner.kycStatus === 'approved_limited'
@@ -448,7 +451,7 @@ class KYCController extends BaseController {
                     recipientId: runnerId,
                     recipientType: 'runner',
                     title: '✅ Document Approved',
-                    body: `Your kyc documents have been approved. ${result.kycStatus === 'approved_limited' ? 'You can now accept limited jobs!' : 'Submit your selfie to complete verification.'}`,
+                    body: `Your kyc documents have been approved. ${result.kycStatus === 'approved_limited' ? 'You can now accept limited jobs!' : ''}`,
                     data: { type: 'kyc_document_approved', documentType, kycStatus: result.kycStatus }
                 });
 

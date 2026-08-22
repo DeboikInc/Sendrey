@@ -1,5 +1,5 @@
 import React from "react";
-import { X, Reply, FileText, Image as ImageIcon, Video, Music } from "lucide-react";
+import { X, Reply, FileText, Video, Music } from "lucide-react";
 import { motion } from "framer-motion";
 
 export default function ReplyPreview({ message, onCancel, darkMode }) {

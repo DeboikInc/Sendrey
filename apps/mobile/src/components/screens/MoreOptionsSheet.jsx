@@ -1,7 +1,10 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Wallet, AlertTriangle, FileText, Star, Settings, Phone } from 'lucide-react';
-import useUserOrderStore from '../../store/userOrderStore';
-import { getAvailableReasons } from '../../utils/disputeReasons';
+import {
+  Wallet, AlertTriangle, FileText,
+  Settings, Phone
+} from 'lucide-react';
+// import useUserOrderStore from '../../store/userOrderStore';
+// import { getAvailableReasons } from '../../utils/disputeReasons';
 
 export default function MoreOptionsSheet({
   isOpen,
@@ -11,26 +14,13 @@ export default function MoreOptionsSheet({
   onWallet,
   onRaiseDispute,
   onSettings,
+  onCancelOrder,
   onRateRunner,
   canRate,
   onRunnerContactInfo,
+  canCancelOrder
 }) {
-  const currentOrder = useUserOrderStore((s) => s.currentOrder);
-  const orderCancelled = useUserOrderStore((s) => s.orderCancelled);
-
   if (!isOpen) return null;
-
-  // Derived — mirrors canRaiseDispute logic from ChatScreen but lives here now
-  // eslint-disable-next-line 
-  const canRaiseDispute = (() => { 
-    if (!currentOrder || orderCancelled) return false;
-    if (currentOrder.status === 'cancelled') return false;
-    if (currentOrder.hasDispute) return false;
-    return getAvailableReasons(
-      currentOrder.serviceType ?? currentOrder.taskType,
-      currentOrder.status
-    ).length > 0;
-  })();
 
   const options = [
     {
@@ -39,32 +29,24 @@ export default function MoreOptionsSheet({
       description: 'View balance & transactions',
       onClick: () => { onClose(); onWallet(); }
     },
-      {
-        icon: <FileText className="w-5 h-5 text-secondary" />,
-        label: 'Order Details',
-        description: 'View payment breakdown & status',
-        onClick: () => { onClose(); onOrderDetails(); }
-      },
-      {
-        icon: <Phone className="w-5 h-5 text-red-500" />,
-        label: 'Runner Contact',
-        description: 'call the runner directly',
-        onClick: () => { onClose(); onRunnerContactInfo(); }
-      },
-      {
-        icon: <AlertTriangle className="w-5 h-5 text-red-500" />,
-        label: 'Raise Dispute',
-        description: 'Report an issue with this order',
-        onClick: () => { onClose(); onRaiseDispute(); }
-      },
-    ...(canRate ? [
-      {
-        icon: <Star className="w-5 h-5 text-yellow-500" />,
-        label: 'Rate Runner',
-        description: 'Leave a rating for your runner',
-        onClick: () => { onClose(); onRateRunner(); }
-      }
-    ] : []),
+    {
+      icon: <FileText className="w-5 h-5 text-secondary" />,
+      label: 'Order Details',
+      description: 'View payment breakdown & status',
+      onClick: () => { onClose(); onOrderDetails(); }
+    },
+    {
+      icon: <AlertTriangle className="w-5 h-5 text-red-500" />,
+      label: 'Raise Dispute',
+      description: 'Report an issue with this order',
+      onClick: () => { onClose(); onRaiseDispute(); }
+    },
+    {
+      icon: <Phone className="w-5 h-5 text-primary" />,
+      label: 'Runner Contact Information',
+      description: 'call the runner directly',
+      onClick: () => { onClose(); onRunnerContactInfo(); }
+    },
     {
       icon: <Settings className="w-5 h-5 text-primary" />,
       label: 'Settings',
@@ -104,7 +86,7 @@ export default function MoreOptionsSheet({
                   <button
                     key={index}
                     onClick={option.onClick}
-                    className={`w-full flex items-center gap-4 p-4 rounded-xl transition-colors ${darkMode
+                    className={`w-full flex items-center gap-4 p-3 rounded-xl transition-colors ${darkMode
                       ? 'bg-black-200 hover:bg-black-200/80'
                       : 'bg-gray-1001 hover:bg-gray-100'
                       }`}
@@ -113,7 +95,7 @@ export default function MoreOptionsSheet({
                       {option.icon}
                     </div>
                     <div className="text-left">
-                      <p className={`font-semibold ${darkMode ? 'text-white' : 'text-black-200'}`}>
+                      <p className={`font-semibold text-sm ${darkMode ? 'text-white' : 'text-black-200'}`}>
                         {option.label}
                       </p>
                       {option.description ? (
@@ -129,12 +111,22 @@ export default function MoreOptionsSheet({
 
             <div className="h-4" />
 
-            <button
-              onClick={onClose}
-              className={`w-full text-center p-4 rounded-xl border border-red-600 ${darkMode ? 'bg-black-100' : 'bg-white'}`}
-            >
-              <p className="font-medium text-red-600">Cancel</p>
-            </button>
+            <div className='flex gap-3'>
+              <button
+                onClick={onCancelOrder}
+                disabled={!canCancelOrder}
+                className={`w-full text-center p-4 rounded-xl bg-black-100 border border-red-600 ${darkMode ? 'bg-black-100' : 'bg-white'} ${!canCancelOrder ? 'opacity-40 pointer-events-none' : ''}`}
+              >
+                <p className="font-medium text-red-600">Cancel this order</p>
+              </button>
+
+              <button
+                onClick={onClose}
+                className={`w-full text-center p-4 rounded-xl border border-red-600 ${darkMode ? 'bg-black-100' : 'bg-white'}`}
+              >
+                <p className="font-medium text-red-600">Exit</p>
+              </button>
+            </div>
           </motion.div>
         </motion.div>
       )}

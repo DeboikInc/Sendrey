@@ -58,7 +58,6 @@ export default function ProjectedRoutes() {
         </ProtectedRoute>
       } />
 
-
       {/* Public routes - no authentication required */}
       <Route path="/" element={<Home />} />
       <Route path="/auth" element={<Auth />} />
@@ -67,7 +66,7 @@ export default function ProjectedRoutes() {
       <Route path="/user/chat/:chatId" element={<ChatDeepLink userType="user" />} />
 
       {/* catch all routes */}
-       <Route path="*" element={<NotFound darkMode={dark} />} />
+      <Route path="*" element={<NotFound darkMode={dark} />} />
     </Routes>
   );
 }

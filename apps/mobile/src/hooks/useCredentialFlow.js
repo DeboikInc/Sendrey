@@ -18,7 +18,7 @@ const GEO_OPTIONS = {
 const MAX_WATCH_DURATION = 15000;
 
 const CREDENTIAL_QUESTIONS = [
-  { question: "What's your name?", field: "name" },
+  { question: "What's your name? (first Name and last Name only)", field: "name" },
   { question: "What's your phone number?", field: "phone" },
   { question: "What's your email address?", field: "email" },
   { question: "What's your fleet type? (bike, car, motorcycle, van)", field: "fleetType", isFleetSelection: true },
@@ -32,6 +32,7 @@ const buildReturningUserGreeting = (name, kycStatus = {}, fleetType = '') => {
     ninStatus = 'not_submitted',
     driverLicenseStatus = 'not_submitted',
     selfieVerified = false,
+    selfieStatus = 'not_submitted',
   } = kycStatus;
 
   if (!isVerified) {
@@ -40,7 +41,14 @@ const buildReturningUserGreeting = (name, kycStatus = {}, fleetType = '') => {
 
   const isPedestrian = fleetType?.toLowerCase() === 'pedestrian';
 
-  // Pedestrians only need one of nin/license verified. Everyone else needs both.
+  // ── Rejection takes priority over every other state ─────────────────────
+  const hasRejection =
+    ninStatus === 'rejected' || driverLicenseStatus === 'rejected' || selfieStatus === 'rejected';
+
+  if (hasRejection) {
+    return `Hi ${name}, welcome back! One of your documents needs to be resubmitted. Continue as ${name}?`;
+  }
+
   const idComplete = isPedestrian
     ? (ninStatus === 'verified' || driverLicenseStatus === 'verified')
     : (ninStatus === 'verified' && driverLicenseStatus === 'verified');
@@ -62,7 +70,6 @@ const buildReturningUserGreeting = (name, kycStatus = {}, fleetType = '') => {
   const idPending = ninPending || licensePending;
   const idSubmitted = ninSubmitted || licenseSubmitted;
 
-
   const missingId = !isPedestrian && ninSubmitted && !licenseSubmitted ? "driver's license"
     : !isPedestrian && licenseSubmitted && !ninSubmitted ? 'NIN'
       : null;
@@ -83,7 +90,7 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
   const dispatch = useDispatch();
   const { runner } = useSelector((s) => s.auth);
   const [_localRegistrationComplete, setRegistrationComplete] = useState(false);
-  const registrationComplete = !!runner?._id || _localRegistrationComplete;
+  const registrationComplete = (!!runner?._id && runner?.isEmailVerified) || _localRegistrationComplete;
 
   const [isCollectingCredentials, setIsCollectingCredentials] = useState(false);
   const [credentialStep, setCredentialStep] = useState(null);
@@ -109,7 +116,7 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
 
   // Location state
   const [runnerLocation, setRunnerLocation] = useState(null);
-  const [ , setLocationResolved] = useState(false);
+  const [, setLocationResolved] = useState(false);
 
   const bestPositionRef = useRef(null);
   const watchIdRef = useRef(null);
@@ -500,7 +507,8 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
         setReturningUserData({
           ...updatedRunnerData,
           firstName: checkResult.firstName,
-          kycStatus: checkResult.kycStatus
+          kycStatus: checkResult.kycStatus,
+          isTrainingCompleted: checkResult.isTrainingCompleted ?? false,
         });
         setTempUserData(updatedRunnerData);
         setIsReturningUser(true);
@@ -588,6 +596,7 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
           const serverName = err?.data?.userName || err?.userName || updatedRunnerData.name.trim().split(" ")[0];
           const kycStatus = err?.data?.kycStatus || err?.kycStatus || {};
           const fleetType = err?.data?.fleetType || err?.fleetType || {};
+          const isTrainingCompleted = err?.data?.isTrainingCompleted ?? err?.isTrainingCompleted ?? false;
           const greetingText = buildReturningUserGreeting(serverName, kycStatus, fleetType || updatedRunnerData.fleetType);
 
           setReturningUserData({
@@ -600,7 +609,8 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
               selfieVerified: kycStatus?.selfieVerified ?? false,
               selfieStatus: kycStatus?.selfieStatus ?? 'not_submitted',
               overallVerified: kycStatus?.overallVerified ?? false,
-            }
+            },
+            isTrainingCompleted,
           });
           persistReturningKycStatus(updatedRunnerData.email, kycStatus);
           setTempUserData(updatedRunnerData);

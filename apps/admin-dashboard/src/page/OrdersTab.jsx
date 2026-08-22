@@ -4,9 +4,10 @@ import { useDispatch, useSelector } from 'react-redux';
 import { getAllOrders } from '../Redux/orderSlice';
 import {
     CheckCircle, Clock, ShoppingBag,
-    XCircle, AlertTriangle, MapPin, Bike, Calendar,
+    XCircle, AlertTriangle, MapPin, Bike,
     Package, ChevronDown, ChevronUp, Search,
-    ArrowUpDown, SortAsc, SortDesc
+    ArrowUpDown, SortAsc, SortDesc, User, Truck, CreditCard,
+    MapPinHouse, Store, Navigation
 } from 'lucide-react';
 import PageLayout from '../components/layout/PageLayout';
 
@@ -25,8 +26,8 @@ function StatusPill({ status }) {
     const cfg = STATUS_CONFIG[status] || { color: 'bg-white/5 text-white/40 border-white/10', icon: Clock };
     const Icon = cfg.icon;
     return (
-        <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase border ${cfg.color}`}>
-            <Icon size={10} /> {status?.replace(/_/g, ' ')}
+        <span className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold uppercase border ${cfg.color}`}>
+            <Icon size={12} /> {status?.replace(/_/g, ' ')}
         </span>
     );
 }
@@ -36,61 +37,39 @@ function OrderCard({ order }) {
 
     const customer = order.userId;
     const runner = order.runnerId;
-    const location = order.deliveryLocation?.address || order.marketLocation?.address || '—';
+    
+    // All location fields
+    const pickupLocation = order.pickupLocation?.address || '—';
+    const dropoffLocation = order.dropoffLocation?.address || '—';
+    const marketLocation = order.marketLocation?.address || '—';
+    const deliveryLocation = order.deliveryLocation?.address || '—';
+    const orderFromLocation = order.currentUserLocation?.address || '—';
 
     return (
         <div className="bg-secondary/30 border border-white/10 rounded-2xl transition-all hover:border-primary/20">
-            {/* Main row */}
+            {/* Main row - Compact view */}
             <div
                 className="p-4 sm:p-5 cursor-pointer"
                 onClick={() => setExpanded(!expanded)}
             >
-                <div className="flex flex-col sm:flex-row sm:items-center gap-4">
-                    {/* Order ID & Date */}
-                    <div className="min-w-[120px]">
-                        <p className="text-xs font-mono text-primary font-bold">{order.orderId}</p>
-                        <div className="flex items-center gap-1 mt-1">
-                            <Calendar size={10} className="text-white/30" />
-                            <p className="text-[9px] text-white/30">{new Date(order.createdAt).toLocaleDateString()}</p>
+                <div className="flex items-center justify-between gap-4">
+                    {/* Order ID & Service Type */}
+                    <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-3 flex-wrap">
+                            <p className="text-sm font-mono text-primary font-bold">{order.orderId}</p>
+                            <div className="flex items-center gap-1.5 text-sm text-white/50">
+                                <Bike size={16} className="text-primary shrink-0" />
+                                <span className="capitalize">{order.serviceType?.replace(/-/g, ' ')}</span>
+                            </div>
                         </div>
                     </div>
 
-                    {/* Customer */}
-                    <div className="min-w-[140px]">
-                        <p className="text-xs text-white/80 font-medium">{customer?.firstName ?? '—'} {customer?.lastName ?? ''}</p>
-                        <p className="text-[10px] text-white/40 mt-0.5">{customer?.phone}</p>
-                    </div>
-
-                    {/* Runner */}
-                    <div className="min-w-[140px]">
-                        <p className="text-xs text-white/80 font-medium">{runner?.firstName ?? '—'} {runner?.lastName ?? ''}</p>
-                        <p className="text-[10px] text-white/40 mt-0.5">{runner?.phone}</p>
-                    </div>
-
-                    {/* Service + Location */}
-                    <div className="flex-1 min-w-[160px]">
-                        <div className="flex items-center gap-1 text-[10px] text-white/50">
-                            <Bike size={11} className="text-primary shrink-0" />
-                            <span className="capitalize">{order.serviceType?.replace(/-/g, ' ')}</span>
-                        </div>
-                        <div className="flex items-center gap-1 mt-0.5 text-[10px] text-white/30">
-                            <MapPin size={10} className="shrink-0" />
-                            <span className="truncate">{location}</span>
-                        </div>
-                    </div>
-
-                    {/* Amount */}
-                    <div className="min-w-[120px]">
-                        <p className="text-sm font-bold text-white/90">₦{order.totalAmount?.toLocaleString()}</p>
-                        <p className="text-[10px] text-white/30">Budget: ₦{order.itemBudget?.toLocaleString()}</p>
-                    </div>
-
-                    {/* Status */}
-                    <div className="min-w-[110px]">
+                    {/* Status - Always visible */}
+                    <div className="shrink-0">
                         <StatusPill status={order.status} />
                         {order.hasDispute && (
-                            <div className="mt-1 flex items-center gap-1 text-[9px] text-red-500">
-                                <AlertTriangle size={9} /> Dispute
+                            <div className="mt-1 flex items-center gap-1 text-xs text-red-500 justify-end">
+                                <AlertTriangle size={10} /> Dispute
                             </div>
                         )}
                     </div>
@@ -100,7 +79,7 @@ function OrderCard({ order }) {
                         onClick={e => { e.stopPropagation(); setExpanded(!expanded); }}
                         className="p-2 bg-white/5 rounded-lg hover:text-primary text-white/40 transition-colors border border-white/10 shrink-0"
                     >
-                        {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                        {expanded ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
                     </button>
                 </div>
             </div>
@@ -108,68 +87,137 @@ function OrderCard({ order }) {
             {/* Expanded detail panel */}
             {expanded && (
                 <div className="border-t border-white/5 px-4 sm:px-5 py-4 bg-secondary/50">
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
-                        {/* Financials breakdown */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-4">
+                        {/* Customer Info */}
                         <div className="bg-secondary/30 rounded-xl p-3 border border-white/5">
                             <div className="flex items-center gap-2 mb-2">
-                                <p size={12} className="text-primary" >₦</p>
-                                <p className="text-[9px] text-white/30 uppercase tracking-widest">Financials</p>
+                                <User size={14} className="text-primary" />
+                                <p className="text-xs text-white/30 uppercase tracking-widest">Customer</p>
                             </div>
-                            {[
-                                ['Total', `₦${order.totalAmount?.toLocaleString()}`],
-                                ['Item Budget', `₦${order.itemBudget?.toLocaleString()}`],
-                                ['Delivery Fee', `₦${order.deliveryFee?.toLocaleString()}`],
-                                ['Platform Fee', `₦${order.platformFee?.toLocaleString()}`],
-                                ['Runner Payout', `₦${order.runnerPayout?.toLocaleString()}`],
-                            ].map(([k, v]) => (
-                                <div key={k} className="flex justify-between items-center py-0.5">
-                                    <span className="text-[10px] text-white/40">{k}</span>
-                                    <span className="text-[10px] text-white/70 font-medium">{v}</span>
-                                </div>
-                            ))}
+                            <p className="text-sm text-white/80 font-medium">{customer?.firstName} {customer?.lastName}</p>
+                            <p className="text-xs text-white/40 mt-0.5">{customer?.email}</p>
+                            <p className="text-xs text-white/40">{customer?.phone}</p>
                         </div>
 
-                        {/* Order info */}
+                        {/* Runner Info */}
                         <div className="bg-secondary/30 rounded-xl p-3 border border-white/5">
                             <div className="flex items-center gap-2 mb-2">
-                                <Package size={12} className="text-primary" />
-                                <p className="text-[9px] text-white/30 uppercase tracking-widest">Order Info</p>
+                                <Truck size={14} className="text-primary" />
+                                <p className="text-xs text-white/30 uppercase tracking-widest">Runner</p>
                             </div>
-                            {[
-                                ['Fleet', order.fleetType],
-                                ['Payment', order.paymentStatus],
-                                // ['Approval', order.approvalStatus],
-                                ['Rated', order.isRated ? 'Yes' : 'No'],
-                                // ['Confirmed By', order.deliveryConfirmedBy ?? '—'],
-                            ].map(([k, v]) => (
-                                <div key={k} className="flex justify-between items-center py-0.5">
-                                    <span className="text-[10px] text-white/40 capitalize">{k}</span>
-                                    <span className="text-[10px] text-white/70 font-medium capitalize">{v || '—'}</span>
+                            <p className="text-sm text-white/80 font-medium">{runner?.firstName} {runner?.lastName}</p>
+                            <p className="text-xs text-white/40 mt-0.5">{runner?.email}</p>
+                            <p className="text-xs text-white/40">{runner?.phone}</p>
+                        </div>
+
+                        {/* Order Details */}
+                        <div className="bg-secondary/30 rounded-xl p-3 border border-white/5">
+                            <div className="flex items-center gap-2 mb-2">
+                                <Package size={14} className="text-primary" />
+                                <p className="text-xs text-white/30 uppercase tracking-widest">Order Details</p>
+                            </div>
+                            <div className="space-y-1">
+                                <div className="flex justify-between items-center">
+                                    <span className="text-xs text-white/40">Fleet</span>
+                                    <span className="text-sm text-white/70 font-medium capitalize">{order.fleetType || '—'}</span>
                                 </div>
-                            ))}
+                                <div className="flex justify-between items-center">
+                                    <span className="text-xs text-white/40">Payment</span>
+                                    <span className="text-sm text-white/70 font-medium capitalize">{order.paymentStatus || '—'}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-xs text-white/40">Rated</span>
+                                    <span className="text-sm text-white/70 font-medium">{order.isRated ? 'Yes' : 'No'}</span>
+                                </div>
+                                <div className="flex justify-between items-center">
+                                    <span className="text-xs text-white/40">created At</span>
+                                    <span className="text-sm text-white/70 font-medium"> {new Date(order.createdAt).toLocaleString()} </span>
+                                </div>
+                            </div>
                         </div>
 
-                        {/* Customer */}
-                        <div className="bg-secondary/30 rounded-xl p-3 border border-white/5">
-                            <p className="text-[9px] text-white/30 uppercase tracking-widest mb-2">Customer</p>
-                            <p className="text-xs text-white/80 font-medium">{customer?.firstName} {customer?.lastName}</p>
-                            <p className="text-[10px] text-white/40 mt-0.5">{customer?.email}</p>
-                            <p className="text-[10px] text-white/40">{customer?.phone}</p>
+                        {/* Locations */}
+                        <div className="bg-secondary/30 rounded-xl p-3 border border-white/5 md:col-span-2 lg:col-span-3">
+                            <div className="flex items-center gap-2 mb-2">
+                                <MapPin size={14} className="text-primary" />
+                                <p className="text-xs text-white/30 uppercase tracking-widest">Locations</p>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                                {pickupLocation !== '—' && (
+                                    <div className="flex items-start gap-2">
+                                        <Navigation size={14} className="text-green-400 shrink-0 mt-0.5" />
+                                        <div>
+                                            <p className="text-xs text-white/40">Pickup</p>
+                                            <p className="text-sm text-white/70">{pickupLocation}</p>
+                                        </div>
+                                    </div>
+                                )}
+                                {dropoffLocation !== '—' && (
+                                    <div className="flex items-start gap-2">
+                                        <MapPinHouse size={14} className="text-blue-400 shrink-0 mt-0.5" />
+                                        <div>
+                                            <p className="text-xs text-white/40">Dropoff</p>
+                                            <p className="text-sm text-white/70">{dropoffLocation}</p>
+                                        </div>
+                                    </div>
+                                )}
+                                {marketLocation !== '—' && (
+                                    <div className="flex items-start gap-2">
+                                        <Store size={14} className="text-yellow-400 shrink-0 mt-0.5" />
+                                        <div>
+                                            <p className="text-xs text-white/40">Market</p>
+                                            <p className="text-sm text-white/70">{marketLocation}</p>
+                                        </div>
+                                    </div>
+                                )}
+                                {deliveryLocation !== '—' && (
+                                    <div className="flex items-start gap-2">
+                                        <MapPin size={14} className="text-purple-400 shrink-0 mt-0.5" />
+                                        <div>
+                                            <p className="text-xs text-white/40">Delivery</p>
+                                            <p className="text-sm text-white/70">{deliveryLocation}</p>
+                                        </div>
+                                    </div>
+                                )}
+                                {orderFromLocation !== '—' && (
+                                    <div className="flex items-start gap-2">
+                                        <MapPin size={14} className="text-orange-400 shrink-0 mt-0.5" />
+                                        <div>
+                                            <p className="text-xs text-white/40">Order From</p>
+                                            <p className="text-sm text-white/70">{orderFromLocation}</p>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </div>
 
-                        {/* Runner */}
-                        <div className="bg-secondary/30 rounded-xl p-3 border border-white/5">
-                            <p className="text-[9px] text-white/30 uppercase tracking-widest mb-2">Runner</p>
-                            <p className="text-xs text-white/80 font-medium">{runner?.firstName} {runner?.lastName}</p>
-                            <p className="text-[10px] text-white/40 mt-0.5">{runner?.email}</p>
-                            <p className="text-[10px] text-white/40">{runner?.phone}</p>
+                        {/* Financials */}
+                        <div className="bg-secondary/30 rounded-xl p-3 border border-white/5 md:col-span-3">
+                            <div className="flex items-center gap-2 mb-2">
+                                <CreditCard size={14} className="text-primary" />
+                                <p className="text-xs text-white/30 uppercase tracking-widest">Financials</p>
+                            </div>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+                                {[
+                                    ['Total', `₦${order.totalAmount?.toLocaleString()}`],
+                                    ['Item Budget', `₦${order.itemBudget?.toLocaleString()}`],
+                                    ['Delivery Fee', `₦${order.deliveryFee?.toLocaleString()}`],
+                                    ['Platform Fee', `₦${order.platformFee?.toLocaleString()}`],
+                                    ['Runner Payout', `₦${order.runnerPayout?.toLocaleString()}`],
+                                ].map(([k, v]) => (
+                                    <div key={k} className="flex flex-col">
+                                        <span className="text-xs text-white/40">{k}</span>
+                                        <span className="text-sm text-white/70 font-medium">{v}</span>
+                                    </div>
+                                ))}
+                            </div>
                         </div>
                     </div>
 
                     {/* Status history timeline */}
                     {order.statusHistory?.length > 0 && (
                         <div className="bg-secondary/30 rounded-xl p-3 border border-white/5">
-                            <p className="text-[9px] text-white/30 uppercase tracking-widest mb-3">Status History</p>
+                            <p className="text-xs text-white/30 uppercase tracking-widest mb-3">Status History</p>
                             <div className="flex flex-col gap-2">
                                 {order.statusHistory.map((h, idx) => (
                                     <div key={h._id || idx} className="flex items-start gap-3">
@@ -181,18 +229,18 @@ function OrderCard({ order }) {
                                         </div>
                                         <div className="min-w-0 flex-1 flex items-start justify-between gap-2">
                                             <div>
-                                                <span className="text-[10px] text-white/70 font-medium capitalize">
+                                                <span className="text-sm text-white/70 font-medium capitalize">
                                                     {h.status?.replace(/_/g, ' ')}
                                                 </span>
                                                 {h.note && (
-                                                    <p className="text-[9px] text-white/30 mt-0.5">{h.note}</p>
+                                                    <p className="text-xs text-white/30 mt-0.5">{h.note}</p>
                                                 )}
                                             </div>
                                             <div className="text-right shrink-0">
-                                                <p className="text-[9px] text-white/30">
+                                                <p className="text-xs text-white/30">
                                                     {new Date(h.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                                                 </p>
-                                                <p className="text-[9px] text-white/20 capitalize">{h.triggeredBy}</p>
+                                                <p className="text-xs text-white/20 capitalize">{h.triggeredBy}</p>
                                             </div>
                                         </div>
                                     </div>
@@ -223,8 +271,6 @@ export default function OrdersTab() {
         [
             'all',
             'pending_payment',
-            // 'items_submitted',
-            // 'items_approved',
             'completed', 'cancelled', 'disputed'],
         []);
 
@@ -254,13 +300,23 @@ export default function OrdersTab() {
                 const customerName = `${order.userId?.firstName || ''} ${order.userId?.lastName || ''}`.toLowerCase();
                 const customerEmail = (order.userId?.email || '').toLowerCase();
                 const runnerName = `${order.runnerId?.firstName || ''} ${order.runnerId?.lastName || ''}`.toLowerCase();
-                const location = (order.deliveryLocation?.address || order.marketLocation?.address || '').toLowerCase();
+                
+                // All location fields for search
+                const pickupLocation = (order.pickupLocation?.address || '').toLowerCase();
+                const dropoffLocation = (order.dropoffLocation?.address || '').toLowerCase();
+                const marketLocation = (order.marketLocation?.address || '').toLowerCase();
+                const deliveryLocation = (order.deliveryLocation?.address || '').toLowerCase();
+                const orderFromLocation = (order.currentUserLocation?.address || '').toLowerCase();
 
                 return orderId.includes(query) ||
                     customerName.includes(query) ||
                     customerEmail.includes(query) ||
                     runnerName.includes(query) ||
-                    location.includes(query);
+                    pickupLocation.includes(query) ||
+                    dropoffLocation.includes(query) ||
+                    marketLocation.includes(query) ||
+                    deliveryLocation.includes(query) ||
+                    orderFromLocation.includes(query);
             });
         }
 
@@ -355,14 +411,14 @@ export default function OrdersTab() {
             <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                 {/* Search Input */}
                 <div className="flex-1">
-                    <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-3 py-2 w-full focus-within:border-primary/40 transition-colors">
-                        <Search size={12} className="text-white/30 shrink-0" />
+                    <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-3 py-2.5 w-full focus-within:border-primary/40 transition-colors">
+                        <Search size={14} className="text-white/30 shrink-0" />
                         <input
                             type="text"
                             value={searchQuery}
                             onChange={handleSearchChange}
                             placeholder="Search by order ID, customer, runner, or location..."
-                            className="bg-transparent text-xs text-white/70 placeholder-white/25 outline-none w-full"
+                            className="bg-transparent text-sm text-white/70 placeholder-white/25 outline-none w-full"
                             autoComplete="off"
                         />
                         {searchQuery && (
@@ -382,7 +438,7 @@ export default function OrdersTab() {
                     <select
                         value={sortBy}
                         onChange={handleSortChange}
-                        className="appearance-none bg-secondary border border-white/10 rounded-lg px-3 py-2 pr-8 text-xs text-white/70 focus:outline-none focus:border-primary/40 cursor-pointer"
+                        className="appearance-none bg-secondary border border-white/10 rounded-lg px-3 py-2.5 pr-8 text-sm text-white/70 focus:outline-none focus:border-primary/40 cursor-pointer"
                     >
                         <option value="date_desc">Newest First</option>
                         <option value="date_asc">Oldest First</option>
@@ -403,7 +459,7 @@ export default function OrdersTab() {
                     <button
                         key={status}
                         onClick={() => handleStatusFilterChange(status)}
-                        className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wide transition-all
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase tracking-wide transition-all
                             ${statusFilter === status
                                 ? 'bg-primary/10 text-primary border border-primary/20'
                                 : 'bg-secondary/50 text-white/40 border border-white/10 hover:text-white/70'}`}
@@ -427,14 +483,14 @@ export default function OrdersTab() {
         >
             {/* Error Display */}
             {error && (
-                <div className="mb-4 flex items-center gap-2 px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-500 text-xs">
-                    <AlertTriangle size={13} /> Error: {typeof error === 'string' ? error : 'Failed to load orders'}
+                <div className="mb-4 flex items-center gap-2 px-4 py-3 rounded-lg bg-red-500/10 border border-red-500/20 text-red-500 text-sm">
+                    <AlertTriangle size={14} /> Error: {typeof error === 'string' ? error : 'Failed to load orders'}
                 </div>
             )}
 
             {/* Search Results Count */}
             {!loading && searchQuery && filteredAndSortedOrders.length > 0 && (
-                <div className="mb-3 text-xs text-white/40">
+                <div className="mb-3 text-sm text-white/40">
                     Found {filteredAndSortedOrders.length} order{filteredAndSortedOrders.length !== 1 ? 's' : ''} matching "{searchQuery}"
                 </div>
             )}
@@ -447,7 +503,7 @@ export default function OrdersTab() {
             {/* Empty State */}
             {!loading && !error && filteredAndSortedOrders.length === 0 && (
                 <div className="text-center py-20 bg-secondary/30 rounded-2xl border border-dashed border-white/10">
-                    <ShoppingBag size={32} className="mx-auto text-white/20 mb-3" />
+                    <ShoppingBag size={36} className="mx-auto text-white/20 mb-3" />
                     <p className="text-white/40 text-sm">
                         {searchQuery
                             ? `No orders match "${searchQuery}"`
@@ -457,7 +513,7 @@ export default function OrdersTab() {
                     {searchQuery && (
                         <button
                             onClick={handleClearSearch}
-                            className="mt-2 text-xs text-primary hover:text-primary/80 transition-colors"
+                            className="mt-2 text-sm text-primary hover:text-primary/80 transition-colors"
                         >
                             Clear search
                         </button>
@@ -467,7 +523,7 @@ export default function OrdersTab() {
 
             {/* Order cards */}
             {!loading && filteredAndSortedOrders.length > 0 && (
-                <div className="grid gap-4">
+                <div className="grid gap-3">
                     {filteredAndSortedOrders.map(order => (
                         <OrderCard key={order._id} order={order} />
                     ))}

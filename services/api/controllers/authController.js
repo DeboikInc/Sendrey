@@ -131,7 +131,7 @@ class AuthController extends BaseController {
       // Virtual account (non-blocking)
       try {
         await paymentService.createVirtualAccount(
-          user._id, user.email, `${user.firstName} ${user.lastName}`
+          user._id, user.email, `${user.firstName} ${user.lastName}`, user.phone
         );
       } catch (err) {
         console.error('Virtual account creation failed:', err.message);
@@ -193,7 +193,7 @@ class AuthController extends BaseController {
       if (!['admin', 'super-admin'].includes(runner.role)) {
         try {
           await paymentService.createVirtualAccount(
-            runner._id, runner.email, `${runner.firstName} ${runner.lastName}`
+            runner._id, runner.email, `${runner.firstName} ${runner.lastName}`, runner.phone
           );
         } catch (err) {
           console.error('Virtual account creation failed:', err.message);
@@ -221,6 +221,7 @@ class AuthController extends BaseController {
           userEmail: error.userEmail,
           userPhone: error.userPhone,
           kycStatus: error.kycStatus,
+          isTrainingCompleted: error.isTrainingCompleted,
         }, 409);
       }
       next(error);
@@ -448,6 +449,7 @@ class AuthController extends BaseController {
 
       if (!runner) return this.error(res, 'Runner not found', 404);
 
+      const isTrainingCompleted = runner.isTrainingCompleted
       const kycStatus = {
         overallStatus: runner.kycStatus,
         nin: {
@@ -476,7 +478,7 @@ class AuthController extends BaseController {
         },
       };
 
-      return this.success(res, { runner: this._sanitizeRunner(runner), kycStatus });
+      return this.success(res, { runner: this._sanitizeRunner(runner), kycStatus, isTrainingCompleted });
     } catch (error) {
       next(error);
     }

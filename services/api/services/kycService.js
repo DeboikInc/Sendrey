@@ -262,7 +262,7 @@ class KYCService {
                     { 'verificationDocuments.driverLicense.status': 'pending_review' },
                     { 'biometricVerification.status': 'pending_review' }
                 ]
-            }).select('firstName lastName email phone createdAt verificationDocuments biometricVerification kycStatus');
+            }).select('firstName lastName email phone fleetType createdAt verificationDocuments biometricVerification kycStatus');
 
             return pendingRunners.map(runner => ({
                 id: runner._id,
@@ -270,6 +270,7 @@ class KYCService {
                 lastName: runner.lastName,
                 email: runner.email,
                 phone: runner.phone,
+                fleetType: runner.fleetType,
                 createdAt: runner.createdAt,
                 kycStatus: runner.kycStatus,
                 pendingItems: this.getPendingItems(runner)
@@ -311,6 +312,7 @@ class KYCService {
                 lastName: runner.lastName,
                 email: runner.email,
                 phone: runner.phone,
+                fleetType: runner.fleetType,
                 dateOfBirth: runner.dateOfBirth,
                 createdAt: runner.createdAt,
                 kycStatus: runner.kycStatus,
@@ -475,7 +477,7 @@ class KYCService {
             const verifiedRunners = await Runner.find({
                 role: 'runner',
                 kycStatus: { $in: ['approved_full', 'approved_limited'] }
-            }).select('firstName lastName email phone createdAt verificationDocuments biometricVerification kycStatus');
+            }).select('firstName lastName email fleetType phone createdAt verificationDocuments biometricVerification kycStatus');
 
             return verifiedRunners.map(runner => ({
                 id: runner._id,
@@ -484,6 +486,7 @@ class KYCService {
                 email: runner.email,
                 // isKycVerified: runner.isKycVerified,
                 phone: runner.phone,
+                fleetType: runner.fleetType,
                 createdAt: runner.createdAt,
                 kycStatus: runner.kycStatus,
                 pendingItems: [] // Verified runners have no pending items

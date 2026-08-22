@@ -37,7 +37,7 @@ const corsOptions = {
       callback(null, true);
     } else {
       console.warn(`CORS blocked: ${origin}`);
-      callback(new Error('Not allowed by CORS'));
+      callback(null, false);
     }
   },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],

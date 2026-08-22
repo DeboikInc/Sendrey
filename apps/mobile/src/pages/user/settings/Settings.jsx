@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { ChevronLeft, Building2, ChevronRight, Moon, Sun } from "lucide-react";
+import { ChevronLeft, Building2, ChevronRight, Moon, Sun, Bell, BellOff } from "lucide-react";
 
 import { fetchProfile } from "../../../Redux/userSlice";
 import { updateUser } from "../../../Redux/authSlice";
 import { getSuggestionStatus, hydrateFromUser } from "../../../Redux/businessSlice";
+import { optInNotifications, optOutNotifications, getNotificationPreferences } from "../../../Redux/notificationSlice";
 
 import Profile from "./Profile";
 import UpgradeBanner from "./UpgradeBanner";
@@ -17,8 +18,13 @@ export default function Settings({ darkMode, onBack, onToggleDarkMode, initialTa
     const dispatch = useDispatch();
     const { user } = useSelector((s) => s.auth);
     const { suggestion, businessName } = useSelector((s) => s.business); // eslint-disable-line no-unused-vars
+    const notificationPrefs = useSelector((s) => s.notification?.preferences);
 
     const [view, setView] = useState("settings"); // "settings" | "business"
+
+    const [notificationLoading, setNotificationLoading] = useState(false);
+    const [notificationError, setNotificationError] = useState(null);
+    const [notificationSuccess, setNotificationSuccess] = useState(null);
 
     const isTeamMember = user?.teamMembership?.status === 'accepted';
 
@@ -27,6 +33,13 @@ export default function Settings({ darkMode, onBack, onToggleDarkMode, initialTa
     const card = darkMode ? "bg-black-100 border-white/10" : "bg-white border-gray-100";
     const inner = darkMode ? "bg-black-200 border-white/10" : "bg-gray-50 border-gray-100";
     const heading = darkMode ? "text-white" : "text-black-200";
+
+    // Check if notifications are opted in
+    const isOptedIn = notificationPrefs?.push?.messages === true ||
+        notificationPrefs?.push?.updates === true;
+
+    const isOptedOut = notificationPrefs?.push?.messages === false &&
+        notificationPrefs?.push?.updates === false;
 
     useEffect(() => {
         dispatch(hydrateFromUser(user));
@@ -52,6 +65,34 @@ export default function Settings({ darkMode, onBack, onToggleDarkMode, initialTa
             setView("business");
         }
     }, [initialTab, isBusiness]);
+
+    useEffect(() => {
+        if (!user?._id) return;
+        dispatch(getNotificationPreferences({ userId: user._id, userType: 'user' }));
+    }, [user?._id, dispatch]);
+
+    const handleNotificationToggle = async () => {
+        if (!user?._id) return;
+        setNotificationLoading(true);
+        setNotificationError(null);
+        setNotificationSuccess(null);
+        try {
+            if (isOptedIn) {
+                await dispatch(optOutNotifications({ userId: user._id, userType: 'user' })).unwrap();
+                setNotificationSuccess('Notifications disabled');
+            } else {
+                await dispatch(optInNotifications({ userId: user._id, userType: 'user' })).unwrap();
+                setNotificationSuccess('Notifications enabled');
+            }
+            await dispatch(getNotificationPreferences({ userId: user._id, userType: 'user' }));
+            setTimeout(() => setNotificationSuccess(null), 3000);
+        } catch (err) {
+            setNotificationError(err || 'Failed to update notifications');
+            setTimeout(() => setNotificationError(null), 3000);
+        } finally {
+            setNotificationLoading(false);
+        }
+    };
 
     // console.log('pendingBusinessInvite:', user?.pendingBusinessInvite);
 
@@ -95,23 +136,51 @@ export default function Settings({ darkMode, onBack, onToggleDarkMode, initialTa
                         <p className="text-[10px] font-black uppercase tracking-[0.2em] text-black-100/80 dark:text-gray-400 mb-4">
                             Preferences
                         </p>
-                        <button
-                            onClick={onToggleDarkMode}
-                            className={`w-full flex items-center justify-between p-4 rounded-2xl border ${inner}`}
-                        >
-                            <div className="flex items-center gap-3">
-                                {darkMode
-                                    ? <Moon className="h-4 w-4 text-black-100/80 dark:text-gray-400" />
-                                    : <Sun className="h-4 w-4 text-black-100/80 dark:text-gray-400" />
-                                }
-                                <p className={`text-sm font-semibold ${heading}`}>
-                                    {darkMode ? "Dark Mode" : "Light Mode"}
-                                </p>
-                            </div>
-                            <div className={`w-11 h-6 rounded-full transition-colors duration-300 relative ${darkMode ? "bg-primary" : "bg-gray-200"}`}>
-                                <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all duration-300 ${darkMode ? "left-6" : "left-1"}`} />
-                            </div>
-                        </button>
+                        <div className="space-y-3">
+                            <button
+                                onClick={onToggleDarkMode}
+                                className={`w-full flex items-center justify-between p-4 rounded-2xl border ${inner}`}
+                            >
+                                <div className="flex items-center gap-3">
+                                    {darkMode
+                                        ? <Moon className="h-4 w-4 text-black-100/80 dark:text-gray-400" />
+                                        : <Sun className="h-4 w-4 text-black-100/80 dark:text-gray-400" />
+                                    }
+                                    <p className={`text-sm font-semibold ${heading}`}>
+                                        {darkMode ? "Dark Mode" : "Light Mode"}
+                                    </p>
+                                </div>
+                                <div className={`w-11 h-6 rounded-full transition-colors duration-300 relative ${darkMode ? "bg-primary" : "bg-gray-200"}`}>
+                                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all duration-300 ${darkMode ? "left-6" : "left-1"}`} />
+                                </div>
+                            </button>
+
+                            <button
+                                onClick={handleNotificationToggle}
+                                disabled={notificationLoading}
+                                className={`w-full flex items-center justify-between p-4 rounded-2xl border ${inner} disabled:opacity-50`}
+                            >
+                                <div className="flex items-center gap-3">
+                                    {isOptedIn
+                                        ? <Bell className="h-4 w-4 text-black-100/80 dark:text-gray-400" />
+                                        : <BellOff className="h-4 w-4 text-black-100/80 dark:text-gray-400" />
+                                    }
+                                    <div className="text-left">
+                                        <p className={`text-sm font-semibold ${heading}`}>
+                                            {isOptedIn ? "Notifications On" : isOptedOut ? "Notifications Off" : "Notifications"}
+                                        </p>
+                                        {(notificationSuccess || notificationError) && (
+                                            <p className={`text-[10px] font-medium ${notificationError ? "text-red-500" : "text-green-500"}`}>
+                                                {notificationError || notificationSuccess}
+                                            </p>
+                                        )}
+                                    </div>
+                                </div>
+                                <div className={`w-11 h-6 rounded-full transition-colors duration-300 relative ${isOptedIn ? "bg-primary" : "bg-gray-200"}`}>
+                                    <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all duration-300 ${isOptedIn ? "left-6" : "left-1"}`} />
+                                </div>
+                            </button>
+                        </div>
                     </div>
 
                     {/* Business — visible only after conversion */}

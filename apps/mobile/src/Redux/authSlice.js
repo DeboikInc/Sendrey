@@ -40,6 +40,8 @@ export const register = createAsyncThunk("auth/register", async (data, thunkAPI)
         if (error.response?.data?.errors) {
             return thunkAPI.rejectWithValue(error.response.data.errors[0].message);
         }
+        console.error(error.response?.data?.errors)
+        console.log(error.response?.data?.errors)
         return thunkAPI.rejectWithValue(error.response?.data?.message || "Something went wrong");
     }
 });

@@ -27,6 +27,7 @@ export default function RunnerCard({ runner, view, onReview }) {
       <div className="mt-2.5 space-y-0.5">
         <p className="text-xs text-white/50 truncate">{runner.email}</p>
         <p className="text-[10px] text-white/30">{runner.phone}</p>
+        <p className="text-[10px] text-white/30">{runner.fleetType}</p>
       </div>
 
       {/* Pending items */}

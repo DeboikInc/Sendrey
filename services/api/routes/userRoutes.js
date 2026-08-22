@@ -44,7 +44,7 @@ router.delete('/locations/:locationId',
   userController.deleteLocation
 );
 
-router.put('/profile',
+router.put('/update-user-profile',
   upload.single('avatar'),
   validate(userValidation.updateProfile),
   auditLog('UPDATE_PROFILE'),

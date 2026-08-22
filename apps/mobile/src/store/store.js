@@ -14,7 +14,7 @@ import ratingReducer from '../Redux/ratingSlice';
 import businessReducer from '../Redux/businessSlice';
 import payoutReducer from '../Redux/payoutSlice';
 import pinReducer from '../Redux/pinSlice';
-
+import notificationReducer from '../Redux/notificationSlice';
 
 const store = configureStore({
   reducer: {
@@ -31,6 +31,7 @@ const store = configureStore({
     rating: ratingReducer,
     payout: payoutReducer,
     business: businessReducer,
+    notification: notificationReducer,
     pin: persistReducer({ key: 'pin', storage, whitelist: ['isPinSet'] }, pinReducer),
   },
   middleware: (getDefaultMiddleware) =>

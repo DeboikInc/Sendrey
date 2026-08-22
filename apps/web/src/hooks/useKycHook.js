@@ -32,9 +32,7 @@ const resolveResumeStep = (kycStatus = {}, fleetType) => {
   return null;
 };
 
-
-
-export const useKycHook = (runnerId, fleetType) => {
+export const useKycHook = (runnerId, fleetType,) => {
   const dispatch = useDispatch();
   const [kycStep, setKycStep] = useState(null);
 
@@ -57,6 +55,7 @@ export const useKycHook = (runnerId, fleetType) => {
   const verifyInProgress = useRef(false);
   // Track which doc is currently being collected: 'nin' | 'driverLicense'
   const currentDocTypeRef = useRef('nin');
+  const kycServerStatusRef = useRef({ nin: 'not_submitted', driverLicense: 'not_submitted', selfie: 'not_submitted' });
 
 
   useEffect(() => {
@@ -194,6 +193,149 @@ export const useKycHook = (runnerId, fleetType) => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const checkVerificationStatus = useCallback(async (setMessages, onBanned, isReturning = false) => {
+    console.log('[KYC] checkVerificationStatus called', { runnerId });
+    if (!runnerId) {
+      console.log('[KYC] checkVerificationStatus BLOCKED — no runnerId');
+      return
+    };
+    try {
+      const result = await dispatch(getVerificationStatus(runnerId));
+      if (result.type.includes('rejected')) {
+        // auth failure — stop polling silently
+        if (result.payload?.status === 401) return;
+      }
+      if (!result.type.includes('fulfilled')) return;
+
+      const { kycStatus, documents, biometrics } = result.payload;
+
+      kycServerStatusRef.current = {
+        nin: documents.nin?.status || 'not_submitted',
+        driverLicense: documents.driverLicense?.status || 'not_submitted',
+        selfie: biometrics.status || 'not_submitted',
+      };
+
+      if (kycStatus === 'banned') {
+        onBanned?.();
+        return;
+      }
+
+      const currentStatusKey = `${documents.nin?.status}-${documents.driverLicense?.status}-${biometrics.status}-${kycStatus}`;
+
+      if (lastCheckedStatusRef.current === currentStatusKey) return;
+      lastCheckedStatusRef.current = currentStatusKey;
+
+      if (isAlreadyVerifiedRef.current) {
+        isAlreadyVerifiedRef.current = false;
+        return;
+      }
+
+      // ── If everything is approved, show ONE combined message ─────────────
+      const allApproved = biometrics.status === 'approved' && biometrics.selfieVerified;
+      const effectivelyReturning = isReturning || isReturningUserRef.current;
+
+      if (allApproved) {
+        const shownKey = `kyc_verified_shown_${runnerId}`;
+        const alreadyShown = localStorage.getItem(shownKey) === '1';
+
+        if (!effectivelyReturning && !alreadyShown && !isAlreadyVerifiedRef.current) {
+          localStorage.setItem(shownKey, '1'); // set immediately, before async setState
+          setMessages(prev => {
+            const hasIt = prev.some(m => m.text?.includes('Congratulations'));
+            if (hasIt) return prev;
+            return [...prev, {
+              id: `kyc-verified-${Date.now()}`,
+              from: "them",
+              text: "Congratulations! Your documents have been verified.",
+              time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              status: "delivered", isKyc: true
+            }];
+          });
+        }
+
+        isAlreadyVerifiedRef.current = true; // ← always set after allApproved
+        setKycStatus({ documentVerified: true, selfieVerified: true, overallVerified: true });
+
+        // push verified state into Redux so raw.jsx re-renders with isVerified=true
+        dispatch(updateRunner({
+          isVerifiedKyc: true,
+          kycStatus: kycStatus
+        }));
+
+        setTimeout(() => setKycStep(6), 800);
+        localStorage.removeItem(`kyc_step_${runnerId}`);
+        localStorage.removeItem(`kyc_doc_type_${runnerId}`);
+        return;
+      }
+
+      // ── Partial rejections/approvals
+      let resumeStep = null;
+
+      if (documents.nin?.status === 'rejected') {
+        const reason = documents.nin.rejectionReason
+          ? `❌ Your NIN verification was unsuccessful: ${documents.nin.rejectionReason}. Please resubmit.`
+          : "❌ Your NIN verification was unsuccessful. Please resubmit.";
+        setMessages(prev => [...prev, {
+          id: `kyc-nin-rejected-${Date.now()}`,
+          from: "them", text: reason,
+          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          status: "delivered", isKyc: true
+        }]);
+        if (!resumeStep) resumeStep = { step: 2, docType: 'nin' };
+      }
+
+      if (documents.driverLicense?.status === 'rejected') {
+        const reason = documents.driverLicense.rejectionReason
+          ? `❌ Your Driver's License verification was unsuccessful: ${documents.driverLicense.rejectionReason}. Please resubmit.`
+          : "❌ Your Driver's License verification was unsuccessful. Please resubmit.";
+        setMessages(prev => [...prev, {
+          id: `kyc-dl-rejected-${Date.now()}`,
+          from: "them", text: reason,
+          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          status: "delivered", isKyc: true
+        }]);
+        if (!resumeStep) resumeStep = { step: 2, docType: 'driverLicense' };
+      }
+
+      if (biometrics.status === 'rejected') {
+        const reason = biometrics.rejectionReason
+          ? `❌ Your selfie verification was unsuccessful: ${biometrics.rejectionReason}. Please resubmit.`
+          : "❌ Your selfie verification was unsuccessful. Please resubmit.";
+        setMessages(prev => [...prev, {
+          id: `kyc-selfie-rejected-${Date.now()}`,
+          from: "them", text: reason,
+          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          status: "delivered", isKyc: true
+        }]);
+        if (!resumeStep) resumeStep = { step: 5, docType: null };
+      }
+
+      // Apply only the highest-priority rejection
+      if (resumeStep) {
+        if (resumeStep.docType) {
+          setDocType(resumeStep.docType);
+          capturedIdPhotoRef.current = null;
+        } else {
+          capturedSelfiePhotoRef.current = null;
+        }
+        setKycStep(resumeStep.step);
+      }
+
+      if (kycStatus === 'banned') {
+        setMessages(prev => [...prev, {
+          id: `kyc-banned-${Date.now()}`,
+          from: "them",
+          text: "🚫 Your account has been suspended. Please contact support at support@sendrey.com.",
+          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          status: "delivered", isKyc: true
+        }]);
+      }
+
+    } catch (error) {
+      console.error('Error checking verification status:', error);
+    }
+  }, [dispatch, runnerId, setDocType]);
+
   const resumeKycFlow = useCallback((serverKycStatus, setMessages) => {
     isReturningUserRef.current = true;
     console.log('[KYC] resumeKycFlow called', { serverKycStatus, kycInitiated: kycInitiated.current, fleetType: fleetTypeRef.current });
@@ -218,6 +360,16 @@ export const useKycHook = (runnerId, fleetType) => {
     if (!isFullyVerified) {
       // only set the ref for partial states where we want to suppress duplicate status messages
       isAlreadyVerifiedRef.current = false;
+    }
+
+    const hasRejection =
+      serverKycStatus?.ninStatus === 'rejected' ||
+      serverKycStatus?.driverLicenseStatus === 'rejected' ||
+      serverKycStatus?.selfieStatus === 'rejected';
+
+    if (hasRejection) {
+      checkVerificationStatus(setMessages, () => { }, true);
+      return;
     }
 
     const resume = resolveResumeStep(serverKycStatus, fleetTypeRef.current);
@@ -250,11 +402,10 @@ export const useKycHook = (runnerId, fleetType) => {
         status: "delivered",
         isKyc: true,
       }]);
-      return; // ← exit early, never reaches checkVerificationStatus path
+
+      return;
     }
 
-    // ── Partial progress — resume into the SAME step the prompt describes,
-    // so the matching capture UI (ID upload / selfie) actually renders.
     if (step === 3) {
       capturedSelfiePhotoRef.current = null; // clear any stale capture from a prior session
     }
@@ -275,7 +426,7 @@ export const useKycHook = (runnerId, fleetType) => {
     }]);
 
     setKycStep(step);
-  }, [startKycFlow, setDocType]);
+  }, [startKycFlow, setDocType, checkVerificationStatus]);
 
   const onIdVerified = useCallback((photo, setMessages) => {
     capturedIdPhotoRef.current = photo;
@@ -383,22 +534,18 @@ export const useKycHook = (runnerId, fleetType) => {
             isKyc: true
           }]);
 
-          if (fleetTypeRef.current === 'pedestrian') {
-            // Pedestrian — NIN only, proceed to selfie
-            setTimeout(() => {
-              setMessages(prev => [...prev, {
-                id: `kyc-selfie-prompt-${Date.now()}`,
-                from: "them",
-                text: "You need to take a quick selfie so I can confirm it's really you.",
-                time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-                status: "delivered",
-                isKyc: true
-              }]);
-              setTimeout(() => setKycStep(3), 800);
-            }, 1000);
+          // Optimistically mark what we just submitted as pending, so the next check reflects reality
+          kycServerStatusRef.current[currentDocTypeRef.current] = 'pending_review';
 
-          } else if (currentDocTypeRef.current === 'nin') {
-            // Non-pedestrian just submitted NIN — now ask for driver's license
+          const needsLicense = fleetTypeRef.current !== 'pedestrian' &&
+            currentDocTypeRef.current !== 'driverLicense' &&
+            ['not_submitted', 'rejected'].includes(kycServerStatusRef.current.driverLicense);
+
+          const selfieStatus = kycServerStatusRef.current.selfie;
+          const needsSelfie = ['not_submitted', 'rejected'].includes(selfieStatus);
+
+          if (needsLicense) {
+            const isResubmit = kycServerStatusRef.current.driverLicense === 'rejected';
             setDocType('driverLicense');
             capturedIdPhotoRef.current = null;
 
@@ -406,7 +553,7 @@ export const useKycHook = (runnerId, fleetType) => {
               setMessages(prev => [...prev, {
                 id: `kyc-dl-prompt-${Date.now()}`,
                 from: "them",
-                text: "Kindly provide your Driver's License.",
+                text: isResubmit ? "Kindly resubmit your Driver's License." : "Kindly provide your Driver's License.",
                 time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
                 status: "delivered",
                 isKyc: true
@@ -414,19 +561,39 @@ export const useKycHook = (runnerId, fleetType) => {
               setTimeout(() => setKycStep(2), 800);
             }, 1000);
 
+          } else if (needsSelfie) {
+            const isResubmit = selfieStatus === 'rejected';
+
+            if (isResubmit) {
+              capturedSelfiePhotoRef.current = null;
+              setTimeout(() => {
+                setMessages(prev => [...prev, {
+                  id: `kyc-selfie-resubmit-prompt-${Date.now()}`,
+                  from: "them",
+                  text: "Kindly resubmit your selfie as well.",
+                  time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                  status: "delivered",
+                  isKyc: true
+                }]);
+                setTimeout(() => setKycStep(5), 800);
+              }, 1000);
+            } else {
+              setTimeout(() => {
+                setMessages(prev => [...prev, {
+                  id: `kyc-selfie-prompt-${Date.now()}`,
+                  from: "them",
+                  text: "You need to take a quick selfie so I can confirm it's really you.",
+                  time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+                  status: "delivered",
+                  isKyc: true
+                }]);
+                setTimeout(() => setKycStep(3), 800);
+              }, 1000);
+            }
+
           } else {
-            // Non-pedestrian just submitted driver's license — proceed to selfie
-            setTimeout(() => {
-              setMessages(prev => [...prev, {
-                id: `kyc-selfie-prompt-${Date.now()}`,
-                from: "them",
-                text: "You need to take a quick selfie so I can confirm it's really you.",
-                time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-                status: "delivered",
-                isKyc: true
-              }]);
-              setTimeout(() => setKycStep(3), 800);
-            }, 1000);
+            // Nothing else is missing or rejected — back to "under review", nothing more to collect
+            setTimeout(() => setKycStep(6), 1000);
           }
 
         } else {
@@ -503,6 +670,7 @@ export const useKycHook = (runnerId, fleetType) => {
           const blob = await res.blob();
           const file = new File([blob], "selfie.jpg", { type: "image/jpeg" });
           const result = await dispatch(verifySelfie(file));
+          kycServerStatusRef.current.selfie = 'pending_review';
 
           if (result.type.includes('fulfilled')) {
             setMessages(prev => [...prev, {
@@ -539,122 +707,6 @@ export const useKycHook = (runnerId, fleetType) => {
     }, 500);
   }, [dispatch, runnerId]);
 
-  const checkVerificationStatus = useCallback(async (setMessages, onBanned, isReturning = false) => {
-    console.log('[KYC] checkVerificationStatus called', { runnerId });
-    if (!runnerId) {
-      console.log('[KYC] checkVerificationStatus BLOCKED — no runnerId');
-      return
-    };
-    try {
-      const result = await dispatch(getVerificationStatus(runnerId));
-      if (result.type.includes('rejected')) {
-        // auth failure — stop polling silently
-        if (result.payload?.status === 401) return;
-      }
-      if (!result.type.includes('fulfilled')) return;
-
-      const { kycStatus, documents, biometrics } = result.payload;
-
-      if (kycStatus === 'banned') {
-        onBanned?.();
-        return;
-      }
-
-      const currentStatusKey = `${documents.nin?.status}-${documents.driverLicense?.status}-${biometrics.status}-${kycStatus}`;
-
-      if (lastCheckedStatusRef.current === currentStatusKey) return;
-      lastCheckedStatusRef.current = currentStatusKey;
-
-      if (isAlreadyVerifiedRef.current) {
-        isAlreadyVerifiedRef.current = false;
-        return;
-      }
-
-      // ── If everything is approved, show ONE combined message ─────────────
-      const allApproved = biometrics.status === 'approved' && biometrics.selfieVerified;
-      const effectivelyReturning = isReturning || isReturningUserRef.current;
-
-      if (allApproved) {
-        const shownKey = `kyc_verified_shown_${runnerId}`;
-        const alreadyShown = localStorage.getItem(shownKey) === '1';
-
-        if (!effectivelyReturning && !alreadyShown && !isAlreadyVerifiedRef.current) {
-          localStorage.setItem(shownKey, '1'); // set immediately, before async setState
-          setMessages(prev => {
-            const hasIt = prev.some(m => m.text?.includes('Congratulations'));
-            if (hasIt) return prev;
-            return [...prev, {
-              id: `kyc-verified-${Date.now()}`,
-              from: "them",
-              text: "Congratulations! Your documents have been verified.",
-              time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-              status: "delivered", isKyc: true
-            }];
-          });
-        }
-
-        isAlreadyVerifiedRef.current = true; // ← always set after allApproved
-        setKycStatus({ documentVerified: true, selfieVerified: true, overallVerified: true });
-
-        // push verified state into Redux so raw.jsx re-renders with isVerified=true
-        dispatch(updateRunner({
-          isVerifiedKyc: true,
-          kycStatus: kycStatus
-        }));
-
-        setTimeout(() => setKycStep(6), 800);
-        localStorage.removeItem(`kyc_step_${runnerId}`);
-        localStorage.removeItem(`kyc_doc_type_${runnerId}`);
-        return;
-      }
-
-      // ── Partial rejections/approvals ──────────────────────────────────────
-      if (documents.nin?.status === 'rejected') {
-        const reason = documents.nin.rejectionReason
-          ? `❌ Your NIN verification was unsuccessful: ${documents.nin.rejectionReason}. Please reach out to support.`
-          : "❌ Your NIN verification was unsuccessful. Please reach out to support.";
-        setMessages(prev => [...prev, {
-          id: `kyc-nin-rejected-${Date.now()}`,
-          from: "them", text: reason,
-          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-          status: "delivered", isKyc: true
-        }]);
-      }
-      if (documents.driverLicense?.status === 'rejected') {
-        const reason = documents.driverLicense.rejectionReason
-          ? `❌ Your Driver's License verification was unsuccessful: ${documents.driverLicense.rejectionReason}. Please reach out to support.`
-          : "❌ Your Driver's License verification was unsuccessful. Please reach out to support.";
-        setMessages(prev => [...prev, {
-          id: `kyc-dl-rejected-${Date.now()}`,
-          from: "them", text: reason,
-          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-          status: "delivered", isKyc: true
-        }]);
-      }
-      if (biometrics.status === 'rejected') {
-        const reason = biometrics.rejectionReason
-          ? `❌ Your selfie verification was unsuccessful: ${biometrics.rejectionReason}. Please reach out to support.`
-          : "❌ Your selfie verification was unsuccessful. Please reach out to support.";
-        setMessages(prev => [...prev, {
-          id: `kyc-selfie-rejected-${Date.now()}`,
-          from: "them", text: reason,
-          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-          status: "delivered", isKyc: true
-        }]);
-      }
-      if (kycStatus === 'banned') {
-        setMessages(prev => [...prev, {
-          id: `kyc-banned-${Date.now()}`,
-          from: "them",
-          text: "🚫 Your account has been suspended. Please contact support at support@sendrey.com.",
-          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-          status: "delivered", isKyc: true
-        }]);
-      }
-    } catch (error) {
-      console.error('Error checking verification status:', error);
-    }
-  }, [dispatch, runnerId]);
 
   const SELFIE_TRIGGERS = ['okay', 'alright', 'sure', 'yes', 'ok'];
 

@@ -14,11 +14,12 @@ const termRoutes = require('./termRoutes');
 const payoutRoutes = require('./payoutRoutes');
 const orderRoutes = require('./orderRoutes');
 const waitlistRoutes = require('./waitlistRoutes')
-const pinRoutes = require('./pinRoutes')
+const pinRoutes = require('./pinRoutes');
 const uploadRoutes = require('./upload');
 const sessionRoutes = require('./sessionRoutes');
-const pricingRoutes = require('./pricingRoutes')
-const pedestrianRoutes = require('./pedestrianRoutes')
+const pricingRoutes = require('./pricingRoutes');
+const pedestrianRoutes = require('./pedestrianRoutes');
+const notificationRoutes = require('./notificationRoutes');
 
 // Use route modules
 router.use('/auth', authRoutes);
@@ -38,6 +39,7 @@ router.use('/pin', pinRoutes)
 router.use('/upload', uploadRoutes);
 router.use('/pricing', pricingRoutes);
 router.use('/pedestrian', pedestrianRoutes);
+router.use('/notifications', notificationRoutes)
 
 // Export the router
 module.exports = router;

@@ -18,11 +18,14 @@ import { useTypingAndRecordingIndicator } from '../../hooks/useTypingIndicator';
 import useOrderStore from '../../store/orderStore';
 import BarLoader from "../common/BarLoader";
 import RecepientContactInformation from "./RecepientContactInformation";
-
 import {
   flushSocketQueue, enqueueSocketEvent,
   submitItemsWithRetry, submitPickupItemWithRetry
 } from '../../utils/socketQueue';
+
+import { useCheckOrderExist } from '../../hooks/useCheckOrderExist';
+import OrderPendingModal from '../common/OrderPendingModal';
+
 
 const getCurrentTime = () => {
   return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -59,6 +62,7 @@ function RunnerChatScreen({
   setInfoOpen,
   runnerId,
   socket,
+  chatId: chatIdProp,
   onSpecialInstructions,
   onOrderCreated,
   onPaymentSuccess,
@@ -121,9 +125,10 @@ function RunnerChatScreen({
 
 }) {
 
-  const chatId = useOrderStore(s => s.activeChatId)
+  const chatId = chatIdProp
     ?? (selectedUser?._id ? `user-${selectedUser._id}-runner-${runnerId}` : null);
   const [awaitingNewOrder, setAwaitingNewOrder] = useState(false);
+  const [showContactModal, setShowContactModal] = useState(false);
 
   const {
     getChat, // eslint-disable-line no-unused-vars
@@ -144,6 +149,10 @@ function RunnerChatScreen({
   const taskCompleted = useOrderStore(s => s.getChat(chatId).taskCompleted);
   const orderCancelled = useOrderStore(s => s.getChat(chatId).orderCancelled);
   const cancellationReason = useOrderStore(s => s.getChat(chatId).cancellationReason);
+  const orderMissingFromStore = useOrderStore(
+    s => (chatId ? (s._chats[chatId]?.orderMissing ?? false) : false)
+  );
+
 
   // Thin wrappers so existing code below doesn't need to change call sites
   const setDeliveryMarked = useCallback((v) => storeSetDeliveryMarked(chatId, v), [chatId, storeSetDeliveryMarked]);
@@ -163,6 +172,7 @@ function RunnerChatScreen({
   const lastFetchedPayoutOrderIdRef = useRef(null);
   const partnerOnlineRef = useRef(true);
   const deliveryDisputeTimerRef = useRef(null);
+  const wasOrderMissingOnMountRef = useRef(orderMissingFromStore);
 
   const [partnerOnline, setPartnerOnline] = useState(true);
   const [showCameraPreview, setShowCameraPreview] = useState(false);
@@ -172,15 +182,24 @@ function RunnerChatScreen({
   const [showPickupItemForm, setShowPickupItemForm] = useState(false);
   const [runnerLocation, setRunnerLocation] = useState(null); // eslint-disable-line no-unused-vars
   const [markingDelivery, setMarkingDelivery] = useState(false);
-  const [showContactModal, setShowContactModal] = useState(false);
 
   const currentRequest = selectedUser?.currentRequest ?? currentOrder ?? null;
+
+  const { orderMissing: orderMissingLive } = useCheckOrderExist({
+    chatId,
+    hasOrder: !!currentOrder?.orderId,
+    socket,
+    enabled: isChatActive && !!chatId && !orderMissingFromStore,
+  });
+
   const counterpart = selectedUser ? {
     phone: selectedUser.phone,
     firstName: selectedUser.firstName,
     lastName: selectedUser.lastName,
     label: 'Task creator',
   } : null;
+
+  const orderMissing = orderMissingFromStore || orderMissingLive;
 
   const [backHomeDisabled] = useState(() => {
     try { return localStorage.getItem(`backHome_disabled_${chatId}`) === 'true'; } catch { return false; }
@@ -205,20 +224,22 @@ function RunnerChatScreen({
   const onMessagesChangeRef = useRef(onMessagesChange);
   const [attachFlowResetKey, setAttachFlowResetKey] = useState(0);
 
-
-  console.log('[RCS mount] currentOrder from store:', currentOrder?.orderId, 'chatId:', chatId, 'FULL STORE SLOT:', useOrderStore.getState()._chats[chatId]);
-
   useEffect(() => {
     mountedRef.current = true;
     return () => { mountedRef.current = false; };
   }, []);
 
   useEffect(() => {
+    if (orderMissingLive && chatId) {
+      useOrderStore.getState()._patch(chatId, { orderMissing: true });
+    }
+  }, [orderMissingLive, chatId]);
+
+  useEffect(() => {
     if (initialMessages?.length) {
       processedMessageIds.current = new Set(initialMessages.map(m => m.id).filter(Boolean));
     }
   }, [sessionKey]);
-
 
   useEffect(() => {
     if (!socket || !chatId || !runnerId) return;
@@ -313,6 +334,30 @@ function RunnerChatScreen({
   useEffect(() => {
     if (!socket || !chatId) return;
 
+    const onUserCancelledOrder = ({ orderId, systemMessage }) => {
+      if (currentOrder?.orderId && orderId && currentOrder.orderId !== orderId) return;
+
+      useOrderStore.getState()._patch(chatId, {
+        orderCancelled: true,
+        cancellationReason: 'user',
+      });
+      setTaskCompleted(false);
+
+      if (systemMessage) {
+        setMessagesAndSync(prev => {
+          if (prev.some(m => m.id === systemMessage.id)) return prev;
+          return [...prev, systemMessage];
+        });
+      }
+    };
+
+    socket.on('orderCancelledByUser', onUserCancelledOrder);
+    return () => socket.off('orderCancelledByUser', onUserCancelledOrder);
+  }, [socket, chatId, currentOrder?.orderId, setTaskCompleted, setMessagesAndSync]);
+
+  useEffect(() => {
+    if (!socket || !chatId) return;
+
     const onChatReset = () => {
       storeSetCurrentOrder(chatId, null);
       useOrderStore.getState()._patch(chatId, {
@@ -322,6 +367,7 @@ function RunnerChatScreen({
         completedStatuses: [],
         deliveryMarked: false,
         userConfirmedDelivery: false,
+        orderMissing: false,
       });
       setCompletedOrderStatuses([]);
       setAwaitingNewOrder(true);
@@ -361,12 +407,6 @@ function RunnerChatScreen({
     ?? currentOrder?.taskType
   ), [selectedUser?._id, currentOrder?.serviceType, currentOrder?.taskType]);
 
-  console.log('[RunnerChat] resolvedServiceType:', resolvedServiceType, {
-    currentOrderServiceType: currentOrder?.serviceType,
-    currentOrderTaskType: currentOrder?.taskType,
-    selectedUserServiceType: selectedUser?.serviceType,
-  });
-
   const isRunErrand = resolvedServiceType === 'run-errand';
   const isPickUp = resolvedServiceType === 'pick-up';
   const isPaid =
@@ -377,18 +417,24 @@ function RunnerChatScreen({
         m.text?.toLowerCase().includes('made payment for this task') &&
         m.orderId === currentOrder.orderId
     ));
-  // logs
-  console.log('RUNNERCHATSCREEN - Mount/Render:', {
-    chatId,
-    taskCompletedFromStore: taskCompleted,
-    orderCancelledFromStore: orderCancelled,
-    currentOrderStatus: currentOrder?.status,
-    currentOrderServiceType: currentOrder?.serviceType,
-    resolvedServiceType,
-    isRunErrand,
-    isPickUp,
-    completedStatuses: useOrderStore.getState().getChat(chatId).completedStatuses,
-  });
+
+  // ── Fallback checks against message history — zustand may lag behind 
+  const messageTaskCompleted = useMemo(() => messages.some(m =>
+    m.type === 'task_completed' || m.messageType === 'task_completed' ||
+    (m.type === 'system' && m.text?.toLowerCase().includes('task completed'))
+  ), [messages]);
+
+  const messageOrderCancelled = useMemo(() => messages.some(m =>
+    m.type === 'system' && m.text?.toLowerCase().includes('cancelled this order')
+  ), [messages]);
+
+  const effectiveTaskCompleted = taskCompleted || messageTaskCompleted;
+  const effectiveOrderCancelled = orderCancelled || messageOrderCancelled;
+
+  const hasActiveOrder = !!currentOrder
+    && !['cancelled', 'task_completed'].includes(currentOrder?.status)
+    && !effectiveOrderCancelled
+    && !effectiveTaskCompleted;
 
   // ── Stable orderData object passed to OrderStatusFlow 
   const orderFlowData = {
@@ -631,7 +677,7 @@ function RunnerChatScreen({
     };
     const onTaskCompleted = ({ orderId }) => {
       if (!mountedRef.current) return;
-      setTaskCompleted(true);        // triggers "Back to Home" button
+      setTaskCompleted(true);
     };
 
     const onDisputeRaised = ({ orderId }) => {
@@ -1394,12 +1440,22 @@ function RunnerChatScreen({
           </div>
           <div className="items-center gap-3 flex">
             <span className="bg-gray-1000 dark:bg-black-200 rounded-full w-10 h-10 flex items-center justify-center">
-              <IconButton variant="text" className="rounded-full" onClick={() => initiateCall('video', selectedUser?._id, 'user')}>
+              <IconButton
+                variant="text"
+                className={`rounded-full ${!hasActiveOrder ? 'opacity-40 cursor-not-allowed' : ''}`}
+                disabled={!hasActiveOrder}
+                onClick={() => { if (hasActiveOrder) initiateCall('video', selectedUser?._id, 'user'); }}
+              >
                 <Video className="h-6 w-6" />
               </IconButton>
             </span>
             <span className="bg-gray-1000 dark:bg-black-200 rounded-full w-10 h-10 flex items-center justify-center">
-              <IconButton onClick={() => initiateCall('voice', selectedUser?._id, 'user')} variant="text" className="rounded-full">
+              <IconButton
+                variant="text"
+                className={`rounded-full ${!hasActiveOrder ? 'opacity-40 cursor-not-allowed' : ''}`}
+                disabled={!hasActiveOrder}
+                onClick={() => { if (hasActiveOrder) initiateCall('voice', selectedUser?._id, 'user'); }}
+              >
                 <Phone className="h-6 w-6" />
               </IconButton>
             </span>
@@ -1463,6 +1519,7 @@ function RunnerChatScreen({
                 onReact={handleMessageReact} onReply={handleMessageReply}
                 onCancelReply={handleCancelReply} messages={messages}
                 onScrollToMessage={handleScrollToMessage} showRelativeTime={true}
+                disableContextMenu={!hasActiveOrder}
               />
             })}
             {otherUserTyping && <TypingIndicator />}
@@ -1471,12 +1528,11 @@ function RunnerChatScreen({
 
         {/* Composer */}
         <div className="bg-gray-100 dark:bg-black-200">
-          {taskCompleted ? (
-            console.log('SHOWING BACK TO HOME - taskCompleted is TRUE', { taskCompleted, orderCancelled }) ||
+          {effectiveTaskCompleted ? (
             <div className="px-4 py-4">
               <button
                 onClick={() => {
-                  if (taskCompleted || orderCancelled) {
+                  if (effectiveTaskCompleted || effectiveOrderCancelled) {
                     onBackToHome?.();
                   }
                 }}
@@ -1486,11 +1542,26 @@ function RunnerChatScreen({
                 {backHomeDisabled ? 'Returning...' : 'Back to Home'}
               </button>
             </div>
-          ) : orderCancelled ? (
+          ) : effectiveOrderCancelled ? (
             console.log('SHOWING CANCELLED VIEW - orderCancelled is TRUE') ||
             <div>
               <div className={`px-4 py-2 text-center text-sm font-medium ${dark ? 'text-gray-400 bg-black-100' : 'text-gray-500 bg-gray-100'} rounded-xl mx-4 mt-3`}>
-                {cancellationReason === 'runner' ? 'You cancelled this order' : 'Order was cancelled'}
+                {cancellationReason === 'runner' ? 'You cancelled this order' : 'Order was cancelled by customer'}
+              </div>
+              <div className="px-4 py-4">
+                <button
+                  onClick={() => onBackToHome?.()}
+                  disabled={backHomeDisabled}
+                  className={`w-full py-4 rounded-xl font-semibold text-white transition-all ${backHomeDisabled ? 'bg-gray-400 cursor-not-allowed opacity-60' : 'bg-primary hover:opacity-90'}`}
+                >
+                  {backHomeDisabled ? 'Returning...' : 'Back to Home'}
+                </button>
+              </div>
+            </div>
+          ) : orderMissing ? (
+            <div>
+              <div className={`px-4 py-2 text-center text-sm font-medium ${dark ? 'text-gray-400 bg-black-100' : 'text-gray-500 bg-gray-100'} rounded-xl mx-4 mt-3`}>
+                This order could not be found. It may have failed to create.
               </div>
               <div className="px-4 py-4">
                 <button
@@ -1720,6 +1791,13 @@ function RunnerChatScreen({
           cameraUsedByItemFormRef={cameraUsedByItemFormRef}
         />
       )}
+
+      <OrderPendingModal
+        isOpen={orderMissing && !wasOrderMissingOnMountRef.current}
+        darkMode={dark}
+        userType="runner"
+        onLeave={() => onBackToHome?.()}
+      />
     </>
   );
 }

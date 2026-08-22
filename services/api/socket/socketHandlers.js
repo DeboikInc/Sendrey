@@ -259,13 +259,17 @@ const createOrder = async (io, { chatId, userId, runnerId, serviceType }) => {
     runnerId,
     serviceType: resolvedServiceType,
     taskType: isErrand ? 'run-errand' : 'pick-up',
+
+    currentUserLocation: request.currentUserLocation ? {address: request.currentUserLocation} : null,
     pickupLocation: request.pickupLocation ? { address: request.pickupLocation } : null,
     deliveryLocation: request.deliveryLocation ? { address: request.deliveryLocation } : null,
     marketLocation: request.marketLocation ? { address: request.marketLocation } : null,
 
+    currentUserCoordinates: validCoords(request.currentUserCoordinates),
     marketCoordinates: validCoords(request.marketCoordinates),
     pickupCoordinates: validCoords(request.pickupCoordinates),
     deliveryCoordinates: validCoords(request.deliveryCoordinates),
+
     // phones
     pickupPhone: request.pickupPhone || null,
     dropoffPhone: request.dropoffPhone || null,
@@ -1425,6 +1429,7 @@ module.exports = {
   handleGetOrderSession,
   handleGetArchivedMessages,
   createOrder,
+  lockAndProceed,
   requestSessionRefresh,
 
   handleGetSpecialInstructions,

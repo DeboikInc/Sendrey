@@ -13,7 +13,6 @@ import { TrackDeliveryScreen } from "./TrackDeliveryScreen";
 import ProfileCardMessage from "../runnerScreens/ProfileCardMessage";
 import ItemSubmissionMessage from "./ItemSubmissionMessage";
 import PickupItemSubmissionMessage from './PickupItemSubmissionMessage';
-
 import DeliveryConfirmationMessage from './DeliveryConfirmationMessage';
 import DeliveryDeniedMessage from './DeliveryDeniedMessage';
 import DeliveryConfirmedMessage from './DeliveryConfirmedMessage';
@@ -32,6 +31,7 @@ import PaystackPaymentModal from "../payments/PaystackPaymentModal";
 
 import MoreOptionsSheet from './MoreOptionsSheet';
 import UserWallet from './UserWallet';
+import CancelOrderModal from './CancelOrderModal';
 
 import TeamNotifyPrompt from './TeamNotifyPrompt'
 import Settings from "../../pages/user/settings/Settings";
@@ -39,17 +39,21 @@ import DisputeForm from '../common/DisputeForm';
 import RatingModal from '../common/RatingModal';
 import RunnerContactInformation from './RunnerContactInformation'
 
-import { checkCanRate } from '../../Redux/ratingSlice';
 import OrderDetailsSheet from '../common/OrderDetailsSheet';
 import { PinPad } from '../common/PinPad';
 import chatStorage from '../../utils/chatStorage';
 import { getAvailableReasons } from '../../utils/disputeReasons';
 
+import { checkCanRate } from '../../Redux/ratingSlice';
+import { cancelOrderByUser } from '../../Redux/orderSlice';
 import { createPaymentIntent } from '../../Redux/paymentSlice';
 import { fetchOrderByChatId } from '../../Redux/orderSlice';
-import { enqueueSocketEvent, flushSocketQueue } from '../../utils/socketQueue';
 
+import { enqueueSocketEvent, flushSocketQueue } from '../../utils/socketQueue';
 import useUserOrderStore from '../../store/userOrderStore';
+
+import { useCheckOrderExist } from '../../hooks/useCheckOrderExist';
+import OrderPendingModal from '../common/OrderPendingModal';
 
 const getCurrentTime = () => {
   return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -81,6 +85,8 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
   const [showMoreSheet, setShowMoreSheet] = useState(false);
   const [showWallet, setShowWallet] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showCancelModal, setShowCancelModal] = useState(false);
+  const [ , setCancellingOrder] = useState(false);
   const [showDisputeForm, setShowDisputeForm] = useState(false);
   const [showRatingModal, setShowRatingModal] = useState(false);
   const [showRunnerContactInfo, setShowRunnerContactInfo] = useState(false);
@@ -97,6 +103,9 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
   const currentOrder = useUserOrderStore((s) => s.currentOrder);
   const orderCancelled = useUserOrderStore((s) => s.orderCancelled);
   const taskCompleted = useUserOrderStore((s) => s.taskCompleted);
+  const orderMissingFromStore = useUserOrderStore((s) => s.orderMissing);
+  const { setOrderMissing } = useUserOrderStore();
+  const wasOrderMissingOnMountRef = useRef(orderMissingFromStore);
 
   const serviceType =
     currentOrder?.serviceType ||
@@ -192,6 +201,22 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
       ? `user-${userData._id}-runner-${runner._id}`
       : null;
   }, [userData?._id, runner?._id]);
+
+  const { orderMissing: orderMissingLive } = useCheckOrderExist({
+    chatId,
+    hasOrder: !!currentOrder?.orderId,
+    socket,
+    enabled: !!chatId && !orderMissingFromStore,
+  });
+
+  const orderMissing = orderMissingFromStore || orderMissingLive;
+
+  useEffect(() => {
+    if (orderMissingLive) {
+      setOrderMissing(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [orderMissingLive]);
 
   // Restore paid chats on mount
   useEffect(() => {
@@ -581,6 +606,8 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
       setCurrentOrder(null);
       currentOrderRef.current = null;
       setTaskCompleted(false);
+      setOrderCancelled(false, null);
+      setOrderMissing(false);
       setPaidChatIds(prev => { const n = new Set(prev); n.delete(chatId); return n; });
       lastProcessedSystemMsgRef.current = null;
       resetDedup();
@@ -766,6 +793,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
         lastProcessedSystemMsgRef.current = null;
         setOrderCancelled(false);
         setTaskCompleted(false);
+        setOrderMissing(false);
 
         // Don't wipe currentOrder if orderCreated already set a fresh one for this chatId
         const TERMINAL = ['completed', 'cancelled', 'task_completed'];
@@ -1909,6 +1937,94 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
     return availableDisputeReasons.length > 0;
   }, [currentOrder, orderCancelled, availableDisputeReasons]);
 
+  const handleCancelOrder = async (reason) => {
+    if (!currentOrder?.orderId && !chatId) return;
+    setCancellingOrder(true);
+
+    try {
+      const result = await dispatch(cancelOrderByUser({
+        userId: userData?._id,
+        orderId: currentOrder?.orderId,
+        chatId,
+        reason,
+      })).unwrap();
+
+      const payload = result?.data ?? result;
+      const { order, cancelMessage } = payload ?? {};
+
+      if (!order || order.status !== 'cancelled') {
+        throw new Error('Order was not confirmed as cancelled');
+      }
+
+      if (cancelMessage) {
+        setMessages(prev => {
+          if (prev.some(m => m.id === cancelMessage.id)) return prev;
+          return [...prev, cancelMessage];
+        });
+      }
+
+      updateCurrentOrder({ status: 'cancelled' });
+      setOrderCancelled(true);
+      setCancelledByName('You');
+      setTaskCompleted(false);
+
+      chatStorage.saveChatStatus(chatId, {
+        orderCancelled: true,
+        cancelledByName: 'You',
+        taskCompleted: false,
+        currentOrder: currentOrderRef.current
+          ? { ...currentOrderRef.current, status: 'cancelled' }
+          : null,
+      });
+
+      const cancelPayload = {
+        chatId,
+        orderId: currentOrder?.orderId,
+        runnerId: runner?._id,
+        userId: userData?._id,
+        reason,
+        cancelledByName: userData?.firstName || 'User',
+      };
+      if (socket?.connected) {
+        socket.emit('orderCancelledByUser', cancelPayload);
+      } else {
+        enqueueSocketEvent('orderCancelledByUser', cancelPayload);
+      }
+
+      setShowCancelModal(false);
+    } catch (err) {
+      console.error('[handleCancelOrder] failed:', err);
+      setShowCancelModal(false);
+
+      const code = err?.code;
+      const failText =
+        code === 'ALREADY_CANCELLED'
+          ? 'This order has already been cancelled.'
+          : code === 'NOT_CANCELLABLE'
+            ? 'This order can no longer be cancelled at its current stage.'
+            : code === 'PAID_ORDER'
+              ? 'This order has already been funded and cannot be cancelled.'
+              : 'Failed to cancel order. Please try again.';
+
+      if (code === 'ALREADY_CANCELLED') {
+        updateCurrentOrder({ status: 'cancelled' });
+        setOrderCancelled(true);
+        setTaskCompleted(false);
+      }
+
+      setMessages(prev => [...prev, {
+        id: `cancel-failed-${Date.now()}`,
+        from: 'system',
+        type: 'system',
+        messageType: 'system',
+        text: failText,
+        time: getCurrentTime(),
+      }]);
+    } finally {
+      setCancellingOrder(false);
+    }
+  };
+
   return (
     <>
       {/* onSettings */}
@@ -1918,6 +2034,16 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
             darkMode={darkMode}
             onBack={() => setShowSettings(false)}
             onToggleDarkMode={toggleDarkMode}
+          />
+        </div>
+      )}
+
+      {showCancelModal && (
+        <div className="fixed inset-0 z-[999]">
+          <CancelOrderModal
+            darkMode={darkMode}
+            onBack={() => setShowCancelModal(false)}
+            onConfirm={handleCancelOrder}
           />
         </div>
       )}
@@ -1985,6 +2111,8 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
         serviceType={serviceType}
         onWallet={() => { setShowMoreSheet(false); setShowWallet(true); }}
         onSettings={() => { setShowMoreSheet(false); setShowSettings(true); }}
+        onCancelOrder={() => { setShowMoreSheet(false); setShowCancelModal(true); }}
+        canCancelOrder={!!currentOrder?.orderId && !orderCancelled}
         hasActiveOrder={canRaiseDispute}
         onRaiseDispute={() => { setShowMoreSheet(false); setShowDisputeForm(true); }}
         onOrderDetails={() => { setShowMoreSheet(false); setShowOrderDetails(true); }}
@@ -2320,6 +2448,18 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
                 Back to Home
               </button>
             </div>
+          ) : orderMissing ? (
+            <div className="flex flex-col items-center gap-3 px-4 sm:px-8 lg:px-64">
+              <p className={`text-sm font-medium text-center ${darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                This order could not be found. It may have failed to create.
+              </p>
+              <button
+                onClick={onOrderComplete}
+                className="w-full py-4 rounded-xl bg-primary text-white font-semibold"
+              >
+                Back to Home
+              </button>
+            </div>
           ) : (
             // ── Normal chat input ──
             <div className="absolute w-full bottom-8 sm:bottom-[40px] px-4 sm:px-8 lg:px-64 right-0 left-0">
@@ -2423,6 +2563,13 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
           onDismiss={() => setShowTeamNotify(false)}
         />
       )}
+
+      <OrderPendingModal
+        isOpen={orderMissing && !wasOrderMissingOnMountRef.current}
+        darkMode={darkMode}
+        userType="user"
+        onLeave={() => onOrderComplete?.()}
+      />
     </>
   );
 }

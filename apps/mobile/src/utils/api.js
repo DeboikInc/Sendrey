@@ -5,6 +5,7 @@ import { authStorage } from "./authStorage";
 export const isCapacitor = !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform());
 
 const BASE_URL = process.env.REACT_APP_API_URL;
+console.log(BASE_URL);
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -82,6 +83,11 @@ api.interceptors.response.use(
 
 
     if (error.response?.status === 401 && original.url?.includes('refresh-token')) {
+      // Only treat this as a real logout if we're actually online.
+      if (navigator.onLine === false) {
+        return Promise.reject(error);
+      }
+
       await clearSession();
       return Promise.reject(error);
     }

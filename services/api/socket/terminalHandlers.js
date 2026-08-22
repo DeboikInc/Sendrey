@@ -14,8 +14,10 @@ const { notifyAutoConfirmWarning } = require('../services/notificationService');
 const orderStateMachine = require('../services/orderStateMachine');
 
 // Remove runner from the in-memory service pool
+const orderService = require('../services/orderService');
 const { runnersByService } = require('./socketHandlers');
-const { cancelOrder } = require('../services/orderService');
+
+const { cancelOrder, cancelStaleOrders } = orderService;
 
 const {
     notifyRatingPrompt,
@@ -23,15 +25,25 @@ const {
     notifyOrderCancelled
 } = require('../services/notificationService');
 
+const REASON_LABELS = {
+    created_by_mistake: 'Created by mistake',
+    no_longer_needed: 'No Longer Needed',
+    wrong_information: 'Wrong Information',
+    taking_too_long: 'Taking too long',
+};
+
+const formatCancelReason = (reason) => {
+    if (!reason) return null;
+    return REASON_LABELS[reason] || reason;
+};
+
 const handleCancelOrder = async (socket, io, data) => {
-    console.log('[handleCancelOrder] INVOKED', { socketId: socket.id, data });
+
     const { chatId, orderId, runnerId, userId, reason } = data;
     try {
         const { order, cancelMessage } = await cancelOrder({
             orderId, chatId, runnerId, userId, reason, cancelledBy: 'runner'
         });
-
-        console.log('[handleCancelOrder] cancelOrder service resolved', { orderId: order?.orderId });
 
         const now = new Date().toISOString();
         const reasonSuffix = reason ? ` Reason: ${reason}` : '';
@@ -40,7 +52,7 @@ const handleCancelOrder = async (socket, io, data) => {
         const runnerMessage = {
             id: `cancel-runner-${Date.now()}`,
             chatId,
-            text: `You cancelled this order.${reasonSuffix}`,
+            text: `You cancelled this order. ${reasonSuffix}`,
             type: 'system',
             from: 'system',
             senderId: 'system',
@@ -57,7 +69,7 @@ const handleCancelOrder = async (socket, io, data) => {
         const userMessage = {
             id: `cancel-user-${Date.now()}`,
             chatId,
-            text: `${runnerName} cancelled this order.${reasonSuffix}`,
+            text: `${runnerName} cancelled this order. ${reasonSuffix}`,
             type: 'system',
             from: 'system',
             senderId: 'system',
@@ -79,7 +91,7 @@ const handleCancelOrder = async (socket, io, data) => {
         });
 
         notifyOrderCancelled(userId, {
-            orderId: order.orderId,
+            orderId,
             cancelledBy: 'runner',
             runnerName,
             reason,
@@ -121,7 +133,18 @@ const handleCancelOrder = async (socket, io, data) => {
         }
 
     } catch (error) {
-        console.error('[handleCancelOrder] FAILED', { orderId, chatId, error: error.message, stack: error.stack });
+        if (error.code === 'PAID_ORDER') {
+            socket.emit('cancelOrderError', {
+                message: 'This order has already been funded and cannot be cancelled.'
+            });
+        }
+        else if (error.code === 'ALREADY_CANCELLED') {
+            logger.info('[handleCancelOrder] order already cancelled', { orderId, chatId });
+        } else {
+            socket.emit('cancelOrderError', {
+                message: 'Failed to cancel order. Please try again.'
+            });
+        }
         const msg = error.message === 'PAID_ORDER'
             ? 'This order has already been funded and cannot be cancelled.'
             : 'Failed to cancel order. Please try again.';
@@ -129,6 +152,111 @@ const handleCancelOrder = async (socket, io, data) => {
     }
 };
 
+
+const handleOrderCancelledByUser = async (socket, io, data) => {
+    const { chatId, orderId, runnerId, userId, reason, cancelledByName, serviceType } = data;
+
+    try {
+        const order = await Order.findOne({ orderId }).select('serviceType').lean();
+
+        // order has been cancelled via api already
+        const label = formatCancelReason(reason);
+        const name = cancelledByName || 'User';
+        const text = label
+            ? `Order cancelled by ${name} — Reason: ${label}`
+            : `Order cancelled by ${name}`;
+
+        const systemMessage = {
+            id: `order-cancelled-user-${Date.now()}`,
+            chatId,
+            orderId,
+            type: 'system',
+            messageType: 'system',
+            from: 'system',
+            senderId: 'system',
+            senderType: 'system',
+            text,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            createdAt: new Date().toISOString(),
+        };
+
+        // Same "everyone in room clears state" broadcast handleCancelOrder does
+        io.to(chatId).emit('orderCancelled', {
+            orderId,
+            chatId,
+            message: text,
+            cancelledBy: 'user',
+            clearChat: true,
+        });
+
+        // Runner-specific event carrying the personalised message your client listens for
+        io.to(`runner-${runnerId}`).emit('orderCancelledByUser', {
+            orderId,
+            reason,
+            cancelledBy: 'user',
+            cancelledByName: name,
+            systemMessage,
+        });
+
+        socket.to(chatId).emit('orderCancelledByUser', {
+            orderId,
+            reason,
+            cancelledBy: 'user',
+            cancelledByName: name,
+            systemMessage,
+        });
+
+        notifyOrderCancelled(runnerId, {
+            orderId,
+            cancelledBy: 'user',
+            reason,
+        }).catch(err => console.warn('[orderCancelledByUser] Runner notify failed:', err.message));
+
+        Chat.updateOne(
+            { chatId },
+            { $push: { messages: systemMessage } },
+            { upsert: true }
+        ).catch(err => console.error('[handleOrderCancelledByUser] failed to persist message:', err.message));
+
+        // fire and forget
+        Promise.all([
+            Runner.findByIdAndUpdate(runnerId, { isAvailable: true, activeOrderId: null, currentUserId: null }),
+            User.findByIdAndUpdate(userId, { isAvailable: true, activeOrderId: null, currentRunnerId: null }),
+            Chat.findOneAndUpdate({ chatId }, { $set: { lastActivity: new Date() } }),
+            archiveCurrentSession(chatId, orderId, 'cancelled'),
+        ]).catch(err => logger.error('handleOrderCancelledByUser post-emit ops failed:', err));
+
+        if (order.serviceType && runnersByService[order.serviceType]) {
+            runnersByService[order.serviceType].delete(socket.id);
+        }
+
+        const room = io.sockets.adapter.rooms.get(chatId);
+        if (room) {
+            for (const socketId of room) {
+                const s = io.sockets.sockets.get(socketId);
+                if (s) s.leave(chatId);
+            }
+        }
+
+        try {
+            await locationStore.removeLocation(orderId);
+            arrivedAtSourceSet.delete(orderId);
+            arrivedAtDeliverySet.delete(orderId);
+
+            io.to(`tracking:${orderId}`).emit('runner:offline', { orderId });
+            logger.info(`[orderCancelledByUser] Cleared tracking for order ${orderId}`);
+        } catch (err) {
+            logger.warn('[orderCancelledByUser] Tracking cleanup failed:', err.message);
+        }
+
+    } catch (error) {
+        logger.error('[handleOrderCancelledByUser] FAILED', { orderId, chatId, error: error.message, stack: error.stack });
+        const msg = error.code === 'PAID_ORDER' || error.message === 'PAID_ORDER'
+            ? 'This order has already been funded and cannot be cancelled.'
+            : 'Failed to cancel order. Please try again.';
+        socket.emit('cancelOrderError', { message: msg });
+    }
+};
 
 const handleTaskCompleted = async (io, data) => {
     const { chatId, orderId, runnerId, userId } = data;
@@ -233,9 +361,9 @@ const handleTaskCompleted = async (io, data) => {
             // Don't wipe messages — runner/user may want to browse completed chat
         );
 
-        await Order.updateMany(
-            { chatId, paymentStatus: 'unpaid', status: { $nin: ['completed', 'cancelled', 'task_completed'] }, orderId: { $ne: orderId } },
-            { $set: { status: 'cancelled', cancelledAt: new Date(), cancelReason: 'task_completed_new_order_started' } }
+        await cancelStaleOrders(
+            { chatId, paymentStatus: 'unpaid', status: { $nin: ['completed', 'cancelled'] }, orderId: { $ne: orderId } },
+            'task_completed_new_order_started'
         );
 
         // Archive session on completion
@@ -300,30 +428,15 @@ const handleTaskCompleted = async (io, data) => {
 const handleRunnerStartedNewOrder = async (socket, data) => {
     const { runnerId, previousOrderId } = data;
     try {
-        // Cancel any lingering unpaid orders for this runner
-        await Order.updateMany(
+
+        await cancelStaleOrders(
             {
                 runnerId,
                 paymentStatus: { $ne: 'paid' },
                 status: { $nin: ['completed', 'cancelled'] },
                 ...(previousOrderId ? { orderId: { $ne: previousOrderId } } : {})
             },
-            {
-                $set: {
-                    status: 'cancelled',
-                    cancelledBy: 'system',
-                    cancelledAt: new Date(),
-                    cancellationReason: 'Runner started new order',
-                },
-                $push: {
-                    statusHistory: {
-                        status: 'cancelled',
-                        timestamp: new Date(),
-                        triggeredBy: 'system',
-                        note: 'Runner started new order — stale pending order auto-cancelled',
-                    }
-                }
-            }
+            'Runner started new order — stale pending order auto-cancelled'
         );
 
         await Runner.findByIdAndUpdate(runnerId, {
@@ -474,4 +587,10 @@ const scheduleAutoConfirm = (io, chatId, orderId, escrowId) => {
     }, AUTO_CONFIRM_DELAY);
 };
 
-module.exports = { handleCancelOrder, handleTaskCompleted, handleRunnerStartedNewOrder, scheduleAutoConfirm };
+module.exports = {
+    handleCancelOrder,
+    handleOrderCancelledByUser,
+    handleTaskCompleted,
+    handleRunnerStartedNewOrder,
+    scheduleAutoConfirm
+};

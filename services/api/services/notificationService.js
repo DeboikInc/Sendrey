@@ -14,9 +14,7 @@ const sendPushNotification = async (recipientIdOrToken, optionsOrUndefined) => {
       const Model = recipientType === 'runner' ? Runner : User;
       const recipient = await Model.findById(recipientId)
         .select('notificationPreferences fcmToken');
-
       if (!recipient || !recipient.fcmToken) return false;
-
       const prefs = recipient.notificationPreferences?.push || {};
       return prefs.messages === true || prefs.updates === true || prefs.promotions === true;
     } catch (error) {
@@ -28,11 +26,9 @@ const sendPushNotification = async (recipientIdOrToken, optionsOrUndefined) => {
   let token, title, body, data, recipientId, recipientType;
 
   if (optionsOrUndefined !== undefined) {
-    // Legacy: first arg is a raw FCM token string, no recipientId to check opt-in against
     token = recipientIdOrToken;
     ({ title, body, data = {} } = optionsOrUndefined);
   } else {
-    // Standard: first arg is an options object
     ({ recipientId, recipientType, title, body, data = {} } = recipientIdOrToken);
 
     const shouldSend = await shouldSendPush(recipientId, recipientType);
@@ -73,19 +69,10 @@ const sendPushNotification = async (recipientIdOrToken, optionsOrUndefined) => {
         },
       },
       apns: {
-        payload: {
-          aps: {
-            sound: 'default',
-            badge: 1,
-            'content-available': 1,
-          },
-        },
-        headers: {
-          'apns-priority': data?.type === 'incoming_call' ? '10' : '5',
-        },
+        payload: { aps: { sound: 'default', badge: 1, 'content-available': 1 } },
+        headers: { 'apns-priority': data?.type === 'incoming_call' ? '10' : '5' },
       },
     };
-
     const response = await admin.messaging().send(message);
     console.log(`✅ Push sent [${data?.type || 'general'}]:`, title);
     return response;

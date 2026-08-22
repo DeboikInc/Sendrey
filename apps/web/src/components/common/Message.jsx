@@ -50,7 +50,8 @@ export default function Message({
   isActiveResend,
   onBudgetConfirmClick,
   showStatusIcons = true,
-
+  onTrainingContinueClick,
+  isTrainingCompleted = false,
 }) {
 
   const [showContextMenu, setShowContextMenu] = useState(false);
@@ -356,6 +357,7 @@ export default function Message({
             </div>
           );
         }
+
       }
 
       // Text message (default)
@@ -761,7 +763,30 @@ export default function Message({
       );
     }
 
-
+    if (m.trainingPromptButton) {
+      return (
+        <div>
+          {m.text}
+          <div className="mt-3">
+            <Button
+              className={`w-full text-white ${isTrainingCompleted
+                  ? 'bg-gray-400 cursor-not-allowed opacity-70'
+                  : 'bg-primary'
+                }`}
+              disabled={isTrainingCompleted}
+              onClick={(e) => {
+                e.stopPropagation();
+                if (!isTrainingCompleted) {
+                  onTrainingContinueClick && onTrainingContinueClick();
+                }
+              }}
+            >
+              {isTrainingCompleted ? 'Training Completed' : 'Continue'}
+            </Button>
+          </div>
+        </div>
+      );
+    }
 
     // Text message (default)
     return <div>{m.text}</div>;

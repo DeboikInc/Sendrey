@@ -3,12 +3,14 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Avatar, Button } from "@material-tailwind/react";
 import Message from "../common/Message";
 import ChatComposer from "./chatComposer";
-import RunnerNotifications from "./RunnerNotifications";
 import sendreyBot from "../../assets/sendrey_bot.jpg";
 import { FaWalking, FaMotorcycle } from "react-icons/fa";
 import { Bike, Car, Truck, RefreshCw, Sun, Moon } from "lucide-react";
 import { useCameraHook } from "../../hooks/useCameraHook";
 import { returningUserNeedsKycPoll } from '../../utils/returningUserKycUtils';
+
+import RunnerNotifications from "./RunnerNotifications";
+import OnboardingProgress, { getOnboardingStageIndex } from "./OnboardingProgress";
 
 const FLEET_OPTIONS = [
   { type: "cycling", icon: Bike, label: "Cycling" },
@@ -72,7 +74,10 @@ function OnboardingScreen({
   onReturningUserChoice,
   returningUserData,
   isVerifyingOtp,
-  effectiveReturningKycStatus
+  effectiveReturningKycStatus,
+
+  onTrainingContinueClick,
+  isTrainingCompleted,
 }) {
 
   // ADD at the top of OnboardingScreen function, after the props destructure:
@@ -94,6 +99,13 @@ function OnboardingScreen({
     .map(([k, v]) => `${k}: ${JSON.stringify(prevOSProps.current[k])} → ${JSON.stringify(v)}`).join(' | ');
   if (osChanged) console.log(`[OS] render #${renderCountOS.current} — changed: ${osChanged}`);
   prevOSProps.current = osTrack;
+
+  const stageIndex = getOnboardingStageIndex({
+    registrationComplete,
+    isTrainingCompleted,
+    isVerified,
+    kycStep,
+  });
 
   const listRef = useRef(null);
   const connectMessageSentRef = useRef(false);
@@ -293,6 +305,8 @@ function OnboardingScreen({
           </div>
         </div>
 
+        <OnboardingProgress stageIndex={stageIndex} darkMode={dark} />
+        
         {/* Messages */}
         <div ref={listRef} className="flex-1 min-h-0 overflow-y-auto px-3 sm:px-6 py-4 bg-chat-pattern bg-gray-100 dark:bg-black-200 scrollbar-hide scroll-smooth">
           <div className="mx-auto max-w-3xl">
@@ -303,6 +317,8 @@ function OnboardingScreen({
                 canResendOtp={registrationComplete ? false : canResendOtp}
                 isActiveResend={registrationComplete ? false : canResendOtp}
                 onMessageClick={() => handleMessageClick(m)}
+                onTrainingContinueClick={onTrainingContinueClick}
+                isTrainingCompleted={isTrainingCompleted}
                 showCursor={false}
                 showStatusIcons={false}
                 userType="runner"
@@ -370,6 +386,8 @@ function OnboardingScreen({
               newOrderComplete={syncedNewOrderComplete}
               // onServiceChoice={handleServiceChoice}
               isUpdatingServer={isUpdatingServer}
+              isTrainingCompleted={isTrainingCompleted}
+              onTrainingContinueClick={onTrainingContinueClick}
             />
           </div>
         )}
