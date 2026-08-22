@@ -246,18 +246,24 @@ class KYCController extends BaseController {
                     nin: {
                         verified: docs.nin?.verified || false,
                         status: docs.nin?.status || 'not_submitted',
-                        submittedAt: docs.nin?.submittedAt || null
+                        submittedAt: docs.nin?.submittedAt || null,
+                        rejectionReason: docs.nin?.rejectionReason,
+                        rejectedAt: docs.nin?.rejectedAt
                     },
                     driverLicense: {
                         verified: docs.driverLicense?.verified || false,
                         status: docs.driverLicense?.status || 'not_submitted',
-                        submittedAt: docs.driverLicense?.submittedAt || null
+                        submittedAt: docs.driverLicense?.submittedAt || null,
+                        rejectionReason: docs.driverLicense?.rejectionReason,
+                        rejectedAt: docs.driverLicence?.rejectedAt
                     }
                 },
                 biometrics: {
                     selfieVerified: biometrics.selfieVerified || false,
                     status: biometrics.status || 'not_submitted',
-                    submittedAt: biometrics.submittedAt || null
+                    submittedAt: biometrics.submittedAt || null,
+                    rejectionReason: biometrics.rejectionReason,
+                    rejectedAt: biometrics.rejectedAt
                 },
                 canAcceptJobs: runner.kycStatus === 'approved_full',
                 canAcceptLimitedJobs: runner.kycStatus === 'approved_limited'
