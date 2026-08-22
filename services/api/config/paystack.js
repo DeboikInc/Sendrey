@@ -83,9 +83,9 @@ class Paystack {
     }
   }
 
-  async createCustomer({ email, first_name, last_name, metadata }) {
+  async createCustomer({ email, first_name, last_name, phone, metadata }) {
     try {
-      const response = await this.readClient.post('/customer', { email, first_name, last_name, metadata });
+      const response = await this.readClient.post('/customer', { email, first_name, last_name, phone, metadata });
       return response.data;
     } catch (error) {
       console.error('Paystack create customer error:', error.response?.data);
@@ -118,7 +118,7 @@ class Paystack {
   // Verify account number
   async verifyAccountNumber({ account_number, bank_code }) {
 
-    if (process.env.NODE_ENV === 'production') {
+    if (process.env.NODE_ENV === 'development') {
       console.log(`[DEV] Mock account verify: ${account_number} | bank: ${bank_code}`);
       return {
         status: true,

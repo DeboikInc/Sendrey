@@ -32,6 +32,7 @@ const buildReturningUserGreeting = (name, kycStatus = {}, fleetType = '') => {
     ninStatus = 'not_submitted',
     driverLicenseStatus = 'not_submitted',
     selfieVerified = false,
+    selfieStatus = 'not_submitted',
   } = kycStatus;
 
   if (!isVerified) {
@@ -40,7 +41,14 @@ const buildReturningUserGreeting = (name, kycStatus = {}, fleetType = '') => {
 
   const isPedestrian = fleetType?.toLowerCase() === 'pedestrian';
 
-  // Pedestrians only need one of nin/license verified. Everyone else needs both.
+  // ── Rejection takes priority over every other state ─────────────────────
+  const hasRejection =
+    ninStatus === 'rejected' || driverLicenseStatus === 'rejected' || selfieStatus === 'rejected';
+
+  if (hasRejection) {
+    return `Hi ${name}, welcome back! One of your documents needs to be resubmitted. Continue as ${name}?`;
+  }
+
   const idComplete = isPedestrian
     ? (ninStatus === 'verified' || driverLicenseStatus === 'verified')
     : (ninStatus === 'verified' && driverLicenseStatus === 'verified');
@@ -62,7 +70,6 @@ const buildReturningUserGreeting = (name, kycStatus = {}, fleetType = '') => {
   const idPending = ninPending || licensePending;
   const idSubmitted = ninSubmitted || licenseSubmitted;
 
-
   const missingId = !isPedestrian && ninSubmitted && !licenseSubmitted ? "driver's license"
     : !isPedestrian && licenseSubmitted && !ninSubmitted ? 'NIN'
       : null;
@@ -83,7 +90,7 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
   const dispatch = useDispatch();
   const { runner } = useSelector((s) => s.auth);
   const [_localRegistrationComplete, setRegistrationComplete] = useState(false);
-  const registrationComplete = !!runner?._id || _localRegistrationComplete;
+  const registrationComplete = (!!runner?._id && runner?.isEmailVerified) || _localRegistrationComplete;
 
   const [isCollectingCredentials, setIsCollectingCredentials] = useState(false);
   const [credentialStep, setCredentialStep] = useState(null);
@@ -109,7 +116,7 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
 
   // Location state
   const [runnerLocation, setRunnerLocation] = useState(null);
-  const [ , setLocationResolved] = useState(false);
+  const [, setLocationResolved] = useState(false);
 
   const bestPositionRef = useRef(null);
   const watchIdRef = useRef(null);

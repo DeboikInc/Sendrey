@@ -233,7 +233,7 @@ const handlePaymentSuccess = async (socket, io, data) => {
     };
 
     // Re-fetch fresh chat to avoid stale read
-    const freshChat = await Chat.findOne({ chatId });
+    const freshChat = await Chat.findOne({ chatId }).select('messages');
     const alreadyHasPaymentMsg = freshChat?.messages?.some(
       m => m.paymentConfirmed === true ||
         m.type === 'payment_confirmed' ||

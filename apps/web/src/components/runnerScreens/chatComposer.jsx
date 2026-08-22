@@ -62,6 +62,7 @@ export default function ChatComposer({
   isUpdatingServer,
   isVerified,
   isTrainingCompleted,
+  onTrainingContinueClick,
 
   isReturningUser,
   onReturningUserChoice,
@@ -408,7 +409,7 @@ export default function ChatComposer({
       );
     }
 
-    if (!isTrainingCompleted) {   
+    if (!isTrainingCompleted) {
       return (
         <div className="p-4 py-6 flex justify-center">
           <p className="text-sm text-center text-gray-500 dark:text-gray-400">
@@ -479,6 +480,39 @@ export default function ChatComposer({
           accept="image/*,video/*,audio/*,.pdf,.doc,.docx"
           multiple
         />
+      </div>
+    );
+  }
+
+  if (
+    registrationComplete && !isChatActive && !isCollectingCredentials &&
+    !needsOtpVerification && !isReturningUser && !isTrainingCompleted &&
+    (kycStep === null || kycStep === undefined)
+  ) {
+    return (
+      <div className="p-4 py-6 flex justify-center">
+        <p className="text-sm text-center text-gray-500 dark:text-gray-400">
+          Training in progress..
+        </p>
+      </div>
+    );
+  }
+
+  if (
+    registrationComplete && !isChatActive && !isCollectingCredentials &&
+    !needsOtpVerification && !isReturningUser &&
+    (kycStep === null || kycStep === undefined) &&
+    isTrainingCompleted
+  ) {
+    return <div className="p-4 py-7" />; // blank while status resolves — matches the pattern used for isSubmitting/isVerifyingOtp elsewhere in this file
+  }
+
+  if (registrationComplete && !isChatActive && !isCollectingCredentials && !needsOtpVerification) {
+    return (
+      <div className="p-4 py-6 flex justify-center">
+        <p className="text-sm text-center text-gray-500 dark:text-gray-400">
+          Your documents are currently under review, we will get back to you soon.
+        </p>
       </div>
     );
   }

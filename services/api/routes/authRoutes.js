@@ -130,7 +130,7 @@ router.post('/request-email-verification',
 
 router.post('/resend-email-verification',
   // authenticate,
-  userRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 3 }), // 3 resends per hour
+  userRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 5 }), // 3 resends per hour
   validate(authValidation.resendVerification),
   authController.resendEmailVerification
 );

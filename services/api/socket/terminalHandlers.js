@@ -369,7 +369,7 @@ const handleTaskCompleted = async (io, data) => {
         // Archive session on completion
         await archiveCurrentSession(chatId, orderId, 'completed');
 
-        const chat = await Chat.findOne({ chatId });
+        const chat = await Chat.findOne({ chatId }).select('messages');
         console.log(`[TaskCompleted] Final messages in chat:`, chat?.messages.map(m => ({ id: m.id, type: m.type, text: m.text?.slice(0, 50) })));
 
 
@@ -394,7 +394,7 @@ const handleTaskCompleted = async (io, data) => {
             const runnerName = [runner?.firstName, runner?.lastName].filter(Boolean).join(' ');
 
             // Get order for payout amount
-            const completedOrder = await Order.findOne({ orderId }).lean();
+            const completedOrder = await Order.findOne({ orderId }).select('runnerPayout').lean();
 
             notifyRatingPrompt(userId, {
                 orderId,

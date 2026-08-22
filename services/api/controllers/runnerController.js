@@ -6,6 +6,8 @@ const Runner = require('../models/Runner');
 const chatService = require('../services/chatService');
 const { MAX_DISTANCE } = require('../config/constants');
 const cloudinary = require('../config/cloudinary');
+const redis = require('../config/redis');
+const { sendPushNotification } = require('../services/notificationService');
 
 class RunnerController extends BaseController {
   constructor() {
@@ -13,6 +15,7 @@ class RunnerController extends BaseController {
 
     // Bind all methods to maintain 'this' context
     this.getProfile = this.getProfile.bind(this);
+    this.publishToSocket = this.publishToSocket.bind(this);
     this.updateProfile = this.updateProfile.bind(this);
     this.getNearbyRunners = this.getNearbyRunners.bind(this);
     this.getRunners = this.getRunners.bind(this);
@@ -43,6 +46,21 @@ class RunnerController extends BaseController {
     } catch (error) {
       logger.error('Get runner profile error:', error);
       next(error);
+    }
+  }
+
+  async publishToSocket(runnerId, payload) {
+    try {
+      const client = redis.getClient();
+      await client.publish('kyc:events', JSON.stringify({
+        runnerId,
+        data: payload
+      }));
+      logger.info(`[Redis runnerController] Published runner status event for ${runnerId}:`, payload.event);
+      return true;
+    } catch (error) {
+      logger.error('[Redis runnerController] Failed to publish:', error.message);
+      return false;
     }
   }
 
@@ -270,7 +288,7 @@ class RunnerController extends BaseController {
   async updateRunnerStatus(req, res, next) {
     try {
       const { runnerId } = req.params;
-      const { status, previousStatus, isActive } = req.body;
+      const { status, previousStatus, isActive, reason } = req.body;
       const updatedBy = req.user.id;
 
       const validStatuses = [
@@ -289,6 +307,32 @@ class RunnerController extends BaseController {
       const runner = await this.service.updateRunnerStatus(runnerId, updatePayload);
 
       logger.info(`Runner status updated: ${runnerId} to ${status} by admin ${updatedBy}`);
+
+      const isBanned = status === 'banned';
+      const banReason = reason || '';
+
+      // ── Real-time push to an active session, via the KYC socket channel ──
+      await this.publishToSocket(runnerId, {
+        kycStatus: runner.kycStatus,
+        isVerifiedKyc: runner.isVerifiedKyc ?? false,
+        isBanned,
+        event: isBanned ? 'runner_banned' : 'runner_unbanned',
+        reason: isBanned ? banReason : null,
+      });
+
+      sendPushNotification({
+        recipientId: runnerId,
+        recipientType: 'runner',
+        title: isBanned ? '🚫 Account Suspended' : '✅ Account Reinstated',
+        body: isBanned
+          ? `Your account has been suspended. Reason: ${banReason}. please contact support`
+          : 'Your account has been reinstated. You can resume accepting orders.',
+        data: {
+          type: isBanned ? 'runner_banned' : 'runner_unbanned',
+          isBanned: String(isBanned),
+          kycStatus: runner.kycStatus,
+        }
+      });
 
       return this.success(res, {
         runner: this._sanitizeRunner(runner)

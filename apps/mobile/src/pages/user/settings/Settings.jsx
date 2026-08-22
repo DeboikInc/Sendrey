@@ -35,14 +35,11 @@ export default function Settings({ darkMode, onBack, onToggleDarkMode, initialTa
     const heading = darkMode ? "text-white" : "text-black-200";
 
     // Check if notifications are opted in
-    const isOptedIn = notificationPrefs?.push?.messages === true &&
-        notificationPrefs?.push?.updates === true &&
-        notificationPrefs?.push?.promotions === true;
+    const isOptedIn = notificationPrefs?.push?.messages === true ||
+        notificationPrefs?.push?.updates === true;
 
-    // Check if notifications are fully opted out
     const isOptedOut = notificationPrefs?.push?.messages === false &&
-        notificationPrefs?.push?.updates === false &&
-        notificationPrefs?.push?.promotions === false;
+        notificationPrefs?.push?.updates === false;
 
     useEffect(() => {
         dispatch(hydrateFromUser(user));

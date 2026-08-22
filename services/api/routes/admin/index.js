@@ -6,6 +6,9 @@ const { isAdmin } = require('../../middleware/roleCheck');
 // login
 router.use('/auth', require('./authAdminRoutes'));
 
+router.use('/metrics', require('./metricsRoutes'));
+router.use('/logs', require('./serverlogs'));
+
 
 // all admin routes require auth + admin role
 router.use(authenticate, isAdmin);
@@ -23,6 +26,7 @@ router.use('/escrows', require('./escrowAdminRoutes'));
 router.use('/pricing',  require('./priceConfigRoutes'));
 router.use('/distance', require('./distanceAdminRoutes'))
 router.use('/platform', require('./platformFeeAdminRoutes'))
+
 
 
 module.exports = router;

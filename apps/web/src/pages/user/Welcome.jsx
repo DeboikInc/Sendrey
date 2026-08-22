@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { useSelector } from "react-redux";
 import useDarkMode from "../../hooks/useDarkMode";
 import { useNavigate } from "react-router-dom";
+import { XCircle } from 'lucide-react';
 
 import ServiceSelectionScreen from "../../components/screens/ServiceSelectionScreen";
 import VehicleSelectionScreen from "../../components/screens/VehicleSelectionScreen";
@@ -70,6 +71,7 @@ export const Welcome = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { socket, joinUserRoom } = useSocket();
+  const [bannedInfo, setBannedInfo] = useState(null);
 
   const { runnerLocation } = useCredentialFlow(serviceTypeRef, (runnerData) => {
     setRunnerId(runnerData._id || runnerData.id);
@@ -174,6 +176,19 @@ export const Welcome = () => {
 
     },
   });
+
+  useEffect(() => {
+    if (!socket || !currentUser?._id) return;
+    const handler = (data) => {
+      if (data.event === 'user_banned') {
+        setBannedInfo({ isBanned: true, reason: data.reason });
+      } else if (data.event === 'user_unbanned') {
+        setBannedInfo(null);
+      }
+    };
+    socket.on('accountStatus', handler);
+    return () => socket.off('accountStatus', handler);
+  }, [socket, currentUser?._id]);
 
   useEffect(() => {
     if (currentUser?._id && socket && permission !== 'denied') {
@@ -1001,6 +1016,32 @@ export const Welcome = () => {
               >
                 Skip This Time
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {bannedInfo?.isBanned && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/80 backdrop-blur-sm">
+          <div className={`max-w-md w-full mx-4 p-6 rounded-2xl ${dark ? 'bg-black-200' : 'bg-white'}`}>
+            <div className="flex flex-col items-center text-center gap-4">
+              <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center">
+                <XCircle className="w-8 h-8 text-red-500" />
+              </div>
+
+              <h2 className={`text-xl font-bold ${dark ? 'text-white' : 'text-black-200'}`}>
+                Account Suspended
+              </h2>
+
+              <p className={`text-sm ${dark ? 'text-gray-300' : 'text-gray-600'}`}>
+                {bannedInfo.reason || 'Your account has been suspended. Please contact support for assistance.'}
+              </p>
+
+              <a href="mailto:support@sendrey.com"
+                className="w-full py-3 px-4 bg-primary text-white rounded-lg font-medium hover:opacity-90 transition-opacity text-center"
+              >
+                Contact Support
+              </a>
             </div>
           </div>
         </div>

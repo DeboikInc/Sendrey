@@ -116,6 +116,7 @@ async function startSocketServer(app) {
     await redis.connect();
 
     const subscriber = redis.getSubscriber();
+    const userSubscriber = redis.getSubscriber();
     await subscriber.subscribe('kyc:events', (err, count) => {
       if (err) {
         console.error('Failed to subscribe to kyc:events:', err);
@@ -132,11 +133,29 @@ async function startSocketServer(app) {
           const { runnerId, data } = payload;
           const room = `runner-${runnerId}`;
           console.log(`[Redis] Emitting to room: ${room}`, data);
+
           ioInstance.to(room).emit('verificationStatus', data);
           console.log(`[Redis] Emitted to ${room}`);
         } catch (error) {
           console.error('[Redis] Failed to process KYC event:', error);
         }
+      }
+    });
+
+    // user
+    await userSubscriber.subscribe('user:events', (err) => {
+      if (err) console.error('Failed to subscribe to user:events:', err);
+      else console.log('✅ Subscribed to user:events');
+    });
+
+    userSubscriber.on('message', (channel, message) => {
+      if (channel !== 'user:events') return;
+      try {
+        const { userId, data } = JSON.parse(message);
+        const room = `user-${userId}`;
+        ioInstance.to(room).emit('accountStatus', data);
+      } catch (error) {
+        console.error('[Redis] Failed to process user event:', error);
       }
     });
 

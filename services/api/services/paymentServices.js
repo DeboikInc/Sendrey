@@ -20,12 +20,13 @@ const mongoose = require('mongoose');
 const { getSocketIO } = require('./socketAccessor');
 class PaymentService {
 
-  async createVirtualAccount(userId, email, fullName) {
+  async createVirtualAccount(userId, email, fullName, phone) {
     try {
       const customer = await paystack.createCustomer({
         email,
         first_name: fullName.split(' ')[0],
         last_name: fullName.split(' ').slice(1).join(' ') || fullName,
+        phone,
         metadata: { userId: userId.toString() }
       });
 

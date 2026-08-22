@@ -52,7 +52,7 @@ export const deleteRunner = createAsyncThunk('runners/delete', async (runnerId, 
 export const banRunner = createAsyncThunk('runners/ban', async (runnerId, { rejectWithValue, getState }) => {
     try {
         const runner = getState().runners.list.find(r => r._id === runnerId);
-        const previousStatus = runner?.runnerStatus || 'approved_limited';
+        const previousStatus = runner?.kycStatus || 'approved_limited';
         const response = await api.patch(`/runners/${runnerId}/status`, {
             status: 'banned',
             previousStatus,

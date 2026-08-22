@@ -387,6 +387,7 @@ function OnboardingScreen({
               // onServiceChoice={handleServiceChoice}
               isUpdatingServer={isUpdatingServer}
               isTrainingCompleted={isTrainingCompleted}
+              onTrainingContinueClick={onTrainingContinueClick}
             />
           </div>
         )}

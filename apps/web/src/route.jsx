@@ -13,7 +13,6 @@ import ChatDeepLink from "./utils/ChatDeepLink";
 import useDarkMode from "./hooks/useDarkMode";
 import ProtectedRoute from "./components/common/ProtectedRoute";
 import NotFound from "./pages/NotFound";
-// import RunnerTraining from "./components/runnerScreens/RunnerTraining";
 
 export default function ProjectedRoutes() {
   const [dark] = useDarkMode();
@@ -58,10 +57,6 @@ export default function ProjectedRoutes() {
           <Welcome />
         </ProtectedRoute>
       } />
-
-      {/* <Route path="/test" element={
-        <RunnerTraining />
-      } /> */}
 
       {/* Public routes - no authentication required */}
       <Route path="/" element={<Home />} />

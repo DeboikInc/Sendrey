@@ -72,14 +72,11 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
     const hasPinSet = isPinSet || runnerData?.hasPin === true;
 
     // Check if notifications are opted in
-    const isOptedIn = notificationPrefs?.push?.messages === true && 
-                      notificationPrefs?.push?.updates === true && 
-                      notificationPrefs?.push?.promotions === true;
+    const isOptedIn = notificationPrefs?.push?.messages === true ||
+        notificationPrefs?.push?.updates === true;
 
-    // Check if notifications are fully opted out
-    const isOptedOut = notificationPrefs?.push?.messages === false && 
-                       notificationPrefs?.push?.updates === false && 
-                       notificationPrefs?.push?.promotions === false;
+    const isOptedOut = notificationPrefs?.push?.messages === false &&
+        notificationPrefs?.push?.updates === false;
 
     // Fetch fresh profile + ratings on mount
     useEffect(() => {
