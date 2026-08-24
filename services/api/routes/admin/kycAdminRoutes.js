@@ -15,7 +15,6 @@ router.get('/runner/:runnerId',
 
 // Approve document
 router.post('/approve-document/:runnerId',
-
     kycController.approveDocument
 );
 
@@ -26,17 +25,17 @@ router.post('/reject-document/:runnerId',
 
 // Approve selfie
 router.post('/approve-selfie/:runnerId',
-
     kycController.approveSelfie
 );
 
 // Reject selfie
-router.post('/reject-selfie/:runnerId',
-    kycController.rejectSelfie
-);
+router.post('/reject-selfie/:runnerId', kycController.rejectSelfie);
 
-router.get('/verified-runners',
-    kycController.getVerifiedRunners
-);
+router.get('/verified-runners', kycController.getVerifiedRunners);
+
+router.get('/rejected', kycController.getRejectedKYC);
+router.get('/flagged', kycController.getFlaggedKYC);
+router.get('/auto-confirmed', kycController.getAutoConfirmedKYC);
+router.get('/resubmitted', kycController.getResubmittedKYC);
 
 module.exports = router;

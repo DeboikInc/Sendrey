@@ -22,6 +22,10 @@ class KYCController extends BaseController {
         this.rejectSelfie = this.rejectSelfie.bind(this);
         this.getVerifiedRunners = this.getVerifiedRunners.bind(this);
         this.validateFaceWithVision = this.validateFaceWithVision.bind(this);
+        this.getRejectedKYC = this.getRejectedKYC.bind(this);
+        this.getFlaggedKYC = this.getFlaggedKYC.bind(this);
+        this.getAutoConfirmedKYC = this.getAutoConfirmedKYC.bind(this);
+        this.getResubmittedKYC = this.getResubmittedKYC.bind(this);
     }
 
     // ==================== RUNNER METHODS ====================
@@ -621,6 +625,46 @@ class KYCController extends BaseController {
         } catch (error) {
             console.error('Error fetching verified runners:', error);
             return this.error(res, 'Error loading verified runners');
+        }
+    }
+
+    async getRejectedKYC(req, res) {
+        try {
+            const runners = await this.service.getRejectedVerifications();
+            return this.success(res, { total: runners.length, runners });
+        } catch (error) {
+            console.error('Error fetching rejected KYC:', error);
+            return this.error(res, 'Error loading rejected verifications');
+        }
+    }
+
+    async getFlaggedKYC(req, res) {
+        try {
+            const runners = await this.service.getFlaggedVerifications();
+            return this.success(res, { total: runners.length, runners });
+        } catch (error) {
+            console.error('Error fetching flagged KYC:', error);
+            return this.error(res, 'Error loading flagged verifications');
+        }
+    }
+
+    async getAutoConfirmedKYC(req, res) {
+        try {
+            const runners = await this.service.getAutoConfirmedVerifications();
+            return this.success(res, { total: runners.length, runners });
+        } catch (error) {
+            console.error('Error fetching auto-confirmed KYC:', error);
+            return this.error(res, 'Error loading auto-confirmed verifications');
+        }
+    }
+
+    async getResubmittedKYC(req, res) {
+        try {
+            const runners = await this.service.getResubmittedVerifications();
+            return this.success(res, { total: runners.length, runners });
+        } catch (error) {
+            console.error('Error fetching resubmitted KYC:', error);
+            return this.error(res, 'Error loading resubmitted verifications');
         }
     }
 
