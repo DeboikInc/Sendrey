@@ -366,11 +366,19 @@ class KYCService {
         try {
             const pendingRunners = await Runner.find({
                 role: 'runner',
-                $or: [
-                    { 'verificationDocuments.nin.status': 'pending_review' },
-                    { 'verificationDocuments.passport.status': 'pending_review' },
-                    { 'verificationDocuments.driverLicense.status': 'pending_review' },
-                    { 'biometricVerification.status': 'pending_review' }
+                $and: [
+                    {
+                        $or: [
+                            { 'verificationDocuments.nin.status': 'pending_review' },
+                            { 'verificationDocuments.passport.status': 'pending_review' },
+                            { 'verificationDocuments.driverLicense.status': 'pending_review' },
+                            { 'biometricVerification.status': 'pending_review' }
+                        ]
+                    },
+                    { 'verificationDocuments.nin.status': { $ne: 'rejected' } },
+                    { 'verificationDocuments.passport.status': { $ne: 'rejected' } },
+                    { 'verificationDocuments.driverLicense.status': { $ne: 'rejected' } },
+                    { 'biometricVerification.status': { $ne: 'rejected' } }
                 ]
             }).select('firstName lastName email phone fleetType createdAt verificationDocuments biometricVerification kycStatus');
 
@@ -687,10 +695,18 @@ class KYCService {
     async getResubmittedVerifications() {
         const runners = await Runner.find({
             role: 'runner',
-            $or: [
-                { 'verificationDocuments.nin.wasResubmitted': true },
-                { 'verificationDocuments.driverLicense.wasResubmitted': true },
-                { 'biometricVerification.wasResubmitted': true }
+            $and: [
+                {
+                    $or: [
+                        { 'verificationDocuments.nin.wasResubmitted': true },
+                        { 'verificationDocuments.driverLicense.wasResubmitted': true },
+                        { 'biometricVerification.wasResubmitted': true }
+                    ]
+                },
+                { 'verificationDocuments.nin.status': { $ne: 'rejected' } },
+                { 'verificationDocuments.passport.status': { $ne: 'rejected' } },
+                { 'verificationDocuments.driverLicense.status': { $ne: 'rejected' } },
+                { 'biometricVerification.status': { $ne: 'rejected' } }
             ]
         }).select('firstName lastName email phone fleetType createdAt verificationDocuments biometricVerification kycStatus');
         return runners.map(r => ({

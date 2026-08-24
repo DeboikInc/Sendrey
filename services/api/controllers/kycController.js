@@ -26,6 +26,8 @@ class KYCController extends BaseController {
         this.getFlaggedKYC = this.getFlaggedKYC.bind(this);
         this.getAutoConfirmedKYC = this.getAutoConfirmedKYC.bind(this);
         this.getResubmittedKYC = this.getResubmittedKYC.bind(this);
+
+        this._pendingRejectionNotifs = new Map();
     }
 
     // ==================== RUNNER METHODS ====================
@@ -373,6 +375,46 @@ class KYCController extends BaseController {
         }
     }
 
+    _scheduleRejectionNotification(runnerId) {
+        const REJECTION_NOTIFY_DEBOUNCE_MS = 2000;
+
+        if (this._pendingRejectionNotifs.has(runnerId)) {
+            clearTimeout(this._pendingRejectionNotifs.get(runnerId));
+        }
+
+        const timeout = setTimeout(async () => {
+            this._pendingRejectionNotifs.delete(runnerId);
+            try {
+                const runner = await Runner.findById(runnerId)
+                    .select('verificationDocuments biometricVerification kycStatus');
+                if (!runner) return;
+
+                const rejectedItems = this.service.getRejectedItems(runner);
+                if (rejectedItems.length === 0) return;
+
+                const title = rejectedItems.length > 1
+                    ? '❌ Verification Rejected'
+                    : `❌ ${rejectedItems[0].type} Rejected`;
+
+                const body = rejectedItems.length > 1
+                    ? `${rejectedItems.length} items were rejected — ${rejectedItems.map(i => `${i.type} (${i.reason || 'no reason given'})`).join('; ')}. Please resubmit.`
+                    : `Your ${rejectedItems[0].type} was rejected. Reason: ${rejectedItems[0].reason || 'no reason given'}. Please resubmit.`;
+
+                sendPushNotification({
+                    recipientId: runnerId,
+                    recipientType: 'runner',
+                    title,
+                    body,
+                    data: { type: 'kyc_rejected', items: rejectedItems }
+                });
+            } catch (err) {
+                console.error('[KYC] rejection notification batch error:', err.message);
+            }
+        }, REJECTION_NOTIFY_DEBOUNCE_MS);
+
+        this._pendingRejectionNotifs.set(runnerId, timeout);
+    }
+
     // ==================== ADMIN METHODS ====================
 
     async getPendingKYC(req, res) {
@@ -498,14 +540,7 @@ class KYCController extends BaseController {
                 // Publish to Redis for socket server
                 await this.publishToSocket(runnerId, payload);
 
-                // Notify runner their document was rejected
-                sendPushNotification({
-                    recipientId: runnerId,
-                    recipientType: 'runner',
-                    title: '❌ Document Rejected',
-                    body: `Your kyc documents was rejected. Reason: ${reason}. Please resubmit.`,
-                    data: { type: 'kyc_document_rejected', documentType, reason }
-                });
+                this._scheduleRejectionNotification(runnerId);
 
                 return this.success(res, {
                     kycStatus: result.kycStatus
@@ -592,13 +627,7 @@ class KYCController extends BaseController {
                 await this.publishToSocket(runnerId, payload);
 
                 // Notify runner their selfie was rejected
-                sendPushNotification({
-                    recipientId: runnerId,
-                    recipientType: 'runner',
-                    title: '❌ Selfie Rejected',
-                    body: `Your documents was rejected. Reason: ${reason}. Please take a clear photo and resubmit.`,
-                    data: { type: 'kyc_selfie_rejected', reason }
-                });
+                this._scheduleRejectionNotification(runnerId);
 
                 return this.success(res, {
                     kycStatus: result.kycStatus

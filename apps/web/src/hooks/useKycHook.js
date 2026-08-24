@@ -45,7 +45,7 @@ export const useKycHook = (runnerId, fleetType,) => {
   const [showConnectButton, setShowConnectButton] = useState(false);
 
   // bump this string any time kyc_* localStorage shape/logic changes again
-  const KYC_STORAGE_VERSION = '2';
+  const KYC_STORAGE_VERSION = '3';
   const isReturningUserRef = useRef(false);
 
   const isAlreadyVerifiedRef = useRef(false);
@@ -269,45 +269,72 @@ export const useKycHook = (runnerId, fleetType,) => {
       }
 
       // ── Partial rejections/approvals
+      const ninRejected = documents.nin?.status === 'rejected';
+      const licenseRejected = documents.driverLicense?.status === 'rejected';
+      const selfieRejected = biometrics.status === 'rejected';
+      const isPedestrian = fleetTypeRef.current === 'pedestrian';
+
+      const allRejected = ninRejected && selfieRejected && (isPedestrian || licenseRejected);
+
       let resumeStep = null;
 
-      if (documents.nin?.status === 'rejected') {
-        const reason = documents.nin.rejectionReason
-          ? `❌ Your NIN verification was unsuccessful: ${documents.nin.rejectionReason}. Please resubmit.`
-          : "❌ Your NIN verification was unsuccessful. Please resubmit.";
-        setMessages(prev => [...prev, {
-          id: `kyc-nin-rejected-${Date.now()}`,
-          from: "them", text: reason,
-          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-          status: "delivered", isKyc: true
-        }]);
-        if (!resumeStep) resumeStep = { step: 2, docType: 'nin' };
-      }
+      if (allRejected) {
+        const reasons = [
+          documents.nin.rejectionReason ? `NIN: ${documents.nin.rejectionReason}` : null,
+          !isPedestrian && documents.driverLicense.rejectionReason ? `Driver's License: ${documents.driverLicense.rejectionReason}` : null,
+          biometrics.rejectionReason ? `Selfie: ${biometrics.rejectionReason}` : null,
+        ].filter(Boolean).join(' | ');
 
-      if (documents.driverLicense?.status === 'rejected') {
-        const reason = documents.driverLicense.rejectionReason
-          ? `❌ Your Driver's License verification was unsuccessful: ${documents.driverLicense.rejectionReason}. Please resubmit.`
-          : "❌ Your Driver's License verification was unsuccessful. Please resubmit.";
         setMessages(prev => [...prev, {
-          id: `kyc-dl-rejected-${Date.now()}`,
-          from: "them", text: reason,
+          id: `kyc-all-rejected-${Date.now()}`,
+          from: "them",
+          text: `❌ Your documents and selfie were all rejected${reasons ? ` ${reasons}.` : ''}. Let's resubmit everything — starting with your NIN.`,
           time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
           status: "delivered", isKyc: true
         }]);
-        if (!resumeStep) resumeStep = { step: 2, docType: 'driverLicense' };
-      }
+        setDocType('nin');
+        capturedIdPhotoRef.current = null;
+        capturedSelfiePhotoRef.current = null;
+        resumeStep = { step: 2, docType: 'nin' };
+      } else {
+        if (ninRejected) {
+          const reason = documents.nin.rejectionReason
+            ? `❌ Your NIN verification was unsuccessful: ${documents.nin.rejectionReason}. Please resubmit.`
+            : "❌ Your NIN verification was unsuccessful. Please resubmit.";
+          setMessages(prev => [...prev, {
+            id: `kyc-nin-rejected-${Date.now()}`,
+            from: "them", text: reason,
+            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            status: "delivered", isKyc: true
+          }]);
+          if (!resumeStep) resumeStep = { step: 2, docType: 'nin' };
+        }
 
-      if (biometrics.status === 'rejected') {
-        const reason = biometrics.rejectionReason
-          ? `❌ Your selfie verification was unsuccessful: ${biometrics.rejectionReason}. Please resubmit.`
-          : "❌ Your selfie verification was unsuccessful. Please resubmit.";
-        setMessages(prev => [...prev, {
-          id: `kyc-selfie-rejected-${Date.now()}`,
-          from: "them", text: reason,
-          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
-          status: "delivered", isKyc: true
-        }]);
-        if (!resumeStep) resumeStep = { step: 5, docType: null };
+        if (licenseRejected) {
+          const reason = documents.driverLicense.rejectionReason
+            ? `❌ Your Driver's License verification was unsuccessful: ${documents.driverLicense.rejectionReason}. Please resubmit.`
+            : "❌ Your Driver's License verification was unsuccessful. Please resubmit.";
+          setMessages(prev => [...prev, {
+            id: `kyc-dl-rejected-${Date.now()}`,
+            from: "them", text: reason,
+            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            status: "delivered", isKyc: true
+          }]);
+          if (!resumeStep) resumeStep = { step: 2, docType: 'driverLicense' };
+        }
+
+        if (selfieRejected) {
+          const reason = biometrics.rejectionReason
+            ? `❌ Your selfie verification was unsuccessful: ${biometrics.rejectionReason}. Please resubmit.`
+            : "❌ Your selfie verification was unsuccessful. Please resubmit.";
+          setMessages(prev => [...prev, {
+            id: `kyc-selfie-rejected-${Date.now()}`,
+            from: "them", text: reason,
+            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            status: "delivered", isKyc: true
+          }]);
+          if (!resumeStep) resumeStep = { step: 5, docType: null };
+        }
       }
 
       // Apply only the highest-priority rejection
