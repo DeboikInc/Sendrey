@@ -186,7 +186,10 @@ const runnerSchema = new mongoose.Schema({
       verifiedBy: String,
       documentHash: String,
       flaggedForReview: { type: Boolean, default: false },
-      flaggedReason: String
+      flaggedReason: String,
+      wasResubmitted: { type: Boolean, default: false },
+      previousRejectedAt: Date,
+      previousRejectionReason: String,
     },
     driverLicense: {
       number: String,
@@ -202,7 +205,10 @@ const runnerSchema = new mongoose.Schema({
       verifiedBy: String,
       documentHash: String,
       flaggedForReview: { type: Boolean, default: false },
-      flaggedReason: String
+      flaggedReason: String,
+      wasResubmitted: { type: Boolean, default: false },
+      previousRejectedAt: Date,
+      previousRejectionReason: String,
     }
   },
   biometricVerification: {
@@ -219,7 +225,10 @@ const runnerSchema = new mongoose.Schema({
     verificationData: mongoose.Schema.Types.Mixed,
     rejectedAt: Date,
     rejectionReason: String,
-    verifiedBy: String
+    verifiedBy: String,
+    wasResubmitted: { type: Boolean, default: false },
+    previousRejectedAt: Date,
+    previousRejectionReason: String,
   },
 
   itemRejectionCount: {
