@@ -214,7 +214,7 @@ export default function KycTab() {
     },
   ];
 
-  // 🆕 Search & Sort component (moved here)
+  // Search & Sort component
   const SearchSortBar = () => (
     <div className="flex gap-2 mb-4">
       {/* Search Input */}
@@ -260,7 +260,6 @@ export default function KycTab() {
     </div>
   );
 
-  // 🆕 View Toggle Bar (separated from search/sort)
   const ViewToggleBar = () => (
     <div className="flex bg-white/5 border border-white/10 rounded-lg p-0.5 gap-0.5 w-full sm:w-auto overflow-x-auto mb-4">
       {[
