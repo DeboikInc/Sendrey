@@ -170,7 +170,7 @@ const runnerSchema = new mongoose.Schema({
     enum: RUNNER_STATUS,
     default: 'pending_verification'
   },
-  
+
   verificationDocuments: {
     nin: {
       number: String,
@@ -183,7 +183,10 @@ const runnerSchema = new mongoose.Schema({
       verificationData: mongoose.Schema.Types.Mixed,
       rejectedAt: Date,
       rejectionReason: String,
-      verifiedBy: String
+      verifiedBy: String,
+      documentHash: String,
+      flaggedForReview: { type: Boolean, default: false },
+      flaggedReason: String
     },
     driverLicense: {
       number: String,
@@ -196,7 +199,10 @@ const runnerSchema = new mongoose.Schema({
       verificationData: mongoose.Schema.Types.Mixed,
       rejectedAt: Date,
       rejectionReason: String,
-      verifiedBy: String
+      verifiedBy: String,
+      documentHash: String,
+      flaggedForReview: { type: Boolean, default: false },
+      flaggedReason: String
     }
   },
   biometricVerification: {
@@ -389,7 +395,7 @@ const runnerSchema = new mongoose.Schema({
     },
   },
 
-  isTrainingCompleted: {type: Boolean, default: false},
+  isTrainingCompleted: { type: Boolean, default: false },
   whatsappOptIn: { type: Boolean, default: false },
   whatsappOptInSource: { type: String },
   whatsappOptInTimestamp: { type: Date },
@@ -451,6 +457,7 @@ runnerSchema.index({ email: 1 });
 runnerSchema.index({ phone: 1 }, { sparse: true });
 runnerSchema.index({ role: 1 });
 runnerSchema.index({ isActive: 1 });
+runnerSchema.index({ documentHash: 1 }, { sparse: true });
 runnerSchema.index({ isVerified: 1 });
 runnerSchema.index({ isVerifiedKyc: 1 });
 runnerSchema.index({ createdAt: -1 });

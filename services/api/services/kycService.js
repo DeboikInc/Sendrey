@@ -4,12 +4,58 @@ const cloudinary = require('../config/cloudinary');
 const streamifier = require('streamifier');
 const path = require('path');
 const fs = require('fs').promises;
+const premblyService = require('./premblyService');
+const axios = require('axios');
+const crypto = require('crypto');
 
+async function urlToBase64(url) {
+    const res = await axios.get(url, { responseType: 'arraybuffer' });
+    return Buffer.from(res.data).toString('base64');
+}
+
+function hashBuffer(buffer) {
+    return crypto.createHash('sha256').update(buffer).digest('hex');
+}
+
+const docHash = hashBuffer(fileBuffer);
 class KYCService {
 
     constructor() {
-
         this.uploadDir = 'uploads';
+    }
+
+
+    async checkDuplicateDocument(userId, docHash, docType) {
+        const self = await Runner.findById(userId).select('verificationDocuments');
+        const selfDocs = self?.verificationDocuments || {};
+        const otherFieldType = docType === 'nin' ? 'driverLicense' : 'nin';
+
+        if (selfDocs[otherFieldType]?.documentHash === docHash) {
+            return {
+                blocked: true,
+                userFacing: true,
+                error: `This is the same document you already submitted as your ${otherFieldType === 'nin' ? 'NIN' : 'Driver License'}. Please upload a different, valid ID.`
+            };
+        }
+
+        // Case 2: different account, same image — possible fraud, don't tip them off
+        const other = await Runner.findOne({
+            _id: { $ne: userId },
+            $or: [
+                { 'verificationDocuments.nin.documentHash': docHash },
+                { 'verificationDocuments.driverLicense.documentHash': docHash }
+            ]
+        }).select('_id');
+
+        if (other) {
+            return {
+                blocked: false, // let it through, don't alert the submitter
+                flagForReview: true,
+                flaggedReason: `Document hash matches an existing submission from another account (${other._id})`
+            };
+        }
+
+        return { blocked: false, flagForReview: false };
     }
 
     async saveDocumentToCloudinary(fileBuffer, documentType, userId, originalName) {
@@ -75,21 +121,60 @@ class KYCService {
         }
     }
 
+    async runAutomatedVerification(userId, selfieBuffer) {
+        const runner = await Runner.findById(userId);
+        const docs = runner.verificationDocuments || {};
+
+        const doc = docs.nin?.documentPath ? { type: 'nin', premblyType: 'ID', path: docs.nin.documentPath }
+            : docs.driverLicense?.documentPath ? { type: 'driverLicense', premblyType: 'DL', path: docs.driverLicense.documentPath }
+                : null;
+
+        if (!doc) return;
+
+        try {
+            const docImageBase64 = await urlToBase64(doc.path);
+            const selfieImageBase64 = selfieBuffer.toString('base64');
+
+            const result = await premblyService.verifyDocumentWithFace({
+                docImageBase64, selfieImageBase64, docType: doc.premblyType
+            });
+
+            if (result.skipped) return; // call failed — stays pending_review, admin handles it
+
+            const docField = `verificationDocuments.${doc.type}`;
+            await Runner.findByIdAndUpdate(userId, {
+                'biometricVerification.faceMatchScore': result.confidence,
+                'biometricVerification.provider': 'prembly',
+                'biometricVerification.verificationId': result.reference,
+                'biometricVerification.verificationData': result.raw,
+                [`${docField}.verificationId`]: result.reference,
+                [`${docField}.verificationData`]: result.extractedData
+            });
+
+            if (result.decision === 'auto_approve') {
+                await this.approveDocument(userId, doc.type, 'prembly-auto');
+                await this.approveSelfie(userId, 'prembly-auto');
+            } else if (result.decision === 'auto_reject') {
+                await this.rejectSelfie(userId, `Automated face match failed (confidence ${result.confidence})`);
+            }
+            // else 'manual_review' — leave as pending_review; admin now sees the confidence score in getRunnerVerificationDetails
+        } catch (err) {
+            console.error('[KYC] Automated verification error, staying on manual review:', err.message);
+        }
+    }
+
     async submitNIN(nin, fileBuffer, fileName, userInfo = {}) {
         try {
-            const uploadResult = await this.saveDocumentToCloudinary(
-                fileBuffer,
-                'nin',
-                userInfo.userId,
-                fileName
-            );
+            const docHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+            const dupCheck = await this.checkDuplicateDocument(userInfo.userId, docHash, 'nin');
 
+            if (dupCheck.blocked) {
+                return { success: false, error: dupCheck.error, documentType: 'nin' };
+            }
+
+            const uploadResult = await this.saveDocumentToCloudinary(fileBuffer, 'nin', userInfo.userId, fileName);
             if (!uploadResult.success) {
-                return {
-                    success: false,
-                    error: 'Failed to upload document',
-                    documentType: 'nin'
-                };
+                return { success: false, error: 'Failed to upload document', documentType: 'nin' };
             }
 
             // Update runner document with Cloudinary URL
@@ -99,6 +184,9 @@ class KYCService {
                     verified: false,
                     documentPath: uploadResult.cloudinaryUrl,
                     cloudinaryPublicId: uploadResult.cloudinaryPublicId,
+                    documentHash: docHash,
+                    flaggedForReview: dupCheck.flagForReview || false,
+                    flaggedReason: dupCheck.flaggedReason || null,
                     submittedAt: new Date(),
                     firstName: userInfo.firstName,
                     lastName: userInfo.lastName,
@@ -131,22 +219,18 @@ class KYCService {
         }
     }
 
-
     async submitDriverLicense(licenseNumber, fileBuffer, fileName, userInfo = {}) {
         try {
-            const uploadResult = await this.saveDocumentToCloudinary(
-                fileBuffer,
-                'driver_license',
-                userInfo.userId,
-                fileName
-            );
+            const docHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+            const dupCheck = await this.checkDuplicateDocument(userInfo.userId, docHash, 'driver_license');
 
+            if (dupCheck.blocked) {
+                return { success: false, error: dupCheck.error, documentType: 'driver_license' };
+            }
+
+            const uploadResult = await this.saveDocumentToCloudinary(fileBuffer, 'driver_license', userInfo.userId, fileName);
             if (!uploadResult.success) {
-                return {
-                    success: false,
-                    error: 'Failed to upload document',
-                    documentType: 'driver_license'
-                };
+                return { success: false, error: 'Failed to upload document', documentType: 'driver_license' };
             }
 
             // Update runner document with Cloudinary URL
@@ -156,6 +240,9 @@ class KYCService {
                     verified: false,
                     documentPath: uploadResult.cloudinaryUrl,
                     cloudinaryPublicId: uploadResult.cloudinaryPublicId,
+                    documentHash: docHash,
+                    flaggedForReview: dupCheck.flagForReview || false,
+                    flaggedReason: dupCheck.flaggedReason || null,
                     submittedAt: new Date(),
                     firstName: userInfo.firstName,
                     lastName: userInfo.lastName,
@@ -214,6 +301,8 @@ class KYCService {
                     submittedAt: new Date()
                 }
             });
+
+            await this.runAutomatedVerification(userId, fileBuffer);
 
             return {
                 success: true,
@@ -327,7 +416,9 @@ class KYCService {
                         verifiedAt: docs.nin?.verifiedAt,
                         verifiedBy: docs.nin?.verifiedBy,
                         rejectedAt: docs.nin?.rejectedAt,
-                        rejectionReason: docs.nin?.rejectionReason
+                        rejectionReason: docs.nin?.rejectionReason,
+                        flaggedForReview: docs.nin?.flaggedForReview || false,
+                        flaggedReason: docs.nin?.flaggedReason || null
                     },
                     driverLicense: {
                         status: docs.driverLicense?.status || 'not_submitted',
@@ -337,7 +428,9 @@ class KYCService {
                         verifiedAt: docs.driverLicense?.verifiedAt,
                         verifiedBy: docs.driverLicense?.verifiedBy,
                         rejectedAt: docs.driverLicense?.rejectedAt,
-                        rejectionReason: docs.driverLicense?.rejectionReason
+                        rejectionReason: docs.driverLicense?.rejectionReason,
+                        flaggedForReview: docs.driverLicense?.flaggedForReview || false,
+                        flaggedReason: docs.driverLicense?.flaggedReason || null
                     }
                 },
                 biometrics: {
@@ -347,7 +440,8 @@ class KYCService {
                     submittedAt: bio.submittedAt,
                     verifiedAt: bio.verifiedAt,
                     rejectedAt: bio.rejectedAt,
-                    rejectionReason: bio.rejectionReason
+                    faceMatchScore: bio.faceMatchScore,
+                    rejectionReason: bio.rejectionReason,
                 }
             };
 
