@@ -47,6 +47,10 @@ export function useRunnerChatHandlers({
   botMessagesUpdater,
   runnerData,
   runnerLocation,
+
+  isVerifiedKyc,
+  checkVerificationStatus,
+  onBannedDetected,
 }) {
   const dispatch = useDispatch();
 
@@ -143,7 +147,7 @@ export function useRunnerChatHandlers({
       serviceType: user.currentRequest?.serviceType ?? user.serviceType ?? null,
       specialInstructions: specialInstructions ?? user.currentRequest?.specialInstructions ?? null,
     };
-    
+
     useOrderStore.getState().clearChatOrder(chatId);
 
     chatManager.set(chatId, {
@@ -337,6 +341,12 @@ export function useRunnerChatHandlers({
 
   // ── handleConnectToService ──────────────────────────────────────────────────
   const handleConnectToService = useCallback(async () => {
+    if (!isVerifiedKyc) {
+      chatManager.set(BOT_CHAT_ID, { newOrderComplete: false, newOrderStep: null });
+      checkVerificationStatus?.(botMessagesUpdater, onBannedDetected, false);
+      return;
+    }
+
     if (!runnerLocation) return;
 
     let freshLocation = runnerLocation;
@@ -391,7 +401,11 @@ export function useRunnerChatHandlers({
         }]);
       }
     }
-  }, [dispatch, runnerLocation, runnerData?.fleetType, botMessagesUpdater, fleetTypeRef, setHasSearched, setRunnerLocation, setVerificationState]);
+  }, [
+    dispatch, runnerLocation, runnerData?.fleetType, 
+    botMessagesUpdater, fleetTypeRef, setHasSearched, setRunnerLocation, 
+    setVerificationState, isVerifiedKyc, checkVerificationStatus, onBannedDetected
+  ]);
 
   // ── handleFindMore ──────────────────────────────────────────────────────────
   const handleFindMore = useCallback(() => {

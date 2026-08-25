@@ -72,7 +72,8 @@ export default function ChatComposer({
   returningUserData,
 
   isVerifyingOtp,
-  kycStatus
+  kycStatus,
+  onKycRedirect
 }) {
 
   const [isConnectDisabled, setIsConnectDisabled] = useState(false);
@@ -83,6 +84,11 @@ export default function ChatComposer({
 
   const handleConnect = () => {
     if (isConnectDisabled || isSearching || isConnectLocked) return;
+    if (!isVerified) {
+      onKycRedirect?.();
+      return;
+    }
+
     setIsConnectDisabled(true);
     handleConnectToService();
     setTimeout(() => setIsConnectDisabled(false), 3000);

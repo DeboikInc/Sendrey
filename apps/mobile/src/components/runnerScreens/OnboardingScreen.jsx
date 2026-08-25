@@ -78,6 +78,7 @@ function OnboardingScreen({
 
   onTrainingContinueClick,
   isTrainingCompleted,
+  onKycRedirect
 }) {
 
   // ADD at the top of OnboardingScreen function, after the props destructure:
@@ -388,6 +389,7 @@ function OnboardingScreen({
               isUpdatingServer={isUpdatingServer}
               isTrainingCompleted={isTrainingCompleted}
               onTrainingContinueClick={onTrainingContinueClick}
+              onKycRedirect={onKycRedirect}
             />
           </div>
         )}
