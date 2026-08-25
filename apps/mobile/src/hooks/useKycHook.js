@@ -734,6 +734,148 @@ export const useKycHook = (runnerId, fleetType,) => {
     }, 500);
   }, [dispatch, runnerId]);
 
+  const checkVerificationStatus = useCallback(async (setMessages, onBanned, isReturning = false) => {
+    console.log('[KYC] checkVerificationStatus called', { runnerId });
+    if (!runnerId) {
+      console.log('[KYC] checkVerificationStatus BLOCKED — no runnerId');
+      return
+    };
+    try {
+      const result = await dispatch(getVerificationStatus(runnerId));
+      if (result.type.includes('rejected')) {
+        // auth failure — stop polling silently
+        if (result.payload?.status === 401) return;
+      }
+      if (!result.type.includes('fulfilled')) return;
+
+      const { kycStatus, documents, biometrics } = result.payload;
+
+      kycServerStatusRef.current = {
+        nin: documents.nin?.status || 'not_submitted',
+        driverLicense: documents.driverLicense?.status || 'not_submitted',
+        selfie: biometrics.status || 'not_submitted',
+      };
+
+      if (kycStatus === 'banned') {
+        onBanned?.();
+        return;
+      }
+
+      const currentStatusKey = `${documents.nin?.status}-${documents.driverLicense?.status}-${biometrics.status}-${kycStatus}`;
+
+      if (lastCheckedStatusRef.current === currentStatusKey) return;
+      lastCheckedStatusRef.current = currentStatusKey;
+
+      if (isAlreadyVerifiedRef.current) {
+        isAlreadyVerifiedRef.current = false;
+        return;
+      }
+
+      // ── If everything is approved, show ONE combined message ─────────────
+      const allApproved = biometrics.status === 'approved' && biometrics.selfieVerified;
+      const effectivelyReturning = isReturning || isReturningUserRef.current;
+
+      if (allApproved) {
+        const shownKey = `kyc_verified_shown_${runnerId}`;
+        const alreadyShown = localStorage.getItem(shownKey) === '1';
+
+        if (!effectivelyReturning && !alreadyShown && !isAlreadyVerifiedRef.current) {
+          localStorage.setItem(shownKey, '1'); // set immediately, before async setState
+          setMessages(prev => {
+            const hasIt = prev.some(m => m.text?.includes('Congratulations'));
+            if (hasIt) return prev;
+            return [...prev, {
+              id: `kyc-verified-${Date.now()}`,
+              from: "them",
+              text: "Congratulations! Your documents have been verified.",
+              time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              status: "delivered", isKyc: true
+            }];
+          });
+        }
+
+        isAlreadyVerifiedRef.current = true; // ← always set after allApproved
+        setKycStatus({ documentVerified: true, selfieVerified: true, overallVerified: true });
+
+        // push verified state into Redux so raw.jsx re-renders with isVerified=true
+        dispatch(updateRunner({
+          isVerifiedKyc: true,
+          kycStatus: kycStatus
+        }));
+
+        setTimeout(() => setKycStep(6), 800);
+        localStorage.removeItem(`kyc_step_${runnerId}`);
+        localStorage.removeItem(`kyc_doc_type_${runnerId}`);
+        return;
+      }
+
+      // ── Partial rejections/approvals
+      let resumeStep = null;
+
+      if (documents.nin?.status === 'rejected') {
+        const reason = documents.nin.rejectionReason
+          ? `❌ Your NIN verification was unsuccessful: ${documents.nin.rejectionReason}. Please resubmit.`
+          : "❌ Your NIN verification was unsuccessful. Please resubmit.";
+        setMessages(prev => [...prev, {
+          id: `kyc-nin-rejected-${Date.now()}`,
+          from: "them", text: reason,
+          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          status: "delivered", isKyc: true
+        }]);
+        if (!resumeStep) resumeStep = { step: 2, docType: 'nin' };
+      }
+
+      if (documents.driverLicense?.status === 'rejected') {
+        const reason = documents.driverLicense.rejectionReason
+          ? `❌ Your Driver's License verification was unsuccessful: ${documents.driverLicense.rejectionReason}. Please resubmit.`
+          : "❌ Your Driver's License verification was unsuccessful. Please resubmit.";
+        setMessages(prev => [...prev, {
+          id: `kyc-dl-rejected-${Date.now()}`,
+          from: "them", text: reason,
+          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          status: "delivered", isKyc: true
+        }]);
+        if (!resumeStep) resumeStep = { step: 2, docType: 'driverLicense' };
+      }
+
+      if (biometrics.status === 'rejected') {
+        const reason = biometrics.rejectionReason
+          ? `❌ Your selfie verification was unsuccessful: ${biometrics.rejectionReason}. Please resubmit.`
+          : "❌ Your selfie verification was unsuccessful. Please resubmit.";
+        setMessages(prev => [...prev, {
+          id: `kyc-selfie-rejected-${Date.now()}`,
+          from: "them", text: reason,
+          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          status: "delivered", isKyc: true
+        }]);
+        if (!resumeStep) resumeStep = { step: 5, docType: null };
+      }
+
+      // Apply only the highest-priority rejection
+      if (resumeStep) {
+        if (resumeStep.docType) {
+          setDocType(resumeStep.docType);
+          capturedIdPhotoRef.current = null;
+        } else {
+          capturedSelfiePhotoRef.current = null;
+        }
+        setKycStep(resumeStep.step);
+      }
+
+      if (kycStatus === 'banned') {
+        setMessages(prev => [...prev, {
+          id: `kyc-banned-${Date.now()}`,
+          from: "them",
+          text: "🚫 Your account has been suspended. Please contact support at support@sendrey.com.",
+          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          status: "delivered", isKyc: true
+        }]);
+      }
+
+    } catch (error) {
+      console.error('Error checking verification status:', error);
+    }
+  }, [dispatch, runnerId, setDocType]);
 
   const SELFIE_TRIGGERS = ['okay', 'alright', 'sure', 'yes', 'ok'];
 
