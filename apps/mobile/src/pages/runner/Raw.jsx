@@ -1,22 +1,15 @@
 /* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { IconButton, Drawer } from "@material-tailwind/react";
-import { Menu, MoreHorizontal, X, Sun, Moon } from "lucide-react";
+import { Menu, MoreHorizontal, Sun, Moon } from "lucide-react";
 import { Modal } from "../../components/common/Modal";
 import RequestLocation from "../../components/common/RequestLocation";
 import { useDispatch, useSelector, shallowEqual } from "react-redux";
 import { shallow } from 'zustand/shallow';
-import RunnerChatScreen from "../../components/runnerScreens/RunnerChatScreen";
-import OnboardingScreen from "../../components/runnerScreens/OnboardingScreen";
 import Sidebar from "../../components/runnerScreens/Sidebar";
 import { updateRunner } from '../../Redux/authSlice';
 
 import { authStorage } from '../../utils/authStorage'
-import { useSocket } from "../../hooks/useSocket";
-import useDarkMode from "../../hooks/useDarkMode";
-import { useRunnerChatHandlers } from '../../hooks/useRunnerChatHandlers';
-import { useRunnerSocketHandlers } from '../../hooks/useRunnerSocketHandlers';
-
 import chatManager from '../../utils/chatStateManager';
 import { enqueueSocketEvent } from '../../utils/socketQueue';
 import { getCachedRecentChats, setCachedRecentChats, clearCachedRecentChats } from '../../utils/recentChatsCache';
@@ -33,18 +26,28 @@ import { Disputes } from './Disputes';
 import { usePushNotifications, RUNNER_ORDER_TYPES } from "../../hooks/usePushNotifications";
 import { useCredentialFlow } from "../../hooks/useCredentialFlow";
 import { useKycHook } from '../../hooks/useKycHook';
-import { useCameraHook } from "../../hooks/useCameraHook";
-import { useCallHook } from "../../hooks/useCallHook";
 import { useMessageQueue } from '../../hooks/useMessageQueue';
 import { useRunnerTraining } from '../../hooks/useRunnerTraining';
+import { useRunnerChatRoomJoin } from '../../hooks/useRunnerChatRoomJoin'
+import { useCallHook } from "../../hooks/useCallHook";
+import useDarkMode from "../../hooks/useDarkMode";
+import { useRunnerChatHandlers } from '../../hooks/useRunnerChatHandlers';
+import { useRunnerSocketHandlers } from '../../hooks/useRunnerSocketHandlers';
 
 import RunnerTraining from '../../components/runnerScreens/RunnerTraining';
 import TermsAcceptanceModal from '../../components/common/TermsAcceptanceModal';
 import { RUNNER_TERMS } from '../../constants/terms';
-import { fetchOrderByChatId } from '../../Redux/orderSlice';
 import BannedModal from '../../components/runnerScreens/BannedModal';
 import useOrderStore from '../../store/orderStore';
 import { fetchRefreshRecentChats } from '../../Redux/runnerSlice';
+
+import ContactInfo from '../../components/runnerScreens/ContactInfo';
+import RunnerMainScreen from '../../components/runnerScreens/RunnerMainScreen';
+
+import { SocketProvider, useSocketContext } from '../../contexts/SocketContext';
+import { CameraProvider, useCameraContext } from '../../contexts/CameraContext';
+import { CallContext } from '../../contexts/CallContext';
+
 
 const getCurrentTime = () => {
   return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -64,9 +67,6 @@ const EMPTY_STATUSES = [];
 const selectBotMessages = (s) => s._chats[BOT_CHAT_ID]?.messages ?? EMPTY_STATUSES;
 const makeTaskCompleted = (id) => (s) => id ? (s._chats[id]?.taskCompleted ?? false) : false;
 const makeCompletedStat = (id) => (s) => id ? (s._chats[id]?.completedStatuses ?? EMPTY_STATUSES) : EMPTY_STATUSES;
-const makeCurrentOrder = (id) => (s) => id ? (s._chats[id]?.currentOrder ?? null) : null;
-const makeOrderCancelled = (id) => (s) => id ? (s._chats[id]?.orderCancelled ?? false) : false;
-const makeCompletedStats = (id) => (s) => id ? (s._chats[id]?.completedStatuses ?? EMPTY_STATUSES) : EMPTY_STATUSES;
 
 const selectIsConnectLocked = (s) => {
   const chats = s._chats;
@@ -169,9 +169,7 @@ function WhatsAppLikeChat() {
   // ── Hooks ───────────────────────────────────────────────────────────────────
   const {
     socket, joinRunnerRoom, sendMessage, isConnected,
-    uploadFileWithProgress, onSpecialInstructions, onOrderCreated,
-    onPaymentSuccess, onDeliveryConfirmed, onMessageDeleted, reconnect,
-  } = useSocket();
+  } = useSocketContext();
 
   const {
     isCollectingCredentials, credentialStep, credentialQuestions,
@@ -244,10 +242,8 @@ function WhatsAppLikeChat() {
   useEffect(() => { handleSelfieResponseRef.current = handleSelfieResponse; }, [handleSelfieResponse]);
 
   const {
-    cameraOpen, capturedImage, videoRef, openCamera, closeCamera,
-    capturePhoto, retakePhoto, setIsPreviewOpen, isPreviewOpen,
-    closePreview, openPreview, switchCamera, facingMode,
-  } = useCameraHook();
+    openCamera
+  } = useCameraContext();
 
   const {
     callState, callType, isMuted, isCameraOff, formattedDuration,
@@ -290,6 +286,12 @@ function WhatsAppLikeChat() {
   }, [socket]);
 
   // ── Helpers ─────────────────────────────────────────────────────────────────
+
+  const handleBannedDetected = useCallback(() => {
+    setShowBannedModal(true);
+    setVerificationState({ isBanned: true, reason: 'Your account has been suspended. Please contact support.' });
+  }, []);
+
   const mergeChatHistory = useCallback((prev, newChats) => {
     if (!newChats || newChats.length === 0) return prev;
 
@@ -364,7 +366,9 @@ function WhatsAppLikeChat() {
     setVerificationState, setNewOrderTrigger, setBotRefreshTrigger,
     setSilentRefreshKey, setRunnerLocation,
     socket, isConnected, joinRunnerRoom,
-    botMessagesUpdater, runnerData, runnerLocation,
+    botMessagesUpdater, runnerData, runnerLocation, isVerifiedKyc: runner?.isVerifiedKyc ?? false,
+    checkVerificationStatus,
+    onBannedDetected: handleBannedDetected
   });
 
   useRunnerSocketHandlers({
@@ -602,7 +606,7 @@ function WhatsAppLikeChat() {
       return;
     }
 
-    // ── Returning user, selfie already submitted (verified/pending/rejected
+    // ── Returning user, selfie already submitted (verified/pending/rejected)
     // resolve immediately
     if (returningUserData?.kycStatus) {
       const { selfieVerified, selfieStatus, overallVerified } = returningUserData.kycStatus;
@@ -940,306 +944,11 @@ function WhatsAppLikeChat() {
     }
   }, [runnerId, chatHistory]);
 
-
-  useEffect(() => {
-    console.log('[raw JOIN EFFECT] selectedUser:', selectedUser?._id,
-      'isReconnect:', chatManager.get(`user-${selectedUser?._id}-runner-${runnerId}`)?.messages?.length > 0,
-      'socket.connected:', socket?.connected,
-    );
-    console.log('[raw JOIN EFFECT] activeChatId state:', activeChatId,
-      'activeChatIdRef:', activeChatIdRef.current
-    );
-
-    if (!selectedUser || !socket || selectedUser.isBot) return;
-
-    const chatId = `user-${selectedUser._id}-runner-${runnerId}`;
-    let joined = false;
-    let fallbackTimer;
-
-    const handleChatHistory = async (msgs) => {
-      if (activeChatIdRef.current !== chatId) return;
-      let latestOrder = null;
-
-      console.log('[CHAT HISTORY] fetchOrderByChatId result:', latestOrder?.orderId, 'store after merge:', useOrderStore.getState()._chats[chatId]?.currentOrder?.orderId);
-
-      if (activeChatIdRef.current === chatId) {
-        console.log('[AWAIT CLEAR] handleChatHistory');
-        setAwaitingChatReady(false);
-      }
-
-      try {
-        const result = await dispatch(fetchOrderByChatId(chatId)).unwrap();
-        if (result) {
-          latestOrder = result?.data ?? result;
-          const isTerminal = ['cancelled', 'completed', 'task_completed'].includes(latestOrder?.status);
-          if (!isTerminal) {
-            currentOrderRef.current = latestOrder;
-            chatManager.set(chatId, { currentOrder: latestOrder });
-            useOrderStore.getState().mergeCurrentOrder(chatId, latestOrder);
-
-            console.log('[raw handleChatHistory] after mergeCurrentOrder, store slot:',
-              useOrderStore.getState()._chats[chatId]?.currentOrder?.orderId,
-              'activeChatId in store:', useOrderStore.getState().activeChatId
-            );
-          }
-        }
-      } catch (_) { }
-
-      if (!latestOrder) {
-        console.warn('[handleChatHistory] no order on first fetch — retrying in 2s');
-        await new Promise(r => setTimeout(r, 2000));
-        try {
-          const retry = await dispatch(fetchOrderByChatId(chatId)).unwrap();
-          if (retry) latestOrder = retry?.data ?? retry;
-          console.log('[handleChatHistory] retry result:', latestOrder?.orderId);
-        } catch (_) { }
-      }
-
-      console.log('[CHAT HISTORY] fetchOrderByChatId result:', latestOrder?.orderId);
-
-      if (!msgs?.length) return;
-
-      const isTerminalOrder = ['completed', 'cancelled', 'task_completed'].includes(latestOrder?.status);
-      const seenPayment = new Set();
-
-      const filtered = msgs.filter(msg => {
-        if (isTerminalOrder) {
-          const orderCompletedAt = latestOrder?.completedAt || latestOrder?.updatedAt;
-          const msgIsOld = orderCompletedAt
-            ? new Date(msg.createdAt) < new Date(orderCompletedAt)
-            : true;
-          if (msgIsOld) {
-            if (msg.type === 'system' && msg.text?.includes('joined the chat')) return false;
-            if (msg.type === 'payment_request' || msg.messageType === 'payment_request') return false;
-          }
-        }
-        const isPay = (msg.type === 'system' && msg.text?.toLowerCase().includes('made payment for this task'))
-          || msg.paymentConfirmed === true || msg.type === 'payment_confirmed';
-        if (isPay) {
-          const key = msg.text || 'payment';
-          if (seenPayment.has(key)) return false;
-          seenPayment.add(key);
-        }
-        return true;
-      });
-
-      const formatted = filtered.map(msg => {
-        const isSys = msg.from === 'system' || msg.type === 'system'
-          || msg.messageType === 'system' || msg.senderType === 'system'
-          || msg.senderId === 'system';
-        return {
-          ...msg,
-          from: isSys ? 'system' : (msg.senderId === runnerId ? 'me' : 'them'),
-          type: msg.type || msg.messageType || 'text',
-        };
-      });
-
-      const existingState = chatManager.get(chatId);
-      const existingOrderId =
-        existingState.currentOrder?.orderId ??
-        useOrderStore.getState().getChat(chatId).currentOrder?.orderId ??
-        null;
-
-      const sameOrder =
-        !!existingOrderId && !!latestOrder?.orderId && existingOrderId === latestOrder.orderId;
-
-      const sameMessages =
-        !!existingState.messages?.length &&
-        existingState.messages.length === formatted.length &&
-        existingState.messages.every((m, i) => m.id === formatted[i]?.id);
-
-      const skipPersist = isTerminalOrder && sameOrder && sameMessages;
-
-      if (!skipPersist) {
-        chatManager.set(chatId, { messages: formatted });
-      } else {
-        console.log('[handleChatHistory] skipping persist — same terminal order + same messages', chatId);
-      }
-
-      if (activeChatIdRef.current === chatId) {
-        if (activeSetMessagesRef.current) {
-          activeSetMessagesRef.current(formatted);
-        } else {
-          let attempts = 0;
-          const tryPush = () => {
-            attempts++;
-            if (activeSetMessagesRef.current && activeChatIdRef.current === chatId) {
-              activeSetMessagesRef.current(formatted);
-            } else if (attempts < 10) {
-              setTimeout(tryPush, 100);
-            }
-          };
-          setTimeout(tryPush, 100);
-        }
-      }
-
-      const lastRealMsg = [...formatted].reverse().find(
-        m => m.from !== 'system' && m.type !== 'system' && m.messageType !== 'system'
-      );
-      if (lastRealMsg) {
-        setChatHistory(prev => mergeChatHistory(prev, [{
-          id: selectedUser._id,
-          userId: selectedUser._id,
-          chatId: chatId,
-          lastMessage: lastRealMsg.text?.substring(0, 30) || '',
-          time: lastRealMsg.time || '',
-          name: `${selectedUser.firstName || ''} ${selectedUser.lastName || ''}`.trim() || 'User',
-        }]));
-      };
-
-      const isCompleted = formatted.some(m =>
-        m.type === 'task_completed' || m.messageType === 'task_completed'
-        || (m.type === 'system' && m.text?.toLowerCase().includes('task completed'))
-      );
-      if (isCompleted) {
-        chatManager.set(chatId, { taskCompleted: true });
-        useOrderStore.getState().setTaskCompleted(chatId, true);
-      }
-
-      const cancelMsg = formatted.find(m =>
-        m.type === 'system' && m.text?.toLowerCase().includes('cancelled this order')
-      );
-      if (cancelMsg) {
-        const by = cancelMsg.text?.split(' ')[0] || 'Runner';
-        chatManager.set(chatId, { orderCancelled: true, cancellationReason: by });
-        useOrderStore.getState().setOrderCancelled(chatId, by);
-      }
-
-    };
-
-    const doJoin = () => {
-      if (joined) {
-        console.log('[RAW doJoin] BLOCKED — already joined');
-        return;
-      }
-
-      joined = true;
-      console.log('[RAW doJoin] emitting runnerJoinChat', { chatId, runnerId, socketId: socket?.id });
-
-      clearTimeout(fallbackTimer);
-      socket.off('proceedToChat', handleProceedToChat);
-      socket.emit('runnerJoinChat', {
-        runnerId,
-        userId: selectedUser._id,
-        chatId,
-        serviceType: selectedUser.serviceType ?? selectedUser.currentRequest?.serviceType ?? null,
-      });
-    };
-
-    const handleProceedToChat = async (data) => {
-      if (data.chatId !== chatId || !data.chatReady) return;
-      console.log('[raw.jsx] proceedToChat received, isRefresh:', data.isRefresh);
-
-      if (runnerId) {
-        const result = await dispatch(fetchRefreshRecentChats(runnerId)).unwrap();
-        const resultChats = Array.isArray(result) ? result : (result?.chats || result?.data || []);
-        const cleanResultChats = resultChats.filter(c =>
-          c.id !== BOT_CHAT_ID &&
-          !c.chatId?.startsWith('bot-') &&
-          !c.id?.toString?.().startsWith?.('bot-')
-        );
-        if (cleanResultChats.length) {
-          setCachedRecentChats(runnerId, cleanResultChats);
-          setChatHistory(prev => mergeChatHistory(prev, cleanResultChats));
-        }
-      }
-
-      if (data.isRefresh) {
-        // Stale order — wipe before rejoining
-        chatManager.set(chatId, {
-          messages: [],
-          currentOrder: null,
-          taskCompleted: false,
-          orderCancelled: false,
-          cancellationReason: null,
-          completedOrderStatuses: [],
-          deliveryMarked: false,
-          userConfirmedDelivery: false,
-        });
-        useOrderStore.getState()._patch(chatId, {
-          currentOrder: null,
-          taskCompleted: false,
-          orderCancelled: false,
-          cancellationReason: null,
-          completedStatuses: [],
-          deliveryMarked: false,
-          userConfirmedDelivery: false,
-          orderMissing: false,
-        });
-        currentOrderRef.current = null;
-      }
-
-      joined = false; // allow re-join
-      doJoin();
-    };
-
-    const handleSessionRefreshOk = ({ chatId: inc, orderChanged }) => {
-      if (inc !== chatId) return;
-      console.log('[raw.jsx] sessionRefreshOk — rejoining');
-
-      if (orderChanged) {
-        // Order changed while offline — full rejoin
-        joined = false;
-        doJoin();
-      } else {
-        // Same order — just rejoin rooms without re-fetching history
-        socket.emit('runnerJoinChat', {
-          chatId,
-          runnerId,
-          userId: selectedUser._id,
-          serviceType: selectedUser.serviceType ?? selectedUser.currentRequest?.serviceType ?? null,
-        });
-      }
-    };
-
-    const handleReconnect = () => {
-      console.log('[RAW handleReconnect] fired', { chatId, socketId: socket?.id });
-
-      // Always rejoin runner room — lost on reconnect
-      socket.emit('joinRunnerRoom', {
-        runnerId,
-        serviceType: selectedUser?.serviceType ?? null,
-      });
-
-      const orderId = currentOrderRef.current?.orderId;
-      if (orderId) {
-        socket.emit('requestSessionRefresh', {
-          chatId,
-          orderId,
-          userId: runnerId,
-          userType: 'runner',
-        });
-      } else {
-        joined = false;
-        doJoin();
-      }
-    };
-
-    const isReconnect = chatManager.get(chatId).messages.length > 0;
-
-    if (isReconnect) {
-      doJoin();
-    } else {
-      socket.on('proceedToChat', handleProceedToChat);
-      fallbackTimer = setTimeout(() => {
-        console.warn('[raw.jsx] proceedToChat timeout — joining directly');
-        doJoin();
-      }, 5000);
-    }
-
-    socket.on('chatHistory', handleChatHistory);
-    socket.on('sessionRefreshOk', handleSessionRefreshOk);
-    socket.on('connect', handleReconnect);
-
-    return () => {
-      clearTimeout(fallbackTimer);
-      socket.off('proceedToChat', handleProceedToChat);
-      socket.off('chatHistory', handleChatHistory);
-      socket.off('sessionRefreshOk', handleSessionRefreshOk);
-      socket.off('connect', handleReconnect);
-    };
-  }, [selectedUser?._id, socket, runnerId, dispatch, chatSessionKey]);
-
+  useRunnerChatRoomJoin({
+    selectedUser, socket, runnerId, dispatch, chatSessionKey,
+    chatManager, currentOrderRef, activeChatIdRef, activeSetMessagesRef,
+    setChatHistory, mergeChatHistory, setAwaitingChatReady,
+  });
 
   // ── Runner room join ─────────────────────────────────────────────────────────
   useEffect(() => {
@@ -1302,11 +1011,10 @@ function WhatsAppLikeChat() {
       ].includes(data.event);
 
       if (isKycDocEvent) {
+        
         const updater = isBotMode ? botMessagesUpdater : chatMessagesUpdater;
         checkVerificationStatus(updater, () => { }, false);
-      }
-
-      if (data.isVerifiedKyc === true) {
+      } else if (data.isVerifiedKyc === true) {
         dispatch(updateRunner({ isVerifiedKyc: true, kycStatus: data.kycStatus }));
       } else if (data.isVerifiedKyc === false) {
         dispatch(updateRunner({ isVerifiedKyc: false, kycStatus: data.kycStatus }));
@@ -1447,6 +1155,17 @@ function WhatsAppLikeChat() {
     // runnerData?.phone,
   ]);
 
+  const handleKycRedirect = useCallback(() => {
+    chatManager.set(BOT_CHAT_ID, {
+      newOrderComplete: false,
+      newOrderStep: null,
+    });
+    checkVerificationStatus(botMessagesUpdater, () => {
+      setShowBannedModal(true);
+      handleBannedDetected();
+    }, false);
+  }, [checkVerificationStatus, botMessagesUpdater]);
+
   const handleMessageClick = useCallback((message, choice) => {
     if (message.hasResendLink && canResendOtp) { handleResendOtp(); return; }
     if (message.selfieChoice) {
@@ -1575,255 +1294,90 @@ function WhatsAppLikeChat() {
   const isConnectLockedFromStore = useOrderStore(selectIsConnectLocked);
   const isConnectLocked = orderPending || isConnectLockedFromStore;
 
-  // ── Render ────────────────────────────────────────────────────────────────────
-  const renderMainScreen = () => {
-    console.log('[RENDER] isBotMode:', isBotMode, 'awaitingChatReady:', awaitingChatReady, 'activeChatId:', activeChatId);
-    // if (runner && token && !runner.isPhoneVerified) {
-    //   return <PhoneVerificationPrompt user={runner} darkMode={dark} toggleDarkMode={() => setDark(!dark)} />;
-    // }
-
-    if (isBotMode || awaitingChatReady) {
-      const botState = chatManager.get(BOT_CHAT_ID);
-      const botMessages = botState.messages.length > 0 ? botState.messages : botStoreMessages;
-
-      return (
-        <div className="relative h-full">
-          <OnboardingScreen
-            key="sendrey-bot"
-            // ── Message persistence: pass from chatManager, child owns its own useState
-            // initialized from this, and calls onMessagesChange to sync back ──
-            initialMessages={botMessages}
-            botRefreshTrigger={botRefreshTrigger}
-            onMessagesChange={botMessagesUpdater}
-            onRegisterSetMessages={registerSetMessages}
-
-            onNewOrderFleetAndServiceSelected={handleNewOrderFleetSelected}
-            onStartNewOrder={handleStartNewOrder}
-            newOrderTrigger={newOrderTrigger}
-
-            isVerifyingOtp={isVerifyingOtp}
-
-            onReturningUserChoice={(choice) =>
-              handleReturningUserChoice(choice, botMessagesUpdater)
-            }
-
-            isSubmitting={isSubmitting}
-            newOrderComplete={botState.newOrderComplete}
-            onSetNewOrderComplete={(val) => {
-              chatManager.set(BOT_CHAT_ID, { newOrderComplete: val });
-            }}
-
-            isVerified={runner?.isVerifiedKyc ?? false}
-            active={active}
-            text={text}
-            setText={setText}
-            dark={dark}
-            setDark={setDark}
-            isCollectingCredentials={isCollectingCredentials}
-            credentialStep={credentialStep}
-            credentialQuestions={credentialQuestions}
-            needsOtpVerification={needsOtpVerification}
-            registrationComplete={registrationComplete}
-            canResendOtp={canResendOtp}
-            send={sendMessage_fn}
-            handleMessageClick={handleMessageClick}
-            pickUp={pickUp}
-            runErrand={runErrand}
-            setDrawerOpen={setDrawerOpen}
-            setInfoOpen={setInfoOpen}
-            initialMessagesComplete={initialMessagesComplete}
-            runnerId={runnerId}
-            kycStep={kycStep}
-            kycStatus={kycStatus}
-            onIdVerified={onIdVerified}
-            handleIDTypeSelection={handleIDTypeSelection}
-            onSelfieVerified={onSelfieVerified}
-            handleSelfieResponse={handleSelfieResponse}
-            onBannedDetected={() => {
-              setShowBannedModal(true);
-              setVerificationState({ isBanned: true, reason: 'Your account has been suspended. Please contact support.' });
-            }}
-            checkVerificationStatus={
-              (setMessages) => checkVerificationStatus(
-                setMessages,
-                () => {
-                  setShowBannedModal(true);
-                  setVerificationState({ isBanned: true, reason: 'Your account has been suspended.' });
-                },
-                isReturningUser
-              )
-            }
-            onConnectToService={handleConnectToService}
-            onFindMore={handleFindMore}
-            nearbyUsers={nearbyUsers}
-            onPickService={handlePickService}
-            socket={socket}
-            isConnected={isConnected}
-            reconnect={reconnect}
-            runnerData={runnerData}
-            canShowNotifications={canShowNotifications}
-            hasSearched={hasSearched}
-            replyingTo={botState.replyingTo}
-            setReplyingTo={setBotReplyingTo}
-            currentOrder={botState.currentOrder}
-            verificationState={verificationState}
-            showBannedModal={showBannedModal}
-            setShowBannedModal={setShowBannedModal}
-            isConnectLocked={isConnectLocked}
-            handleCredentialAnswer={handleCredentialAnswer}
-            runnerLocation={runnerLocation}
-
-            // returning users
-            isReturningUser={isReturningUser}
-            returningUserData={returningUserData}
-            effectiveReturningKycStatus={effectiveReturningKycStatus}
-            forceShowNotifications={showNotifications}
-            onNotificationsShown={() => setShowNotifications(false)}
-
-            // training
-            isTrainingCompleted={runner?.isTrainingCompleted ?? false}
-            onTrainingContinueClick={openTrainingScreen}
-          />
-
-          {awaitingChatReady && (
-            <div
-              className="absolute inset-0 z-[9999] flex flex-col items-center justify-center gap-4"
-              style={{ background: 'rgba(0,0,0,0.85)', pointerEvents: 'all' }}
-            >
-              <div className="relative w-10 h-10">
-                {Array.from({ length: 12 }).map((_, i) => (
-                  <span key={i} className="absolute w-2 h-2 bg-primary rounded-full animate-fade-dot"
-                    style={{ left: "50%", top: "50%", transform: `rotate(${i * 30}deg) translate(0, -16px)`, animationDelay: `${i * 0.1}s` }}
-                  />
-                ))}
-              </div>
-              <p className="text-sm font-medium text-gray-300">Preparing chat…</p>
-            </div>
-          )}
-        </div>
-      );
-    }
-
-    if (isLoadingArchive) {
-      return (
-        <div className="flex items-center justify-center h-full">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto mb-4" />
-            <p className="text-gray-500 dark:text-gray-400">Loading messages...</p>
-          </div>
-        </div>
-      );
-    }
-
-    const chatId = activeChatId;
-    const activeChatIdForScreen = activeChatId !== BOT_CHAT_ID ? activeChatId : null;
-    const chatState = chatManager.get(chatId);
-
-    console.log('RAW.JSX - Rendering RunnerChatScreen:', {
-      chatId,
-      taskCompletedFromStore: useOrderStore.getState().getChat(chatId).taskCompleted,
-      taskCompletedFromManager: chatState.taskCompleted,
-      completedStatusesFromStore: useOrderStore.getState().getChat(chatId).completedStatuses,
-      orderStatus: chatState.currentOrder?.status,
-      serviceType: selectedUser?.serviceType,
-    });
-
-    return (
-      <RunnerChatScreen
-        key={`chat-${selectedUser?._id}`}
-        sessionKey={chatSessionKey}
-        chatId={activeChatIdForScreen}
-
-        // ── Message persistence ──
-        initialMessages={chatState.messages}
-
-        onMessagesChange={chatMessagesUpdater}
-        onRegisterSetMessages={registerSetMessages}
-
-        onStartNewOrder={handleStartNewOrder}
-        onBackToHome={handleBackToHome}
-
-        active={active}
-        selectedUser={selectedUser}
-        isChatActive={true}
-        text={text}
-        setText={setText}
-        dark={dark}
-        setDark={setDark}
-        send={sendMessage_fn}
-        setDrawerOpen={setDrawerOpen}
-        setInfoOpen={setInfoOpen}
-        runnerId={runnerId}
-        socket={socket}
-        showOrderFlow={showOrderFlow}
-        setShowOrderFlow={setShowOrderFlow}
-        handleOrderStatusClick={handleOrderStatusClick}
-        isAttachFlowOpen={isAttachFlowOpen}
-        setIsAttachFlowOpen={setIsAttachFlowOpen}
-        handleLocationClick={handleLocationClick}
-        handleAttachClick={handleAttachClick}
-        setCompletedOrderStatuses={handleSetCompletedStatuses}
-        uploadFileWithProgress={uploadFileWithProgress}
-        replyingTo={chatState.replyingTo}
-        setReplyingTo={(r) => chatManager.set(chatId, { replyingTo: r })}
-        cameraOpen={cameraOpen}
-        capturedImage={capturedImage}
-        isPreviewOpen={isPreviewOpen}
-        switchCamera={switchCamera}
-        facingMode={facingMode}
-        openCamera={openCamera}
-        closeCamera={closeCamera}
-        capturePhoto={capturePhoto}
-        retakePhoto={retakePhoto}
-        openPreview={openPreview}
-        closePreview={closePreview}
-        setIsPreviewOpen={setIsPreviewOpen}
-
-        videoRef={videoRef}
-        callState={callState}
-        callType={callType}
-        isMuted={isMuted}
-        isCameraOff={isCameraOff}
-        switchCallCamera={switchCallCamera}
-        formattedDuration={formattedDuration}
-        remoteUsers={remoteUsers}
-        localVideoTrack={localVideoTrack}
-        initiateCall={initiateCall}
-        acceptCall={acceptCall}
-        declineCall={declineCall}
-        endCall={endCall}
-        isConnecting={isConnecting}
-        callError={callError}
-
-
-        toggleMute={toggleMute}
-        toggleCamera={toggleCamera}
-        isSpeakerOn={isSpeakerOn}
-        networkQuality={networkQuality}
-        toggleSpeaker={toggleSpeaker}
-        runnerFleetType={runnerData?.fleetType}
-
-        completedOrderStatuses={completedStatusesFromStore}
-        taskCompleted={taskCompletedFromStore}
-
-        setTaskCompleted={(val) => {
-          chatManager.set(chatId, { taskCompleted: val });
-          useOrderStore.getState().setTaskCompleted(chatId, val);
-        }}
-
-        orderCancelled={chatState.orderCancelled}
-        cancellationReason={chatState.cancellationReason}
-        onSpecialInstructions={onSpecialInstructions}
-        onOrderCreated={onOrderCreated}
-        onPaymentSuccess={onPaymentSuccess}
-        onDeliveryConfirmed={onDeliveryConfirmed}
-        onMessageDeleted={onMessageDeleted}
-        initialDeliveryMarked={chatState.deliveryMarked}
-        initialUserConfirmedDelivery={chatState.userConfirmedDelivery}
-        initialSpecialInstructions={chatState.specialInstructions}
-      />
-    );
-  };
+  // ── Main
+  const renderMainScreen = () => (
+    <RunnerMainScreen
+      isBotMode={isBotMode}
+      awaitingChatReady={awaitingChatReady}
+      isLoadingArchive={isLoadingArchive}
+      activeChatId={activeChatId}
+      selectedUser={selectedUser}
+      chatSessionKey={chatSessionKey}
+      chatManager={chatManager}
+      botStoreMessages={botStoreMessages}
+      botMessagesUpdater={botMessagesUpdater}
+      registerSetMessages={registerSetMessages}
+      botRefreshTrigger={botRefreshTrigger}
+      handleNewOrderFleetSelected={handleNewOrderFleetSelected}
+      handleStartNewOrder={handleStartNewOrder}
+      newOrderTrigger={newOrderTrigger}
+      isVerifyingOtp={isVerifyingOtp}
+      handleReturningUserChoice={handleReturningUserChoice}
+      isSubmitting={isSubmitting}
+      isVerified={runner?.isVerifiedKyc ?? false}
+      active={active}
+      text={text}
+      setText={setText}
+      dark={dark}
+      setDark={setDark}
+      isCollectingCredentials={isCollectingCredentials}
+      credentialStep={credentialStep}
+      credentialQuestions={credentialQuestions}
+      needsOtpVerification={needsOtpVerification}
+      registrationComplete={registrationComplete}
+      canResendOtp={canResendOtp}
+      sendMessage_fn={sendMessage_fn}
+      handleMessageClick={handleMessageClick}
+      pickUp={pickUp}
+      runErrand={runErrand}
+      setDrawerOpen={setDrawerOpen}
+      setInfoOpen={setInfoOpen}
+      initialMessagesComplete={initialMessagesComplete}
+      runnerId={runnerId}
+      kycStep={kycStep}
+      kycStatus={kycStatus}
+      onIdVerified={onIdVerified}
+      handleIDTypeSelection={handleIDTypeSelection}
+      onSelfieVerified={onSelfieVerified}
+      handleSelfieResponse={handleSelfieResponse}
+      handleBannedDetected={handleBannedDetected}
+      checkVerificationStatus={checkVerificationStatus}
+      handleConnectToService={handleConnectToService}
+      handleFindMore={handleFindMore}
+      nearbyUsers={nearbyUsers}
+      handlePickService={handlePickService}
+      runnerData={runnerData}
+      canShowNotifications={canShowNotifications}
+      hasSearched={hasSearched}
+      setBotReplyingTo={setBotReplyingTo}
+      verificationState={verificationState}
+      showBannedModal={showBannedModal}
+      setShowBannedModal={setShowBannedModal}
+      isConnectLocked={isConnectLocked}
+      handleCredentialAnswer={handleCredentialAnswer}
+      runnerLocation={runnerLocation}
+      isReturningUser={isReturningUser}
+      returningUserData={returningUserData}
+      effectiveReturningKycStatus={effectiveReturningKycStatus}
+      showNotifications={showNotifications}
+      onNotificationsShown={() => setShowNotifications(false)}
+      isTrainingCompleted={runner?.isTrainingCompleted ?? false}
+      openTrainingContinueClick={openTrainingScreen}
+      onKycRedirect={handleKycRedirect}
+      chatMessagesUpdater={chatMessagesUpdater}
+      handleBackToHome={handleBackToHome}
+      showOrderFlow={showOrderFlow}
+      setShowOrderFlow={setShowOrderFlow}
+      handleOrderStatusClick={handleOrderStatusClick}
+      isAttachFlowOpen={isAttachFlowOpen}
+      setIsAttachFlowOpen={setIsAttachFlowOpen}
+      handleLocationClick={handleLocationClick}
+      handleAttachClick={handleAttachClick}
+      handleSetCompletedStatuses={handleSetCompletedStatuses}
+      taskCompletedFromStore={taskCompletedFromStore}
+      completedStatusesFromStore={completedStatusesFromStore}
+    />
+  );
 
   const renderContactInfo = (withClose = false) => {
     const chatState = chatManager.get(activeChatId);
@@ -1904,271 +1458,143 @@ function WhatsAppLikeChat() {
   };
 
   return (
-    <div className="h-screen flex flex-col w-full bg-white dark:bg-black-100 bg-gradient-to-br from-slate-900 via-slate-950 to-black text-white">
-      <div className={`lg:hidden relative z-10 flex flex-shrink-0 items-center justify-between px-3 py-3 border-b dark:border-white/10 border-gray-200 ${currentView !== 'chat' ? 'hidden' : ''}`}>
-        <div className="flex items-center gap-2">
-          <IconButton variant="text" className="rounded-full" onClick={() => setDrawerOpen(true)}>
-            <Menu className="h-5 w-5" />
-          </IconButton>
-        </div>
-        <div className="flex gap-3">
-          <span className="bg-gray-1000 dark:bg-black-200 rounded-full w-10 h-10 flex items-center justify-center">
-            <HeaderIcon onClick={() => setInfoOpen(true)}>
-              <MoreHorizontal className="h-6 w-6" />
-            </HeaderIcon>
-          </span>
-          <div onClick={() => setDark(!dark)} className="cursor-pointer flex items-center gap-2 p-2">
-            {dark ? <Sun className="w-6 h-6" /> : <Moon className="w-6 h-6 text-gray-800" strokeWidth={3.0} />}
+    <CallContext.Provider value={{
+      callState, callType, isMuted, isCameraOff, formattedDuration,
+      remoteUsers, localVideoTrack, initiateCall, acceptCall, declineCall,
+      endCall, toggleMute, toggleCamera, isSpeakerOn, networkQuality,
+      toggleSpeaker, switchCamera: switchCallCamera, isConnecting, callError,
+    }}>
+      <div className="h-screen flex flex-col w-full bg-white dark:bg-black-100 bg-gradient-to-br from-slate-900 via-slate-950 to-black text-white">
+        <div className={`lg:hidden relative z-10 flex flex-shrink-0 items-center justify-between px-3 py-3 border-b dark:border-white/10 border-gray-200 ${currentView !== 'chat' ? 'hidden' : ''}`}>
+          <div className="flex items-center gap-2">
+            <IconButton variant="text" className="rounded-full" onClick={() => setDrawerOpen(true)}>
+              <Menu className="h-5 w-5" />
+            </IconButton>
+          </div>
+          <div className="flex gap-3">
+            <span className="bg-gray-1000 dark:bg-black-200 rounded-full w-10 h-10 flex items-center justify-center">
+              <HeaderIcon onClick={() => setInfoOpen(true)}>
+                <MoreHorizontal className="h-6 w-6" />
+              </HeaderIcon>
+            </span>
+            <div onClick={() => setDark(!dark)} className="cursor-pointer flex items-center gap-2 p-2">
+              {dark ? <Sun className="w-6 h-6" /> : <Moon className="w-6 h-6 text-gray-800" strokeWidth={3.0} />}
+            </div>
           </div>
         </div>
-      </div>
 
-      <div className="flex-1 min-h-0 overflow-hidden">{renderView()}</div>
+        <div className="flex-1 min-h-0 overflow-hidden">{renderView()}</div>
 
-      <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} placement="left"
-        className="p-0 bg-white dark:bg-black-100 backdrop-blur-xl !z-[9999]"
-        overlayProps={{ className: "!z-[9998]" }}>
-        <Sidebar active={active} setActive={setActive} chatHistory={chatHistory}
-          onBotClick={handleBotClick} onUserClick={handleUserClick}
-          onClose={() => setDrawerOpen(false)} />
-      </Drawer>
+        <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} placement="left"
+          className="p-0 bg-white dark:bg-black-100 backdrop-blur-xl !z-[9999]"
+          overlayProps={{ className: "!z-[9998]" }}>
+          <Sidebar active={active} setActive={setActive} chatHistory={chatHistory}
+            onBotClick={handleBotClick} onUserClick={handleUserClick}
+            onClose={() => setDrawerOpen(false)} />
+        </Drawer>
 
-      <Drawer open={infoOpen} onClose={() => setInfoOpen(false)} placement="right"
-        className="p-0 bg-white dark:bg-black-100 backdrop-blur-xl !z-[9999]"
-        overlayProps={{ className: "!z-[9998]" }}>
-        {renderContactInfo(true)}
-      </Drawer>
+        <Drawer open={infoOpen} onClose={() => setInfoOpen(false)} placement="right"
+          className="p-0 bg-white dark:bg-black-100 backdrop-blur-xl !z-[9999]"
+          overlayProps={{ className: "!z-[9998]" }}>
+          {renderContactInfo(true)}
+        </Drawer>
 
-      {activeModal && (
-        <Modal type={activeModal} onClose={() => setActiveModal(null)}
-          onConfirm={(reason) => {
-            if (activeModal === 'cancelOrder' && socket && selectedUser?._id) {
-              const chatId = `user-${selectedUser._id}-runner-${runnerId}`;
-              const orderId = currentOrderRef.current?.orderId;
+        {activeModal && (
+          <Modal type={activeModal} onClose={() => setActiveModal(null)}
+            onConfirm={(reason) => {
+              if (activeModal === 'cancelOrder' && socket && selectedUser?._id) {
+                const chatId = `user-${selectedUser._id}-runner-${runnerId}`;
+                const orderId = currentOrderRef.current?.orderId;
 
-              // Optimistic — update UI immediately
-              const chatId2 = chatId;
-              useOrderStore.getState().setOrderCancelled(chatId2, 'runner');
-              useOrderStore.getState().mergeCurrentOrder(chatId2, { status: 'cancelled' });
-              chatManager.set(chatId2, { orderCancelled: true, cancellationReason: 'runner' });
-              pushToActiveScreen(prev => {
-                if (prev.some(m => m.text?.toLowerCase().includes('cancelled this order'))) return prev;
-                return [...prev, {
-                  id: `cancel-optimistic-${Date.now()}`,
-                  from: 'system', type: 'system', messageType: 'system',
-                  text: 'You cancelled this order.',
-                  time: getCurrentTime(),
-                  senderId: 'system', senderType: 'system',
-                }];
-              });
+                // Optimistic — update UI immediately
+                const chatId2 = chatId;
+                useOrderStore.getState().setOrderCancelled(chatId2, 'runner');
+                useOrderStore.getState().mergeCurrentOrder(chatId2, { status: 'cancelled' });
+                chatManager.set(chatId2, { orderCancelled: true, cancellationReason: 'runner' });
+                pushToActiveScreen(prev => {
+                  if (prev.some(m => m.text?.toLowerCase().includes('cancelled this order'))) return prev;
+                  return [...prev, {
+                    id: `cancel-optimistic-${Date.now()}`,
+                    from: 'system', type: 'system', messageType: 'system',
+                    text: 'You cancelled this order.',
+                    time: getCurrentTime(),
+                    senderId: 'system', senderType: 'system',
+                  }];
+                });
 
-              const cancelPayload = { chatId, orderId, runnerId, userId: selectedUser._id, reason };
-              console.log('[cancelOrder] about to emit', {
-                socketExists: !!socket,
-                socketConnected: socket?.connected,
-                socketId: socket?.id,
-                cancelPayload,
-              });
+                const cancelPayload = { chatId, orderId, runnerId, userId: selectedUser._id, reason };
+                console.log('[cancelOrder] about to emit', {
+                  socketExists: !!socket,
+                  socketConnected: socket?.connected,
+                  socketId: socket?.id,
+                  cancelPayload,
+                });
 
-              if (socket.connected) {
-                socket.emit('cancelOrder', cancelPayload);
-                console.log('[cancelOrder] emitted via socket');
-              } else {
-                // ← Queue it for when connection restores
-                enqueueSocketEvent('cancelOrder', cancelPayload);
-                console.log('[socketQueue] cancelOrder queued — socket offline');
+                if (socket.connected) {
+                  socket.emit('cancelOrder', cancelPayload);
+                  console.log('[cancelOrder] emitted via socket');
+                } else {
+                  // ← Queue it for when connection restores
+                  enqueueSocketEvent('cancelOrder', cancelPayload);
+                  console.log('[socketQueue] cancelOrder queued — socket offline');
+                }
               }
-            }
-            setActiveModal(null);
-          }}
-          chatId={activeChatId}
-          isConnectLocked={isConnectLocked} selectedUser={selectedUser}
-          registrationComplete={registrationComplete} darkMode={dark} />
-      )}
+              setActiveModal(null);
+            }}
+            chatId={activeChatId}
+            isConnectLocked={isConnectLocked} selectedUser={selectedUser}
+            registrationComplete={registrationComplete} darkMode={dark} />
+        )}
 
-      <TermsAcceptanceModal isOpen={showTerms} onClose={() => { }}
-        onAccept={handleAcceptTerms} terms={RUNNER_TERMS} darkMode={dark} userType="runner" />
+        <TermsAcceptanceModal isOpen={showTerms} onClose={() => { }}
+          onAccept={handleAcceptTerms} terms={RUNNER_TERMS} darkMode={dark} userType="runner" />
 
-      {/* user gets banned */}
-      <BannedModal
-        isOpen={showBannedModal}
-        reason={verificationState?.reason || verificationState?.message || null}
-        darkMode={dark}
-      />
-
-      {showLocationModal && (
-        <div className="fixed inset-0 z-[10000] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className={`w-full max-w-md rounded-2xl overflow-hidden relative ${dark ? 'bg-black-100' : 'bg-white'}`}>
-            <RequestLocation
-              darkMode={dark}
-              onLocationComplete={handleLocationComplete}
-              onCancel={handleLocationCancel}
-              initialError={null}
-              initialLoading={false}
-            />
-          </div>
-        </div>
-      )}
-
-      {showTrainingScreen && (
-        <RunnerTraining
-          submitting={isSubmittingTraining}
-          onComplete={async (score) => {
-            const updater = isBotMode ? botMessagesUpdater : chatMessagesUpdater;
-            const success = await completeTraining(score, updater);
-            if (!success) return;
-
-            if (pendingKycResumeRef.current) {
-              resumeKycFlow(pendingKycResumeRef.current, updater);
-            } else {
-              startKycFlow(updater);
-            }
-          }}
+        {/* user gets banned */}
+        <BannedModal
+          isOpen={showBannedModal}
+          reason={verificationState?.reason || verificationState?.message || null}
           darkMode={dark}
-          onExit={closeTrainingScreen}
-          runnerId={runnerId}
         />
-      )}
-    </div>
-  );
-}
 
+        {showLocationModal && (
+          <div className="fixed inset-0 z-[10000] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className={`w-full max-w-md rounded-2xl overflow-hidden relative ${dark ? 'bg-black-100' : 'bg-white'}`}>
+              <RequestLocation
+                darkMode={dark}
+                onLocationComplete={handleLocationComplete}
+                onCancel={handleLocationCancel}
+                initialError={null}
+                initialLoading={false}
+              />
+            </div>
+          </div>
+        )}
 
-// ─── ContactInfo ─────────────────────────────────────────────────────────────
-function ContactInfo({
-  contact, onClose, setActiveModal, onNavigate, onBack, chatId,
-  kycStep, isChatActive,
-  messages = [], isBotMode, onStartNewOrder, registrationComplete, isConnectLocked, isVerified,
-  disputeActive
-}) {
-  // Reads live from store — re-renders the instant store updates
-  const currentOrderSel = useMemo(() => makeCurrentOrder(chatId), [chatId]);
-  const orderCancelledSel = useMemo(() => makeOrderCancelled(chatId), [chatId]);
-  const completedStatsSel = useMemo(() => makeCompletedStats(chatId), [chatId])
+        {showTrainingScreen && (
+          <RunnerTraining
+            submitting={isSubmittingTraining}
+            onComplete={async (score) => {
+              const updater = isBotMode ? botMessagesUpdater : chatMessagesUpdater;
+              const success = await completeTraining(score, updater);
+              if (!success) return;
 
-  const currentOrder = useOrderStore(currentOrderSel);
-  const orderCancelled = useOrderStore(orderCancelledSel);
-
-  const handleModalClick = (modalType) => { onClose?.(); setActiveModal?.(modalType); };
-  const handleNavigation = (view) => { onClose?.(); onNavigate?.(view); };
-
-  const isRunErrand =
-    currentOrder?.serviceType === "run-errand" || currentOrder?.serviceType === "run_errand" ||
-    currentOrder?.taskType === "run_errand" || currentOrder?.taskType === "run-errand";
-
-  const canCancel = isChatActive
-    && currentOrder != null
-    && !['completed', 'cancelled', 'task_completed'].includes(currentOrder.status)
-    && !orderCancelled;
-
-  const completedStatuses = useOrderStore(completedStatsSel);
-
-
-  const itemApproved =
-    currentOrder?.approvalStatus === 'approved' ||
-    currentOrder?.status === 'items_approved' ||
-    completedStatuses?.includes('items_approved') ||
-    completedStatuses?.includes('purchase_completed') ||
-    completedStatuses?.includes('arrived_at_delivery_location');
-
-  const showPayout = isRunErrand &&
-    isChatActive &&
-    currentOrder != null &&
-    !['completed', 'cancelled', 'task_completed'].includes(currentOrder.status);
-
-
-  return (
-    <div className="h-screen flex flex-col overflow-y-auto gap-6 marketSelection pb-28">
-      <div className="py-3 px-2">
-        {onClose && (
-          <IconButton variant="text" size="sm" className="rounded-full lg:hidden flex" onClick={onClose}>
-            <X className="h-7 w-7" />
-          </IconButton>
+              if (pendingKycResumeRef.current) {
+                resumeKycFlow(pendingKycResumeRef.current, updater);
+              } else {
+                startKycFlow(updater);
+              }
+            }}
+            darkMode={dark}
+            onExit={closeTrainingScreen}
+            runnerId={runnerId}
+          />
         )}
       </div>
-
-      <div className="cursor-pointer hover:bg-gray-200 dark:hover:bg-black-100/80 transition-colors" onClick={() => handleNavigation('profile')}>
-        <h3 className="px-4 py-5 font-bold text-md text-black-200 dark:text-gray-300">Profile</h3>
-      </div>
-      <div className="cursor-pointer hover:bg-gray-200 dark:hover:bg-black-100/80 transition-colors" onClick={() => handleNavigation('wallet')}>
-        <h3 className="px-4 py-5 font-bold text-md text-black-200 dark:text-gray-300">Wallet</h3>
-      </div>
-      <div className="cursor-pointer hover:bg-gray-200 dark:hover:bg-black-100/80 transition-colors" onClick={() => handleNavigation('orders')}>
-        <h3 className="px-4 py-5 font-bold text-md text-black-200 dark:text-gray-300">Orders</h3>
-      </div>
-
-      {showPayout && (
-        disputeActive ? (
-          // Dispute in review — locked
-          <div className="opacity-50 pointer-events-none">
-            <h3 className="px-4 py-5 font-bold text-md text-red-400">
-              Payout locked — dispute in review
-            </h3>
-          </div>
-        ) : !itemApproved ? (
-
-          <div className="opacity-40 pointer-events-none">
-            <h3 className="px-4 py-5 font-bold text-md text-black-100/80 dark:text-gray-300">
-              Payout
-              {currentOrder?.status === 'purchase_completed'
-                ? null
-                : currentOrder && [
-                  'en_route_to_delivery',
-                  'arrived_at_delivery_location',
-                  'item_delivered',
-                ].includes(currentOrder.status)
-                  ? (
-                    <span className="ml-2 text-[10px] font-normal text-gray-400 normal-case tracking-normal">
-                      (already completed)
-                    </span>
-                  ) : (
-                    <span className="ml-2 text-[10px] font-normal text-gray-400 normal-case tracking-normal">
-                    </span>
-                  )
-              }
-            </h3>
-          </div>
-        ) : (
-          // purchase_completed — active window, go transfer
-          <div
-            className={
-              orderCancelled
-                ? ''
-                : 'cursor-pointer hover:bg-gray-200 dark:hover:bg-black-200 transition-colors'
-            }
-            onClick={!orderCancelled ? () => handleNavigation('payout') : undefined}
-          >
-            <h3 className="px-4 py-5 font-bold text-md text-black-200 dark:text-gray-300">Payout</h3>
-          </div>
-        )
-      )}
-
-      <div
-        className="cursor-pointer hover:bg-gray-200 dark:hover:bg-black-100/80 transition-colors"
-        onClick={() => handleNavigation('disputes')}
-      >
-        <h3 className="px-4 py-5 font-bold text-md text-black-200 dark:text-gray-300">
-          {isChatActive && currentOrder && !['completed', 'cancelled', 'task_completed'].includes(currentOrder?.status)
-            ? 'Raise dispute'
-            : 'Disputes'}
-        </h3>
-      </div>
-
-      {canCancel && (
-        <div
-          className={orderCancelled ? 'opacity-40 pointer-events-none' : 'cursor-pointer hover:bg-gray-200 dark:hover:bg-black-200 transition-colors'}
-          onClick={!orderCancelled ? () => handleModalClick('cancelOrder') : undefined}
-        >
-          <p className="px-4 py-5 text-md font-medium text-red-400">Cancel order</p>
-        </div>
-      )}
-    </div>
+    </CallContext.Provider>
   );
 }
 
-
 export default function WhatsAppLikeChatRoot() {
-  const key = 'runner-app';
   const hydrated = useOrderStore(s => s._hasHydrated);
 
   useEffect(() => {
@@ -2177,7 +1603,13 @@ export default function WhatsAppLikeChatRoot() {
   }, []);
 
   if (!hydrated) return null;
-  return <MemoChat key={key} />;
+  return (
+    <SocketProvider>
+      <CameraProvider>
+        <MemoChat key="runner-app" />
+      </CameraProvider>
+    </SocketProvider>
+  );
 }
 
 const MemoChat = React.memo(WhatsAppLikeChat);

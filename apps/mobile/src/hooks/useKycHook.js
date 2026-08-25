@@ -45,7 +45,7 @@ export const useKycHook = (runnerId, fleetType,) => {
   const [showConnectButton, setShowConnectButton] = useState(false);
 
   // bump this string any time kyc_* localStorage shape/logic changes again
-  const KYC_STORAGE_VERSION = '2';
+  const KYC_STORAGE_VERSION = '3';
   const isReturningUserRef = useRef(false);
 
   const isAlreadyVerifiedRef = useRef(false);
@@ -54,6 +54,7 @@ export const useKycHook = (runnerId, fleetType,) => {
   const kycInitiated = useRef(false);
   const verifyInProgress = useRef(false);
   // Track which doc is currently being collected: 'nin' | 'driverLicense'
+  const [currentDocType, setCurrentDocTypeState] = useState('nin');
   const currentDocTypeRef = useRef('nin');
   const kycServerStatusRef = useRef({ nin: 'not_submitted', driverLicense: 'not_submitted', selfie: 'not_submitted' });
 
@@ -76,6 +77,7 @@ export const useKycHook = (runnerId, fleetType,) => {
     capturedIdPhotoRef.current = null;
     capturedSelfiePhotoRef.current = null;
     currentDocTypeRef.current = 'nin';
+    setCurrentDocTypeState('nin');
     isReturningUserRef.current = false;
     setKycStep(null);
     setKycStatus({ documentVerified: false, selfieVerified: false, overallVerified: false });
@@ -87,18 +89,21 @@ export const useKycHook = (runnerId, fleetType,) => {
     if (!runnerId || kycStep !== null) return;
     try {
       const savedStep = JSON.parse(localStorage.getItem(`kyc_step_${runnerId}`));
+      const savedStatusRaw = localStorage.getItem(`kyc_status_${runnerId}`);
+      const savedStatus = savedStatusRaw ? JSON.parse(savedStatusRaw) : null;
+
       if (savedStep !== null && savedStep !== undefined) {
         setKycStep(savedStep);
-        if (savedStep === 6) {
+        // step 6 is ambiguous — it's used for both "pending review" and "verified"
+        // UI. Only treat it as verified if kycStatus actually says so.
+        if (savedStep === 6 && savedStatus?.overallVerified) {
           isAlreadyVerifiedRef.current = true;
           localStorage.setItem(`kyc_verified_shown_${runnerId}`, '1');
         }
       }
 
-      // ── Restore kycStatus so isVerified is truthy immediately on remount ──
-      const savedStatus = localStorage.getItem(`kyc_status_${runnerId}`);
       if (savedStatus) {
-        setKycStatus(JSON.parse(savedStatus));
+        setKycStatus(savedStatus);
       }
     } catch { }
   }, [runnerId, kycStep]);
@@ -117,7 +122,10 @@ export const useKycHook = (runnerId, fleetType,) => {
   useEffect(() => {
     if (!runnerId) return;
     const saved = localStorage.getItem(`kyc_doc_type_${runnerId}`);
-    if (saved) currentDocTypeRef.current = saved;
+    if (saved) {
+      currentDocTypeRef.current = saved;
+      setCurrentDocTypeState(saved);
+    }
   }, [runnerId]);
 
   useEffect(() => {
@@ -130,6 +138,7 @@ export const useKycHook = (runnerId, fleetType,) => {
 
   const setDocType = useCallback((type) => {
     currentDocTypeRef.current = type;
+    setCurrentDocTypeState(type);
     if (runnerId) localStorage.setItem(`kyc_doc_type_${runnerId}`, type);
   }, [runnerId]);
 
@@ -254,15 +263,16 @@ export const useKycHook = (runnerId, fleetType,) => {
         }
 
         isAlreadyVerifiedRef.current = true; // ← always set after allApproved
-        setKycStatus({ documentVerified: true, selfieVerified: true, overallVerified: true });
 
-        // push verified state into Redux so raw.jsx re-renders with isVerified=true
-        dispatch(updateRunner({
-          isVerifiedKyc: true,
-          kycStatus: kycStatus
-        }));
+        setTimeout(() => {
+          setKycStatus({ documentVerified: true, selfieVerified: true, overallVerified: true });
+          dispatch(updateRunner({
+            isVerifiedKyc: true,
+            kycStatus: kycStatus
+          }));
+          setKycStep(6);
+        }, 900);
 
-        setTimeout(() => setKycStep(6), 800);
         localStorage.removeItem(`kyc_step_${runnerId}`);
         localStorage.removeItem(`kyc_doc_type_${runnerId}`);
         return;
@@ -429,6 +439,22 @@ export const useKycHook = (runnerId, fleetType,) => {
   }, [startKycFlow, setDocType, checkVerificationStatus]);
 
   const onIdVerified = useCallback((photo, setMessages) => {
+
+    if (!photo) {
+      console.error('[KYC] onIdVerified called with no photo');
+      const docLabel = currentDocTypeRef.current === 'driverLicense' ? "Driver's License" : 'NIN';
+      setMessages(prev => [...prev, {
+        id: `kyc-err-${Date.now()}`,
+        from: "them",
+        text: `That didn't come through. Please try again with your ${docLabel}.`,
+        time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        status: "delivered",
+        isKyc: true
+      }]);
+      setKycStep(2);
+      return;
+    }
+
     capturedIdPhotoRef.current = photo;
     setKycStep(1);
 
@@ -469,10 +495,11 @@ export const useKycHook = (runnerId, fleetType,) => {
 
     if (!photo) {
       console.error('No photo captured!');
+      const docLabel = currentDocTypeRef.current === 'driverLicense' ? "Driver's License" : 'NIN'
       setMessages(prev => [...prev, {
         id: `kyc-err-${Date.now()}`,
         from: "them",
-        text: "No photo found. Please try capturing again.",
+        text: `No photo found. Please try capturing or uploading your ${docLabel} again.`,
         time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
         status: "delivered",
         isKyc: true
@@ -736,6 +763,7 @@ export const useKycHook = (runnerId, fleetType,) => {
     kycStatus,
     setKycStep,
     capturedIdPhoto: capturedIdPhotoRef.current,
+    currentDocType,
     startKycFlow,
     resumeKycFlow,
     onIdVerified,

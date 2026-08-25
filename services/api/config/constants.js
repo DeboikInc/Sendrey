@@ -11,9 +11,9 @@ const RUNNER_STATUS = [
   'approved_limited',
   'approved_full',
   'suspended',
+  'rejected',
   'banned',
 ]
-
 
 const VERIFICATION_STATUS = [
   'not_submitted',

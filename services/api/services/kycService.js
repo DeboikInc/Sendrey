@@ -8,7 +8,6 @@ const fs = require('fs').promises;
 class KYCService {
 
     constructor() {
-
         this.uploadDir = 'uploads';
     }
 
@@ -75,6 +74,62 @@ class KYCService {
         }
     }
 
+    // STATUS ENGINE
+
+    _computeStatus(runner) {
+        const docs = runner.verificationDocuments || {};
+        const biometrics = runner.biometricVerification || {};
+
+        const rejectedItems = [];
+        if (docs.nin?.status === 'rejected') rejectedItems.push('nin');
+        if (docs.driverLicense?.status === 'rejected') rejectedItems.push('driverLicense');
+        if (biometrics.status === 'rejected') rejectedItems.push('selfie');
+        if (rejectedItems.length > 0) return 'rejected';
+
+        const verifiedDocs = [];
+        if (docs.nin?.verified) verifiedDocs.push('nin');
+        if (docs.driverLicense?.verified) verifiedDocs.push('driverLicense');
+
+        const pendingDocs = [];
+        if (docs.nin?.status === 'pending_review') pendingDocs.push('nin');
+        if (docs.driverLicense?.status === 'pending_review') pendingDocs.push('driverLicense');
+
+        if (pendingDocs.length > 0 || biometrics.status === 'pending_review') return 'pending_verification';
+        if (verifiedDocs.length === 0) return 'pending_verification';
+        if (verifiedDocs.length >= 1 && biometrics.selfieVerified) return 'approved_full';
+        if (verifiedDocs.length >= 1) return 'approved_limited';
+        return 'pending_verification';
+    }
+
+    async _applyKycUpdate(runnerId, mutateFn, maxRetries = 3) {
+        for (let attempt = 0; attempt < maxRetries; attempt++) {
+            const runner = await Runner.findById(runnerId);
+            if (!runner) return null;
+
+            mutateFn(runner);
+
+            const newStatus = this._computeStatus(runner);
+            runner.kycStatus = newStatus;
+            runner.isVerifiedKyc = newStatus === 'approved_full';
+
+            try {
+                await runner.save(); 
+                return { success: true, kycStatus: newStatus, isVerifiedKyc: runner.isVerifiedKyc };
+            } catch (err) {
+                if (err.name === 'VersionError' && attempt < maxRetries - 1) continue;
+                throw err;
+            }
+        }
+    }
+
+    async calculateRunnerStatus(runnerId) {
+        const runner = await Runner.findById(runnerId);
+        if (!runner || runner.role !== 'runner') return 'pending_verification';
+        return this._computeStatus(runner);
+    }
+
+    // SUBMISSION METHODS
+
     async submitNIN(nin, fileBuffer, fileName, userInfo = {}) {
         try {
             const uploadResult = await this.saveDocumentToCloudinary(
@@ -92,9 +147,8 @@ class KYCService {
                 };
             }
 
-            // Update runner document with Cloudinary URL
-            await Runner.findByIdAndUpdate(userInfo.userId, {
-                'verificationDocuments.nin': {
+            const result = await this._applyKycUpdate(userInfo.userId, (runner) => {
+                runner.verificationDocuments.nin = {
                     status: 'pending_review',
                     verified: false,
                     documentPath: uploadResult.cloudinaryUrl,
@@ -103,14 +157,19 @@ class KYCService {
                     firstName: userInfo.firstName,
                     lastName: userInfo.lastName,
                     dateOfBirth: userInfo.dateOfBirth
-                }
+                };
             });
+
+            if (!result) {
+                return { success: false, error: 'Runner not found', documentType: 'nin' };
+            }
 
             return {
                 success: true,
                 verified: false,
                 documentType: 'nin',
                 status: 'pending_review',
+                kycStatus: result.kycStatus,
                 data: {
                     firstName: userInfo.firstName,
                     lastName: userInfo.lastName,
@@ -131,7 +190,6 @@ class KYCService {
         }
     }
 
-
     async submitDriverLicense(licenseNumber, fileBuffer, fileName, userInfo = {}) {
         try {
             const uploadResult = await this.saveDocumentToCloudinary(
@@ -149,9 +207,8 @@ class KYCService {
                 };
             }
 
-            // Update runner document with Cloudinary URL
-            await Runner.findByIdAndUpdate(userInfo.userId, {
-                'verificationDocuments.driverLicense': {
+            const result = await this._applyKycUpdate(userInfo.userId, (runner) => {
+                runner.verificationDocuments.driverLicense = {
                     status: 'pending_review',
                     verified: false,
                     documentPath: uploadResult.cloudinaryUrl,
@@ -160,14 +217,19 @@ class KYCService {
                     firstName: userInfo.firstName,
                     lastName: userInfo.lastName,
                     dateOfBirth: userInfo.dateOfBirth
-                }
+                };
             });
+
+            if (!result) {
+                return { success: false, error: 'Runner not found', documentType: 'driver_license' };
+            }
 
             return {
                 success: true,
                 verified: false,
                 documentType: 'driver_license',
                 status: 'pending_review',
+                kycStatus: result.kycStatus,
                 data: {
                     firstName: userInfo.firstName,
                     lastName: userInfo.lastName,
@@ -204,21 +266,25 @@ class KYCService {
                 };
             }
 
-            // Update runner biometric verification with Cloudinary URL
-            await Runner.findByIdAndUpdate(userId, {
-                'biometricVerification': {
+            const result = await this._applyKycUpdate(userId, (runner) => {
+                runner.biometricVerification = {
                     status: 'pending_review',
                     selfieVerified: false,
                     selfieImage: uploadResult.cloudinaryUrl,
                     cloudinaryPublicId: uploadResult.cloudinaryPublicId,
                     submittedAt: new Date()
-                }
+                };
             });
+
+            if (!result) {
+                return { success: false, error: 'Runner not found' };
+            }
 
             return {
                 success: true,
                 verified: false,
                 status: 'pending_review',
+                kycStatus: result.kycStatus,
                 data: {
                     selfiePath: uploadResult.cloudinaryUrl,
                     cloudinaryPublicId: uploadResult.cloudinaryPublicId,
@@ -250,17 +316,25 @@ class KYCService {
         }
     }
 
-    // ==================== ADMIN METHODS ====================
-
+    // ADMIN METHODS
     async getPendingVerifications() {
         try {
             const pendingRunners = await Runner.find({
                 role: 'runner',
-                $or: [
-                    { 'verificationDocuments.nin.status': 'pending_review' },
-                    { 'verificationDocuments.passport.status': 'pending_review' },
-                    { 'verificationDocuments.driverLicense.status': 'pending_review' },
-                    { 'biometricVerification.status': 'pending_review' }
+                $and: [
+                    {
+                        $or: [
+                            { 'verificationDocuments.nin.status': 'pending_review' },
+                            { 'verificationDocuments.passport.status': 'pending_review' },
+                            { 'verificationDocuments.driverLicense.status': 'pending_review' },
+                            { 'biometricVerification.status': 'pending_review' }
+                        ]
+                    },
+                    
+                    { 'verificationDocuments.nin.status': { $ne: 'rejected' } },
+                    { 'verificationDocuments.passport.status': { $ne: 'rejected' } },
+                    { 'verificationDocuments.driverLicense.status': { $ne: 'rejected' } },
+                    { 'biometricVerification.status': { $ne: 'rejected' } }
                 ]
             }).select('firstName lastName email phone fleetType createdAt verificationDocuments biometricVerification kycStatus');
 
@@ -358,26 +432,22 @@ class KYCService {
     }
 
     async approveDocument(runnerId, documentType, adminId = 'admin') {
+        const validTypes = ['nin', 'driverLicense', 'passport'];
+        if (!validTypes.includes(documentType)) return { success: false, error: 'Invalid document type' };
+
         try {
-            const validTypes = ['nin', 'driverLicense', 'passport'];
-            if (!validTypes.includes(documentType)) return { success: false, error: 'Invalid document type' };
-
-            const updateField = `verificationDocuments.${documentType}`;
-
-            await Runner.findByIdAndUpdate(runnerId, {
-                [`${updateField}.verified`]: true,
-                [`${updateField}.status`]: 'approved',
-                [`${updateField}.verifiedAt`]: new Date(),
-                [`${updateField}.verifiedBy`]: adminId,
+            const result = await this._applyKycUpdate(runnerId, (runner) => {
+                const doc = runner.verificationDocuments[documentType] || (runner.verificationDocuments[documentType] = {});
+                doc.verified = true;
+                doc.status = 'approved';
+                doc.verifiedAt = new Date();
+                doc.verifiedBy = adminId;
             });
 
-            const newStatus = await this.calculateRunnerStatus(runnerId);
-            const isVerifiedKyc = newStatus === 'approved_full';
+            if (!result) return { success: false, error: 'Runner not found' };
 
-            await Runner.findByIdAndUpdate(runnerId, { kycStatus: newStatus, isVerifiedKyc });
-
-            console.log('[approveDocument]', documentType, '→ kycStatus:', newStatus, 'isVerifiedKyc:', isVerifiedKyc);
-            return { success: true, kycStatus: newStatus };
+            console.log('[approveDocument]', documentType, '→ kycStatus:', result.kycStatus, 'isVerifiedKyc:', result.isVerifiedKyc);
+            return { success: true, kycStatus: result.kycStatus, isVerifiedKyc: result.isVerifiedKyc };
         } catch (error) {
             console.error('Error approving document:', error);
             return { success: false, error: error.message };
@@ -385,23 +455,21 @@ class KYCService {
     }
 
     async rejectDocument(runnerId, documentType, reason) {
-        try {
-            const validTypes = ['nin', 'driverLicense', 'passport'];
-            if (!validTypes.includes(documentType)) return { success: false, error: 'Invalid document type' };
+        const validTypes = ['nin', 'driverLicense', 'passport'];
+        if (!validTypes.includes(documentType)) return { success: false, error: 'Invalid document type' };
 
-            const updateField = `verificationDocuments.${documentType}`;
-            await Runner.findByIdAndUpdate(runnerId, {
-                [`${updateField}.verified`]: false,
-                [`${updateField}.status`]: 'rejected',
-                [`${updateField}.rejectedAt`]: new Date(),
-                [`${updateField}.rejectionReason`]: reason,
+        try {
+            const result = await this._applyKycUpdate(runnerId, (runner) => {
+                const doc = runner.verificationDocuments[documentType] || (runner.verificationDocuments[documentType] = {});
+                doc.verified = false;
+                doc.status = 'rejected';
+                doc.rejectedAt = new Date();
+                doc.rejectionReason = reason;
             });
 
-            const newStatus = await this.calculateRunnerStatus(runnerId);
-            const isVerifiedKyc = newStatus === 'approved_full';
-            await Runner.findByIdAndUpdate(runnerId, { kycStatus: newStatus, isVerifiedKyc });
+            if (!result) return { success: false, error: 'Runner not found' };
 
-            return { success: true, kycStatus: newStatus };
+            return { success: true, kycStatus: result.kycStatus };
         } catch (error) {
             console.error('Error rejecting document:', error);
             return { success: false, error: error.message };
@@ -410,66 +478,41 @@ class KYCService {
 
     async approveSelfie(runnerId, adminId = 'admin') {
         try {
-            await Runner.findByIdAndUpdate(runnerId, {
-                'biometricVerification.selfieVerified': true,
-                'biometricVerification.status': 'approved',
-                'biometricVerification.verifiedAt': new Date(),
+            const result = await this._applyKycUpdate(runnerId, (runner) => {
+                if (!runner.biometricVerification) runner.biometricVerification = {};
+                runner.biometricVerification.selfieVerified = true;
+                runner.biometricVerification.status = 'approved';
+                runner.biometricVerification.verifiedAt = new Date();
+                runner.biometricVerification.verifiedBy = adminId;
             });
 
-            const newStatus = await this.calculateRunnerStatus(runnerId);
-            const isVerifiedKyc = newStatus === 'approved_full';
+            if (!result) return { success: false, error: 'Runner not found' };
 
-            await Runner.findByIdAndUpdate(runnerId, { kycStatus: newStatus, isVerifiedKyc });
-
-            console.log('[approveSelfie] → kycStatus:', newStatus, 'isVerifiedKyc:', isVerifiedKyc);
-            return { success: true, kycStatus: newStatus, isVerifiedKyc };
+            console.log('[approveSelfie] → kycStatus:', result.kycStatus, 'isVerifiedKyc:', result.isVerifiedKyc);
+            return { success: true, kycStatus: result.kycStatus, isVerifiedKyc: result.isVerifiedKyc };
         } catch (error) {
             console.error('Error approving selfie:', error);
             return { success: false, error: error.message };
         }
     }
 
-
     async rejectSelfie(runnerId, reason) {
         try {
-            await Runner.findByIdAndUpdate(runnerId, {
-                'biometricVerification.selfieVerified': false,
-                'biometricVerification.status': 'rejected',
-                'biometricVerification.rejectedAt': new Date(),
-                'biometricVerification.rejectionReason': reason,
+            const result = await this._applyKycUpdate(runnerId, (runner) => {
+                if (!runner.biometricVerification) runner.biometricVerification = {};
+                runner.biometricVerification.selfieVerified = false;
+                runner.biometricVerification.status = 'rejected';
+                runner.biometricVerification.rejectedAt = new Date();
+                runner.biometricVerification.rejectionReason = reason;
             });
 
-            const newStatus = await this.calculateRunnerStatus(runnerId);
-            const isVerifiedKyc = newStatus === 'approved_full';
-            await Runner.findByIdAndUpdate(runnerId, { kycStatus: newStatus, isVerifiedKyc });
+            if (!result) return { success: false, error: 'Runner not found' };
 
-            return { success: true, kycStatus: newStatus };
+            return { success: true, kycStatus: result.kycStatus };
         } catch (error) {
             console.error('Error rejecting selfie:', error);
             return { success: false, error: error.message };
         }
-    }
-
-    async calculateRunnerStatus(runnerId) {
-        const runner = await Runner.findById(runnerId);
-        if (!runner || runner.role !== 'runner') return 'pending_verification';
-
-        const docs = runner.verificationDocuments || {};
-        const biometrics = runner.biometricVerification || {};
-
-        const verifiedDocs = [];
-        if (docs.nin?.verified) verifiedDocs.push('nin');
-        if (docs.driverLicense?.verified) verifiedDocs.push('driverLicense');
-
-        const pendingDocs = [];
-        if (docs.nin?.status === 'pending_review') pendingDocs.push('nin');
-        if (docs.driverLicense?.status === 'pending_review') pendingDocs.push('driverLicense');
-
-        if (pendingDocs.length > 0 || biometrics.status === 'pending_review') return 'pending_verification';
-        if (verifiedDocs.length === 0) return 'pending_verification';
-        if (verifiedDocs.length >= 1 && biometrics.selfieVerified) return 'approved_full';
-        if (verifiedDocs.length >= 1) return 'approved_limited';
-        return 'pending_verification';
     }
 
     async getVerifiedRunners() {
@@ -484,7 +527,6 @@ class KYCService {
                 firstName: runner.firstName,
                 lastName: runner.lastName,
                 email: runner.email,
-                // isKycVerified: runner.isKycVerified,
                 phone: runner.phone,
                 fleetType: runner.fleetType,
                 createdAt: runner.createdAt,
