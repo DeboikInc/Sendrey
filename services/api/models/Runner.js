@@ -36,6 +36,7 @@ const runnerSchema = new mongoose.Schema({
     type: String,
     trim: true,
     sparse: true,
+    unique: true,
   },
   buidingName: {
     type: String,
@@ -463,7 +464,7 @@ runnerSchema.virtual('totalEarnings').set(function () {
 
 // Indexes
 runnerSchema.index({ email: 1 });
-runnerSchema.index({ phone: 1 }, { sparse: true });
+runnerSchema.index({ phone: 1 }, { sparse: true, unique: true });
 runnerSchema.index({ role: 1 });
 runnerSchema.index({ isActive: 1 });
 runnerSchema.index({ documentHash: 1 }, { sparse: true });

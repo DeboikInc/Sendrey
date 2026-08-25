@@ -33,6 +33,7 @@ const userSchema = new mongoose.Schema({
     type: String,
     trim: true,
     sparse: true,
+    unique: true
   },
   buidingName: {
     type: String,
@@ -395,7 +396,7 @@ userSchema.virtual('accountAge').get(function () {
 
 // Indexes
 userSchema.index({ email: 1 });
-userSchema.index({ phone: 1 }, { sparse: true });
+userSchema.index({ phone: 1 }, { sparse: true, unique: true });
 userSchema.index({ role: 1 });
 userSchema.index({ isActive: 1 });
 userSchema.index({ isVerified: 1 });

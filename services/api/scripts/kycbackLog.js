@@ -2,7 +2,8 @@ const mongoose = require('mongoose');
 const Runner = require('../models/Runner');
 const KYCServiceExport = require('../services/kycService');
 
-const DATABASE_URL = "mongodb+srv://sendrey:sendrey@cluster0.6h2uo87.mongodb.net/sendrey-server-production?retryWrites=true&w=majority";
+const DATABASE_URL = 
+"mongodb+srv://sendrey:sendrey@cluster0.6h2uo87.mongodb.net/sendrey-server-production?retryWrites=true&w=majority";
 
 const kycService = typeof KYCServiceExport === 'function'
     ? new KYCServiceExport()

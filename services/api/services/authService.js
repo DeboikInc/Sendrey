@@ -22,15 +22,19 @@ class AuthService {
         ? await Model.findOne({ $or: conditions })
         : null;
 
-      if (existingUser) {
-        if (!existingUser.isVerified) {
-          return { user: existingUser, existing: true };
+      const existingByEmail = userData.email
+        ? await Model.findOne({ email: userData.email })
+        : null;
+
+      if (existingByEmail) {
+        if (!existingByEmail.isVerified) {
+          return { user: existingByEmail, existing: true };
         }
         const err = new Error('Account already exists');
         err.statusCode = 409;
-        err.userName = existingUser.firstName;
-        err.userEmail = existingUser.email;
-        err.userPhone = existingUser.phone;
+        err.userName = existingByEmail.firstName;
+        err.userEmail = existingByEmail.email;
+        err.userPhone = existingByEmail.phone;
         err.kycStatus = {
           isVerified: existingUser.isVerified,
           isEmailVerified: existingUser.isEmailVerified,
@@ -41,6 +45,16 @@ class AuthService {
           overallVerified: existingUser.isVerifiedKyc || false,
         };
         throw err;
+      }
+
+      if (userData.phone) {
+        const phoneConflict = await Model.findOne({ phone: userData.phone });
+        if (phoneConflict) {
+          const err = new Error('This phone number is already registered to another account');
+          err.statusCode = 409;
+          err.field = 'phone';
+          throw err;
+        }
       }
 
       let role = userType;
