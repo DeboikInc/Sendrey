@@ -105,6 +105,54 @@ export const getVerifiedRunners = createAsyncThunk(
     }
 );
 
+export const getRejectedKYC = createAsyncThunk(
+    "kycAdmin/getRejected",
+    async (_, thunkAPI) => {
+        try {
+            const response = await api.get("/kyc/rejected");
+            return response.data;
+        } catch (error) {
+            return thunkAPI.rejectWithValue(error.response?.data?.message || "Failed to fetch rejected KYC");
+        }
+    }
+);
+
+export const getFlaggedKYC = createAsyncThunk(
+    "kycAdmin/getFlagged",
+    async (_, thunkAPI) => {
+        try {
+            const response = await api.get("/kyc/flagged");
+            return response.data;
+        } catch (error) {
+            return thunkAPI.rejectWithValue(error.response?.data?.message || "Failed to fetch flagged KYC");
+        }
+    }
+);
+
+export const getAutoConfirmedKYC = createAsyncThunk(
+    "kycAdmin/getAutoConfirmed",
+    async (_, thunkAPI) => {
+        try {
+            const response = await api.get("/kyc/auto-confirmed");
+            return response.data;
+        } catch (error) {
+            return thunkAPI.rejectWithValue(error.response?.data?.message || "Failed to fetch auto-confirmed KYC");
+        }
+    }
+);
+
+export const getResubmittedKYC = createAsyncThunk(
+    "kycAdmin/getResubmitted",
+    async (_, thunkAPI) => {
+        try {
+            const response = await api.get("/kyc/resubmitted");
+            return response.data;
+        } catch (error) {
+            return thunkAPI.rejectWithValue(error.response?.data?.message || "Failed to fetch resubmitted KYC");
+        }
+    }
+);
+
 // ── Helpers ───────────────────────────────────────────────
 const updateRunner = (runners, runnerId, patch) =>
     runners.map(r => (r._id === runnerId || r.id === runnerId) ? { ...r, ...patch } : r);
@@ -142,11 +190,19 @@ const updateBiometricsStatus = (selectedRunner, status) => {
 const kycAdminSlice = createSlice({
     name: "kycAdmin",
     initialState: {
-        status:         "idle",
-        error:          "",
+        status: "idle",
+        error: "",
         pendingRunners: [],
-        totalPending:   0,
+        totalPending: 0,
         verifiedRunners: [],
+        rejectedRunners: [],
+        totalRejected: 0,
+        flaggedRunners: [],
+        totalFlagged: 0,
+        autoConfirmedRunners: [],
+        totalAutoConfirmed: 0,
+        resubmittedRunners: [],
+        totalResubmitted: 0,
         selectedRunner: null,
     },
     reducers: {
@@ -155,19 +211,19 @@ const kycAdminSlice = createSlice({
         },
     },
     extraReducers: (builder) => {
-        const pending  = (state) => { state.status = "loading"; state.error = ""; };
+        const pending = (state) => { state.status = "loading"; state.error = ""; };
         const rejected = (state, action) => {
             state.status = "failed";
-            state.error  = action.payload || action.error?.message || "Something went wrong";
+            state.error = action.payload || action.error?.message || "Something went wrong";
         };
 
         builder
             // ── getPendingKYC ─────────────────────────────
             .addCase(getPendingKYC.pending, pending)
             .addCase(getPendingKYC.fulfilled, (state, action) => {
-                state.status        = "succeeded";
+                state.status = "succeeded";
                 state.pendingRunners = (action.payload.runners ?? []).map(normalize);
-                state.totalPending   = action.payload.total ?? 0;
+                state.totalPending = action.payload.total ?? 0;
             })
             .addCase(getPendingKYC.rejected, rejected)
 
@@ -192,7 +248,6 @@ const kycAdminSlice = createSlice({
                     { runnerStatus: runnerStatus || state.selectedRunner?.runnerStatus }
                 );
 
-                // ✅ Update the nested document status so VerifCard re-renders
                 if (state.selectedRunner?._id === runnerId) {
                     state.selectedRunner = updateDocumentStatus(
                         state.selectedRunner, documentType, 'approved'
@@ -215,7 +270,6 @@ const kycAdminSlice = createSlice({
                     { runnerStatus: runnerStatus || state.selectedRunner?.runnerStatus }
                 );
 
-                // ✅ Update the nested document status + store rejection reason
                 if (state.selectedRunner?._id === runnerId) {
                     state.selectedRunner = {
                         ...updateDocumentStatus(state.selectedRunner, documentType, 'rejected'),
@@ -223,8 +277,8 @@ const kycAdminSlice = createSlice({
                             ...state.selectedRunner.documents,
                             [documentType]: {
                                 ...(state.selectedRunner.documents?.[documentType] || {}),
-                                status:          'rejected',
-                                verified:        false,
+                                status: 'rejected',
+                                verified: false,
                                 rejectionReason: reason,
                             },
                         },
@@ -247,7 +301,6 @@ const kycAdminSlice = createSlice({
                     { runnerStatus: runnerStatus || state.selectedRunner?.runnerStatus }
                 );
 
-                // ✅ Update biometrics status so selfie VerifCard re-renders
                 if (state.selectedRunner?._id === runnerId) {
                     state.selectedRunner = updateBiometricsStatus(state.selectedRunner, 'approved');
                     if (runnerStatus) {
@@ -268,14 +321,13 @@ const kycAdminSlice = createSlice({
                     { runnerStatus: runnerStatus || state.selectedRunner?.runnerStatus }
                 );
 
-                // ✅ Update biometrics status + store rejection reason
                 if (state.selectedRunner?._id === runnerId) {
                     state.selectedRunner = {
                         ...updateBiometricsStatus(state.selectedRunner, 'rejected'),
                         biometrics: {
                             ...(state.selectedRunner.biometrics || {}),
-                            status:          'rejected',
-                            selfieVerified:  false,
+                            status: 'rejected',
+                            selfieVerified: false,
                             rejectionReason: reason,
                         },
                     };
@@ -289,10 +341,46 @@ const kycAdminSlice = createSlice({
             // ── getVerifiedRunners ────────────────────────
             .addCase(getVerifiedRunners.pending, pending)
             .addCase(getVerifiedRunners.fulfilled, (state, action) => {
-                state.status         = "succeeded";
+                state.status = "succeeded";
                 state.verifiedRunners = (action.payload.runners ?? []).map(normalize);
             })
-            .addCase(getVerifiedRunners.rejected, rejected);
+            .addCase(getVerifiedRunners.rejected, rejected)
+
+            // ── getRejectedKYC ────────────────────────────
+            .addCase(getRejectedKYC.pending, pending)
+            .addCase(getRejectedKYC.fulfilled, (state, action) => {
+                state.status = "succeeded";
+                state.rejectedRunners = (action.payload.runners ?? []).map(normalize);
+                state.totalRejected = action.payload.total ?? 0;
+            })
+            .addCase(getRejectedKYC.rejected, rejected)
+
+            // ── getFlaggedKYC ─────────────────────────────
+            .addCase(getFlaggedKYC.pending, pending)
+            .addCase(getFlaggedKYC.fulfilled, (state, action) => {
+                state.status = "succeeded";
+                state.flaggedRunners = (action.payload.runners ?? []).map(normalize);
+                state.totalFlagged = action.payload.total ?? 0;
+            })
+            .addCase(getFlaggedKYC.rejected, rejected)
+
+            // ── getAutoConfirmedKYC ───────────────────────
+            .addCase(getAutoConfirmedKYC.pending, pending)
+            .addCase(getAutoConfirmedKYC.fulfilled, (state, action) => {
+                state.status = "succeeded";
+                state.autoConfirmedRunners = (action.payload.runners ?? []).map(normalize);
+                state.totalAutoConfirmed = action.payload.total ?? 0;
+            })
+            .addCase(getAutoConfirmedKYC.rejected, rejected)
+
+            // ── getResubmittedKYC ─────────────────────────
+            .addCase(getResubmittedKYC.pending, pending)
+            .addCase(getResubmittedKYC.fulfilled, (state, action) => {
+                state.status = "succeeded";
+                state.resubmittedRunners = (action.payload.runners ?? []).map(normalize);
+                state.totalResubmitted = action.payload.total ?? 0;
+            })
+            .addCase(getResubmittedKYC.rejected, rejected);
     },
 });
 

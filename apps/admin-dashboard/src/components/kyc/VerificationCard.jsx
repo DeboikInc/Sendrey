@@ -82,6 +82,24 @@ export default function VerificationCard({
             <p className="text-[10px] text-red-500/80">Rejection reason: {data.rejectionReason}</p>
           </div>
         )}
+        {data?.faceMatchScore !== undefined && data?.faceMatchScore !== null && (
+          <div className="flex items-center justify-between">
+            <span className="text-[10px] text-white/30 tracking-wider uppercase">Face Match</span>
+            <span className={`text-[11px] font-medium ${data.faceMatchScore >= 0.85 ? 'text-green-500' : data.faceMatchScore <= 0.5 ? 'text-red-500' : 'text-yellow-500'}`}>
+              {(data.faceMatchScore * 100).toFixed(0)}%
+            </span>
+          </div>
+        )}
+        {data?.flaggedForReview && (
+          <div className="mt-1 px-3 py-2 rounded-lg bg-yellow-500/10 border border-yellow-500/20">
+            <p className="text-[10px] text-yellow-500/90">⚠️ Flagged: {data.flaggedReason}</p>
+          </div>
+        )}
+        {data?.wasResubmitted && (
+          <div className="mt-1 px-3 py-2 rounded-lg bg-blue-500/10 border border-blue-500/20">
+            <p className="text-[10px] text-blue-400/90">Resubmitted — previously rejected: {data.previousRejectionReason}</p>
+          </div>
+        )}
       </div>
 
       {/* Actions - using Button component */}

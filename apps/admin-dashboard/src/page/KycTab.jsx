@@ -1,7 +1,11 @@
 // src/pages/KycDashboard.jsx
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { Clock, UserCheck, AlertTriangle, Search, Shield, ArrowUpDown, SortAsc, SortDesc } from 'lucide-react';
+import {
+  Clock, UserCheck, AlertTriangle,
+  Search, Shield, ArrowUpDown, SortAsc,
+  SortDesc, XCircle, Zap, RefreshCw
+} from 'lucide-react';
 import PageLayout from '../components/layout/PageLayout';
 import RunnerCard from '../components/kyc/RunnerCard';
 import RunnerModal from '../components/kyc/RunnerModal';
@@ -14,61 +18,91 @@ import {
   rejectSelfie,
   clearSelectedRunner,
   getVerifiedRunners,
+  getRejectedKYC,
+  getFlaggedKYC,
+  getAutoConfirmedKYC,
+  getResubmittedKYC,
 } from '../Redux/kycSlice';
 
 export default function KycTab() {
   const [currentView, setCurrentView] = useState('pending');
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedQuery, setDebouncedQuery] = useState('');
   const [sortBy, setSortBy] = useState('newest');
   const [isRefreshing, setIsRefreshing] = useState(false);
   const dispatch = useDispatch();
 
   const {
-    pendingRunners = [],
-    totalPending = 0,
+    pendingRunners = [], totalPending = 0,
     verifiedRunners = [],
+    rejectedRunners = [], totalRejected = 0,
+    flaggedRunners = [], totalFlagged = 0,
+    autoConfirmedRunners = [], totalAutoConfirmed = 0,
+    resubmittedRunners = [], totalResubmitted = 0,
     selectedRunner = null,
     status = 'idle',
     error = '',
   } = useSelector(state => state.adminKyc || {});
 
   useEffect(() => {
+    const handle = setTimeout(() => setDebouncedQuery(searchQuery), 350);
+    return () => clearTimeout(handle);
+  }, [searchQuery]);
+
+  useEffect(() => {
     dispatch(getPendingKYC());
     dispatch(getVerifiedRunners());
   }, [dispatch]);
 
+  const refreshData = useCallback(() => {
+    dispatch(getPendingKYC());
+    dispatch(getVerifiedRunners());
+    dispatch(getRejectedKYC());
+    dispatch(getFlaggedKYC());
+    dispatch(getAutoConfirmedKYC());
+    dispatch(getResubmittedKYC());
+  }, [dispatch]);
+
+  useEffect(() => {
+    refreshData();
+  }, [dispatch, refreshData]);
+
+  const viewDataMap = {
+    pending: pendingRunners,
+    verified: verifiedRunners,
+    rejected: rejectedRunners,
+    flagged: flaggedRunners,
+    autoConfirmed: autoConfirmedRunners,
+    resubmitted: resubmittedRunners,
+  };
+
   // Filter and sort runners
   const displayedRunners = useMemo(() => {
-    const baseData = (currentView === 'pending' ? pendingRunners : verifiedRunners) || [];
+    const baseData = viewDataMap[currentView] || [];
 
-    // Apply search filter
     let filtered = baseData;
-    if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
+    if (debouncedQuery.trim()) {
+      const query = debouncedQuery.toLowerCase();
       filtered = baseData.filter(runner =>
         `${runner.firstName} ${runner.lastName} ${runner.email} ${runner.phone} ${runner.fleetType} ${runner._id}`.toLowerCase().includes(query)
       );
     }
 
-    // Apply sorting
     const sorted = [...filtered];
     switch (sortBy) {
-      case 'newest':
-        return sorted.sort((a, b) => new Date(b.createdAt || b.submittedAt || 0) - new Date(a.createdAt || a.submittedAt || 0));
-      case 'oldest':
-        return sorted.sort((a, b) => new Date(a.createdAt || a.submittedAt || 0) - new Date(b.createdAt || b.submittedAt || 0));
-      case 'name_asc':
-        return sorted.sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
-      case 'name_desc':
-        return sorted.sort((a, b) => `${b.firstName} ${b.lastName}`.localeCompare(`${a.firstName} ${a.lastName}`));
-      case 'email_asc':
-        return sorted.sort((a, b) => (a.email || '').localeCompare(b.email || ''));
-      case 'email_desc':
-        return sorted.sort((a, b) => (b.email || '').localeCompare(a.email || ''));
-      default:
-        return sorted;
+      case 'newest': return sorted.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+      case 'oldest': return sorted.sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+      case 'name_asc': return sorted.sort((a, b) => `${a.firstName} ${a.lastName}`.localeCompare(`${b.firstName} ${b.lastName}`));
+      case 'name_desc': return sorted.sort((a, b) => `${b.firstName} ${b.lastName}`.localeCompare(`${a.firstName} ${a.lastName}`));
+      case 'email_asc': return sorted.sort((a, b) => (a.email || '').localeCompare(b.email || ''));
+      case 'email_desc': return sorted.sort((a, b) => (b.email || '').localeCompare(a.email || ''));
+      default: return sorted;
     }
-  }, [currentView, pendingRunners, verifiedRunners, searchQuery, sortBy]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentView, pendingRunners, verifiedRunners,
+    rejectedRunners, flaggedRunners, autoConfirmedRunners,
+    resubmittedRunners, debouncedQuery, sortBy
+  ]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
@@ -78,11 +112,6 @@ export default function KycTab() {
       setIsRefreshing(false);
     }
   };
-
-  const refreshData = useCallback(() => {
-    dispatch(getPendingKYC());
-    dispatch(getVerifiedRunners());
-  }, [dispatch]);
 
   const handleApproveDocument = (runnerId, documentType) =>
     dispatch(approveDocument({ runnerId, documentType })).then(refreshData);
@@ -146,81 +175,120 @@ export default function KycTab() {
       borderClass: 'border-green-500/20',
       textClass: 'text-green-500',
       iconClass: 'text-green-500'
-    }
+    },
+    {
+      label: 'Rejected',
+      value: (rejectedRunners || []).length,
+      icon: UserCheck,
+      bgClass: 'bg-red-500/10',
+      borderClass: 'border-red-500/20',
+      textClass: 'text-red-500',
+      iconClass: 'text-red-500'
+    },
+    {
+      label: 'Flagged',
+      value: (flaggedRunners || []).length,
+      icon: UserCheck,
+      bgClass: 'bg-yellow-500/10',
+      borderClass: 'border-yellow-500/20',
+      textClass: 'text-yellow-500',
+      iconClass: 'text-yellow-500'
+    },
+    {
+      label: 'Auto-Confirmed',
+      value: (autoConfirmedRunners || []).length,
+      icon: UserCheck,
+      bgClass: 'bg-green-500/30',
+      borderClass: 'border-green-500/40',
+      textClass: 'text-green-500',
+      iconClass: 'text-green-500'
+    },
+    {
+      label: 'Resubmitted',
+      value: (resubmittedRunners || []).length,
+      icon: UserCheck,
+      bgClass: 'bg-blue-500/30',
+      borderClass: 'border-blue-500/40',
+      textClass: 'text-blue-500',
+      iconClass: 'text-blue-500'
+    },
   ];
 
-  // Toolbar component
-  const Toolbar = () => (
-    <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:justify-between">
-      {/* View toggle */}
-      <div className="flex bg-white/5 border border-white/10 rounded-lg p-0.5 gap-0.5 w-full sm:w-auto">
-        {[
-          { key: 'pending', label: 'Pending', icon: Clock, count: totalPending },
-          { key: 'verified', label: 'Verified', icon: UserCheck, count: (verifiedRunners || []).length },
-        ].map(({ key, label, icon: Icon, count }) => (
+  // Search & Sort component
+  const SearchSortBar = () => (
+    <div className="flex gap-2 mb-4">
+      {/* Search Input */}
+      <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-3 py-2 w-full sm:w-64 focus-within:border-primary/40 transition-colors">
+        <Search size={12} className="text-white/30 shrink-0" />
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={handleSearchChange}
+          placeholder={`Search ${currentView} runners...`}
+          className="bg-transparent text-xs text-white/70 placeholder-white/25 outline-none w-full"
+          autoComplete="off"
+        />
+        {searchQuery && (
           <button
-            key={key}
-            onClick={() => handleViewChange(key)}
-            className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-md text-xs font-medium transition-all
-              ${currentView === key
-                ? 'bg-primary/10 text-primary border border-primary/20'
-                : 'text-white/40 hover:text-white'
-              }`}
+            onClick={handleClearSearch}
+            className="text-white/30 hover:text-white/70 transition-colors text-sm font-bold"
+            type="button"
           >
-            <Icon size={12} />
-            {label}
-            <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold
-              ${currentView === key ? 'bg-primary text-white' : 'bg-white/10 text-white/40'}`}>
-              {count ?? 0}
-            </span>
+            ×
           </button>
-        ))}
+        )}
       </div>
 
-      {/* Search and Sort */}
-      <div className="flex gap-2">
-        {/* Search Input */}
-        <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-3 py-2 w-full sm:w-64 focus-within:border-primary/40 transition-colors">
-          <Search size={12} className="text-white/30 shrink-0" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={handleSearchChange}
-            placeholder={`Search ${currentView} runners...`}
-            className="bg-transparent text-xs text-white/70 placeholder-white/25 outline-none w-full"
-            autoComplete="off"
-          />
-          {searchQuery && (
-            <button
-              onClick={handleClearSearch}
-              className="text-white/30 hover:text-white/70 transition-colors text-sm font-bold"
-              type="button"
-            >
-              ×
-            </button>
-          )}
-        </div>
-
-        {/* Sort Dropdown */}
-        <div className="relative">
-          <select
-            value={sortBy}
-            onChange={handleSortChange}
-            className="appearance-none bg-secondary border border-white/10 rounded-lg px-3 py-2 pr-8 text-xs text-white/70 focus:outline-none focus:border-primary/40 cursor-pointer"
-          >
-            <option value="newest">Newest First</option>
-            <option value="oldest">Oldest First</option>
-            <option value="name_asc">Name (A-Z)</option>
-            <option value="name_desc">Name (Z-A)</option>
-            <option value="email_asc">Email (A-Z)</option>
-            <option value="email_desc">Email (Z-A)</option>
-          </select>
-          <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
-            {getSortIcon()}
-          </div>
+      {/* Sort Dropdown */}
+      <div className="relative">
+        <select
+          value={sortBy}
+          onChange={handleSortChange}
+          className="appearance-none bg-secondary border border-white/10 rounded-lg px-3 py-2 pr-8 text-xs text-white/70 focus:outline-none focus:border-primary/40 cursor-pointer"
+        >
+          <option value="newest">Newest First</option>
+          <option value="oldest">Oldest First</option>
+          <option value="name_asc">Name (A-Z)</option>
+          <option value="name_desc">Name (Z-A)</option>
+          <option value="email_asc">Email (A-Z)</option>
+          <option value="email_desc">Email (Z-A)</option>
+        </select>
+        <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
+          {getSortIcon()}
         </div>
       </div>
     </div>
+  );
+
+  const ViewToggleBar = () => (
+    <div className="flex bg-white/5 border border-white/10 rounded-lg p-0.5 gap-0.5 w-full sm:w-auto overflow-x-auto mb-4">
+      {[
+        { key: 'pending', label: 'Pending', icon: Clock, count: totalPending },
+        { key: 'verified', label: 'Verified', icon: UserCheck, count: (verifiedRunners || []).length },
+        { key: 'rejected', label: 'Rejected', icon: XCircle, count: totalRejected },
+        { key: 'flagged', label: 'Flagged', icon: AlertTriangle, count: totalFlagged },
+        { key: 'autoConfirmed', label: 'Auto-Confirmed', icon: Zap, count: totalAutoConfirmed },
+        { key: 'resubmitted', label: 'Resubmitted', icon: RefreshCw, count: totalResubmitted },
+      ].map(({ key, label, icon: Icon, count }) => (
+        <button
+          key={key}
+          onClick={() => handleViewChange(key)}
+          className={`flex-1 sm:flex-none flex items-center justify-center gap-2 px-3 py-2 rounded-md text-xs font-medium transition-all whitespace-nowrap
+        ${currentView === key ? 'bg-primary/10 text-primary border border-primary/20' : 'text-white/40 hover:text-white'}`}
+        >
+          <Icon size={12} />
+          {label}
+          <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-bold ${currentView === key ? 'bg-primary text-white' : 'bg-white/10 text-white/40'}`}>
+            {count ?? 0}
+          </span>
+        </button>
+      ))}
+    </div>
+  );
+
+  // Toolbar component (now only contains the view toggle)
+  const Toolbar = () => (
+    <ViewToggleBar />
   );
 
   // Error display
@@ -268,6 +336,9 @@ export default function KycTab() {
         isRefreshing={isRefreshing}
         toolbar={<Toolbar />}
       >
+        {/* 🆕 Search & Sort bar now appears here - under stats, above the content */}
+        <SearchSortBar />
+
         {displayedRunners.length === 0 ? (
           <div className="py-16 flex flex-col items-center gap-3 text-white/20">
             <Shield size={28} className="opacity-30" />

@@ -14,7 +14,7 @@ const bcrypt = require('bcryptjs');
 
 const { sendEmailEvent } = require('../kafka/producers/emailProducer');
 const { sendSmsEvent } = require('../kafka/producers/smsProducer');
-
+const redis = require('../config/redis');
 
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
@@ -317,48 +317,75 @@ class AuthController extends BaseController {
 
   refreshToken = async (req, res, next) => {
     try {
-      
       const incomingToken = req.cookies.refreshToken || req.body.refreshToken;
       if (!incomingToken) return this.error(res, 'No refresh token provided', 401);
 
       const tokenHash = this._hashToken(incomingToken);
 
-      let session = await AuthSession.findOne({ tokenHash });
-
-      if (!session) {
-        // Might be a token that was just rotated out from under a racing
-        // request — check the grace window before treating this as revoked.
-        session = await AuthSession.findOne({
-          previousTokenHash: tokenHash,
-          previousTokenExpiresAt: { $gt: new Date() },
+      // Replay cache 
+      const cached = await redis.get(`refresh_replay:${tokenHash}`);
+      if (cached) {
+        const { accessToken, refreshToken: cachedRefresh } = JSON.parse(cached);
+        this.setAuthCookies(res, accessToken, cachedRefresh);
+        return this.success(res, {
+          message: 'Token refreshed',
+          accessToken,
+          refreshToken: cachedRefresh,
         });
       }
 
+      // Atomic claim: concurrent request successfully rotate a given tokenHash. 
+      const newRefreshToken = this._generateOpaqueToken();
+      const newTokenHash = this._hashToken(newRefreshToken);
+
+      const session = await AuthSession.findOneAndUpdate(
+        { tokenHash }, 
+        {
+          $set: {
+            tokenHash: newTokenHash,
+            lastUsedAt: new Date(),
+            expiresAt: new Date(Date.now() + SESSION_TTL_MS),
+          },
+        },
+        { new: false } 
+      );
+
       if (!session) {
+        await new Promise(r => setTimeout(r, 150));
+        const raced = await redis.get(`refresh_replay:${tokenHash}`);
+        if (raced) {
+          const { accessToken, refreshToken: cachedRefresh } = JSON.parse(raced);
+          this.setAuthCookies(res, accessToken, cachedRefresh);
+          return this.success(res, {
+            message: 'Token refreshed',
+            accessToken,
+            refreshToken: cachedRefresh,
+          });
+        }
         return this.error(res, 'Session expired or revoked', 401);
       }
 
       if (session.expiresAt < new Date()) {
-        await session.deleteOne();
+        await AuthSession.deleteOne({ _id: session._id });
         return this.error(res, 'Session expired', 401);
       }
 
       const Model = session.userType === 'runner' ? Runner : User;
       const account = await Model.findById(session.userId);
       if (!account) {
-        await session.deleteOne();
+        await AuthSession.deleteOne({ _id: session._id });
         return this.error(res, 'Account not found', 404);
       }
 
       const accessToken = this.service.generateToken(account);
-      const newRefreshToken = this._generateOpaqueToken();
 
-      session.previousTokenHash = session.tokenHash;
-      session.previousTokenExpiresAt = new Date(Date.now() + 30 * 1000);
-      session.tokenHash = this._hashToken(newRefreshToken);
-      session.lastUsedAt = new Date();
-      session.expiresAt = new Date(Date.now() + SESSION_TTL_MS);
-      await session.save();
+      // Publish the replay result
+      await redis.set(
+        `refresh_replay:${tokenHash}`,
+        JSON.stringify({ accessToken, refreshToken: newRefreshToken }),
+        'EX',
+        30
+      );
 
       this.setAuthCookies(res, accessToken, newRefreshToken);
 
@@ -370,7 +397,7 @@ class AuthController extends BaseController {
     } catch (err) {
       return this.error(res, err.message || 'Invalid or expired refresh token', err.statusCode || 401);
     }
-  }
+  };
 
   verifyEmailToken = async (req, res, next) => {
     try {
