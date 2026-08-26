@@ -101,21 +101,6 @@ export const Profile = ({
     useEffect(() => {
         if (!runnerId) return;
 
-        // const fetchData = async () => {
-        //     try {
-        //         const result = await dispatch(getProfile()).unwrap();
-        //         const runner = result?.data?.runner || result?.runner || result?.data || result;
-        //         if (runner) {
-        //             setRunnerData(runner);
-        //             if (runner.hasPinSet !== undefined) {
-        //                 dispatch(setPinSet(runner.hasPinSet));
-        //             }
-        //         }
-        //     } catch (err) {
-        //         console.error('Profile fetch error:', err);
-        //     }
-        // };
-
         const fetchData = async () => {
             try {
                 const result = await dispatch(getProfile()).unwrap();
