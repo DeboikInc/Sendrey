@@ -98,48 +98,48 @@ export const Profile = ({
 
     const [debugInfo, setDebugInfo] = useState(null);
 
-    const fetchData = async () => {
-        try {
-            const result = await dispatch(getProfile()).unwrap();
-            const runner = result?.data?.runner || result?.runner || result?.data || result;
-            setDebugInfo({
-                success: true,
-                hasResult: !!result,
-                resultKeys: result ? Object.keys(result) : [],
-                documentCookie: document.cookie || '(empty)',
-                localStorageToken: localStorage.getItem('accessToken') || localStorage.getItem('token') || '(none)',
-            });
-            if (runner) {
-                setRunnerData(runner);
-                if (runner.hasPinSet !== undefined) dispatch(setPinSet(runner.hasPinSet));
-            }
-        } catch (err) {
-            setDebugInfo({
-                success: false,
-                errorMessage: err?.message,
-                errorStatus: err?.status || err?.response?.status,
-                errorData: JSON.stringify(err?.response?.data || err?.data || err),
-                documentCookie: document.cookie || '(empty)',
-                localStorageToken: localStorage.getItem('accessToken') || localStorage.getItem('token') || '(none)',
-            });
-            console.error('Profile fetch error:', err);
-        }
-    };
-
     useEffect(() => {
         if (!runnerId) return;
+
+        // const fetchData = async () => {
+        //     try {
+        //         const result = await dispatch(getProfile()).unwrap();
+        //         const runner = result?.data?.runner || result?.runner || result?.data || result;
+        //         if (runner) {
+        //             setRunnerData(runner);
+        //             if (runner.hasPinSet !== undefined) {
+        //                 dispatch(setPinSet(runner.hasPinSet));
+        //             }
+        //         }
+        //     } catch (err) {
+        //         console.error('Profile fetch error:', err);
+        //     }
+        // };
 
         const fetchData = async () => {
             try {
                 const result = await dispatch(getProfile()).unwrap();
                 const runner = result?.data?.runner || result?.runner || result?.data || result;
+                setDebugInfo({
+                    success: true,
+                    hasResult: !!result,
+                    resultKeys: result ? Object.keys(result) : [],
+                    documentCookie: document.cookie || '(empty)',
+                    localStorageToken: localStorage.getItem('accessToken') || localStorage.getItem('token') || '(none)',
+                });
                 if (runner) {
                     setRunnerData(runner);
-                    if (runner.hasPinSet !== undefined) {
-                        dispatch(setPinSet(runner.hasPinSet));
-                    }
+                    if (runner.hasPinSet !== undefined) dispatch(setPinSet(runner.hasPinSet));
                 }
             } catch (err) {
+                setDebugInfo({
+                    success: false,
+                    errorMessage: err?.message,
+                    errorStatus: err?.status || err?.response?.status,
+                    errorData: JSON.stringify(err?.response?.data || err?.data || err),
+                    documentCookie: document.cookie || '(empty)',
+                    localStorageToken: localStorage.getItem('accessToken') || localStorage.getItem('token') || '(none)',
+                });
                 console.error('Profile fetch error:', err);
             }
         };
