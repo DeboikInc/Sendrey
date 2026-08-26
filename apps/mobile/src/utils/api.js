@@ -24,6 +24,44 @@ const clearSession = async () => {
   }
 };
 
+let isRefreshing = false;
+let refreshQueue = []; // pending requests waiting for new token
+
+const processQueue = (error, token = null) => {
+  refreshQueue.forEach(({ resolve, reject }) => {
+    if (error) reject(error);
+    else resolve(token);
+  });
+  refreshQueue = [];
+};
+
+// Shared refresh logic — always sends the stored refresh token explicitly
+// (mobile can't rely on cookies alone, especially inside Capacitor's native
+// shell), and always persists the rotated tokens back to storage + Redux
+// so the *next* request picks up the new access token immediately rather
+// than waiting for another 401 round-trip.
+const doRefresh = async () => {
+  const { refreshToken } = await authStorage.getTokens();
+  if (!refreshToken) throw new Error('No refresh token');
+
+  const res = await axios.post(
+    `${BASE_URL}/auth/refresh-token`,
+    { refreshToken },
+    { withCredentials: true }
+  );
+
+  const payload = res.data?.data || res.data;
+  const newAccess = payload.accessToken || payload.token;
+  const newRefresh = payload.refreshToken || refreshToken;
+
+  if (!newAccess) throw new Error('Refresh response missing accessToken');
+
+  await authStorage.setTokens(newAccess, newRefresh);
+  if (store) store.dispatch(setToken(newAccess));
+
+  return { accessToken: newAccess, refreshToken: newRefresh };
+};
+
 export const refreshSession = () => {
   if (isRefreshing) {
     return new Promise((resolve, reject) => {
@@ -31,10 +69,10 @@ export const refreshSession = () => {
     });
   }
   isRefreshing = true;
-  return axios.post(`${BASE_URL}/auth/refresh-token`, {}, { withCredentials: true })
-    .then((res) => { processQueue(null); return res; })
+  return doRefresh()
+    .then((tokens) => { processQueue(null, tokens.accessToken); return tokens; })
     .catch((err) => {
-      processQueue(err);
+      processQueue(err, null);
       const status = err.response?.status;
       if (status === 401 || status === 403) clearSession();
       throw err;
@@ -58,17 +96,6 @@ api.interceptors.request.use(
   (error) => Promise.reject(error)
 );
 
-let isRefreshing = false;
-let refreshQueue = []; // pending requests waiting for new token
-
-const processQueue = (error, token = null) => {
-  refreshQueue.forEach(({ resolve, reject }) => {
-    if (error) reject(error);
-    else resolve(token);
-  });
-  refreshQueue = [];
-};
-
 api.interceptors.response.use(
   (response) => {
     if (response.data && response.data.data !== undefined) {
@@ -80,7 +107,6 @@ api.interceptors.response.use(
     const original = error.config;
 
     if (original._skipInterceptor) return Promise.reject(error);
-
 
     if (error.response?.status === 401 && original.url?.includes('refresh-token')) {
       // Only treat this as a real logout if we're actually online.
@@ -107,23 +133,10 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const { refreshToken } = await authStorage.getTokens();
-        if (!refreshToken) throw new Error('No refresh token');
+        const tokens = await doRefresh();
+        original.headers['Authorization'] = `Bearer ${tokens.accessToken}`;
 
-        const { data } = await axios.post(
-          `${BASE_URL}/auth/refresh-token`,
-          { refreshToken },
-          { withCredentials: true }
-        );
-
-        const newAccess = data.accessToken || data.token;
-        const newRefresh = data.refreshToken || refreshToken;
-
-        await authStorage.setTokens(newAccess, newRefresh);
-        store.dispatch(setToken(newAccess));
-        original.headers['Authorization'] = `Bearer ${newAccess}`;
-
-        processQueue(null, newAccess);
+        processQueue(null, tokens.accessToken);
         return api(original);
       } catch (refreshError) {
         processQueue(refreshError, null);

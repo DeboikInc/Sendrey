@@ -14,15 +14,29 @@ import { PinPad } from '../../components/common/PinPad';
 
 const ConfirmModal = ({ field, value, onConfirm, onCancel, dark }) => (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-        <div className={`bg-white dark:bg-black-100 rounded-2xl shadow-xl max-w-sm w-full p-6`}>
-            <h2 className="text-lg font-bold text-black-200 dark:text-gray-200 mb-2">Save changes?</h2>
-            <p className="text-sm text-black-100/80 dark:text-gray-400 mb-1">
+        <div className={`bg-white dark:bg-black-100 rounded-2xl shadow-xl max-w-sm w-full p-4 sm:p-6 mx-4`}>
+            <h2 className="text-base sm:text-lg font-bold text-black-200 dark:text-gray-200 mb-2">
+                Save changes?
+            </h2>
+            <p className="text-xs sm:text-sm text-black-100/80 dark:text-gray-400 mb-1">
                 Update <span className="font-medium capitalize">{field}</span> to:
             </p>
-            <p className="text-sm font-semibold text-black-200 dark:text-white mb-6 break-all">"{value}"</p>
-            <div className="flex justify-end gap-3 font-medium">
-                <button onClick={onCancel} className="text-black-100/80 dark:text-gray-400">Cancel</button>
-                <button onClick={onConfirm} className="text-primary">Save</button>
+            <p className="text-sm sm:text-base font-semibold text-black-200 dark:text-white mb-6 break-all">
+                "{value}"
+            </p>
+            <div className="flex justify-end gap-3 font-medium text-sm sm:text-base">
+                <button 
+                    onClick={onCancel} 
+                    className="text-black-100/80 dark:text-gray-400 px-2 py-1 active:scale-95 transition-transform"
+                >
+                    Cancel
+                </button>
+                <button 
+                    onClick={onConfirm} 
+                    className="text-primary px-2 py-1 active:scale-95 transition-transform"
+                >
+                    Save
+                </button>
             </div>
         </div>
     </div>
@@ -34,7 +48,7 @@ const StarDisplay = ({ rating }) => {
             {[1, 2, 3, 4, 5].map(star => (
                 <Star
                     key={star}
-                    className={`w-4 h-4 ${star <= Math.round(rating)
+                    className={`w-3 h-3 sm:w-4 sm:h-4 ${star <= Math.round(rating)
                         ? 'text-yellow-400 fill-yellow-400'
                         : 'text-gray-300 dark:text-gray-600'}`}
                 />
@@ -43,7 +57,14 @@ const StarDisplay = ({ rating }) => {
     );
 };
 
-export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runnerData: initialRunnerData, onToggleDarkMode }) => {
+export const Profile = ({ 
+    darkMode, 
+    onBack, 
+    runnerId, 
+    registrationComplete, 
+    runnerData: initialRunnerData, 
+    onToggleDarkMode 
+}) => {
     const dispatch = useDispatch();
     const averageRating = useSelector(s => s.rating.averageRating);
     const totalRatings = useSelector(s => s.rating.totalRatings);
@@ -70,15 +91,11 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
     const [notificationSuccess, setNotificationSuccess] = useState(null);
 
     const hasPinSet = isPinSet || runnerData?.hasPin === true;
-
-    // Check if notifications are opted in
     const isOptedIn = notificationPrefs?.push?.messages === true ||
         notificationPrefs?.push?.updates === true;
-
     const isOptedOut = notificationPrefs?.push?.messages === false &&
         notificationPrefs?.push?.updates === false;
 
-    // Fetch fresh profile + ratings on mount
     useEffect(() => {
         if (!runnerId) return;
 
@@ -102,7 +119,6 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
         dispatch(getNotificationPreferences({ userId: runnerId, userType: 'runner' }));
     }, [runnerId, dispatch]);
 
-    // Update local state when store profile changes
     useEffect(() => {
         if (profileFromStore) {
             setRunnerData(prev => ({ ...prev, ...profileFromStore }));
@@ -203,14 +219,22 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
     if (!registrationComplete) {
         return (
             <div className={`h-full flex flex-col bg-white dark:bg-black-100 ${darkMode ? 'dark' : ''}`}>
-                <div className="flex items-center border-b border-gray-100 dark:border-white/10 p-3">
-                    <div onClick={onBack} className="cursor-pointer text-black-200 dark:text-gray-300">
-                        <ChevronLeft />
-                    </div>
-                    <h1 className="text-lg font-bold mx-auto text-black-200 dark:text-gray-300">Profile</h1>
+                <div className="flex items-center border-b border-gray-100 dark:border-white/10 p-3 sm:p-4">
+                    <button 
+                        onClick={onBack} 
+                        className="cursor-pointer text-black-200 dark:text-gray-300 p-1 -ml-1 active:scale-95 transition-transform"
+                        aria-label="Go back"
+                    >
+                        <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
+                    </button>
+                    <h1 className="text-base sm:text-lg font-bold mx-auto text-black-200 dark:text-gray-300">
+                        Profile
+                    </h1>
                 </div>
                 <div className="flex-1 flex flex-col items-center justify-center text-center px-6 py-20">
-                    <p className="text-black-100/80 dark:text-gray-500">Get Started to view profile</p>
+                    <p className="text-sm sm:text-base text-black-100/80 dark:text-gray-500">
+                        Get Started to view profile
+                    </p>
                 </div>
             </div>
         );
@@ -219,30 +243,42 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
     return (
         <div className={`h-screen flex flex-col bg-white dark:bg-black-100 ${darkMode ? 'dark' : ''}`}>
             {/* Header */}
-            <div className="flex items-center border-b border-gray-100 dark:border-white/10 p-3">
-                <div onClick={onBack} className="cursor-pointer text-black-200 dark:text-gray-300">
-                    <ChevronLeft />
-                </div>
-                <h1 className="text-lg font-bold mx-auto text-black-200 dark:text-gray-300">Profile</h1>
+            <div className="flex items-center border-b border-gray-100 dark:border-white/10 p-3 sm:p-4 flex-shrink-0">
+                <button 
+                    onClick={onBack} 
+                    className="cursor-pointer text-black-200 dark:text-gray-300 p-1 -ml-1 active:scale-95 transition-transform"
+                    aria-label="Go back"
+                >
+                    <ChevronLeft className="w-5 h-5 sm:w-6 sm:h-6" />
+                </button>
+                <h1 className="text-base sm:text-lg font-bold mx-auto text-black-200 dark:text-gray-300">
+                    Profile
+                </h1>
             </div>
 
-            <div className="flex-1 overflow-y-auto marketSelection">
-                {/* Avatar */}
-                <div className="flex flex-col items-center py-6 px-4">
+            <div className="flex-1 overflow-y-auto marketSelection pb-4 sm:pb-6">
+                {/* Avatar Section */}
+                <div className="flex flex-col items-center py-4 sm:py-6 px-4">
                     <div className="relative">
-                        <div className="w-20 h-20 rounded-full bg-gray-200 dark:bg-black-200 overflow-hidden flex items-center justify-center">
+                        <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gray-200 dark:bg-black-200 overflow-hidden flex items-center justify-center">
                             {runnerData.avatar ? (
-                                <img src={runnerData.avatar} alt="avatar" className="w-full h-full object-cover" />
+                                <img 
+                                    src={runnerData.avatar} 
+                                    alt="avatar" 
+                                    className="w-full h-full object-cover"
+                                    loading="lazy"
+                                />
                             ) : (
-                                <User className="w-8 h-8 text-black-100/80 dark:text-gray-400" />
+                                <User className="w-8 h-8 sm:w-10 sm:h-10 text-black-100/80 dark:text-gray-400" />
                             )}
                         </div>
                         <button
                             onClick={() => fileInputRef.current?.click()}
                             disabled={avatarUploading}
-                            className="absolute bottom-0 right-0 w-7 h-7 bg-primary rounded-full flex items-center justify-center shadow-md disabled:opacity-50"
+                            className="absolute bottom-0 right-0 w-7 h-7 sm:w-8 sm:h-8 bg-primary rounded-full flex items-center justify-center shadow-md disabled:opacity-50 active:scale-95 transition-transform"
+                            aria-label="Upload avatar"
                         >
-                            <Camera className="w-3.5 h-3.5 text-white" />
+                            <Camera className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-white" />
                         </button>
                         <input
                             ref={fileInputRef}
@@ -253,7 +289,9 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
                         />
                     </div>
                     {avatarUploading && (
-                        <p className="text-xs text-black-100/80 dark:text-gray-400 mt-2">Uploading...</p>
+                        <p className="text-xs text-black-100/80 dark:text-gray-400 mt-2 animate-pulse">
+                            Uploading...
+                        </p>
                     )}
 
                     {/* Rating */}
@@ -266,14 +304,19 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
                         </div>
                     )}
                     {totalRatings === 0 && (
-                        <p className="text-xs text-black-100/80 dark:text-gray-500 mt-3">No ratings yet</p>
+                        <p className="text-xs text-black-100/80 dark:text-gray-500 mt-3">
+                            No ratings yet
+                        </p>
                     )}
                 </div>
 
                 {/* Editable fields */}
-                <div className="px-4 pb-4 space-y-3">
+                <div className="px-3 sm:px-4 pb-4 space-y-3">
                     {fields.map(({ key, label }) => (
-                        <div key={key} className="border border-black-100/20 dark:border-white/10 rounded-xl px-4 py-3">
+                        <div 
+                            key={key} 
+                            className="border border-black-100/20 dark:border-white/10 rounded-xl px-3 sm:px-4 py-3 min-h-[70px]"
+                        >
                             <p className="text-xs text-black-100/80 dark:text-gray-500 mb-1">{label}</p>
                             {editingField === key ? (
                                 <input
@@ -282,58 +325,72 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
                                     onChange={e => setEditValue(e.target.value)}
                                     onKeyDown={handleEditKeyDown}
                                     onBlur={handleSaveAttempt}
-                                    className="w-full text-sm text-black-200 dark:text-white bg-transparent outline-none border-b border-primary pb-0.5"
+                                    className="w-full text-sm sm:text-base text-black-200 dark:text-white bg-transparent outline-none border-b border-primary pb-0.5"
+                                    inputMode="text"
                                 />
                             ) : (
                                 <div
-                                    className="flex items-center justify-between cursor-pointer"
+                                    className="flex items-center justify-between cursor-pointer min-h-[28px]"
                                     onClick={() => handleEditStart(key, runnerData[key])}
+                                    role="button"
+                                    tabIndex={0}
+                                    onKeyDown={(e) => e.key === 'Enter' && handleEditStart(key, runnerData[key])}
                                 >
-                                    <p className="text-sm text-black-200 dark:text-gray-200">
-                                        {runnerData[key] || <span className="text-black-100/80 dark:text-gray-400">Not set</span>}
+                                    <p className={`text-sm sm:text-base text-black-200 dark:text-gray-200 ${
+                                        !runnerData[key] ? 'text-black-100/80 dark:text-gray-400' : ''
+                                    }`}>
+                                        {runnerData[key] || 'Not set'}
                                     </p>
-                                    <ChevronRight className="w-4 h-4 text-black-100/80 dark:text-gray-400" />
+                                    <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 text-black-100/80 dark:text-gray-400 flex-shrink-0 ml-2" />
                                 </div>
                             )}
                         </div>
                     ))}
 
                     {/* Email — read only */}
-                    <div className="border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3">
+                    <div className="border border-gray-200 dark:border-white/10 rounded-xl px-3 sm:px-4 py-3 min-h-[70px]">
                         <p className="text-xs text-black-100/80 dark:text-gray-500 mb-1">Email</p>
-                        <div className="flex items-center justify-between">
-                            <p className="text-sm text-black-200 dark:text-gray-200">{runnerData.email || '—'}</p>
-                            <div className="flex flex-col justify-center items-center gap-1">
-                                <Phone className="w-3.5 h-3.5 text-black-100/80 dark:text-gray-400" />
-                                <span className="text-[10px] text-black-100/80 dark:text-gray-400">Contact support to change</span>
+                        <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm sm:text-base text-black-200 dark:text-gray-200 break-all">
+                                {runnerData.email || '—'}
+                            </p>
+                            <div className="flex flex-col items-center gap-1 flex-shrink-0 ml-2">
+                                <Phone className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-black-100/80 dark:text-gray-400" />
+                                <span className="text-[8px] sm:text-[10px] text-black-100/80 dark:text-gray-400 text-center leading-tight">
+                                    Contact support<br className="sm:hidden" /> to change
+                                </span>
                             </div>
                         </div>
                     </div>
 
-                    <div className="border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3">
+                    <div className="border border-gray-200 dark:border-white/10 rounded-xl px-3 sm:px-4 py-3 min-h-[70px]">
                         <p className="text-xs text-black-100/80 dark:text-gray-500 mb-1">Phone</p>
-                        <div className="flex items-center justify-between">
-                            <p className="text-sm text-black-200 dark:text-gray-200">{runnerData.phone || '—'}</p>
-                            <div className="flex flex-col justify-center items-center gap-1">
-                                <Phone className="w-3.5 h-3.5 text-black-100/80 dark:text-gray-400" />
-                                <span className="text-[10px] text-black-100/80 dark:text-gray-400">Contact support to change</span>
+                        <div className="flex items-center justify-between gap-2">
+                            <p className="text-sm sm:text-base text-black-200 dark:text-gray-200">
+                                {runnerData.phone || '—'}
+                            </p>
+                            <div className="flex flex-col items-center gap-1 flex-shrink-0 ml-2">
+                                <Phone className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-black-100/80 dark:text-gray-400" />
+                                <span className="text-[8px] sm:text-[10px] text-black-100/80 dark:text-gray-400 text-center leading-tight">
+                                    Contact support<br className="sm:hidden" /> to change
+                                </span>
                             </div>
                         </div>
                     </div>
 
                     {/* Fleet Type — read only */}
-                    <div className="border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3">
+                    <div className="border border-gray-200 dark:border-white/10 rounded-xl px-3 sm:px-4 py-3 min-h-[70px]">
                         <p className="text-xs text-black-100/80 dark:text-gray-500 mb-1">Your Fleet Type</p>
                         <div className="flex items-center justify-between">
-                            <p className="text-sm text-black-200 dark:text-gray-200 capitalize">
+                            <p className="text-sm sm:text-base text-black-200 dark:text-gray-200 capitalize">
                                 {runnerData.fleetType ?? '—'}
                             </p>
                         </div>
                     </div>
 
                     {/* KYC — read only */}
-                    <div className="border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 space-y-3">
-                        <p className="text-xs text-black-100/80 dark:text-gray-500 mb-1">KYC Status</p>
+                    <div className="border border-gray-200 dark:border-white/10 rounded-xl px-3 sm:px-4 py-3 min-h-[70px]">
+                        <p className="text-xs text-black-100/80 dark:text-gray-500 mb-2">KYC Status</p>
 
                         {(() => {
                             const isVerified = runnerData.isVerifiedKyc;
@@ -347,31 +404,35 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
                             const submittedDocs = [
                                 nin?.status && nin.status !== 'not_submitted' ? 'ID (NIN)' : null,
                                 license?.status && license.status !== 'not_submitted' ? 'Driver\'s License' : null,
-                                selfie?.status && selfie.status !== 'not_submitted' ? 'Facial Recognition' : null,
+                                selfie?.status && selfie.status !== 'not_submitted' ? 'Facial' : null,
                             ].filter(Boolean);
 
                             if (isVerified) {
                                 return (
-                                    <div className="flex items-center justify-between">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                                         <div className="flex items-center gap-2">
                                             <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
                                                 <CheckCircle className="w-3.5 h-3.5 text-primary" />
                                             </div>
                                             <p className="text-sm font-bold text-primary">Verified</p>
                                         </div>
-                                        <p className="text-xs text-black-100/80 dark:text-gray-400">{submittedDocs.join(' · ')}</p>
+                                        <p className="text-xs text-black-100/80 dark:text-gray-400">
+                                            {submittedDocs.join(' · ')}
+                                        </p>
                                     </div>
                                 );
                             }
 
                             if (isPending) {
                                 return (
-                                    <div className="flex items-center justify-between">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                                         <div className="flex items-center gap-2">
                                             <div className="w-6 h-6 rounded-full bg-secondary/10 flex items-center justify-center flex-shrink-0">
                                                 <Clock className="w-3.5 h-3.5 text-secondary dark:text-gray-300" />
                                             </div>
-                                            <p className="text-sm font-bold text-secondary dark:text-gray-300">Pending Review</p>
+                                            <p className="text-sm font-bold text-secondary dark:text-gray-300">
+                                                Pending Review
+                                            </p>
                                         </div>
                                         <p className="text-xs text-black-100/80 dark:text-gray-400">
                                             {submittedDocs.length > 0 ? submittedDocs.join(' · ') : 'Under review'}
@@ -382,7 +443,7 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
 
                             if (isRejected) {
                                 return (
-                                    <div className="flex items-center justify-between">
+                                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
                                         <div className="flex items-center gap-2">
                                             <div className="w-6 h-6 rounded-full bg-gray-1000 dark:bg-white/5 flex items-center justify-center flex-shrink-0">
                                                 <XCircle className="w-3.5 h-3.5 text-gray-500" />
@@ -400,34 +461,40 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
                                         <Shield className="w-3.5 h-3.5 text-black-100/80 dark:text-gray-400" />
                                     </div>
                                     <div>
-                                        <p className="text-sm font-bold text-black-100/80 dark:text-gray-400">Not Verified</p>
-                                        <p className="text-xs text-black-100/80 dark:text-gray-400 mt-0.5">Complete onboarding to verify</p>
+                                        <p className="text-sm font-bold text-black-100/80 dark:text-gray-400">
+                                            Not Verified
+                                        </p>
+                                        <p className="text-xs text-black-100/80 dark:text-gray-400 mt-0.5">
+                                            Complete onboarding to verify
+                                        </p>
                                     </div>
                                 </div>
                             );
                         })()}
                     </div>
 
-                    <div className="border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3">
+                    <div className="border border-gray-200 dark:border-white/10 rounded-xl px-3 sm:px-4 py-3 min-h-[70px]">
                         <p className="text-xs text-black-100/80 dark:text-gray-500 mb-1">Training Status</p>
                         <div className="flex items-center justify-between">
-                            <p className="text-sm text-black-200 dark:text-gray-200 capitalize">
+                            <p className="text-sm sm:text-base text-black-200 dark:text-gray-200 capitalize">
                                 {runnerData.isTrainingCompleted ? 'Completed' : 'Pending..'}
                             </p>
                         </div>
                     </div>
 
                     {saveError && (
-                        <p className="text-xs text-red-500 text-center">{saveError}</p>
+                        <p className="text-xs text-red-500 text-center animate-pulse">{saveError}</p>
                     )}
                     {saving && (
-                        <p className="text-xs text-black-100/80 dark:text-gray-400 text-center">Saving...</p>
+                        <p className="text-xs text-black-100/80 dark:text-gray-400 text-center animate-pulse">
+                            Saving...
+                        </p>
                     )}
                 </div>
 
                 {/* Preferences Section */}
-                <div className="px-4 pb-4">
-                    <p className={`text-xs font-semibold uppercase tracking-widest mb-3 
+                <div className="px-3 sm:px-4 pb-4">
+                    <p className={`text-[10px] sm:text-xs font-semibold uppercase tracking-widest mb-3 
                         ${darkMode ? 'text-gray-500' : 'text-black-100/80'}`}>
                         Preferences
                     </p>
@@ -435,19 +502,23 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
                     {/* Dark Mode Toggle */}
                     <button
                         onClick={() => onToggleDarkMode && onToggleDarkMode()}
-                        className={`w-full flex items-center justify-between border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 mb-3`}
+                        className={`w-full flex items-center justify-between border border-gray-200 dark:border-white/10 rounded-xl px-3 sm:px-4 py-3 mb-3 active:scale-[0.98] transition-transform`}
                     >
                         <div className="flex items-center gap-3">
                             {darkMode
-                                ? <Moon className="h-4 w-4 text-black-100/80 dark:text-gray-400" />
-                                : <Sun className="h-4 w-4 text-black-100/80 dark:text-gray-400" />
+                                ? <Moon className="h-4 w-4 sm:h-5 sm:w-5 text-black-100/80 dark:text-gray-400" />
+                                : <Sun className="h-4 w-4 sm:h-5 sm:w-5 text-black-100/80 dark:text-gray-400" />
                             }
-                            <p className={`text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-black-200'}`}>
+                            <p className={`text-sm sm:text-base font-medium ${darkMode ? 'text-gray-200' : 'text-black-200'}`}>
                                 {darkMode ? "Dark Mode" : "Light Mode"}
                             </p>
                         </div>
-                        <div className={`w-11 h-6 rounded-full transition-colors duration-300 relative ${darkMode ? "bg-primary" : "bg-gray-200"}`}>
-                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all duration-300 ${darkMode ? "left-6" : "left-1"}`} />
+                        <div className={`w-11 h-6 rounded-full transition-colors duration-300 relative flex-shrink-0 ml-4 ${
+                            darkMode ? "bg-primary" : "bg-gray-200"
+                        }`}>
+                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all duration-300 ${
+                                darkMode ? "left-6" : "left-1"
+                            }`} />
                         </div>
                     </button>
 
@@ -455,44 +526,54 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
                     <button
                         onClick={handleNotificationToggle}
                         disabled={notificationLoading}
-                        className={`w-full flex items-center justify-between border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3 disabled:opacity-50`}
+                        className={`w-full flex items-center justify-between border border-gray-200 dark:border-white/10 rounded-xl px-3 sm:px-4 py-3 disabled:opacity-50 active:scale-[0.98] transition-transform`}
                     >
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 min-w-0">
                             {isOptedIn ? (
-                                <Bell className="h-4 w-4 text-black-100/80 dark:text-gray-400" />
+                                <Bell className="h-4 w-4 sm:h-5 sm:w-5 text-black-100/80 dark:text-gray-400 flex-shrink-0" />
                             ) : (
-                                <BellOff className="h-4 w-4 text-black-100/80 dark:text-gray-400" />
+                                <BellOff className="h-4 w-4 sm:h-5 sm:w-5 text-black-100/80 dark:text-gray-400 flex-shrink-0" />
                             )}
-                            <div className="text-left">
-                                <p className={`text-sm font-medium ${darkMode ? 'text-gray-200' : 'text-black-200'}`}>
+                            <div className="text-left min-w-0">
+                                <p className={`text-sm sm:text-base font-medium truncate ${
+                                    darkMode ? 'text-gray-200' : 'text-black-200'
+                                }`}>
                                     {isOptedIn ? 'Notifications On' : isOptedOut ? 'Notifications Off' : 'Notifications'}
                                 </p>
                                 {(notificationSuccess || notificationError) ? (
-                                    <p className={`text-xs font-medium ${notificationError ? 'text-red-500' : 'text-green-500'}`}>
+                                    <p className={`text-xs font-medium truncate ${
+                                        notificationError ? 'text-red-500' : 'text-green-500'
+                                    }`}>
                                         {notificationError || notificationSuccess}
                                     </p>
                                 ) : (
-                                    <p className="text-xs text-black-100/80 dark:text-gray-400">
-                                        {isOptedIn ? 'All notifications enabled' : isOptedOut ? 'All notifications disabled' : 'Tap to manage'}
+                                    <p className="text-xs text-black-100/80 dark:text-gray-400 truncate">
+                                        {isOptedIn ? 'All notifications enabled' : 
+                                         isOptedOut ? 'All notifications disabled' : 
+                                         'Tap to manage'}
                                     </p>
                                 )}
                             </div>
                         </div>
-                        <div className={`w-11 h-6 rounded-full transition-colors duration-300 relative ${isOptedIn ? "bg-primary" : "bg-gray-200"}`}>
-                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all duration-300 ${isOptedIn ? "left-6" : "left-1"}`} />
+                        <div className={`w-11 h-6 rounded-full transition-colors duration-300 relative flex-shrink-0 ml-4 ${
+                            isOptedIn ? "bg-primary" : "bg-gray-200"
+                        }`}>
+                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all duration-300 ${
+                                isOptedIn ? "left-6" : "left-1"
+                            }`} />
                         </div>
                     </button>
                 </div>
 
                 {/* PIN Management */}
-                <div className="px-4 pb-4">
-                    <p className={`text-xs font-semibold uppercase tracking-widest mb-3 
+                <div className="px-3 sm:px-4 pb-4">
+                    <p className={`text-[10px] sm:text-xs font-semibold uppercase tracking-widest mb-3 
                         ${darkMode ? 'text-gray-500' : 'text-black-100/80'}`}>
                         Security
                     </p>
 
                     {pinSuccess && (
-                        <div className="mb-3 p-3 rounded-xl bg-green-500/10 text-green-500 text-xs text-center font-medium">
+                        <div className="mb-3 p-3 rounded-xl bg-green-500/10 text-green-500 text-xs text-center font-medium animate-pulse">
                             {pinSuccess}
                         </div>
                     )}
@@ -505,58 +586,70 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
                     {!hasPinSet ? (
                         <button
                             onClick={() => { setPinMode('set'); setPinSaveError(null); setPinSuccess(null); }}
-                            className="w-full flex items-center justify-between border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3"
+                            className="w-full flex items-center justify-between border border-gray-200 dark:border-white/10 rounded-xl px-3 sm:px-4 py-3 active:scale-[0.98] transition-transform"
                         >
-                            <div className="flex items-center gap-3">
-                                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                            <div className="flex items-center gap-3 min-w-0">
+                                <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
                                     <Shield className="w-4 h-4 text-primary" />
                                 </div>
-                                <div className="text-left">
-                                    <p className="text-sm font-medium text-black-200 dark:text-gray-200">Set Transaction PIN</p>
-                                    <p className="text-xs text-black-100/80 dark:text-gray-400 mt-0.5">Required for withdrawals & transfers</p>
+                                <div className="text-left min-w-0">
+                                    <p className="text-sm sm:text-base font-medium text-black-200 dark:text-gray-200 truncate">
+                                        Set Transaction PIN
+                                    </p>
+                                    <p className="text-xs text-black-100/80 dark:text-gray-400 mt-0.5 truncate">
+                                        Required for withdrawals & transfers
+                                    </p>
                                 </div>
                             </div>
-                            <ChevronRight className="w-4 h-4 text-black-100/80 dark:text-gray-400" />
+                            <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 text-black-100/80 dark:text-gray-400 flex-shrink-0 ml-2" />
                         </button>
                     ) : (
                         <div className="space-y-2">
                             <button
                                 onClick={() => { setPinMode('reset_current'); setPinSaveError(null); setPinSuccess(null); }}
-                                className="w-full flex items-center justify-between border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3"
+                                className="w-full flex items-center justify-between border border-gray-200 dark:border-white/10 rounded-xl px-3 sm:px-4 py-3 active:scale-[0.98] transition-transform"
                             >
-                                <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                                <div className="flex items-center gap-3 min-w-0">
+                                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
                                         <KeyRound className="w-4 h-4 text-primary" />
                                     </div>
-                                    <div className="text-left">
-                                        <p className="text-sm font-medium text-black-200 dark:text-gray-200">Change PIN</p>
-                                        <p className="text-xs text-black-100/80 dark:text-gray-400 mt-0.5">Enter current PIN then set new one</p>
+                                    <div className="text-left min-w-0">
+                                        <p className="text-sm sm:text-base font-medium text-black-200 dark:text-gray-200 truncate">
+                                            Change PIN
+                                        </p>
+                                        <p className="text-xs text-black-100/80 dark:text-gray-400 mt-0.5 truncate">
+                                            Enter current PIN then set new one
+                                        </p>
                                     </div>
                                 </div>
-                                <ChevronRight className="w-4 h-4 text-black-100/80 dark:text-gray-400" />
+                                <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 text-black-100/80 dark:text-gray-400 flex-shrink-0 ml-2" />
                             </button>
 
                             <button
                                 onClick={() => { setPinMode('forgot'); setPinSaveError(null); setPinSuccess(null); }}
-                                className="w-full flex items-center justify-between border border-gray-200 dark:border-white/10 rounded-xl px-4 py-3"
+                                className="w-full flex items-center justify-between border border-gray-200 dark:border-white/10 rounded-xl px-3 sm:px-4 py-3 active:scale-[0.98] transition-transform"
                             >
-                                <div className="flex items-center gap-3">
-                                    <div className="w-8 h-8 rounded-full bg-yellow-500/10 flex items-center justify-center">
+                                <div className="flex items-center gap-3 min-w-0">
+                                    <div className="w-8 h-8 rounded-full bg-yellow-500/10 flex items-center justify-center flex-shrink-0">
                                         <Shield className="w-4 h-4 text-yellow-500" />
                                     </div>
-                                    <div className="text-left">
-                                        <p className="text-sm font-medium text-black-200 dark:text-gray-200">Forgot PIN</p>
-                                        <p className="text-xs text-black-100/80 dark:text-gray-400 mt-0.5">Reset via identity verification</p>
+                                    <div className="text-left min-w-0">
+                                        <p className="text-sm sm:text-base font-medium text-black-200 dark:text-gray-200 truncate">
+                                            Forgot PIN
+                                        </p>
+                                        <p className="text-xs text-black-100/80 dark:text-gray-400 mt-0.5 truncate">
+                                            Reset via identity verification
+                                        </p>
                                     </div>
                                 </div>
-                                <ChevronRight className="w-4 h-4 text-black-100/80 dark:text-gray-400" />
+                                <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 text-black-100/80 dark:text-gray-400 flex-shrink-0 ml-2" />
                             </button>
                         </div>
                     )}
                 </div>
 
                 {/* Delete account — disabled */}
-                <div className="px-4 pb-6">
+                <div className="px-3 sm:px-4 pb-6">
                     <div className="flex items-center justify-between p-4 border border-gray-200 dark:border-white/10 rounded-xl opacity-40 cursor-not-allowed">
                         <div className="flex items-center gap-2">
                             <Trash2 className="w-4 h-4 text-red-400" />
@@ -655,7 +748,7 @@ export const Profile = ({ darkMode, onBack, runnerId, registrationComplete, runn
                 />
             )}
 
-            <div className="flex justify-center p-4 text-xs text-black-100/80 dark:text-gray-700">
+            <div className="flex justify-center p-3 sm:p-4 text-[10px] sm:text-xs text-black-100/80 dark:text-gray-700">
                 Sendrey - support@sendrey.com
             </div>
         </div>

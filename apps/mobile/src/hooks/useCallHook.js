@@ -1,12 +1,22 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import AgoraRTC from "agora-rtc-sdk-ng";
+import { useMediaContext } from "../contexts/MediaContext";
 
 const APP_ID = process.env.REACT_APP_AGORA_APP_ID;
 
 const ROLE = { CALLER: "caller", RECEIVER: "receiver" };
 const STATE = { IDLE: "idle", OUTGOING: "outgoing", INCOMING: "incoming", ACTIVE: "active" };
 
+const CALL_ERROR_MESSAGES = {
+  denied: "Microphone/camera permission denied. Please allow access in your browser settings and try again.",
+  no_device: "We couldn't find a working microphone or camera on this device.",
+  in_use: "Your microphone or camera is in use by another app. Close it and try again.",
+  insecure_context: "This feature needs a secure (https) connection.",
+  unknown: "Microphone/camera permission denied. Please allow access in your browser settings and try again.",
+};
+
 export const useCallHook = ({ socket, chatId, currentUserId, currentUserType }) => {
+  const { requestMediaAccess } = useMediaContext();
   const [callState, setCallState] = useState(STATE.IDLE);
   const [callType, setCallType] = useState(null);
   const [incomingCall, setIncomingCall] = useState(null);
@@ -163,19 +173,21 @@ export const useCallHook = ({ socket, chatId, currentUserId, currentUserType }) 
 
   useEffect(() => { endCallCleanupRef.current = endCallCleanup; }, [endCallCleanup]);
 
-  const requestMediaPermissions = async (type) => {
+  const requestMediaPermissions = useCallback(async (type) => {
     try {
-      const constraints = type === "voice"
-        ? { audio: true }
-        : { audio: true, video: true };
-      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      const constraints = type === "voice" ? { audio: true } : { audio: true, video: true };
+      const stream = await requestMediaAccess(type === "voice" ? "audio" : "video", {
+        constraints,
+        silent: true,
+      });
       stream.getTracks().forEach(t => t.stop()); // just checking, don't hold it
-      return true;
-    } catch (err) {
-      console.warn("[useCallHook] permission denied:", err);
-      return false;
+      return { ok: true };
+    } catch (rejection) {
+      const reason = rejection?.reason || "unknown";
+      console.warn("[useCallHook] permission denied:", reason, rejection?.original);
+      return { ok: false, message: CALL_ERROR_MESSAGES[reason] || CALL_ERROR_MESSAGES.unknown };
     }
-  };
+  }, [requestMediaAccess]);
 
   // ── Core join ──────────────────────────────────────────────────────────────
   const joinAgoraChannel = useCallback(async (channelName, type, token) => {
@@ -194,11 +206,11 @@ export const useCallHook = ({ socket, chatId, currentUserId, currentUserType }) 
       return;
     }
 
-    const hasPermission = await requestMediaPermissions(type);
-    if (!hasPermission) {
+    const permissionResult = await requestMediaPermissions(type);
+    if (!permissionResult.ok) {
       isJoiningRef.current = false;
       setIsConnecting(false);
-      setCallError("Microphone/camera permission denied. Please allow access in your browser settings and try again.");
+      setCallError(permissionResult.message);
       setTimeout(() => endCallCleanupRef.current?.(), 4000);
       return;
     }
@@ -299,7 +311,7 @@ export const useCallHook = ({ socket, chatId, currentUserId, currentUserType }) 
         endCallCleanupRef.current?.();
       }, 4000);
     }
-  }, [startCallTimer]);
+  }, [startCallTimer, requestMediaPermissions]);
 
   useEffect(() => { joinAgoraChannelRef.current = joinAgoraChannel; }, [joinAgoraChannel]);
 

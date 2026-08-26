@@ -5,16 +5,8 @@ const config = require('../config');
 const logger = require('../utils/logger');
 const Order = require('../models/Order');
 
-const TERMINAL_STATUSES = ['completed', 'cancelled', 'task_completed', 'delivered'];
+const TERMINAL_STATUSES = ['cancelled', 'task_completed'];
 
-// allow these through mid actions
-const GRACE_ROUTES = [
-  '/api/v1/chat',
-  '/api/v1/orders',
-  '/api/v1/payment',
-  '/api/v1/disputes',
-  '/api/v1/delivery',
-];
 
 const hasActiveNonTerminalOrder = async (userId) => {
   try {

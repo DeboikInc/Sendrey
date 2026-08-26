@@ -19,6 +19,7 @@ const redis = require('../config/redis');
 const jwt = require('jsonwebtoken');
 const crypto = require('crypto');
 const AuthSession = require('../models/AuthSession');
+const { setAuthCookies } = require('../utils/authCookies');
 
 const SESSION_TTL_MS = (parseInt(process.env.SESSION_TTL_MS));
 
@@ -31,38 +32,8 @@ class AuthController extends BaseController {
     this.smsService = smsService;
   }
 
-  setAuthCookies = async (res, accessToken, refreshToken) => {
-    const isProd = process.env.NODE_ENV === 'production';
-    const isStaging = process.env.NODE_ENV === 'staging';
-
-    let domain = undefined;
-    if (isProd) {
-      domain = '.sendrey.com';
-    } else if (isStaging) {
-      domain = 'api-staging.sendrey.com';
-    } else {
-      domain = 'localhost'; // or undefined for localhost
-    }
-
-    res.cookie('token', accessToken, {
-      httpOnly: true,
-      secure: isProd || isStaging || false,
-      sameSite: isProd || isStaging ? 'none' : 'lax',
-      maxAge: 15 * 60 * 1000, // 15 mins
-      path: '/',
-      domain: domain,
-    });
-
-    res.cookie('refreshToken', refreshToken, {
-      httpOnly: true,
-      secure: isProd || isStaging || false,
-      sameSite: isProd || isStaging ? 'none' : 'lax',
-      maxAge: SESSION_TTL_MS,
-      path: '/',
-      domain: domain,
-    });
-  };
-
+  setAuthCookies = setAuthCookies;
+  
   _generateOpaqueToken = () => crypto.randomBytes(40).toString('hex');
   _hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
 
