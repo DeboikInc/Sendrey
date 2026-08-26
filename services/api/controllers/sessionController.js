@@ -3,27 +3,11 @@ const Order = require('../models/Order');
 const jwt = require('jsonwebtoken');
 const BaseController = require('./baseController');
 const authService = require('../services/authService');
-const TERMINAL_STATUSES = ['cancelled', 'task_completed', 'cancelled'];
+const TERMINAL_STATUSES = ['cancelled', 'task_completed'];
+const { setAuthCookies } = require('../utils/authCookies');
 
 class SessionController extends BaseController {
-
-  setAuthCookies = (res, accessToken, refreshToken) => {
-    const isProd = process.env.NODE_ENV === 'production';
-
-    res.cookie('token', accessToken, {
-      httpOnly: true,
-      secure: isProd,
-      sameSite: isProd ? 'none' : 'lax',
-      maxAge: 15 * 60 * 1000,
-    });
-
-    res.cookie('refreshToken', refreshToken, {
-      httpOnly: true,
-      secure: isProd,
-      sameSite: isProd ? 'none' : 'lax',
-      maxAge: 30 * 24 * 60 * 60 * 1000,
-    });
-  };
+  setAuthCookies = setAuthCookies;
 
   async validateSession(req, res) {
     try {

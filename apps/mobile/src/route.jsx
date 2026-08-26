@@ -10,64 +10,61 @@ import { Wallet } from "./pages/runner/Wallet";
 import { Orders } from "./pages/runner/Orders";
 import { Payout } from "./pages/runner/Payout";
 import ChatDeepLink from "./utils/ChatDeepLink";
-import NotFound from "./pages/NotFound"
-import ProtectedRoute from "./components/common/ProtectedRoute";
 import useDarkMode from "./hooks/useDarkMode";
+import ProtectedRoute from "./components/common/ProtectedRoute";
+import NotFound from "./pages/NotFound";
+import { MediaProvider } from "./contexts/MediaContext";
 
 export default function ProjectedRoutes() {
   const [dark] = useDarkMode();
 
   return (
-    <Routes>
-      {/* Runner routes - require runner authentication */}
+    <MediaProvider>
+      <Routes>
+        {/* Runner routes - require runner authentication */}
+        <Route path="/profile" element={
+          <ProtectedRoute requireRunner={true}>
+            <Profile />
+          </ProtectedRoute>
+        } />
+        <Route path="/all-orders" element={
+          <ProtectedRoute requireRunner={true}>
+            <Orders />
+          </ProtectedRoute>
+        } />
+        <Route path="/disputes" element={
+          <ProtectedRoute requireRunner={true}>
+            <Disputes />
+          </ProtectedRoute>
+        } />
+        <Route path="/wallet" element={
+          <ProtectedRoute requireRunner={true}>
+            <Wallet />
+          </ProtectedRoute>
+        } />
+        <Route path="/payout" element={
+          <ProtectedRoute requireRunner={true}>
+            <Payout />
+          </ProtectedRoute>
+        } />
 
-      <Route path="/profile" element={
-        <ProtectedRoute requireRunner={true}>
-          <Profile />
-        </ProtectedRoute>
-      } />
+        {/* User routes - require user authentication */}
+        <Route path="/welcome" element={
+          <ProtectedRoute requireRunner={false}>
+            <Welcome />
+          </ProtectedRoute>
+        } />
 
-      <Route path="/all-orders" element={
-        <ProtectedRoute requireRunner={true}>
-          <Orders />
-        </ProtectedRoute>
-      } />
+        {/* Public routes - no authentication required */}
+        <Route path="/" element={<Home />} />
+        <Route path="/auth" element={<Auth />} />
+        <Route path="/raw" element={<WhatsAppLikeChat />} />
+        <Route path="/runner/chat/:chatId" element={<ChatDeepLink userType="runner" />} />
+        <Route path="/user/chat/:chatId" element={<ChatDeepLink userType="user" />} />
 
-      <Route path="/disputes" element={
-        <ProtectedRoute requireRunner={true}>
-          <Disputes />
-        </ProtectedRoute>
-      } />
-
-      <Route path="/wallet" element={
-        <ProtectedRoute requireRunner={true}>
-          <Wallet />
-        </ProtectedRoute>
-      } />
-
-      <Route path="/payout" element={
-        <ProtectedRoute requireRunner={true}>
-          <Payout />
-        </ProtectedRoute>
-      } />
-
-      {/* User routes - require user authentication */}
-      <Route path="/welcome" element={
-        <ProtectedRoute requireRunner={false}>
-          <Welcome />
-        </ProtectedRoute>
-      } />
-
-
-      {/* Public routes - no authentication required */}
-      <Route path="/" element={<Home />} />
-      <Route path="/auth" element={<Auth />} />
-      <Route path="/raw" element={<WhatsAppLikeChat />} />
-      <Route path="/runner/chat/:chatId" element={<ChatDeepLink userType="runner" />} />
-      <Route path="/user/chat/:chatId" element={<ChatDeepLink userType="user" />} />
-
-      {/* catch all non existing routes */}
-      <Route path="*" element={<NotFound darkMode={dark} />} />
-    </Routes>
+        {/* catch all routes */}
+        <Route path="*" element={<NotFound darkMode={dark} />} />
+      </Routes>
+    </MediaProvider>
   );
 }

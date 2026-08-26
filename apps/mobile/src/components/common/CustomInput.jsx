@@ -3,6 +3,7 @@ import { Mic, Paperclip, Smile, Square, Plus, MapPin, X, Camera } from "lucide-r
 import { useState, useEffect, useRef, useCallback } from "react";
 import EmojiPicker from "emoji-picker-react";
 import InputReplyPreview from "./InputReplyPreview";
+import { useMediaContext } from "../../contexts/MediaContext";
 
 export default function CustomInput({
   value,
@@ -49,6 +50,7 @@ export default function CustomInput({
   const mediaRecorderRef = useRef(null);
   const audioChunksRef = useRef([]);
   const timerRef = useRef(null);
+  const { requestMediaAccess } = useMediaContext();
 
   // ── Device detection for emoji ─────────────────────────────────────────────
   const isTouchDevice = useRef(
@@ -65,51 +67,35 @@ export default function CustomInput({
   // ── Recording logic ────────────────────────────────────────────────────────
   const startRecording = useCallback(async () => {
     if (!window.MediaRecorder) {
-      alert('Audio recording is not supported on this browser. Please update Safari.');
+      alert('Audio recording is not supported on this browser. Please update.');
       return;
     }
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await requestMediaAccess('audio');
+
       function getSupportedMimeType() {
-        const types = [
-          'audio/mp4',
-          'audio/webm;codecs=opus',
-          'audio/webm',
-          'audio/ogg;codecs=opus',
-        ];
-
-        return types.find(t => {
-          try {
-            return MediaRecorder.isTypeSupported(t);
-          } catch {
-            return false;
-          }
-        }) || ''; // browser choose  better than unsupported type
-
+        const types = ['audio/mp4', 'audio/webm;codecs=opus', 'audio/webm', 'audio/ogg;codecs=opus'];
+        return types.find(t => { try { return MediaRecorder.isTypeSupported(t); } catch { return false; } }) || '';
       }
 
       const mimeType = getSupportedMimeType();
       const options = mimeType ? { mimeType } : {};
 
       let recorder;
-      try {
-        recorder = new MediaRecorder(stream, options);
-      } catch {
-        recorder = new MediaRecorder(stream); // Safari fallback
-      }
+      try { recorder = new MediaRecorder(stream, options); }
+      catch { recorder = new MediaRecorder(stream); }
+
       mediaRecorderRef.current = recorder;
       audioChunksRef.current = [];
 
-      recorder.ondataavailable = (e) => {
-        if (e.data.size > 0) audioChunksRef.current.push(e.data);
-      };
+      recorder.ondataavailable = (e) => { if (e.data.size > 0) audioChunksRef.current.push(e.data); };
 
       recorder.onstop = () => {
         const actualMimeType = recorder.mimeType || mimeType || 'audio/mp4';
         const blob = new Blob(audioChunksRef.current, { type: actualMimeType });
         const url = URL.createObjectURL(blob);
-        setAudioPreview({ url, blob, mimeType: actualMimeType }); // ← pass actual type
+        setAudioPreview({ url, blob, mimeType: actualMimeType });
         stream.getTracks().forEach(t => t.stop());
       };
 
@@ -117,21 +103,11 @@ export default function CustomInput({
       if (onRecordingStartRef.current) onRecordingStartRef.current();
       setRecordingActive(true);
       setRecordingSeconds(0);
-
-      timerRef.current = setInterval(() => {
-        setRecordingSeconds(s => s + 1);
-      }, 1000);
+      timerRef.current = setInterval(() => setRecordingSeconds(s => s + 1), 1000);
     } catch (err) {
-      console.error('Recording error:', err.name, err.message);
-      if (err.name === 'NotAllowedError' || err.name === 'PermissionDeniedError') {
-        alert('Microphone permission denied. Please enable it in Settings.');
-      } else if (err.name === 'NotSupportedError') {
-        alert('Audio recording is not supported on this browser.');
-      } else {
-        alert('Could not start recording. Please try again.');
-      }
+      console.error('Recording error:', err?.name, err?.message);
     }
-  }, []);
+  }, [requestMediaAccess]);
 
   const stopRecording = useCallback(() => {
     // Guard — don't stop if already inactive

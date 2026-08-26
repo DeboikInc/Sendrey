@@ -45,7 +45,7 @@ export const useKycHook = (runnerId, fleetType,) => {
   const [showConnectButton, setShowConnectButton] = useState(false);
 
   // bump this string any time kyc_* localStorage shape/logic changes again
-  const KYC_STORAGE_VERSION = '3';
+  const KYC_STORAGE_VERSION = '4';
   const isReturningUserRef = useRef(false);
 
   const isAlreadyVerifiedRef = useRef(false);
