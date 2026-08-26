@@ -1464,53 +1464,79 @@ function WhatsAppLikeChat() {
             endCall, toggleMute, toggleCamera, isSpeakerOn, networkQuality,
             toggleSpeaker, switchCamera: switchCallCamera, isConnecting, callError,
         }}>
-            <div className="h-screen flex flex-col w-full bg-white dark:bg-black-100 bg-gradient-to-br from-slate-900 via-slate-950 to-black text-white">
-                <div className={`lg:hidden relative z-10 flex flex-shrink-0 items-center justify-between px-3 py-3 border-b dark:border-white/10 border-gray-200 ${currentView !== 'chat' ? 'hidden' : ''}`}>
+            <div className="h-screen w-full overflow-hidden bg-white dark:bg-black-100 flex flex-col">
+                {/* Mobile Header - Only visible on mobile, below it's hidden */}
+                <div className={`lg:hidden flex-shrink-0 flex items-center justify-between px-3 py-2 border-b dark:border-white/10 border-gray-200 ${currentView !== 'chat' ? 'hidden' : ''}`}>
                     <div className="flex items-center gap-2">
-                        <IconButton variant="text" className="rounded-full" onClick={() => setDrawerOpen(true)}>
+                        <IconButton
+                            variant="text"
+                            className="rounded-full p-1"
+                            onClick={() => setDrawerOpen(true)}
+                        >
                             <Menu className="h-5 w-5" />
                         </IconButton>
                     </div>
-                    <div className="flex gap-3">
-                        <span className="bg-gray-1000 dark:bg-black-200 rounded-full w-10 h-10 flex items-center justify-center">
+                    <div className="flex gap-2 items-center">
+                        <span className="bg-gray-1000 dark:bg-black-200 rounded-full w-8 h-8 flex items-center justify-center">
                             <HeaderIcon onClick={() => setInfoOpen(true)}>
-                                <MoreHorizontal className="h-6 w-6" />
+                                <MoreHorizontal className="h-5 w-5" />
                             </HeaderIcon>
                         </span>
-                        <div onClick={() => setDark(!dark)} className="cursor-pointer flex items-center gap-2 p-2">
-                            {dark ? <Sun className="w-6 h-6" /> : <Moon className="w-6 h-6 text-gray-800" strokeWidth={3.0} />}
+                        <div
+                            onClick={() => setDark(!dark)}
+                            className="cursor-pointer flex items-center justify-center p-1.5"
+                        >
+                            {dark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5 text-gray-800" strokeWidth={3.0} />}
                         </div>
                     </div>
                 </div>
 
-                <div className="flex-1 min-h-0 overflow-hidden">{renderView()}</div>
+                {/* Main Content - Takes remaining space */}
+                <div className="flex-1 min-h-0 overflow-hidden">
+                    {renderView()}
+                </div>
 
-                <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} placement="left"
-                    className="p-0 bg-white dark:bg-black-100 backdrop-blur-xl !z-[9999]"
-                    overlayProps={{ className: "!z-[9998]" }}>
-                    <Sidebar active={active} setActive={setActive} chatHistory={chatHistory}
-                        onBotClick={handleBotClick} onUserClick={handleUserClick}
-                        onClose={() => setDrawerOpen(false)} />
+                {/* Drawers */}
+                <Drawer
+                    open={drawerOpen}
+                    onClose={() => setDrawerOpen(false)}
+                    placement="left"
+                    className="p-0 bg-white dark:bg-black-100 backdrop-blur-xl !z-[9999] w-[280px] max-w-[85vw]"
+                    overlayProps={{ className: "!z-[9998]" }}
+                >
+                    <Sidebar
+                        active={active}
+                        setActive={setActive}
+                        chatHistory={chatHistory}
+                        onBotClick={handleBotClick}
+                        onUserClick={handleUserClick}
+                        onClose={() => setDrawerOpen(false)}
+                    />
                 </Drawer>
 
-                <Drawer open={infoOpen} onClose={() => setInfoOpen(false)} placement="right"
-                    className="p-0 bg-white dark:bg-black-100 backdrop-blur-xl !z-[9999]"
-                    overlayProps={{ className: "!z-[9998]" }}>
+                <Drawer
+                    open={infoOpen}
+                    onClose={() => setInfoOpen(false)}
+                    placement="right"
+                    className="p-0 bg-white dark:bg-black-100 backdrop-blur-xl !z-[9999] w-[280px] max-w-[85vw]"
+                    overlayProps={{ className: "!z-[9998]" }}
+                >
                     {renderContactInfo(true)}
                 </Drawer>
 
+                {/* Modals */}
                 {activeModal && (
-                    <Modal type={activeModal} onClose={() => setActiveModal(null)}
+                    <Modal
+                        type={activeModal}
+                        onClose={() => setActiveModal(null)}
                         onConfirm={(reason) => {
                             if (activeModal === 'cancelOrder' && socket && selectedUser?._id) {
                                 const chatId = `user-${selectedUser._id}-runner-${runnerId}`;
                                 const orderId = currentOrderRef.current?.orderId;
 
-                                // Optimistic — update UI immediately
-                                const chatId2 = chatId;
-                                useOrderStore.getState().setOrderCancelled(chatId2, 'runner');
-                                useOrderStore.getState().mergeCurrentOrder(chatId2, { status: 'cancelled' });
-                                chatManager.set(chatId2, { orderCancelled: true, cancellationReason: 'runner' });
+                                useOrderStore.getState().setOrderCancelled(chatId, 'runner');
+                                useOrderStore.getState().mergeCurrentOrder(chatId, { status: 'cancelled' });
+                                chatManager.set(chatId, { orderCancelled: true, cancellationReason: 'runner' });
                                 pushToActiveScreen(prev => {
                                     if (prev.some(m => m.text?.toLowerCase().includes('cancelled this order'))) return prev;
                                     return [...prev, {
@@ -1534,7 +1560,6 @@ function WhatsAppLikeChat() {
                                     socket.emit('cancelOrder', cancelPayload);
                                     console.log('[cancelOrder] emitted via socket');
                                 } else {
-                                    // ← Queue it for when connection restores
                                     enqueueSocketEvent('cancelOrder', cancelPayload);
                                     console.log('[socketQueue] cancelOrder queued — socket offline');
                                 }
@@ -1542,14 +1567,22 @@ function WhatsAppLikeChat() {
                             setActiveModal(null);
                         }}
                         chatId={activeChatId}
-                        isConnectLocked={isConnectLocked} selectedUser={selectedUser}
-                        registrationComplete={registrationComplete} darkMode={dark} />
+                        isConnectLocked={isConnectLocked}
+                        selectedUser={selectedUser}
+                        registrationComplete={registrationComplete}
+                        darkMode={dark}
+                    />
                 )}
 
-                <TermsAcceptanceModal isOpen={showTerms} onClose={() => { }}
-                    onAccept={handleAcceptTerms} terms={RUNNER_TERMS} darkMode={dark} userType="runner" />
+                <TermsAcceptanceModal
+                    isOpen={showTerms}
+                    onClose={() => { }}
+                    onAccept={handleAcceptTerms}
+                    terms={RUNNER_TERMS}
+                    darkMode={dark}
+                    userType="runner"
+                />
 
-                {/* user gets banned */}
                 <BannedModal
                     isOpen={showBannedModal}
                     reason={verificationState?.reason || verificationState?.message || null}
