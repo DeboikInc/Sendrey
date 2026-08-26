@@ -1,4 +1,4 @@
-﻿/* eslint-disable react-hooks/exhaustive-deps */
+/* eslint-disable react-hooks/exhaustive-deps */
 import React, { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { IconButton, Drawer } from "@material-tailwind/react";
 import { Menu, MoreHorizontal, Sun, Moon } from "lucide-react";
@@ -53,10 +53,10 @@ const getCurrentTime = () => {
     return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 };
 
-// ─── Initial bot messages ────────────────────────────────────────────────────
+// --- Initial bot messages ----------------------------------------------------
 const INITIAL_BOT_MESSAGES = [
     { id: 1, from: "them", text: "Welcome!", time: getCurrentTime(), status: "read" },
-    { id: 2, from: "them", text: "Hi! I'm Sendrey Assistant 👋 ", time: getCurrentTime(), status: "delivered" },
+    { id: 2, from: "them", text: "Hi! I'm Sendrey Assistant ?? ", time: getCurrentTime(), status: "delivered" },
     // { id: 3, from: "them", text: "Would you like like to run a pickup or run an errand?", time: getCurrentTime(), status: "delivered" },
 ];
 
@@ -81,7 +81,7 @@ const selectIsConnectLocked = (s) => {
 };
 
 
-// ─── HeaderIcon
+// --- HeaderIcon
 const HeaderIcon = ({ children, onClick }) => (
     <IconButton variant="text" size="sm" className="rounded-full" onClick={onClick}>
         {children}
@@ -125,18 +125,18 @@ function WhatsAppLikeChat() {
     const [awaitingChatReady, setAwaitingChatReady] = useState(false);
     const [chatSessionKey, setChatSessionKey] = useState(0);
 
-    // ── Runner identity ─────────────────────────────────────────────────────────
+    // -- Runner identity ---------------------------------------------------------
     const [runnerId, setRunnerId] = useState(() => runner?._id || null);
     const runnerIdRef = useRef(null);
     const [runnerLocation, setRunnerLocation] = useState(null);
 
     const [selectedUser, setSelectedUser] = useState(saved.selectedUser || null);
 
-    // ── Global state that the current chat screen reads from the chatManager ─────────
+    // -- Global state that the current chat screen reads from the chatManager ---------
     // Each child screen manages its own copy from the chatmanager.
     const [serviceType, setServiceType] = useState(null);
 
-    // ── Misc state ──────────────────────────────────────────────────────────────
+    // -- Misc state --------------------------------------------------------------
     const [initialMessagesComplete, setInitialMessagesComplete] = useState(false);
     const [hasSearched, setHasSearched] = useState(false);
     const [canShowNotifications, setCanShowNotifications] = useState(false);
@@ -149,7 +149,7 @@ function WhatsAppLikeChat() {
     const [showNotifications, setShowNotifications] = useState(false);
 
 
-    // ── Refs ────────────────────────────────────────────────────────────────────
+    // -- Refs --------------------------------------------------------------------
     const pendingChatSwitchRef = useRef(null);
     const serviceTypeRef = useRef(saved.serviceType || runner?.serviceType || null);
     const fleetTypeRef = useRef(runner?.fleetType || null);
@@ -166,7 +166,7 @@ function WhatsAppLikeChat() {
     const activeSetMessagesRef = useRef(null);
     const isFreshRegistrationRef = useRef(false);
 
-    // ── Hooks ───────────────────────────────────────────────────────────────────
+    // -- Hooks -------------------------------------------------------------------
     const {
         socket, joinRunnerRoom, sendMessage, isConnected,
     } = useSocketContext();
@@ -201,12 +201,12 @@ function WhatsAppLikeChat() {
     const effectiveReturningKycStatus = useMemo(() => {
         // Live value from this session's credential flow
         if (returningUserData?.kycStatus) return returningUserData.kycStatus;
-        // Fallback: persisted from a previous session — survives refresh
+        // Fallback: persisted from a previous session � survives refresh
         if (runner?.email) return getPersistedReturningKycStatus(runner.email);
         return null;
     }, [returningUserData?.kycStatus, runner?.email]);
 
-    // ── Chat routing state ──────────────────────────────────────────────────────
+    // -- Chat routing state ------------------------------------------------------
     // activeChatId drives which screen is shown and which chatManager slot is active.
     // 'sendrey-bot' = onboarding screen. Any other value = RunnerChatScreen.
     const [activeChatId, setActiveChatId] = useState(
@@ -271,7 +271,7 @@ function WhatsAppLikeChat() {
                 localStorage.setItem(`bot_messages_${runnerIdRef.current}`, JSON.stringify(next.slice(-60)));
             } catch (_) { }
 
-            // Server persistence — debounced so a fast typed sequence doesn't
+            // Server persistence � debounced so a fast typed sequence doesn't
             // fire one emit per message. Survives device switches.
             if (socket) {
                 clearTimeout(botSaveTimerRef.current);
@@ -285,7 +285,7 @@ function WhatsAppLikeChat() {
         }
     }, [socket]);
 
-    // ── Helpers ─────────────────────────────────────────────────────────────────
+    // -- Helpers -----------------------------------------------------------------
 
     const handleBannedDetected = useCallback(() => {
         setShowBannedModal(true);
@@ -408,12 +408,12 @@ function WhatsAppLikeChat() {
                 return;
             }
 
-            // ── Order flow ────────────────────────────────────────────────────────
+            // -- Order flow --------------------------------------------------------
             if (RUNNER_ORDER_TYPES.includes(data?.type)) {
-                // Notification arrived late — runner not in active chat, do nothing
+                // Notification arrived late � runner not in active chat, do nothing
                 if (isBotMode) return;
 
-                // Already on chat screen, socket state is live — just ensure views are correct
+                // Already on chat screen, socket state is live � just ensure views are correct
                 setCurrentView('chat');
                 return;
             }
@@ -432,9 +432,9 @@ function WhatsAppLikeChat() {
 
     const chatMessagesUpdater = useCallback((updater) => {
         const chatId = activeChatIdRef.current;
-        if (chatId === BOT_CHAT_ID) return; // ← never write chat messages to bot slot
+        if (chatId === BOT_CHAT_ID) return; // ? never write chat messages to bot slot
         const next = chatManager.updateMessages(chatId, updater);
-        // ← only push if the correct chat screen is registered
+        // ? only push if the correct chat screen is registered
         if (activeScreenIdRef.current === chatId && activeSetMessagesRef.current) {
             activeSetMessagesRef.current(next);
         }
@@ -467,7 +467,7 @@ function WhatsAppLikeChat() {
         serviceTypeRef.current = serviceType;
     }, [serviceType]);
 
-    // ── Keep activeChatIdRef in sync ────────────────────────────────────────────
+    // -- Keep activeChatIdRef in sync --------------------------------------------
     useEffect(() => {
         activeChatIdRef.current = activeChatId;
     }, [activeChatId]);
@@ -528,7 +528,7 @@ function WhatsAppLikeChat() {
             setAwaitingChatReady(true); // show loading overlay while socket reconnects
         }
 
-        // If no order state, stay on bot — socket will proceedToChat when ready
+        // If no order state, stay on bot � socket will proceedToChat when ready
     }, [runner?._id, registrationComplete]);
 
 
@@ -549,11 +549,11 @@ function WhatsAppLikeChat() {
         activeScreenIdRef.current = screenId;
     }, []);
 
-    // ── KYC nudge timer ref ──────────────────────────────────────────────────────
+    // -- KYC nudge timer ref ------------------------------------------------------
     const kycNudgeTimerRef = useRef(null);
     const KYC_NUDGE_INTERVAL = 2 * 24 * 60 * 60 * 1000;
 
-    // ── Terms acceptance ────────────────────────────────────────────────────────
+    // -- Terms acceptance --------------------------------------------------------
     const handleAcceptTerms = async ({ whatsappOptIn }) => {
         try {
             await api.post('/terms/accept',
@@ -584,7 +584,7 @@ function WhatsAppLikeChat() {
         console.log('[RAW] silentRefreshKey changed', silentRefreshKey);
     }, [silentRefreshKey]);
 
-    // ── KYC started effect ───────────────────────────────────────────────────────
+    // -- KYC started effect -------------------------------------------------------
     useEffect(() => {
         if (!runnerId) return;
         const isFreshReg = isFreshRegistrationRef.current || sessionStorage.getItem(`fresh_reg_${runnerId}`) === 'true';
@@ -606,7 +606,7 @@ function WhatsAppLikeChat() {
             return;
         }
 
-        // ── Returning user, selfie already submitted (verified/pending/rejected)
+        // -- Returning user, selfie already submitted (verified/pending/rejected)
         // resolve immediately
         if (returningUserData?.kycStatus) {
             const { selfieVerified, selfieStatus, overallVerified } = returningUserData.kycStatus;
@@ -672,7 +672,7 @@ function WhatsAppLikeChat() {
         runner?.isTrainingCompleted, runner?.isVerifiedKyc,
     ]);
 
-    // ── KYC nudge ────────────────────────────────────────────────────────────────
+    // -- KYC nudge ----------------------------------------------------------------
     useEffect(() => {
         if (!registrationComplete || !runnerId) return;
         if (kycStatus.selfieVerified) return;
@@ -689,7 +689,7 @@ function WhatsAppLikeChat() {
             const nudgeMessage = {
                 id: `kyc-nudge-${Date.now()}`,
                 from: 'them',
-                text: `Hi${runnerData?.firstName ? ` ${runnerData.firstName}` : ''}, complete your KYC now and gain access to endless tasks. Take your selfie now to verify your identity, this would only take a minute 📸`,
+                text: `Hi${runnerData?.firstName ? ` ${runnerData.firstName}` : ''}, complete your KYC now and gain access to endless tasks. Take your selfie now to verify your identity, this would only take a minute ??`,
                 time: getCurrentTime(),
                 status: 'delivered',
                 isKyc: true,
@@ -697,7 +697,7 @@ function WhatsAppLikeChat() {
             botMessagesUpdater(prev => [...prev, nudgeMessage]);
 
             if (permission === 'granted') {
-                new Notification('Complete your KYC 📸', {
+                new Notification('Complete your KYC ??', {
                     body: `Hi${runnerData?.firstName ? ` ${runnerData.firstName}` : ''}! Take your selfie to unlock unlimited tasks.`,
                     icon: '/favicon.ico',
                 });
@@ -708,12 +708,12 @@ function WhatsAppLikeChat() {
         return () => { if (kycNudgeTimerRef.current) clearTimeout(kycNudgeTimerRef.current); };
     }, [registrationComplete, runnerId, kycStatus.selfieVerified, kycStep, permission, runnerData?.firstName, botMessagesUpdater]);
 
-    // ── Fleet type sync ──────────────────────────────────────────────────────────
+    // -- Fleet type sync ----------------------------------------------------------
     useEffect(() => {
         if (runnerData?.fleetType) fleetTypeRef.current = runnerData.fleetType;
     }, [runnerData?.fleetType]);
 
-    // ── Initial bot messages (typed in one by one on first load) ─────────────────
+    // -- Initial bot messages (typed in one by one on first load) -----------------
 
     const loadPersistedBotMessages = (runnerId) => {
         if (!runnerId) return [];
@@ -819,11 +819,11 @@ function WhatsAppLikeChat() {
 
             if (accessToken || refreshToken) {
                 // tokens still exist, transient null, not a real logout. Do nothing.
-                console.warn('[raw.jsx] runner went null but tokens still present — ignoring transient blip');
+                console.warn('[raw.jsx] runner went null but tokens still present � ignoring transient blip');
                 return;
             }
 
-            // real logout — safe to wipe
+            // real logout � safe to wipe
             chatManager.set(BOT_CHAT_ID, { messages: [] });
             useOrderStore.getState().setMessages(BOT_CHAT_ID, []);
             setInitialMessagesComplete(false);
@@ -849,7 +849,7 @@ function WhatsAppLikeChat() {
         return () => { cancelled = true; clearTimeout(t); };
     }, [runner?._id]);
 
-    // ── canShowNotifications ─────────────────────────────────────────────────────
+    // -- canShowNotifications -----------------------------------------------------
     useEffect(() => {
         if (kycStep === 6 && registrationComplete && isBotMode) {
             setCanShowNotifications(true);
@@ -880,7 +880,7 @@ function WhatsAppLikeChat() {
             });
     }, [kycStep, registrationComplete, isBotMode, runnerId, dispatch, mergeChatHistory]);
 
-    // ── OTP resend cooldown ──────────────────────────────────────────────────────
+    // -- OTP resend cooldown ------------------------------------------------------
     useEffect(() => {
         if (needsOtpVerification) {
             setCanResendOtp(false);
@@ -950,7 +950,7 @@ function WhatsAppLikeChat() {
         setChatHistory, mergeChatHistory, setAwaitingChatReady,
     });
 
-    // ── Runner room join ─────────────────────────────────────────────────────────
+    // -- Runner room join ---------------------------------------------------------
     useEffect(() => {
         if (!registrationComplete || !runnerId || !socket) return;
 
@@ -980,11 +980,11 @@ function WhatsAppLikeChat() {
         }
     }, [socket, runnerId, registrationComplete]);
 
-    // ── Verification status ──────────────────────────────────────────────────────
+    // -- Verification status ------------------------------------------------------
     useEffect(() => {
         if (!socket || !runnerId) return;
         const handler = (data) => {
-            console.log("🔵 [SOCKET RECEIVED] verificationStatus event:", data);
+            console.log("?? [SOCKET RECEIVED] verificationStatus event:", data);
 
             setVerificationState(data);
             setShowBannedModal(!!data.isBanned);
@@ -1044,12 +1044,12 @@ function WhatsAppLikeChat() {
         }
     }, [activeChatId]);
 
-    // ── Body scroll lock ─────────────────────────────────────────────────────────
+    // -- Body scroll lock ---------------------------------------------------------
     useEffect(() => {
         document.body.style.overflow = (drawerOpen || infoOpen) ? "hidden" : "";
     }, [drawerOpen, infoOpen]);
 
-    // ── Geolocation ──────────────────────────────────────────────────────────────
+    // -- Geolocation --------------------------------------------------------------
     useEffect(() => {
         if (!registrationComplete) return;
         if (navigator.geolocation) {
@@ -1091,7 +1091,7 @@ function WhatsAppLikeChat() {
                     }
                     // Chat will restore via the existing savedUI restore effect
                 } else {
-                    // No active order — clear stale state for this chatId
+                    // No active order � clear stale state for this chatId
                     useOrderStore.getState()._patch(savedChatId, {
                         currentOrder: null,
                         taskCompleted: false,
@@ -1113,7 +1113,7 @@ function WhatsAppLikeChat() {
                     });
                     chatManager.set(savedChatId, { currentOrder: null });
                 }
-                // On network error or 401, keep existing state — don't clear
+                // On network error or 401, keep existing state � don't clear
                 console.warn('[raw.jsx] Session validation failed:', error.message);
             }
         };
@@ -1122,7 +1122,7 @@ function WhatsAppLikeChat() {
         return () => clearTimeout(timer);
     }, [runnerId, runner?._id]);
 
-    // ── Message handlers (bot screen) ────────────────────────────────────────────
+    // -- Message handlers (bot screen) --------------------------------------------
 
     const handleResendOtp = useCallback(() => {
         if (!canResendOtp) return;
@@ -1236,13 +1236,13 @@ function WhatsAppLikeChat() {
         } else if (isCollectingCredentials && credentialStep !== null) {
             handleCredentialAnswer(text.trim(), setText, botMessagesUpdater);
         } else if (!isBotMode && selectedUser) {
-            const chatId = `user-${selectedUser._id}-runner-${currentRunnerId}`; // ← ref
+            const chatId = `user-${selectedUser._id}-runner-${currentRunnerId}`; // ? ref
             const newMsg = {
                 id: Date.now().toString(), from: "me", type: "text",
                 text: text.trim(),
                 time: getCurrentTime(),
                 status: socket?.connected ? "pending" : "queued",
-                senderId: currentRunnerId, senderType: "runner", // ← ref
+                senderId: currentRunnerId, senderType: "runner", // ? ref
                 ...(replyingTo && {
                     replyTo: replyingTo.id,
                     replyToMessage: replyingTo.text || replyingTo.fileName || "Media",
@@ -1290,11 +1290,11 @@ function WhatsAppLikeChat() {
     const handleLocationClick = () => setShowOrderFlow(true);
     const handleAttachClick = () => setIsAttachFlowOpen(true);
 
-    // ── Derived ───────────────────────────────────────────────────────────────────
+    // -- Derived -------------------------------------------------------------------
     const isConnectLockedFromStore = useOrderStore(selectIsConnectLocked);
     const isConnectLocked = orderPending || isConnectLockedFromStore;
 
-    // ── Main
+    // -- Main
     const renderMainScreen = () => (
         <RunnerMainScreen
             isBotMode={isBotMode}
@@ -1561,7 +1561,7 @@ function WhatsAppLikeChat() {
                                     console.log('[cancelOrder] emitted via socket');
                                 } else {
                                     enqueueSocketEvent('cancelOrder', cancelPayload);
-                                    console.log('[socketQueue] cancelOrder queued — socket offline');
+                                    console.log('[socketQueue] cancelOrder queued � socket offline');
                                 }
                             }
                             setActiveModal(null);
@@ -1627,7 +1627,7 @@ function WhatsAppLikeChat() {
     );
 }
 
-// raw.jsx — WhatsAppLikeChatRoot, updated
+// raw.jsx � WhatsAppLikeChatRoot, updated
 export default function WhatsAppLikeChatRoot() {
     const hydrated = useOrderStore(s => s._hasHydrated);
 
