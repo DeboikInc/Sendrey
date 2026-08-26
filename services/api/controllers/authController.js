@@ -324,7 +324,7 @@ class AuthController extends BaseController {
 
       const tokenHash = this._hashToken(incomingToken);
 
-      // Replay cache 
+      // Replay cache — concurrent requests rotating the same tokenHash
       const cached = await redis.get(`refresh_replay:${tokenHash}`);
       if (cached) {
         const { accessToken, refreshToken: cachedRefresh } = JSON.parse(cached);
@@ -336,52 +336,8 @@ class AuthController extends BaseController {
         });
       }
 
-      // Atomic claim: concurrent request successfully rotate a given tokenHash. 
-      const newRefreshToken = this._generateOpaqueToken();
-      const newTokenHash = this._hashToken(newRefreshToken);
+      const { accessToken, refreshToken: newRefreshToken } = await authService.refreshTokens(incomingToken);
 
-      const session = await AuthSession.findOneAndUpdate(
-        { tokenHash },
-        {
-          $set: {
-            tokenHash: newTokenHash,
-            lastUsedAt: new Date(),
-            expiresAt: new Date(Date.now() + SESSION_TTL_MS),
-          },
-        },
-        { new: false }
-      );
-
-      if (!session) {
-        await new Promise(r => setTimeout(r, 150));
-        const raced = await redis.get(`refresh_replay:${tokenHash}`);
-        if (raced) {
-          const { accessToken, refreshToken: cachedRefresh } = JSON.parse(raced);
-          this.setAuthCookies(res, accessToken, cachedRefresh);
-          return this.success(res, {
-            message: 'Token refreshed',
-            accessToken,
-            refreshToken: cachedRefresh,
-          });
-        }
-        return this.error(res, 'Session expired or revoked', 401);
-      }
-
-      if (session.expiresAt < new Date()) {
-        await AuthSession.deleteOne({ _id: session._id });
-        return this.error(res, 'Session expired', 401);
-      }
-
-      const Model = session.userType === 'runner' ? Runner : User;
-      const account = await Model.findById(session.userId);
-      if (!account) {
-        await AuthSession.deleteOne({ _id: session._id });
-        return this.error(res, 'Account not found', 404);
-      }
-
-      const accessToken = this.service.generateToken(account);
-
-      // Publish the replay result
       await redis.set(
         `refresh_replay:${tokenHash}`,
         JSON.stringify({ accessToken, refreshToken: newRefreshToken }),

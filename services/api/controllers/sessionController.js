@@ -1,29 +1,15 @@
-
 const Order = require('../models/Order');
 const jwt = require('jsonwebtoken');
 const BaseController = require('./baseController');
 const authService = require('../services/authService');
-const TERMINAL_STATUSES = ['cancelled', 'task_completed', 'cancelled'];
+const redis = require('../config/redis');
+const { setAuthCookies } = require('../utils/authCookies');
+
+const TERMINAL_STATUSES = ['completed', 'cancelled', 'task_completed', 'delivered'];
 
 class SessionController extends BaseController {
 
-  setAuthCookies = (res, accessToken, refreshToken) => {
-    const isProd = process.env.NODE_ENV === 'production';
-
-    res.cookie('token', accessToken, {
-      httpOnly: true,
-      secure: isProd,
-      sameSite: isProd ? 'none' : 'lax',
-      maxAge: 15 * 60 * 1000,
-    });
-
-    res.cookie('refreshToken', refreshToken, {
-      httpOnly: true,
-      secure: isProd,
-      sameSite: isProd ? 'none' : 'lax',
-      maxAge: 30 * 24 * 60 * 60 * 1000,
-    });
-  };
+  setAuthCookies = setAuthCookies;
 
   async validateSession(req, res) {
     try {
@@ -74,16 +60,15 @@ class SessionController extends BaseController {
   async refreshSession(req, res) {
     try {
       const { chatId } = req.body;
-      const userId = req.user?._id;
 
       if (!chatId) {
         return res.status(400).json({ success: false, message: 'chatId is required' });
       }
 
-      let resolvedUserId = req.user._id;
+      const resolvedUserId = req.user._id;
 
       const activeOrder = await Order.findOne({
-        $or: [{ userId: resolvedUserId }, { runnerId: resolvedUserId }], // ← was userId (unresolved)
+        $or: [{ userId: resolvedUserId }, { runnerId: resolvedUserId }],
         chatId,
         status: { $nin: TERMINAL_STATUSES }
       }).lean();
@@ -95,10 +80,64 @@ class SessionController extends BaseController {
         });
       }
 
-      // Active order confirmed — now do a REAL refresh using the actual
-      // refresh token, same mechanism as /auth/refresh-token.
-      const refreshToken = req.cookies.refreshToken || req.body.refreshToken;
-      const { accessToken, refreshToken: newRefresh } = await authService.refreshTokens(refreshToken);
+      const incomingToken = req.cookies.refreshToken || req.body.refreshToken;
+      if (!incomingToken) {
+        return res.status(401).json({ success: false, message: 'No refresh token provided' });
+      }
+
+      const tokenHash = authService._hashToken(incomingToken);
+
+      // Replay cache — same guard as AuthController.refreshToken, since this
+      // hits the identical authService.refreshTokens() rotation and is
+      // vulnerable to the same concurrent-request race (e.g. app resume from
+      // background firing alongside an already-queued refresh).
+      const cached = await redis.get(`refresh_replay:${tokenHash}`);
+      if (cached) {
+        const { accessToken, refreshToken: cachedRefresh } = JSON.parse(cached);
+        this.setAuthCookies(res, accessToken, cachedRefresh);
+        return res.status(200).json({
+          success: true,
+          data: {
+            accessToken,
+            refreshToken: cachedRefresh,
+            orderId: activeOrder.orderId,
+            orderStatus: activeOrder.status,
+          }
+        });
+      }
+
+      let result;
+      try {
+        result = await authService.refreshTokens(incomingToken);
+      } catch (err) {
+        if (err.statusCode === 401) {
+          await new Promise(r => setTimeout(r, 150));
+          const raced = await redis.get(`refresh_replay:${tokenHash}`);
+          if (raced) {
+            const { accessToken, refreshToken: cachedRefresh } = JSON.parse(raced);
+            this.setAuthCookies(res, accessToken, cachedRefresh);
+            return res.status(200).json({
+              success: true,
+              data: {
+                accessToken,
+                refreshToken: cachedRefresh,
+                orderId: activeOrder.orderId,
+                orderStatus: activeOrder.status,
+              }
+            });
+          }
+        }
+        throw err;
+      }
+
+      const { accessToken, refreshToken: newRefresh } = result;
+
+      await redis.set(
+        `refresh_replay:${tokenHash}`,
+        JSON.stringify({ accessToken, refreshToken: newRefresh }),
+        'EX',
+        30
+      );
 
       this.setAuthCookies(res, accessToken, newRefresh);
 

@@ -5,22 +5,18 @@ const User = require('../models/User');
 const Runner = require('../models/Runner');
 const Wallet = require('../models/Wallet')
 const logger = require('../utils/logger');
+const AuthSession = require('../models/AuthSession');
 
 class AuthService {
+  _generateOpaqueToken = () => crypto.randomBytes(40).toString('hex');
+  _hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
+
   /**
    * Register new user or runner
    */
   async register(userData, creatorUserRole, userType = 'user') {
     try {
       const Model = userType === 'runner' ? Runner : User;
-
-      const conditions = [];
-      if (userData.email) conditions.push({ email: userData.email });
-      if (userData.phone) conditions.push({ phone: userData.phone });
-
-      const existingUser = conditions.length
-        ? await Model.findOne({ $or: conditions })
-        : null;
 
       const existingByEmail = userData.email
         ? await Model.findOne({ email: userData.email })
@@ -36,13 +32,13 @@ class AuthService {
         err.userEmail = existingByEmail.email;
         err.userPhone = existingByEmail.phone;
         err.kycStatus = {
-          isVerified: existingUser.isVerified,
-          isEmailVerified: existingUser.isEmailVerified,
-          ninStatus: existingUser.verificationDocuments?.nin?.status || 'not_submitted',
-          driverLicenseStatus: existingUser.verificationDocuments?.driverLicense?.status || 'not_submitted',
-          selfieVerified: existingUser.biometricVerification?.selfieVerified || false,
-          selfieStatus: existingUser.biometricVerification?.status || 'not_submitted',
-          overallVerified: existingUser.isVerifiedKyc || false,
+          isVerified: existingByEmail.isVerified,
+          isEmailVerified: existingByEmail.isEmailVerified,
+          ninStatus: existingByEmail.verificationDocuments?.nin?.status || 'not_submitted',
+          driverLicenseStatus: existingByEmail.verificationDocuments?.driverLicense?.status || 'not_submitted',
+          selfieVerified: existingByEmail.biometricVerification?.selfieVerified || false,
+          selfieStatus: existingByEmail.biometricVerification?.status || 'not_submitted',
+          overallVerified: existingByEmail.isVerifiedKyc || false,
         };
         throw err;
       }
@@ -134,6 +130,56 @@ class AuthService {
       }
     };
   }
+
+  async refreshTokens(refreshToken) {
+    if (!refreshToken) {
+      const err = new Error('No refresh token provided');
+      err.statusCode = 401;
+      throw err;
+    }
+
+    const tokenHash = this._hashToken(refreshToken);
+    const newRefreshToken = this._generateOpaqueToken();
+    const newTokenHash = this._hashToken(newRefreshToken);
+
+    const session = await AuthSession.findOneAndUpdate(
+      { tokenHash },
+      {
+        $set: {
+          tokenHash: newTokenHash,
+          lastUsedAt: new Date(),
+          expiresAt: new Date(Date.now() + parseInt(process.env.SESSION_TTL_MS)),
+        },
+      },
+      { new: false }
+    );
+
+    if (!session) {
+      const err = new Error('Session expired or revoked');
+      err.statusCode = 401;
+      throw err;
+    }
+
+    if (session.expiresAt < new Date()) {
+      await AuthSession.deleteOne({ _id: session._id });
+      const err = new Error('Session expired');
+      err.statusCode = 401;
+      throw err;
+    }
+
+    const Model = session.userType === 'runner' ? Runner : User;
+    const account = await Model.findById(session.userId);
+    if (!account) {
+      await AuthSession.deleteOne({ _id: session._id });
+      const err = new Error('Account not found');
+      err.statusCode = 404;
+      throw err;
+    }
+
+    const accessToken = this.generateToken(account);
+    return { accessToken, refreshToken: newRefreshToken, user: account, userType: session.userType };
+  }
+
 
   /**
    * Generate access token JWT (short-lived, stateless).
