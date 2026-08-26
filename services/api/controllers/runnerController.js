@@ -44,6 +44,7 @@ class RunnerController extends BaseController {
       console.log('sanitized avatar:', sanitized.avatar);
       return this.success(res, { runner: this._sanitizeRunner(runner) });
     } catch (error) {
+      console.log("runnerController err ", error)
       logger.error('Get runner profile error:', error);
       next(error);
     }
