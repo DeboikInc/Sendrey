@@ -215,14 +215,16 @@ class AuthController extends BaseController {
     } catch (error) {
       logger.error('Runner registration error:', error);
       if (error.statusCode === 409) {
-        return this.error(res, {
-          message: 'Account already exists',
+        if (error.field === 'phone') {
+          return this.error(res, error.message, 409, { field: 'phone' });
+        }
+        return this.error(res, 'Account already exists', 409, {
           userName: error.userName,
           userEmail: error.userEmail,
           userPhone: error.userPhone,
           kycStatus: error.kycStatus,
           isTrainingCompleted: error.isTrainingCompleted,
-        }, 409);
+        });
       }
       next(error);
     }
@@ -339,7 +341,7 @@ class AuthController extends BaseController {
       const newTokenHash = this._hashToken(newRefreshToken);
 
       const session = await AuthSession.findOneAndUpdate(
-        { tokenHash }, 
+        { tokenHash },
         {
           $set: {
             tokenHash: newTokenHash,
@@ -347,7 +349,7 @@ class AuthController extends BaseController {
             expiresAt: new Date(Date.now() + SESSION_TTL_MS),
           },
         },
-        { new: false } 
+        { new: false }
       );
 
       if (!session) {

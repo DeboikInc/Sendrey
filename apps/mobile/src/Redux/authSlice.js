@@ -37,12 +37,16 @@ export const register = createAsyncThunk("auth/register", async (data, thunkAPI)
         await storeTokensIfNeeded(response.data);
         return response.data;
     } catch (error) {
-        if (error.response?.data?.errors) {
-            return thunkAPI.rejectWithValue(error.response.data.errors[0].message);
-        }
-        console.error(error.response?.data?.errors)
-        console.log(error.response?.data?.errors)
-        return thunkAPI.rejectWithValue(error.response?.data?.message || "Something went wrong");
+        const data = error.response?.data;
+        const message = data?.errors?.[0]?.message || data?.message || "Something went wrong";
+
+        return thunkAPI.rejectWithValue({
+            ...data,
+            ...(data?.errors && typeof data.errors === 'object' && !Array.isArray(data.errors) ? data.errors : {}),
+            message,
+            status: error.response?.status,
+        });
+
     }
 });
 
