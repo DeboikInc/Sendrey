@@ -80,7 +80,7 @@ export default function ChatComposer({
   const [isLetsGetStarted, setIsLetsGetStarted] = useState(false);
   const kycFileInputRef = useRef(null);
   const [returningChoiceMade, setReturningChoiceMade] = useState(false);
-
+  const CONNECT_DISABLED = true;
 
   const handleConnect = () => {
     if (isConnectDisabled || isSearching || isConnectLocked) return;
@@ -349,12 +349,13 @@ export default function ChatComposer({
       <div className="p-4">
         <Button
           onClick={handleConnect}
-          disabled={isConnectDisabled || isConnectLocked || isUpdatingServer}
-          className={`w-full bg-primary rounded-lg sm:text-sm flex items-center justify-center py-4 ${isConnectDisabled || isConnectLocked || isUpdatingServer ? 'bg-gray-500 opacity-50 cursor-not-allowed' : ''}`}
+          disabled={CONNECT_DISABLED || isConnectDisabled || isConnectLocked || isUpdatingServer}
+          className={`w-full bg-primary rounded-lg sm:text-sm flex items-center justify-center py-4 ${CONNECT_DISABLED || isConnectDisabled || isConnectLocked || isUpdatingServer ? 'bg-gray-500 opacity-50 cursor-not-allowed' : ''}`}
         >
-          {isConnectLocked ? 'Ongoing Order — complete or cancel current order to connect'
-            : isUpdatingServer ? 'In Progress'
-              : 'Connect to an errand service'}
+          {CONNECT_DISABLED ? 'Connect to an errand service (Coming soon, stay tuned)'
+            : isConnectLocked ? 'Ongoing Order — complete or cancel current order to connect'
+              : isUpdatingServer ? 'In Progress'
+                : 'Connect to an errand service'}
         </Button>
       </div>
     );
@@ -362,19 +363,19 @@ export default function ChatComposer({
 
   // ── New Order Complete - Connect to Service ───────────────────────────────
   if (newOrderComplete) {
-
     return (
       <div className="p-4">
         <Button
           onClick={handleConnect}
-          disabled={isConnectDisabled || isSearching || isConnectLocked | isUpdatingServer}
-          className={`w-full bg-primary rounded-lg sm:text-sm flex items-center justify-center py-4 ${isConnectDisabled || isSearching || isConnectLocked || isUpdatingServer ? 'bg-gray-500 opacity-50 cursor-not-allowed' : ''}`}
+          disabled={CONNECT_DISABLED || isConnectDisabled || isSearching || isConnectLocked || isUpdatingServer}
+          className={`w-full bg-primary rounded-lg sm:text-sm flex items-center justify-center py-4 ${CONNECT_DISABLED || isConnectDisabled || isSearching || isConnectLocked || isUpdatingServer ? 'bg-gray-500 opacity-50 cursor-not-allowed' : ''}`}
         >
           <span>
-            {isUpdatingServer ? 'In Progress'
-              : isConnectLocked ? 'Ongoing Order — complete or cancel current order to connect again'
-                : isSearching ? 'Connecting...'
-                  : 'Connect to an errand service'}
+            {CONNECT_DISABLED ? 'Connect to an errand service (Coming soon, stay tuned)'
+              : isUpdatingServer ? 'In Progress'
+                : isConnectLocked ? 'Ongoing Order — complete or cancel current order to connect again'
+                  : isSearching ? 'Connecting...'
+                    : 'Connect to an errand service'}
           </span>
         </Button>
       </div>
@@ -429,16 +430,17 @@ export default function ChatComposer({
       <div className="p-4">
         <Button
           onClick={handleConnect}
-          disabled={isConnectDisabled || isSearching || isConnectLocked || isUpdatingServer}
-          className={`w-full bg-primary rounded-lg sm:text-sm flex items-center justify-center py-4 ${isConnectDisabled || isSearching || isConnectLocked || isUpdatingServer
+          disabled={CONNECT_DISABLED || isConnectDisabled || isSearching || isConnectLocked || isUpdatingServer}
+          className={`w-full bg-primary rounded-lg sm:text-sm flex items-center justify-center py-4 ${CONNECT_DISABLED || isConnectDisabled || isSearching || isConnectLocked || isUpdatingServer
             ? 'bg-gray-500 opacity-50 cursor-not-allowed' : ''
             }`}
         >
           <span>
-            {isUpdatingServer ? 'Updating...'
-              : isConnectLocked ? 'Ongoing Order — complete or cancel current order to connect again'
-                : isSearching ? 'Connecting...'
-                  : 'Connect to an errand service'}
+            {CONNECT_DISABLED ? 'Connect to an errand service (Coming soon, stay tuned)'
+              : isUpdatingServer ? 'Updating...'
+                : isConnectLocked ? 'Ongoing Order — complete or cancel current order to connect again'
+                  : isSearching ? 'Connecting...'
+                    : 'Connect to an errand service'}
           </span>
         </Button>
       </div>
