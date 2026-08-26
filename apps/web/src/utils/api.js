@@ -51,8 +51,11 @@ const doRefresh = async () => {
   let body = {};
   if (isMobileBrowser) {
     const { refreshToken } = await authStorage.getTokens();
-    if (!refreshToken) throw new Error('No refresh token available');
-    body = { refreshToken };
+    if (refreshToken) {
+      return axios.post(`${BASE_URL}/auth/refresh-token`, { refreshToken }, { withCredentials: true });
+    }
+
+    // no throwing errs, allow self heal
   }
   return axios.post(`${BASE_URL}/auth/refresh-token`, body, { withCredentials: true });
 };
