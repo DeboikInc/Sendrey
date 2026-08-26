@@ -248,11 +248,11 @@ function OnboardingScreen({
       {/* Header - Mobile First */}
       <div className="flex-shrink-0 px-3 py-2 sm:px-5 sm:py-3 border-b dark:border-white/10 border-gray-200 flex items-center justify-between bg-white/5/10 backdrop-blur-xl">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-          <Avatar 
-            src={sendreyBot} 
-            alt="Sendrey Bot" 
-            size="sm" 
-            className="w-8 h-8 sm:w-10 sm:h-10 flex-shrink-0" 
+          <Avatar
+            src={sendreyBot}
+            alt="Sendrey Bot"
+            size="sm"
+            className="w-8 h-8 sm:w-10 sm:h-10 flex-shrink-0"
           />
           <div className="truncate min-w-0">
             <div className="font-bold text-sm sm:text-[16px] truncate dark:text-white text-black-200">
@@ -264,9 +264,9 @@ function OnboardingScreen({
           </div>
         </div>
         <div className="hidden sm:flex">
-          <div 
-            onClick={() => setDark(!dark)} 
-            className="cursor-pointer bg-gray-900 dark:bg-gray-200 rounded-full w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center"
+          <div
+            onClick={() => setDark(!dark)}
+            className="cursor-pointer bg-gray-900 dark:bg-gray-100/60 rounded-full w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center"
           >
             {dark ? <Sun className="w-4 h-4 sm:w-5 sm:h-5 text:flash-white" /> : <Moon className="w-4 h-4 sm:w-5 sm:h-5 text:flash-white" strokeWidth={3.0} />}
           </div>
@@ -277,10 +277,10 @@ function OnboardingScreen({
       <div className="flex-shrink-0">
         <OnboardingProgress stageIndex={stageIndex} darkMode={dark} />
       </div>
-      
+
       {/* Messages - Takes remaining space */}
-      <div 
-        ref={listRef} 
+      <div
+        ref={listRef}
         className="flex-1 min-h-0 overflow-y-auto px-2 sm:px-3 md:px-6 py-2 sm:py-4 bg-chat-pattern bg-gray-100 dark:bg-black-200 scrollbar-hide scroll-smooth"
       >
         <div className="mx-auto max-w-3xl">
@@ -309,8 +309,8 @@ function OnboardingScreen({
         !isSubmitting && (
           <div className="flex-shrink-0 flex gap-1 sm:gap-2 justify-center p-2 sm:p-3 bg-gray-100 dark:bg-black-200 overflow-x-auto">
             {FLEET_OPTIONS.map(({ type, icon: Icon, label }) => (
-              <Button 
-                key={type} 
+              <Button
+                key={type}
                 variant="outlined"
                 className="flex flex-col p-1.5 sm:p-3 justify-center items-center text-black-100/60 dark:text-gray-400 min-w-[50px] sm:min-w-[70px]"
                 onClick={() => handleCredentialAnswer(type, setText, setMessagesAndSync)}

@@ -266,7 +266,7 @@ function OnboardingScreen({
         <div className="hidden sm:flex">
           <div 
             onClick={() => setDark(!dark)} 
-            className="cursor-pointer bg-gray-900 dark:bg-gray-200 rounded-full w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center"
+            className="cursor-pointer bg-gray-900 dark:bg-gray-100/60 rounded-full w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center"
           >
             {dark ? <Sun className="w-4 h-4 sm:w-5 sm:h-5 text:flash-white" /> : <Moon className="w-4 h-4 sm:w-5 sm:h-5 text:flash-white" strokeWidth={3.0} />}
           </div>

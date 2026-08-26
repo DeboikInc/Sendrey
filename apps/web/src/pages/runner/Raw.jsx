@@ -201,7 +201,7 @@ function WhatsAppLikeChat() {
     const effectiveReturningKycStatus = useMemo(() => {
         // Live value from this session's credential flow
         if (returningUserData?.kycStatus) return returningUserData.kycStatus;
-        // Fallback: persisted from a previous session — survives refresh
+        // Fallback: persisted from a previous session ï¿½ survives refresh
         if (runner?.email) return getPersistedReturningKycStatus(runner.email);
         return null;
     }, [returningUserData?.kycStatus, runner?.email]);
@@ -271,7 +271,7 @@ function WhatsAppLikeChat() {
                 localStorage.setItem(`bot_messages_${runnerIdRef.current}`, JSON.stringify(next.slice(-60)));
             } catch (_) { }
 
-            // Server persistence — debounced so a fast typed sequence doesn't
+            // Server persistence ï¿½ debounced so a fast typed sequence doesn't
             // fire one emit per message. Survives device switches.
             if (socket) {
                 clearTimeout(botSaveTimerRef.current);
@@ -410,10 +410,10 @@ function WhatsAppLikeChat() {
 
             // -- Order flow --------------------------------------------------------
             if (RUNNER_ORDER_TYPES.includes(data?.type)) {
-                // Notification arrived late — runner not in active chat, do nothing
+                // Notification arrived late ï¿½ runner not in active chat, do nothing
                 if (isBotMode) return;
 
-                // Already on chat screen, socket state is live — just ensure views are correct
+                // Already on chat screen, socket state is live ï¿½ just ensure views are correct
                 setCurrentView('chat');
                 return;
             }
@@ -528,7 +528,7 @@ function WhatsAppLikeChat() {
             setAwaitingChatReady(true); // show loading overlay while socket reconnects
         }
 
-        // If no order state, stay on bot — socket will proceedToChat when ready
+        // If no order state, stay on bot ï¿½ socket will proceedToChat when ready
     }, [runner?._id, registrationComplete]);
 
 
@@ -819,11 +819,11 @@ function WhatsAppLikeChat() {
 
             if (accessToken || refreshToken) {
                 // tokens still exist, transient null, not a real logout. Do nothing.
-                console.warn('[raw.jsx] runner went null but tokens still present — ignoring transient blip');
+                console.warn('[raw.jsx] runner went null but tokens still present ï¿½ ignoring transient blip');
                 return;
             }
 
-            // real logout — safe to wipe
+            // real logout ï¿½ safe to wipe
             chatManager.set(BOT_CHAT_ID, { messages: [] });
             useOrderStore.getState().setMessages(BOT_CHAT_ID, []);
             setInitialMessagesComplete(false);
@@ -1091,7 +1091,7 @@ function WhatsAppLikeChat() {
                     }
                     // Chat will restore via the existing savedUI restore effect
                 } else {
-                    // No active order — clear stale state for this chatId
+                    // No active order ï¿½ clear stale state for this chatId
                     useOrderStore.getState()._patch(savedChatId, {
                         currentOrder: null,
                         taskCompleted: false,
@@ -1113,7 +1113,7 @@ function WhatsAppLikeChat() {
                     });
                     chatManager.set(savedChatId, { currentOrder: null });
                 }
-                // On network error or 401, keep existing state — don't clear
+                // On network error or 401, keep existing state ï¿½ don't clear
                 console.warn('[raw.jsx] Session validation failed:', error.message);
             }
         };
@@ -1484,9 +1484,9 @@ function WhatsAppLikeChat() {
                         </span>
                         <div
                             onClick={() => setDark(!dark)}
-                            className="cursor-pointer flex items-center justify-center p-1.5"
+                            className="cursor-pointer bg-gray-900 dark:bg-gray-100/60 flex items-center justify-center p-1.5"
                         >
-                            {dark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5 text-gray-800" strokeWidth={3.0} />}
+                            {dark ? <Sun className="w-5 h-5 text:flash-white" /> : <Moon className="w-5 h-5 text:flash-white" strokeWidth={3.0} />}
                         </div>
                     </div>
                 </div>
@@ -1561,7 +1561,7 @@ function WhatsAppLikeChat() {
                                     console.log('[cancelOrder] emitted via socket');
                                 } else {
                                     enqueueSocketEvent('cancelOrder', cancelPayload);
-                                    console.log('[socketQueue] cancelOrder queued — socket offline');
+                                    console.log('[socketQueue] cancelOrder queued ï¿½ socket offline');
                                 }
                             }
                             setActiveModal(null);
@@ -1627,7 +1627,7 @@ function WhatsAppLikeChat() {
     );
 }
 
-// raw.jsx — WhatsAppLikeChatRoot, updated
+// raw.jsx ï¿½ WhatsAppLikeChatRoot, updated
 export default function WhatsAppLikeChatRoot() {
     const hydrated = useOrderStore(s => s._hasHydrated);
 

@@ -1484,9 +1484,9 @@ function WhatsAppLikeChat() {
                         </span>
                         <div
                             onClick={() => setDark(!dark)}
-                            className="cursor-pointer flex items-center justify-center p-1.5"
+                            className="cursor-pointer bg-gray-900 dark:bg-gray-100/60 flex items-center justify-center p-1.5"
                         >
-                            {dark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5 text-gray-800" strokeWidth={3.0} />}
+                            {dark ? <Sun className="w-5 h-5 text:flash-white" /> : <Moon className="w-5 h-5 text:flash-white" strokeWidth={3.0} />}
                         </div>
                     </div>
                 </div>
