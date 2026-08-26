@@ -1,7 +1,7 @@
 import { createSlice, createAsyncThunk } from "@reduxjs/toolkit";
 import api from "../utils/api";
 import useOrderStore from '../store/orderStore';
-
+import { authStorage } from "../utils/authStorage";
 
 export const register = createAsyncThunk("auth/register", async (data, thunkAPI) => {
     const { role, email, fullName, firstName, lastName, phone, fleetType, latitude, longitude } = data;
@@ -262,6 +262,9 @@ const authSlice = createSlice({
                     state.user = action.payload.user;
                     state.runner = null;
                 }
+                if (action.payload.accessToken) {
+                    authStorage.setTokens(action.payload.accessToken, action.payload.refreshToken);
+                }
             })
             .addCase(register.rejected, (state, action) => {
                 state.status = "failed";
@@ -284,6 +287,10 @@ const authSlice = createSlice({
                     state.user = action.payload.user;
                 }
                 state.isAuthenticated = true;
+
+                if (action.payload.accessToken) {
+                    authStorage.setTokens(action.payload.accessToken, action.payload.refreshToken);
+                }
             })
 
             // ── verifyEmailOTP ─────────────────────────────────────────────────────
@@ -296,6 +303,10 @@ const authSlice = createSlice({
                 } else if (action.payload.user) {
                     state.user = action.payload.user;
                     state.runner = null;
+                }
+
+                if (action.payload.accessToken) {
+                    authStorage.setTokens(action.payload.accessToken, action.payload.refreshToken);
                 }
             })
             .addCase(verifyEmailOTP.rejected, (state, action) => {
@@ -316,7 +327,12 @@ const authSlice = createSlice({
 
             // ── verifyPhone ────────────────────────────────────────────────────────
             .addCase(verifyPhone.pending, (state) => { state.status = "loading"; state.error = null; })
-            .addCase(verifyPhone.fulfilled, (state) => { state.status = "succeeded"; })
+            .addCase(verifyPhone.fulfilled, (state, action) => {
+                state.status = "succeeded";
+                if (action.payload.accessToken) {
+                    authStorage.setTokens(action.payload.accessToken, action.payload.refreshToken);
+                }
+            })
             .addCase(verifyPhone.rejected, (state, action) => {
                 state.status = "failed";
                 state.error = action.payload || "Phone verification failed";

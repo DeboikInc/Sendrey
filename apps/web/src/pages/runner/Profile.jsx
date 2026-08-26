@@ -25,14 +25,14 @@ const ConfirmModal = ({ field, value, onConfirm, onCancel, dark }) => (
                 "{value}"
             </p>
             <div className="flex justify-end gap-3 font-medium text-sm sm:text-base">
-                <button
-                    onClick={onCancel}
+                <button 
+                    onClick={onCancel} 
                     className="text-black-100/80 dark:text-gray-400 px-2 py-1 active:scale-95 transition-transform"
                 >
                     Cancel
                 </button>
-                <button
-                    onClick={onConfirm}
+                <button 
+                    onClick={onConfirm} 
                     className="text-primary px-2 py-1 active:scale-95 transition-transform"
                 >
                     Save
@@ -57,13 +57,13 @@ const StarDisplay = ({ rating }) => {
     );
 };
 
-export const Profile = ({
-    darkMode,
-    onBack,
-    runnerId,
-    registrationComplete,
-    runnerData: initialRunnerData,
-    onToggleDarkMode
+export const Profile = ({ 
+    darkMode, 
+    onBack, 
+    runnerId, 
+    registrationComplete, 
+    runnerData: initialRunnerData, 
+    onToggleDarkMode 
 }) => {
     const dispatch = useDispatch();
     const averageRating = useSelector(s => s.rating.averageRating);
@@ -96,8 +96,6 @@ export const Profile = ({
     const isOptedOut = notificationPrefs?.push?.messages === false &&
         notificationPrefs?.push?.updates === false;
 
-    const [debugInfo, setDebugInfo] = useState(null);
-
     useEffect(() => {
         if (!runnerId) return;
 
@@ -105,26 +103,13 @@ export const Profile = ({
             try {
                 const result = await dispatch(getProfile()).unwrap();
                 const runner = result?.data?.runner || result?.runner || result?.data || result;
-                setDebugInfo({
-                    success: true,
-                    hasResult: !!result,
-                    resultKeys: result ? Object.keys(result) : [],
-                    documentCookie: document.cookie || '(empty)',
-                    localStorageToken: localStorage.getItem('accessToken') || localStorage.getItem('token') || '(none)',
-                });
                 if (runner) {
                     setRunnerData(runner);
-                    if (runner.hasPinSet !== undefined) dispatch(setPinSet(runner.hasPinSet));
+                    if (runner.hasPinSet !== undefined) {
+                        dispatch(setPinSet(runner.hasPinSet));
+                    }
                 }
             } catch (err) {
-                setDebugInfo({
-                    success: false,
-                    errorMessage: err?.message,
-                    errorStatus: err?.status || err?.response?.status,
-                    errorData: JSON.stringify(err?.response?.data || err?.data || err),
-                    documentCookie: document.cookie || '(empty)',
-                    localStorageToken: localStorage.getItem('accessToken') || localStorage.getItem('token') || '(none)',
-                });
                 console.error('Profile fetch error:', err);
             }
         };
@@ -235,8 +220,8 @@ export const Profile = ({
         return (
             <div className={`h-full flex flex-col bg-white dark:bg-black-100 ${darkMode ? 'dark' : ''}`}>
                 <div className="flex items-center border-b border-gray-100 dark:border-white/10 p-3 sm:p-4">
-                    <button
-                        onClick={onBack}
+                    <button 
+                        onClick={onBack} 
                         className="cursor-pointer text-black-200 dark:text-gray-300 p-1 -ml-1 active:scale-95 transition-transform"
                         aria-label="Go back"
                     >
@@ -259,8 +244,8 @@ export const Profile = ({
         <div className={`h-screen flex flex-col bg-white dark:bg-black-100 ${darkMode ? 'dark' : ''}`}>
             {/* Header */}
             <div className="flex items-center border-b border-gray-100 dark:border-white/10 p-3 sm:p-4 flex-shrink-0">
-                <button
-                    onClick={onBack}
+                <button 
+                    onClick={onBack} 
                     className="cursor-pointer text-black-200 dark:text-gray-300 p-1 -ml-1 active:scale-95 transition-transform"
                     aria-label="Go back"
                 >
@@ -277,9 +262,9 @@ export const Profile = ({
                     <div className="relative">
                         <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gray-200 dark:bg-black-200 overflow-hidden flex items-center justify-center">
                             {runnerData.avatar ? (
-                                <img
-                                    src={runnerData.avatar}
-                                    alt="avatar"
+                                <img 
+                                    src={runnerData.avatar} 
+                                    alt="avatar" 
                                     className="w-full h-full object-cover"
                                     loading="lazy"
                                 />
@@ -328,8 +313,8 @@ export const Profile = ({
                 {/* Editable fields */}
                 <div className="px-3 sm:px-4 pb-4 space-y-3">
                     {fields.map(({ key, label }) => (
-                        <div
-                            key={key}
+                        <div 
+                            key={key} 
                             className="border border-black-100/20 dark:border-white/10 rounded-xl px-3 sm:px-4 py-3 min-h-[70px]"
                         >
                             <p className="text-xs text-black-100/80 dark:text-gray-500 mb-1">{label}</p>
@@ -351,8 +336,9 @@ export const Profile = ({
                                     tabIndex={0}
                                     onKeyDown={(e) => e.key === 'Enter' && handleEditStart(key, runnerData[key])}
                                 >
-                                    <p className={`text-sm sm:text-base text-black-200 dark:text-gray-200 ${!runnerData[key] ? 'text-black-100/80 dark:text-gray-400' : ''
-                                        }`}>
+                                    <p className={`text-sm sm:text-base text-black-200 dark:text-gray-200 ${
+                                        !runnerData[key] ? 'text-black-100/80 dark:text-gray-400' : ''
+                                    }`}>
                                         {runnerData[key] || 'Not set'}
                                     </p>
                                     <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 text-black-100/80 dark:text-gray-400 flex-shrink-0 ml-2" />
@@ -527,10 +513,12 @@ export const Profile = ({
                                 {darkMode ? "Dark Mode" : "Light Mode"}
                             </p>
                         </div>
-                        <div className={`w-11 h-6 rounded-full transition-colors duration-300 relative flex-shrink-0 ml-4 ${darkMode ? "bg-primary" : "bg-gray-200"
-                            }`}>
-                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all duration-300 ${darkMode ? "left-6" : "left-1"
-                                }`} />
+                        <div className={`w-11 h-6 rounded-full transition-colors duration-300 relative flex-shrink-0 ml-4 ${
+                            darkMode ? "bg-primary" : "bg-gray-200"
+                        }`}>
+                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all duration-300 ${
+                                darkMode ? "left-6" : "left-1"
+                            }`} />
                         </div>
                     </button>
 
@@ -547,28 +535,32 @@ export const Profile = ({
                                 <BellOff className="h-4 w-4 sm:h-5 sm:w-5 text-black-100/80 dark:text-gray-400 flex-shrink-0" />
                             )}
                             <div className="text-left min-w-0">
-                                <p className={`text-sm sm:text-base font-medium truncate ${darkMode ? 'text-gray-200' : 'text-black-200'
-                                    }`}>
+                                <p className={`text-sm sm:text-base font-medium truncate ${
+                                    darkMode ? 'text-gray-200' : 'text-black-200'
+                                }`}>
                                     {isOptedIn ? 'Notifications On' : isOptedOut ? 'Notifications Off' : 'Notifications'}
                                 </p>
                                 {(notificationSuccess || notificationError) ? (
-                                    <p className={`text-xs font-medium truncate ${notificationError ? 'text-red-500' : 'text-green-500'
-                                        }`}>
+                                    <p className={`text-xs font-medium truncate ${
+                                        notificationError ? 'text-red-500' : 'text-green-500'
+                                    }`}>
                                         {notificationError || notificationSuccess}
                                     </p>
                                 ) : (
                                     <p className="text-xs text-black-100/80 dark:text-gray-400 truncate">
-                                        {isOptedIn ? 'All notifications enabled' :
-                                            isOptedOut ? 'All notifications disabled' :
-                                                'Tap to manage'}
+                                        {isOptedIn ? 'All notifications enabled' : 
+                                         isOptedOut ? 'All notifications disabled' : 
+                                         'Tap to manage'}
                                     </p>
                                 )}
                             </div>
                         </div>
-                        <div className={`w-11 h-6 rounded-full transition-colors duration-300 relative flex-shrink-0 ml-4 ${isOptedIn ? "bg-primary" : "bg-gray-200"
-                            }`}>
-                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all duration-300 ${isOptedIn ? "left-6" : "left-1"
-                                }`} />
+                        <div className={`w-11 h-6 rounded-full transition-colors duration-300 relative flex-shrink-0 ml-4 ${
+                            isOptedIn ? "bg-primary" : "bg-gray-200"
+                        }`}>
+                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all duration-300 ${
+                                isOptedIn ? "left-6" : "left-1"
+                            }`} />
                         </div>
                     </button>
                 </div>
@@ -759,12 +751,6 @@ export const Profile = ({
             <div className="flex justify-center p-3 sm:p-4 text-[10px] sm:text-xs text-black-100/80 dark:text-gray-700">
                 Sendrey - support@sendrey.com
             </div>
-
-            {debugInfo && (
-                <pre className="text-[10px] bg-black text-green-400 p-2 m-2 overflow-auto whitespace-pre-wrap break-all">
-                    {JSON.stringify(debugInfo, null, 2)}
-                </pre>
-            )}
         </div>
     );
 };
