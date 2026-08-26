@@ -21,7 +21,7 @@ const crypto = require('crypto');
 const AuthSession = require('../models/AuthSession');
 const { setAuthCookies } = require('../utils/authCookies');
 
-const SESSION_TTL_MS = (parseInt(process.env.SESSION_TTL_MS));
+const SESSION_TTL_MS = (parseInt(process.env.SESSION_TTL_MS || 5184000000));
 
 class AuthController extends BaseController {
   constructor() {
