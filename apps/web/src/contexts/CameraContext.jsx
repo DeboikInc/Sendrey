@@ -1,11 +1,12 @@
-// contexts/CameraContext.jsx
 import React, { createContext, useContext } from "react";
 import { useCameraHook } from "../hooks/useCameraHook";
+import { useMediaContext } from "./MediaContext";
 
 const CameraContext = createContext(null);
 
 export function CameraProvider({ children }) {
-  const value = useCameraHook();
+  const { requestMediaAccess } = useMediaContext();
+  const value = useCameraHook(requestMediaAccess);
   return <CameraContext.Provider value={value}>{children}</CameraContext.Provider>;
 }
 

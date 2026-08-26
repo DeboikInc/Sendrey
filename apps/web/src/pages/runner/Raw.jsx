@@ -50,14 +50,14 @@ import { CallContext } from '../../contexts/CallContext';
 
 
 const getCurrentTime = () => {
-  return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+    return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
 };
 
 // ─── Initial bot messages ────────────────────────────────────────────────────
 const INITIAL_BOT_MESSAGES = [
-  { id: 1, from: "them", text: "Welcome!", time: getCurrentTime(), status: "read" },
-  { id: 2, from: "them", text: "Hi! I'm Sendrey Assistant 👋 ", time: getCurrentTime(), status: "delivered" },
-  // { id: 3, from: "them", text: "Would you like like to run a pickup or run an errand?", time: getCurrentTime(), status: "delivered" },
+    { id: 1, from: "them", text: "Welcome!", time: getCurrentTime(), status: "read" },
+    { id: 2, from: "them", text: "Hi! I'm Sendrey Assistant 👋 ", time: getCurrentTime(), status: "delivered" },
+    // { id: 3, from: "them", text: "Would you like like to run a pickup or run an errand?", time: getCurrentTime(), status: "delivered" },
 ];
 
 const BOT_CHAT_ID = 'sendrey-bot';
@@ -69,1547 +69,1548 @@ const makeTaskCompleted = (id) => (s) => id ? (s._chats[id]?.taskCompleted ?? fa
 const makeCompletedStat = (id) => (s) => id ? (s._chats[id]?.completedStatuses ?? EMPTY_STATUSES) : EMPTY_STATUSES;
 
 const selectIsConnectLocked = (s) => {
-  const chats = s._chats;
-  for (const chatId in chats) {
-    const chat = chats[chatId];
-    if (!chat.currentOrder) continue;
-    if (chat.taskCompleted || chat.orderCancelled) continue;
-    const status = chat.currentOrder.status;
-    if (!['completed', 'cancelled', 'task_completed'].includes(status)) return true;
-  }
-  return false;
+    const chats = s._chats;
+    for (const chatId in chats) {
+        const chat = chats[chatId];
+        if (!chat.currentOrder) continue;
+        if (chat.taskCompleted || chat.orderCancelled) continue;
+        const status = chat.currentOrder.status;
+        if (!['completed', 'cancelled', 'task_completed'].includes(status)) return true;
+    }
+    return false;
 };
 
 
 // ─── HeaderIcon
 const HeaderIcon = ({ children, onClick }) => (
-  <IconButton variant="text" size="sm" className="rounded-full" onClick={onClick}>
-    {children}
-  </IconButton>
+    <IconButton variant="text" size="sm" className="rounded-full" onClick={onClick}>
+        {children}
+    </IconButton>
 );
 
 // Main component
 function WhatsAppLikeChat() {
-  const { runner } = useSelector((s) => s.auth);
-  const nearbyUsers = useSelector((state) => state.users.nearbyUsers, shallowEqual);
-  const saved = JSON.parse(localStorage.getItem('runner_ui') || '{}');
+    const { runner } = useSelector((s) => s.auth);
+    const nearbyUsers = useSelector((state) => state.users.nearbyUsers, shallowEqual);
+    const saved = JSON.parse(localStorage.getItem('runner_ui') || '{}');
 
-  const [dark, setDark] = useDarkMode();
+    const [dark, setDark] = useDarkMode();
 
-  const BOT_CHAT_ENTRY = {
-    id: BOT_CHAT_ID,
-    name: 'Sendrey Assistant',
-    lastMessage: 'Welcome! Pick a service to get started.',
-    time: getCurrentTime(),
-    online: true,
-    avatar: null,
-    isBot: true,
-    unread: 0,
-  };
+    const BOT_CHAT_ENTRY = {
+        id: BOT_CHAT_ID,
+        name: 'Sendrey Assistant',
+        lastMessage: 'Welcome! Pick a service to get started.',
+        time: getCurrentTime(),
+        online: true,
+        avatar: null,
+        isBot: true,
+        unread: 0,
+    };
 
-  const dispatch = useDispatch();
+    const dispatch = useDispatch();
 
-  const [chatHistory, setChatHistory] = useState([BOT_CHAT_ENTRY]);
+    const [chatHistory, setChatHistory] = useState([BOT_CHAT_ENTRY]);
 
-  const [active, setActive] = useState(null);
-  const [drawerOpen, setDrawerOpen] = useState(false);
-  const [infoOpen, setInfoOpen] = useState(false);
-  const [activeModal, setActiveModal] = useState(null);
-  const [currentView, setCurrentView] = useState('chat');
-  const [showOrderFlow, setShowOrderFlow] = useState(false);
-  const [isAttachFlowOpen, setIsAttachFlowOpen] = useState(false);
-  const [isLoadingArchive, setIsLoadingArchive] = useState(false);
-  const [silentRefreshKey, setSilentRefreshKey] = useState(0);
-  const [, setCompletedStatusesVersion] = useState(0);
-  const [orderPending, setOrderPending] = useState(false);
-  const [awaitingChatReady, setAwaitingChatReady] = useState(false);
-  const [chatSessionKey, setChatSessionKey] = useState(0);
+    const [active, setActive] = useState(null);
+    const [drawerOpen, setDrawerOpen] = useState(false);
+    const [infoOpen, setInfoOpen] = useState(false);
+    const [activeModal, setActiveModal] = useState(null);
+    const [currentView, setCurrentView] = useState('chat');
+    const [showOrderFlow, setShowOrderFlow] = useState(false);
+    const [isAttachFlowOpen, setIsAttachFlowOpen] = useState(false);
+    const [isLoadingArchive, setIsLoadingArchive] = useState(false);
+    const [silentRefreshKey, setSilentRefreshKey] = useState(0);
+    const [, setCompletedStatusesVersion] = useState(0);
+    const [orderPending, setOrderPending] = useState(false);
+    const [awaitingChatReady, setAwaitingChatReady] = useState(false);
+    const [chatSessionKey, setChatSessionKey] = useState(0);
 
-  // ── Runner identity ─────────────────────────────────────────────────────────
-  const [runnerId, setRunnerId] = useState(() => runner?._id || null);
-  const runnerIdRef = useRef(null);
-  const [runnerLocation, setRunnerLocation] = useState(null);
+    // ── Runner identity ─────────────────────────────────────────────────────────
+    const [runnerId, setRunnerId] = useState(() => runner?._id || null);
+    const runnerIdRef = useRef(null);
+    const [runnerLocation, setRunnerLocation] = useState(null);
 
-  const [selectedUser, setSelectedUser] = useState(saved.selectedUser || null);
+    const [selectedUser, setSelectedUser] = useState(saved.selectedUser || null);
 
-  // ── Global state that the current chat screen reads from the chatManager ─────────
-  // Each child screen manages its own copy from the chatmanager.
-  const [serviceType, setServiceType] = useState(null);
+    // ── Global state that the current chat screen reads from the chatManager ─────────
+    // Each child screen manages its own copy from the chatmanager.
+    const [serviceType, setServiceType] = useState(null);
 
-  // ── Misc state ──────────────────────────────────────────────────────────────
-  const [initialMessagesComplete, setInitialMessagesComplete] = useState(false);
-  const [hasSearched, setHasSearched] = useState(false);
-  const [canShowNotifications, setCanShowNotifications] = useState(false);
-  const [showTerms, setShowTerms] = useState(false);
-  const [verificationState, setVerificationState] = useState(null);
-  const [showBannedModal, setShowBannedModal] = useState(false);
-  const [newOrderTrigger, setNewOrderTrigger] = useState(0);
-  const [botRefreshTrigger, setBotRefreshTrigger] = useState(0);
-  const [canResendOtp, setCanResendOtp] = useState(false);
-  const [showNotifications, setShowNotifications] = useState(false);
+    // ── Misc state ──────────────────────────────────────────────────────────────
+    const [initialMessagesComplete, setInitialMessagesComplete] = useState(false);
+    const [hasSearched, setHasSearched] = useState(false);
+    const [canShowNotifications, setCanShowNotifications] = useState(false);
+    const [showTerms, setShowTerms] = useState(false);
+    const [verificationState, setVerificationState] = useState(null);
+    const [showBannedModal, setShowBannedModal] = useState(false);
+    const [newOrderTrigger, setNewOrderTrigger] = useState(0);
+    const [botRefreshTrigger, setBotRefreshTrigger] = useState(0);
+    const [canResendOtp, setCanResendOtp] = useState(false);
+    const [showNotifications, setShowNotifications] = useState(false);
 
 
-  // ── Refs ────────────────────────────────────────────────────────────────────
-  const pendingChatSwitchRef = useRef(null);
-  const serviceTypeRef = useRef(saved.serviceType || runner?.serviceType || null);
-  const fleetTypeRef = useRef(runner?.fleetType || null);
-  const currentOrderRef = useRef(null);
-  const selectedUserRef = useRef(saved.selectedUser || null);
-  const activeChatIdRef = useRef(BOT_CHAT_ID);
-  const activeScreenIdRef = useRef(saved.activeChatId || BOT_CHAT_ID);
-  const kycStartedRef = useRef(false);
-  const pendingKycResumeRef = useRef(null);
-  const searchIntervalRef = useRef(null);
-  const botSaveTimerRef = useRef(null);
-  // Each child screen registers its setMessages here so raw.jsx can push
-  // messages into the currently visible screen from socket handlers.
-  const activeSetMessagesRef = useRef(null);
-  const isFreshRegistrationRef = useRef(false);
+    // ── Refs ────────────────────────────────────────────────────────────────────
+    const pendingChatSwitchRef = useRef(null);
+    const serviceTypeRef = useRef(saved.serviceType || runner?.serviceType || null);
+    const fleetTypeRef = useRef(runner?.fleetType || null);
+    const currentOrderRef = useRef(null);
+    const selectedUserRef = useRef(saved.selectedUser || null);
+    const activeChatIdRef = useRef(BOT_CHAT_ID);
+    const activeScreenIdRef = useRef(saved.activeChatId || BOT_CHAT_ID);
+    const kycStartedRef = useRef(false);
+    const pendingKycResumeRef = useRef(null);
+    const searchIntervalRef = useRef(null);
+    const botSaveTimerRef = useRef(null);
+    // Each child screen registers its setMessages here so raw.jsx can push
+    // messages into the currently visible screen from socket handlers.
+    const activeSetMessagesRef = useRef(null);
+    const isFreshRegistrationRef = useRef(false);
 
-  // ── Hooks ───────────────────────────────────────────────────────────────────
-  const {
-    socket, joinRunnerRoom, sendMessage, isConnected,
-  } = useSocketContext();
+    // ── Hooks ───────────────────────────────────────────────────────────────────
+    const {
+        socket, joinRunnerRoom, sendMessage, isConnected,
+    } = useSocketContext();
 
-  const {
-    isCollectingCredentials, credentialStep, credentialQuestions,
-    startCredentialFlow, needsOtpVerification, handleCredentialAnswer,
-    registrationComplete, handleOtpVerification, runnerData, handleResendOtp: resendOtpFromHook,
-    isReturningUser, returningUserData, handleReturningUserChoice, isSubmitting,
-    isVerifyingOtp, showLocationModal,
-    handleLocationComplete,
-    handleLocationCancel,
-  } = useCredentialFlow(serviceTypeRef, (rd, serverKycStatus) => {
-    setRunnerId(rd._id || rd.id);
-    isFreshRegistrationRef.current = true;
-    sessionStorage.setItem(`fresh_reg_${runnerId}`, 'true');
+    const {
+        isCollectingCredentials, credentialStep, credentialQuestions,
+        startCredentialFlow, needsOtpVerification, handleCredentialAnswer,
+        registrationComplete, handleOtpVerification, runnerData, handleResendOtp: resendOtpFromHook,
+        isReturningUser, returningUserData, handleReturningUserChoice, isSubmitting,
+        isVerifyingOtp, showLocationModal,
+        handleLocationComplete,
+        handleLocationCancel,
+    } = useCredentialFlow(serviceTypeRef, (rd, serverKycStatus) => {
+        setRunnerId(rd._id || rd.id);
+        isFreshRegistrationRef.current = true;
+        sessionStorage.setItem(`fresh_reg_${runnerId}`, 'true');
 
-    if (serverKycStatus?.overallVerified || serverKycStatus?.selfieVerified) {
-      isFreshRegistrationRef.current = false; // not a fresh reg
-      pendingKycResumeRef.current = serverKycStatus;
+        if (serverKycStatus?.overallVerified || serverKycStatus?.selfieVerified) {
+            isFreshRegistrationRef.current = false; // not a fresh reg
+            pendingKycResumeRef.current = serverKycStatus;
 
-      setTimeout(() => {
-        if (rd?.isTrainingCompleted) {
-          resumeKycFlow(serverKycStatus, botMessagesUpdater);
-        } else {
-          promptTraining(botMessagesUpdater);
+            setTimeout(() => {
+                if (rd?.isTrainingCompleted) {
+                    resumeKycFlow(serverKycStatus, botMessagesUpdater);
+                } else {
+                    promptTraining(botMessagesUpdater);
+                }
+            }, 100);
         }
-      }, 100);
-    }
-  });
-
-  const effectiveReturningKycStatus = useMemo(() => {
-    // Live value from this session's credential flow
-    if (returningUserData?.kycStatus) return returningUserData.kycStatus;
-    // Fallback: persisted from a previous session — survives refresh
-    if (runner?.email) return getPersistedReturningKycStatus(runner.email);
-    return null;
-  }, [returningUserData?.kycStatus, runner?.email]);
-
-  // ── Chat routing state ──────────────────────────────────────────────────────
-  // activeChatId drives which screen is shown and which chatManager slot is active.
-  // 'sendrey-bot' = onboarding screen. Any other value = RunnerChatScreen.
-  const [activeChatId, setActiveChatId] = useState(
-    (runner?._id || registrationComplete)
-      ? (saved.activeChatId || BOT_CHAT_ID)
-      : BOT_CHAT_ID
-  );
-
-  const orderStoreRef = useRef(useOrderStore.getState());
-  const chatIdForStore = activeChatId !== BOT_CHAT_ID ? activeChatId : null;
-
-  const taskSel = useMemo(() => makeTaskCompleted(chatIdForStore), [chatIdForStore]);
-  const statusSel = useMemo(() => makeCompletedStat(chatIdForStore), [chatIdForStore]);
-
-  const taskCompletedFromStore = useOrderStore(taskSel);
-  const completedStatusesFromStore = useOrderStore(statusSel, shallow);
-  const botStoreMessages = useOrderStore(selectBotMessages);
-
-  const {
-    showTrainingScreen, isSubmittingTraining,
-    promptTraining, openTrainingScreen, closeTrainingScreen,
-    completeTraining,
-  } = useRunnerTraining(runnerId);
-
-  const {
-    kycStep, kycStatus, startKycFlow, onIdVerified,
-    handleSelfieResponse, handleIDTypeSelection, onSelfieVerified,
-    checkVerificationStatus, resumeKycFlow
-  } = useKycHook(runnerId, runnerData?.fleetType);
-
-
-  const handleSelfieResponseRef = useRef(handleSelfieResponse);
-  useEffect(() => { handleSelfieResponseRef.current = handleSelfieResponse; }, [handleSelfieResponse]);
-
-  const {
-    openCamera
-  } = useCameraContext();
-
-  const {
-    callState, callType, isMuted, isCameraOff, formattedDuration,
-    remoteUsers, localVideoTrack, initiateCall, acceptCall, declineCall,
-    endCall, toggleMute, toggleCamera, isSpeakerOn, networkQuality,
-    toggleSpeaker, switchCamera: switchCallCamera, isConnecting, callError,
-  } = useCallHook({
-    socket,
-    chatId: selectedUser?._id ? `user-${selectedUser._id}-runner-${runnerId}` : null,
-    currentUserId: runnerId,
-    currentUserType: "runner",
-  });
-
-  const botMessagesUpdater = useCallback((updater) => {
-    const next = chatManager.updateMessages(BOT_CHAT_ID, updater);
-    if (activeChatIdRef.current === BOT_CHAT_ID &&
-      activeScreenIdRef.current === BOT_CHAT_ID &&
-      activeSetMessagesRef.current) {
-      activeSetMessagesRef.current(next);
-    }
-    useOrderStore.getState().setMessages(BOT_CHAT_ID, next);
-
-    if (runnerIdRef.current) {
-      try {
-        localStorage.setItem(`bot_messages_${runnerIdRef.current}`, JSON.stringify(next.slice(-60)));
-      } catch (_) { }
-
-      // Server persistence — debounced so a fast typed sequence doesn't
-      // fire one emit per message. Survives device switches.
-      if (socket) {
-        clearTimeout(botSaveTimerRef.current);
-        botSaveTimerRef.current = setTimeout(() => {
-          socket.emit('saveBotChatHistory', {
-            runnerId: runnerIdRef.current,
-            messages: next.slice(-100),
-          });
-        }, 800);
-      }
-    }
-  }, [socket]);
-
-  // ── Helpers ─────────────────────────────────────────────────────────────────
-
-  const handleBannedDetected = useCallback(() => {
-    setShowBannedModal(true);
-    setVerificationState({ isBanned: true, reason: 'Your account has been suspended. Please contact support.' });
-  }, []);
-
-  const mergeChatHistory = useCallback((prev, newChats) => {
-    if (!newChats || newChats.length === 0) return prev;
-
-    const isBotEntry = (c) =>
-      c.id === BOT_CHAT_ID ||
-      c.chatId?.startsWith('bot-') ||
-      c.id?.toString?.().startsWith?.('bot-');
-
-    const cleanNewChats = newChats.filter(c => !isBotEntry(c));
-    if (cleanNewChats.length === 0) return prev;
-
-    const existingMap = new Map();
-    prev.forEach(c => {
-      if (c.id && !isBotEntry(c)) existingMap.set(c.id, c);
     });
 
-    cleanNewChats.forEach(c => {
-      if (c.id) {
-        existingMap.set(c.id, {
-          ...existingMap.get(c.id),
-          ...c,
-          lastMessage: c.lastMessage || existingMap.get(c.id)?.lastMessage || '',
+    const effectiveReturningKycStatus = useMemo(() => {
+        // Live value from this session's credential flow
+        if (returningUserData?.kycStatus) return returningUserData.kycStatus;
+        // Fallback: persisted from a previous session — survives refresh
+        if (runner?.email) return getPersistedReturningKycStatus(runner.email);
+        return null;
+    }, [returningUserData?.kycStatus, runner?.email]);
+
+    // ── Chat routing state ──────────────────────────────────────────────────────
+    // activeChatId drives which screen is shown and which chatManager slot is active.
+    // 'sendrey-bot' = onboarding screen. Any other value = RunnerChatScreen.
+    const [activeChatId, setActiveChatId] = useState(
+        (runner?._id || registrationComplete)
+            ? (saved.activeChatId || BOT_CHAT_ID)
+            : BOT_CHAT_ID
+    );
+
+    const orderStoreRef = useRef(useOrderStore.getState());
+    const chatIdForStore = activeChatId !== BOT_CHAT_ID ? activeChatId : null;
+
+    const taskSel = useMemo(() => makeTaskCompleted(chatIdForStore), [chatIdForStore]);
+    const statusSel = useMemo(() => makeCompletedStat(chatIdForStore), [chatIdForStore]);
+
+    const taskCompletedFromStore = useOrderStore(taskSel);
+    const completedStatusesFromStore = useOrderStore(statusSel, shallow);
+    const botStoreMessages = useOrderStore(selectBotMessages);
+
+    const {
+        showTrainingScreen, isSubmittingTraining,
+        promptTraining, openTrainingScreen, closeTrainingScreen,
+        completeTraining,
+    } = useRunnerTraining(runnerId);
+
+    const {
+        kycStep, kycStatus, startKycFlow, onIdVerified,
+        handleSelfieResponse, handleIDTypeSelection, onSelfieVerified,
+        checkVerificationStatus, resumeKycFlow
+    } = useKycHook(runnerId, runnerData?.fleetType);
+
+
+    const handleSelfieResponseRef = useRef(handleSelfieResponse);
+    useEffect(() => { handleSelfieResponseRef.current = handleSelfieResponse; }, [handleSelfieResponse]);
+
+    const {
+        openCamera
+    } = useCameraContext();
+
+    const {
+        callState, callType, isMuted, isCameraOff, formattedDuration,
+        remoteUsers, localVideoTrack, initiateCall, acceptCall, declineCall,
+        endCall, toggleMute, toggleCamera, isSpeakerOn, networkQuality,
+        toggleSpeaker, switchCamera: switchCallCamera, isConnecting, callError,
+    } = useCallHook({
+        socket,
+        chatId: selectedUser?._id ? `user-${selectedUser._id}-runner-${runnerId}` : null,
+        currentUserId: runnerId,
+        currentUserType: "runner",
+    });
+
+    const botMessagesUpdater = useCallback((updater) => {
+        const next = chatManager.updateMessages(BOT_CHAT_ID, updater);
+        if (activeChatIdRef.current === BOT_CHAT_ID &&
+            activeScreenIdRef.current === BOT_CHAT_ID &&
+            activeSetMessagesRef.current) {
+            activeSetMessagesRef.current(next);
+        }
+        useOrderStore.getState().setMessages(BOT_CHAT_ID, next);
+
+        if (runnerIdRef.current) {
+            try {
+                localStorage.setItem(`bot_messages_${runnerIdRef.current}`, JSON.stringify(next.slice(-60)));
+            } catch (_) { }
+
+            // Server persistence — debounced so a fast typed sequence doesn't
+            // fire one emit per message. Survives device switches.
+            if (socket) {
+                clearTimeout(botSaveTimerRef.current);
+                botSaveTimerRef.current = setTimeout(() => {
+                    socket.emit('saveBotChatHistory', {
+                        runnerId: runnerIdRef.current,
+                        messages: next.slice(-100),
+                    });
+                }, 800);
+            }
+        }
+    }, [socket]);
+
+    // ── Helpers ─────────────────────────────────────────────────────────────────
+
+    const handleBannedDetected = useCallback(() => {
+        setShowBannedModal(true);
+        setVerificationState({ isBanned: true, reason: 'Your account has been suspended. Please contact support.' });
+    }, []);
+
+    const mergeChatHistory = useCallback((prev, newChats) => {
+        if (!newChats || newChats.length === 0) return prev;
+
+        const isBotEntry = (c) =>
+            c.id === BOT_CHAT_ID ||
+            c.chatId?.startsWith('bot-') ||
+            c.id?.toString?.().startsWith?.('bot-');
+
+        const cleanNewChats = newChats.filter(c => !isBotEntry(c));
+        if (cleanNewChats.length === 0) return prev;
+
+        const existingMap = new Map();
+        prev.forEach(c => {
+            if (c.id && !isBotEntry(c)) existingMap.set(c.id, c);
         });
-      }
+
+        cleanNewChats.forEach(c => {
+            if (c.id) {
+                existingMap.set(c.id, {
+                    ...existingMap.get(c.id),
+                    ...c,
+                    lastMessage: c.lastMessage || existingMap.get(c.id)?.lastMessage || '',
+                });
+            }
+        });
+
+        const merged = Array.from(existingMap.values());
+        merged.sort((a, b) => {
+            const timeA = new Date(a.lastActivity || a.time || 0).getTime();
+            const timeB = new Date(b.lastActivity || b.time || 0).getTime();
+            return timeB - timeA;
+        });
+
+        return merged;
+    }, []);
+
+    const isBotMode = activeChatId === BOT_CHAT_ID;
+
+    // FIRE-AND-FORGET: Instant UI + async store sync
+    const pushToActiveScreen = useCallback((updater) => {
+        // 
+        if (activeSetMessagesRef.current) {
+            try {
+                activeSetMessagesRef.current(updater);
+            } catch (e) {
+                console.warn('[pushToActiveScreen] UI failed:', e);
+            }
+        }
+
+        //  ASYNC STORE SYNC (non-blocking)
+        queueMicrotask(() => {
+            const chatId = activeChatIdRef.current;
+            if (chatId && chatId !== BOT_CHAT_ID) {
+                chatManager.updateMessages(chatId, updater);
+                useOrderStore.getState().setMessages(chatId, chatManager.get(chatId).messages);
+            }
+        });
+    }, []);
+
+    const {
+        handleBotClick, handleUserClick, handlePickService,
+        handleStartNewOrder, handleBackToHome, handleOrderStatusClick,
+        handleSetCompletedStatuses, handleConnectToService,
+        handleFindMore, handleNewOrderFleetSelected,
+    } = useRunnerChatHandlers({
+        runnerId, runnerIdRef, selectedUserRef, activeChatIdRef,
+        activeScreenIdRef, activeSetMessagesRef, currentOrderRef,
+        fleetTypeRef, searchIntervalRef, pendingChatSwitchRef,
+        setActiveChatId, setSelectedUser, setActive, setChatHistory,
+        setOrderPending, setCompletedStatusesVersion, setHasSearched,
+        setIsLoadingArchive, setAwaitingChatReady, setChatSessionKey,
+        setVerificationState, setNewOrderTrigger, setBotRefreshTrigger,
+        setSilentRefreshKey, setRunnerLocation,
+        socket, isConnected, joinRunnerRoom,
+        botMessagesUpdater, runnerData, runnerLocation, isVerifiedKyc: runner?.isVerifiedKyc ?? false,
+        checkVerificationStatus,
+        onBannedDetected: handleBannedDetected
     });
 
-    const merged = Array.from(existingMap.values());
-    merged.sort((a, b) => {
-      const timeA = new Date(a.lastActivity || a.time || 0).getTime();
-      const timeB = new Date(b.lastActivity || b.time || 0).getTime();
-      return timeB - timeA;
+    useRunnerSocketHandlers({
+        socket, runnerId, runnerIdRef, selectedUserRef,
+        activeChatIdRef, currentOrderRef, pushToActiveScreen,
+        setOrderPending, setCompletedStatusesVersion, setAwaitingChatReady,
     });
 
-    return merged;
-  }, []);
+    // push notification handling
+    const { permission, requestPermission } = usePushNotifications({
+        userId: runnerId,
+        userType: 'runner',
+        socket,
+        onIncomingCall: useCallback((data) => {
+            // data = { callId, chatId, callType, callerId, callerType, channelName, token }
+            // acceptCall from useCallHook handles joining the Agora channel
+            acceptCall(data);
+        }, [acceptCall]),
 
-  const isBotMode = activeChatId === BOT_CHAT_ID;
+        onNotificationTap: useCallback((data) => {
+            if (data?.type === 'new_request_nearby') {
+                setActiveChatId(BOT_CHAT_ID);
+                setSelectedUser(null);
+                setShowNotifications(true);
+                return;
+            }
 
-  // FIRE-AND-FORGET: Instant UI + async store sync
-  const pushToActiveScreen = useCallback((updater) => {
+            if (data?.type === 'kyc_document_approved' ||
+                data?.type === 'kyc_document_rejected' ||
+                data?.type === 'kyc_selfie_approved' ||
+                data?.type === 'kyc_nin_submitted' ||
+                data?.type === 'kyc_license_submitted' ||
+                data?.type === 'kyc_selfie_submitted') {
+                setActiveChatId(BOT_CHAT_ID);
+                setSelectedUser(null);
+                setCurrentView('chat');
+                return;
+            }
+
+            // ── Order flow ────────────────────────────────────────────────────────
+            if (RUNNER_ORDER_TYPES.includes(data?.type)) {
+                // Notification arrived late — runner not in active chat, do nothing
+                if (isBotMode) return;
+
+                // Already on chat screen, socket state is live — just ensure views are correct
+                setCurrentView('chat');
+                return;
+            }
+
+            if (data?.type === 'dispute_raised' || data?.type === 'dispute_resolved') {
+                setCurrentView('disputes');
+                return;
+            }
+
+            if (data?.type === 'withdrawal_requested' || data?.type === 'withdrawal_released') {
+                setCurrentView('wallet');
+                return;
+            }
+        }, [isBotMode]),
+    });
+
+    const chatMessagesUpdater = useCallback((updater) => {
+        const chatId = activeChatIdRef.current;
+        if (chatId === BOT_CHAT_ID) return; // ← never write chat messages to bot slot
+        const next = chatManager.updateMessages(chatId, updater);
+        // ← only push if the correct chat screen is registered
+        if (activeScreenIdRef.current === chatId && activeSetMessagesRef.current) {
+            activeSetMessagesRef.current(next);
+        }
+        useOrderStore.getState().setMessages(chatId, next);
+    }, []);
+
+    const handleMessageStatusUpdate = useCallback((idOrTempId, status, realId) => {
+        chatMessagesUpdater(prev => prev.map(m => {
+            if (m.id !== idOrTempId && m.tempId !== idOrTempId) return m;
+            return {
+                ...m,
+                status,
+                ...(realId && m.id === idOrTempId ? { id: realId, tempId: undefined } : {}),
+            };
+        }));
+    }, [chatMessagesUpdater]);
+
+    const { enqueue } = useMessageQueue({
+        socket,
+        isConnected,
+        chatId: activeChatIdRef.current,
+        sendMessage,
+        enabled: true,
+        onStatusUpdate: handleMessageStatusUpdate,
+    });
+
+
+    useEffect(() => {
+        if (!serviceType) return;
+        serviceTypeRef.current = serviceType;
+    }, [serviceType]);
+
+    // ── Keep activeChatIdRef in sync ────────────────────────────────────────────
+    useEffect(() => {
+        activeChatIdRef.current = activeChatId;
+    }, [activeChatId]);
+
+    useEffect(() => {
+        if (runner?._id && !runnerId) {
+            setRunnerId(runner._id);
+        }
+    }, [runner?._id]);
+
+    useEffect(() => {
+        runnerIdRef.current = runnerId;
+        if (!runnerId) {
+            kycStartedRef.current = false;
+        }
+    }, [runnerId]);
+
+    useEffect(() => {
+        localStorage.setItem('runner_ui', JSON.stringify({
+            activeChatId, selectedUser, active, currentView, serviceType,
+        }));
+    }, [activeChatId, selectedUser, active, currentView, serviceType]);
+
+    useEffect(() => {
+        if (runnerId && socket && permission !== 'denied') requestPermission();
+    }, [runnerId, socket, permission, requestPermission]);
+
+    useEffect(() => {
+        const unsub = useOrderStore.subscribe(s => { orderStoreRef.current = s; });
+        return unsub;
+    }, []);
+
+    useEffect(() => {
+        if (!selectedUser?._id || active) return;
+        const match = chatHistory.find(c => c.userId === selectedUser._id);
+        if (match) setActive(match);
+    }, [chatHistory, selectedUser?._id, active]);
+
+    useEffect(() => {
+        if (!saved.selectedUser || !saved.activeChatId || saved.activeChatId === BOT_CHAT_ID) return;
+        if (!runner?._id && !registrationComplete) return;
+
+        selectedUserRef.current = saved.selectedUser;
+        setActiveChatId(saved.activeChatId);
+        setSelectedUser(saved.selectedUser);
+
+        const storedMsgs = useOrderStore.getState().getChat(saved.activeChatId).messages ?? [];
+        if (storedMsgs.length > 0) {
+            chatManager.set(saved.activeChatId, { messages: storedMsgs });
+        }
+
+        // only switch away from bot if we actually have order state
+        //  let the socket rejoin flow handle it
+        const storedOrder = useOrderStore.getState().getChat(saved.activeChatId).currentOrder;
+        if (storedOrder && !['completed', 'cancelled', 'task_completed'].includes(storedOrder.status)) {
+            setActiveChatId(saved.activeChatId);
+            console.log('[AWAIT CLEAR] session restore effect');
+            setAwaitingChatReady(true); // show loading overlay while socket reconnects
+        }
+
+        // If no order state, stay on bot — socket will proceedToChat when ready
+    }, [runner?._id, registrationComplete]);
+
+
+    useEffect(() => {
+        // Run as soon as we have any runner identity, not just after auth
+        const { _chats } = useOrderStore.getState();
+        for (const [chatId, chatData] of Object.entries(_chats)) {
+            const msgs = chatData.messages ?? [];
+            if (msgs.length > 0) {
+                chatManager.set(chatId, { messages: msgs });
+            }
+        }
+    }, []);
+
+
+    const registerSetMessages = useCallback((fn, screenId) => {
+        activeSetMessagesRef.current = fn;
+        activeScreenIdRef.current = screenId;
+    }, []);
+
+    // ── KYC nudge timer ref ──────────────────────────────────────────────────────
+    const kycNudgeTimerRef = useRef(null);
+    const KYC_NUDGE_INTERVAL = 2 * 24 * 60 * 60 * 1000;
+
+    // ── Terms acceptance ────────────────────────────────────────────────────────
+    const handleAcceptTerms = async ({ whatsappOptIn }) => {
+        try {
+            await api.post('/terms/accept',
+                {
+                    version: RUNNER_TERMS.version,
+                    userType: 'runner',
+                    whatsappOptIn
+                }
+            );
+            localStorage.setItem(`terms_accepted_${runnerId}`, 'true');
+            localStorage.setItem(`kyc_flow_started_${runnerId}`, 'true');
+            setShowTerms(false);
+            pendingKycResumeRef.current = null;
+
+            if (runner?.isTrainingCompleted) {
+                startKycFlow(botMessagesUpdater);
+            } else {
+                promptTraining(botMessagesUpdater);
+            }
+        } catch (error) {
+            console.error('Failed to save terms acceptance:', error);
+        }
+    };
+
+
     // 
-    if (activeSetMessagesRef.current) {
-      try {
-        activeSetMessagesRef.current(updater);
-      } catch (e) {
-        console.warn('[pushToActiveScreen] UI failed:', e);
-      }
-    }
+    useEffect(() => {
+        console.log('[RAW] silentRefreshKey changed', silentRefreshKey);
+    }, [silentRefreshKey]);
 
-    //  ASYNC STORE SYNC (non-blocking)
-    queueMicrotask(() => {
-      const chatId = activeChatIdRef.current;
-      if (chatId && chatId !== BOT_CHAT_ID) {
-        chatManager.updateMessages(chatId, updater);
-        useOrderStore.getState().setMessages(chatId, chatManager.get(chatId).messages);
-      }
-    });
-  }, []);
-
-  const {
-    handleBotClick, handleUserClick, handlePickService,
-    handleStartNewOrder, handleBackToHome, handleOrderStatusClick,
-    handleSetCompletedStatuses, handleConnectToService,
-    handleFindMore, handleNewOrderFleetSelected,
-  } = useRunnerChatHandlers({
-    runnerId, runnerIdRef, selectedUserRef, activeChatIdRef,
-    activeScreenIdRef, activeSetMessagesRef, currentOrderRef,
-    fleetTypeRef, searchIntervalRef, pendingChatSwitchRef,
-    setActiveChatId, setSelectedUser, setActive, setChatHistory,
-    setOrderPending, setCompletedStatusesVersion, setHasSearched,
-    setIsLoadingArchive, setAwaitingChatReady, setChatSessionKey,
-    setVerificationState, setNewOrderTrigger, setBotRefreshTrigger,
-    setSilentRefreshKey, setRunnerLocation,
-    socket, isConnected, joinRunnerRoom,
-    botMessagesUpdater, runnerData, runnerLocation, isVerifiedKyc: runner?.isVerifiedKyc ?? false,
-    checkVerificationStatus,
-    onBannedDetected: handleBannedDetected
-  });
-
-  useRunnerSocketHandlers({
-    socket, runnerId, runnerIdRef, selectedUserRef,
-    activeChatIdRef, currentOrderRef, pushToActiveScreen,
-    setOrderPending, setCompletedStatusesVersion, setAwaitingChatReady,
-  });
-
-  // push notification handling
-  const { permission, requestPermission } = usePushNotifications({
-    userId: runnerId,
-    userType: 'runner',
-    socket,
-    onIncomingCall: useCallback((data) => {
-      // data = { callId, chatId, callType, callerId, callerType, channelName, token }
-      // acceptCall from useCallHook handles joining the Agora channel
-      acceptCall(data);
-    }, [acceptCall]),
-
-    onNotificationTap: useCallback((data) => {
-      if (data?.type === 'new_request_nearby') {
-        setActiveChatId(BOT_CHAT_ID);
-        setSelectedUser(null);
-        setShowNotifications(true);
-        return;
-      }
-
-      if (data?.type === 'kyc_document_approved' ||
-        data?.type === 'kyc_document_rejected' ||
-        data?.type === 'kyc_selfie_approved' ||
-        data?.type === 'kyc_nin_submitted' ||
-        data?.type === 'kyc_license_submitted' ||
-        data?.type === 'kyc_selfie_submitted') {
-        setActiveChatId(BOT_CHAT_ID);
-        setSelectedUser(null);
-        setCurrentView('chat');
-        return;
-      }
-
-      // ── Order flow ────────────────────────────────────────────────────────
-      if (RUNNER_ORDER_TYPES.includes(data?.type)) {
-        // Notification arrived late — runner not in active chat, do nothing
-        if (isBotMode) return;
-
-        // Already on chat screen, socket state is live — just ensure views are correct
-        setCurrentView('chat');
-        return;
-      }
-
-      if (data?.type === 'dispute_raised' || data?.type === 'dispute_resolved') {
-        setCurrentView('disputes');
-        return;
-      }
-
-      if (data?.type === 'withdrawal_requested' || data?.type === 'withdrawal_released') {
-        setCurrentView('wallet');
-        return;
-      }
-    }, [isBotMode]),
-  });
-
-  const chatMessagesUpdater = useCallback((updater) => {
-    const chatId = activeChatIdRef.current;
-    if (chatId === BOT_CHAT_ID) return; // ← never write chat messages to bot slot
-    const next = chatManager.updateMessages(chatId, updater);
-    // ← only push if the correct chat screen is registered
-    if (activeScreenIdRef.current === chatId && activeSetMessagesRef.current) {
-      activeSetMessagesRef.current(next);
-    }
-    useOrderStore.getState().setMessages(chatId, next);
-  }, []);
-
-  const handleMessageStatusUpdate = useCallback((idOrTempId, status, realId) => {
-    chatMessagesUpdater(prev => prev.map(m => {
-      if (m.id !== idOrTempId && m.tempId !== idOrTempId) return m;
-      return {
-        ...m,
-        status,
-        ...(realId && m.id === idOrTempId ? { id: realId, tempId: undefined } : {}),
-      };
-    }));
-  }, [chatMessagesUpdater]);
-
-  const { enqueue } = useMessageQueue({
-    socket,
-    isConnected,
-    chatId: activeChatIdRef.current,
-    sendMessage,
-    enabled: true,
-    onStatusUpdate: handleMessageStatusUpdate,
-  });
-
-
-  useEffect(() => {
-    if (!serviceType) return;
-    serviceTypeRef.current = serviceType;
-  }, [serviceType]);
-
-  // ── Keep activeChatIdRef in sync ────────────────────────────────────────────
-  useEffect(() => {
-    activeChatIdRef.current = activeChatId;
-  }, [activeChatId]);
-
-  useEffect(() => {
-    if (runner?._id && !runnerId) {
-      setRunnerId(runner._id);
-    }
-  }, [runner?._id]);
-
-  useEffect(() => {
-    runnerIdRef.current = runnerId;
-    if (!runnerId) {
-      kycStartedRef.current = false;
-    }
-  }, [runnerId]);
-
-  useEffect(() => {
-    localStorage.setItem('runner_ui', JSON.stringify({
-      activeChatId, selectedUser, active, currentView, serviceType,
-    }));
-  }, [activeChatId, selectedUser, active, currentView, serviceType]);
-
-  useEffect(() => {
-    if (runnerId && socket && permission !== 'denied') requestPermission();
-  }, [runnerId, socket, permission, requestPermission]);
-
-  useEffect(() => {
-    const unsub = useOrderStore.subscribe(s => { orderStoreRef.current = s; });
-    return unsub;
-  }, []);
-
-  useEffect(() => {
-    if (!selectedUser?._id || active) return;
-    const match = chatHistory.find(c => c.userId === selectedUser._id);
-    if (match) setActive(match);
-  }, [chatHistory, selectedUser?._id, active]);
-
-  useEffect(() => {
-    if (!saved.selectedUser || !saved.activeChatId || saved.activeChatId === BOT_CHAT_ID) return;
-    if (!runner?._id && !registrationComplete) return;
-
-    selectedUserRef.current = saved.selectedUser;
-    setActiveChatId(saved.activeChatId);
-    setSelectedUser(saved.selectedUser);
-
-    const storedMsgs = useOrderStore.getState().getChat(saved.activeChatId).messages ?? [];
-    if (storedMsgs.length > 0) {
-      chatManager.set(saved.activeChatId, { messages: storedMsgs });
-    }
-
-    // only switch away from bot if we actually have order state
-    //  let the socket rejoin flow handle it
-    const storedOrder = useOrderStore.getState().getChat(saved.activeChatId).currentOrder;
-    if (storedOrder && !['completed', 'cancelled', 'task_completed'].includes(storedOrder.status)) {
-      setActiveChatId(saved.activeChatId);
-      console.log('[AWAIT CLEAR] session restore effect');
-      setAwaitingChatReady(true); // show loading overlay while socket reconnects
-    }
-
-    // If no order state, stay on bot — socket will proceedToChat when ready
-  }, [runner?._id, registrationComplete]);
-
-
-  useEffect(() => {
-    // Run as soon as we have any runner identity, not just after auth
-    const { _chats } = useOrderStore.getState();
-    for (const [chatId, chatData] of Object.entries(_chats)) {
-      const msgs = chatData.messages ?? [];
-      if (msgs.length > 0) {
-        chatManager.set(chatId, { messages: msgs });
-      }
-    }
-  }, []);
-
-
-  const registerSetMessages = useCallback((fn, screenId) => {
-    activeSetMessagesRef.current = fn;
-    activeScreenIdRef.current = screenId;
-  }, []);
-
-  // ── KYC nudge timer ref ──────────────────────────────────────────────────────
-  const kycNudgeTimerRef = useRef(null);
-  const KYC_NUDGE_INTERVAL = 2 * 24 * 60 * 60 * 1000;
-
-  // ── Terms acceptance ────────────────────────────────────────────────────────
-  const handleAcceptTerms = async ({ whatsappOptIn }) => {
-    try {
-      await api.post('/terms/accept',
-        {
-          version: RUNNER_TERMS.version,
-          userType: 'runner',
-          whatsappOptIn
-        }
-      );
-      localStorage.setItem(`terms_accepted_${runnerId}`, 'true');
-      localStorage.setItem(`kyc_flow_started_${runnerId}`, 'true');
-      setShowTerms(false);
-      pendingKycResumeRef.current = null;
-
-      if (runner?.isTrainingCompleted) {
-        startKycFlow(botMessagesUpdater);
-      } else {
-        promptTraining(botMessagesUpdater);
-      }
-    } catch (error) {
-      console.error('Failed to save terms acceptance:', error);
-    }
-  };
-
-
-  // 
-  useEffect(() => {
-    console.log('[RAW] silentRefreshKey changed', silentRefreshKey);
-  }, [silentRefreshKey]);
-
-  // ── KYC started effect ───────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!runnerId) return;
-    const isFreshReg = isFreshRegistrationRef.current || sessionStorage.getItem(`fresh_reg_${runnerId}`) === 'true';
-    if (!registrationComplete && !isFreshReg) return;
-    if (needsOtpVerification) return;
-    if (isCollectingCredentials) return;
-    if (kycStartedRef.current) return;
-    if (kycStatus.overallVerified || kycStep === 6) return;
-    if (isReturningUser) return;
-
-    if (runner?.isVerifiedKyc && !isFreshRegistrationRef.current) {
-      kycStartedRef.current = true;
-      localStorage.setItem(`kyc_flow_started_${runnerId}`, 'true');
-      localStorage.setItem(`kyc_verified_shown_${runnerId}`, '1');
-      chatManager.set(BOT_CHAT_ID, { kycStep: 1 });
-      if (!runner?.isTrainingCompleted) {
-        promptTraining(botMessagesUpdater);
-      }
-      return;
-    }
-
-    // ── Returning user, selfie already submitted (verified/pending/rejected)
-    // resolve immediately
-    if (returningUserData?.kycStatus) {
-      const { selfieVerified, selfieStatus, overallVerified } = returningUserData.kycStatus;
-      if (selfieVerified || selfieStatus === 'pending_review' || overallVerified) {
+    // ── KYC started effect ───────────────────────────────────────────────────────
+    useEffect(() => {
+        if (!runnerId) return;
+        const isFreshReg = isFreshRegistrationRef.current || sessionStorage.getItem(`fresh_reg_${runnerId}`) === 'true';
+        if (!registrationComplete && !isFreshReg) return;
+        if (needsOtpVerification) return;
+        if (isCollectingCredentials) return;
         if (kycStartedRef.current) return;
-        kycStartedRef.current = true;
-        sessionStorage.removeItem(`fresh_reg_${runnerId}`);
-        localStorage.setItem(`kyc_flow_started_${runnerId}`, 'true');
+        if (kycStatus.overallVerified || kycStep === 6) return;
+        if (isReturningUser) return;
 
-        const returningTrainingDone = runner.isTrainingCompleted ?? false;
-        if (!returningTrainingDone) {
-          promptTraining(botMessagesUpdater);
-        } else {
-          checkVerificationStatus(botMessagesUpdater, () => { }, true);
+        if (runner?.isVerifiedKyc && !isFreshRegistrationRef.current) {
+            kycStartedRef.current = true;
+            localStorage.setItem(`kyc_flow_started_${runnerId}`, 'true');
+            localStorage.setItem(`kyc_verified_shown_${runnerId}`, '1');
+            chatManager.set(BOT_CHAT_ID, { kycStep: 1 });
+            if (!runner?.isTrainingCompleted) {
+                promptTraining(botMessagesUpdater);
+            }
+            return;
         }
-        return;
-      }
-    }
 
-    const kycFlowStarted = localStorage.getItem(`kyc_flow_started_${runnerId}`);
-    if (kycFlowStarted && !returningUserData?.kycStatus) return;
+        // ── Returning user, selfie already submitted (verified/pending/rejected)
+        // resolve immediately
+        if (returningUserData?.kycStatus) {
+            const { selfieVerified, selfieStatus, overallVerified } = returningUserData.kycStatus;
+            if (selfieVerified || selfieStatus === 'pending_review' || overallVerified) {
+                if (kycStartedRef.current) return;
+                kycStartedRef.current = true;
+                sessionStorage.removeItem(`fresh_reg_${runnerId}`);
+                localStorage.setItem(`kyc_flow_started_${runnerId}`, 'true');
 
-    const timer = setTimeout(() => {
-      if (kycStartedRef.current) return;
-      if (kycStatus.overallVerified || kycStep === 6) return;
-      if (isReturningUser) return;
+                const returningTrainingDone = runner.isTrainingCompleted ?? false;
+                if (!returningTrainingDone) {
+                    promptTraining(botMessagesUpdater);
+                } else {
+                    checkVerificationStatus(botMessagesUpdater, () => { }, true);
+                }
+                return;
+            }
+        }
 
-      kycStartedRef.current = true;
-      sessionStorage.removeItem(`fresh_reg_${runnerId}`);
+        const kycFlowStarted = localStorage.getItem(`kyc_flow_started_${runnerId}`);
+        if (kycFlowStarted && !returningUserData?.kycStatus) return;
 
-      const alreadyAccepted = localStorage.getItem(`terms_accepted_${runnerId}`);
+        const timer = setTimeout(() => {
+            if (kycStartedRef.current) return;
+            if (kycStatus.overallVerified || kycStep === 6) return;
+            if (isReturningUser) return;
 
-      if (returningUserData?.kycStatus) {
-        localStorage.setItem(`kyc_flow_started_${runnerId}`, 'true');
-        pendingKycResumeRef.current = returningUserData.kycStatus;
+            kycStartedRef.current = true;
+            sessionStorage.removeItem(`fresh_reg_${runnerId}`);
+
+            const alreadyAccepted = localStorage.getItem(`terms_accepted_${runnerId}`);
+
+            if (returningUserData?.kycStatus) {
+                localStorage.setItem(`kyc_flow_started_${runnerId}`, 'true');
+                pendingKycResumeRef.current = returningUserData.kycStatus;
+
+                setTimeout(() => {
+                    const returningTrainingDone = runner.isTrainingCompleted ?? false;
+                    if (returningTrainingDone) {
+                        resumeKycFlow(returningUserData.kycStatus, botMessagesUpdater);
+                    } else {
+                        promptTraining(botMessagesUpdater);
+                    }
+                }, 1500);
+            } else if (!alreadyAccepted) {
+                setShowTerms(true);
+            } else {
+                localStorage.setItem(`kyc_flow_started_${runnerId}`, 'true');
+                pendingKycResumeRef.current = null;
+                if (runner?.isTrainingCompleted) {
+                    startKycFlow(botMessagesUpdater);
+                } else {
+                    promptTraining(botMessagesUpdater);
+                }
+            }
+        }, 2000);
+
+        return () => clearTimeout(timer);
+    }, [
+        registrationComplete, runnerId, needsOtpVerification, isCollectingCredentials,
+        isReturningUser, kycStatus.overallVerified, kycStep, returningUserData,
+        resumeKycFlow, startKycFlow, promptTraining, checkVerificationStatus, botMessagesUpdater,
+        runner?.isTrainingCompleted, runner?.isVerifiedKyc,
+    ]);
+
+    // ── KYC nudge ────────────────────────────────────────────────────────────────
+    useEffect(() => {
+        if (!registrationComplete || !runnerId) return;
+        if (kycStatus.selfieVerified) return;
+        if (kycStep === 3 || kycStep === 5) return;
+
+        const lastNudge = localStorage.getItem(`kyc_nudge_${runnerId}`);
+        const now = Date.now();
+        const timeUntilNext = lastNudge
+            ? Math.max(0, parseInt(lastNudge) + KYC_NUDGE_INTERVAL - now)
+            : KYC_NUDGE_INTERVAL;
+
+        kycNudgeTimerRef.current = setTimeout(() => {
+            if (kycStatus.selfieVerified) return;
+            const nudgeMessage = {
+                id: `kyc-nudge-${Date.now()}`,
+                from: 'them',
+                text: `Hi${runnerData?.firstName ? ` ${runnerData.firstName}` : ''}, complete your KYC now and gain access to endless tasks. Take your selfie now to verify your identity, this would only take a minute 📸`,
+                time: getCurrentTime(),
+                status: 'delivered',
+                isKyc: true,
+            };
+            botMessagesUpdater(prev => [...prev, nudgeMessage]);
+
+            if (permission === 'granted') {
+                new Notification('Complete your KYC 📸', {
+                    body: `Hi${runnerData?.firstName ? ` ${runnerData.firstName}` : ''}! Take your selfie to unlock unlimited tasks.`,
+                    icon: '/favicon.ico',
+                });
+            }
+            localStorage.setItem(`kyc_nudge_${runnerId}`, Date.now().toString());
+        }, timeUntilNext);
+
+        return () => { if (kycNudgeTimerRef.current) clearTimeout(kycNudgeTimerRef.current); };
+    }, [registrationComplete, runnerId, kycStatus.selfieVerified, kycStep, permission, runnerData?.firstName, botMessagesUpdater]);
+
+    // ── Fleet type sync ──────────────────────────────────────────────────────────
+    useEffect(() => {
+        if (runnerData?.fleetType) fleetTypeRef.current = runnerData.fleetType;
+    }, [runnerData?.fleetType]);
+
+    // ── Initial bot messages (typed in one by one on first load) ─────────────────
+
+    const loadPersistedBotMessages = (runnerId) => {
+        if (!runnerId) return [];
+        try {
+            const stored = localStorage.getItem(`bot_messages_${runnerId}`);
+            return stored ? JSON.parse(stored) : [];
+        } catch (_) { return []; }
+    };
+
+    useEffect(() => {
+        const storedMsgs = useOrderStore.getState().getChat(BOT_CHAT_ID).messages;
+        if (storedMsgs.length > 0) {
+            chatManager.set(BOT_CHAT_ID, { messages: storedMsgs });
+            return;
+        }
+
+        if (runnerId) {
+            const persisted = loadPersistedBotMessages(runnerId);
+            if (persisted.length > 0) {
+                if (persisted.some(m => m.text?.includes('Congratulations'))) {
+                    localStorage.setItem(`kyc_verified_shown_${runnerId}`, '1');
+                }
+                chatManager.set(BOT_CHAT_ID, { messages: persisted });
+                useOrderStore.getState().setMessages(BOT_CHAT_ID, persisted);
+                setInitialMessagesComplete(true);
+                return;
+            }
+        }
+
+        const botState = chatManager.get(BOT_CHAT_ID);
+        if (botState.messages.length > 0) return;
+
+        const startTypedIntro = () => {
+            const t1 = setTimeout(() => {
+                if (activeChatIdRef.current !== BOT_CHAT_ID) return;
+                const s = chatManager.get(BOT_CHAT_ID);
+                if (s.messages.length === 0) botMessagesUpdater([INITIAL_BOT_MESSAGES[0]]);
+            }, 0);
+
+            const t2 = setTimeout(() => {
+                if (activeChatIdRef.current !== BOT_CHAT_ID) return;
+                const s = chatManager.get(BOT_CHAT_ID);
+                if (s.messages.length === 1) botMessagesUpdater([...s.messages, INITIAL_BOT_MESSAGES[1]]);
+                setTimeout(() => setInitialMessagesComplete(true), 300);
+            }, 700);
+
+            return () => { clearTimeout(t1); clearTimeout(t2); };
+        };
+
+        // server fallback
+        if (runnerId && socket) {
+            let settled = false;
+            socket.emit('getBotChatHistory', { runnerId }, (serverMessages) => {
+                if (settled) return;
+                settled = true;
+                if (serverMessages?.length > 0) {
+                    if (serverMessages.some(m => m.text?.includes('Congratulations'))) {
+                        localStorage.setItem(`kyc_verified_shown_${runnerId}`, '1');
+                    }
+                    chatManager.set(BOT_CHAT_ID, { messages: serverMessages });
+                    useOrderStore.getState().setMessages(BOT_CHAT_ID, serverMessages);
+                    try {
+                        localStorage.setItem(`bot_messages_${runnerId}`, JSON.stringify(serverMessages.slice(-60)));
+                    } catch (_) { }
+                    setInitialMessagesComplete(true);
+                } else {
+                    startTypedIntro();
+                }
+            });
+
+            const ackTimeout = setTimeout(() => { if (!settled) { settled = true; startTypedIntro(); } }, 2500);
+            return () => clearTimeout(ackTimeout);
+        }
+
+        return startTypedIntro();
+    }, [runnerId]);
+
+    // Ban listener
+    useEffect(() => {
+        if (!socket || !runnerId) return;
+
+        const handleAlert = (msg) => {
+            pushToActiveScreen(prev => [...prev, msg]);
+            const chatId = activeChatIdRef.current;
+            chatManager.updateMessages(chatId, prev => [...prev, msg]);
+        };
+
+        socket.on('runnerSystemAlert', handleAlert);
+        return () => socket.off('runnerSystemAlert', handleAlert);
+    }, [socket, runnerId, pushToActiveScreen]);
+
+    // watch for runner becoming null
+    useEffect(() => {
+        if (!runner?._id && !runnerId) return; // not authenticated, nothing to clear
+        if (runner?._id) return; // still authenticated, do nothing
+
+        // Confirm tokens are actually gone before nuking chat state.
+        let cancelled = false;
+
+        const confirmAndWipe = async () => {
+            const { accessToken, refreshToken } = await authStorage.getTokens();
+            if (cancelled) return;
+
+            if (accessToken || refreshToken) {
+                // tokens still exist, transient null, not a real logout. Do nothing.
+                console.warn('[raw.jsx] runner went null but tokens still present — ignoring transient blip');
+                return;
+            }
+
+            // real logout — safe to wipe
+            chatManager.set(BOT_CHAT_ID, { messages: [] });
+            useOrderStore.getState().setMessages(BOT_CHAT_ID, []);
+            setInitialMessagesComplete(false);
+
+            if (runnerId) {
+                localStorage.removeItem(`bot_messages_${runnerId}`);
+                localStorage.removeItem(`kyc_flow_started_${runnerId}`);
+                localStorage.removeItem(`kyc_step_${runnerId}`);
+                localStorage.removeItem(`kyc_doc_type_${runnerId}`);
+                localStorage.removeItem(`terms_accepted_${runnerId}`);
+                localStorage.removeItem(`kyc_status_${runnerId}`);
+                localStorage.removeItem(`training_progress_${runnerId}`);
+                clearCachedRecentChats(runnerId);
+            }
+
+            useOrderStore.getState()._reset();
+            localStorage.removeItem('sendrey-order-store');
+            setRunnerId(null);
+        };
+
+        // small delay lets a reconnecting socket / rehydrating Redux settle
+        const t = setTimeout(confirmAndWipe, 800);
+        return () => { cancelled = true; clearTimeout(t); };
+    }, [runner?._id]);
+
+    // ── canShowNotifications ─────────────────────────────────────────────────────
+    useEffect(() => {
+        if (kycStep === 6 && registrationComplete && isBotMode) {
+            setCanShowNotifications(true);
+        } else if (!isBotMode) {
+            setCanShowNotifications(false);
+        }
+    }, [kycStep, registrationComplete, isBotMode]);
+
+    useEffect(() => {
+        if (!(kycStep === 6 && registrationComplete && isBotMode && runnerId)) return;
+
+        dispatch(fetchRefreshRecentChats(runnerId))
+            .unwrap()
+            .then((res) => {
+                const serverChats = Array.isArray(res) ? res : (res?.chats || res?.data || []);
+                const cleanServerChats = serverChats.filter(c =>
+                    c.id !== BOT_CHAT_ID &&
+                    !c.chatId?.startsWith('bot-') &&
+                    !c.id?.toString?.().startsWith?.('bot-')
+                );
+                if (cleanServerChats.length === 0) return;
+
+                setCachedRecentChats(runnerId, cleanServerChats);
+                setChatHistory(prev => mergeChatHistory(prev, cleanServerChats));
+            })
+            .catch(err => {
+                console.warn('[recent-chats] connect-screen refresh failed:', err);
+            });
+    }, [kycStep, registrationComplete, isBotMode, runnerId, dispatch, mergeChatHistory]);
+
+    // ── OTP resend cooldown ──────────────────────────────────────────────────────
+    useEffect(() => {
+        if (needsOtpVerification) {
+            setCanResendOtp(false);
+            const timer = setTimeout(() => setCanResendOtp(true), 30000); // 30s
+            return () => clearTimeout(timer);
+        }
+    }, [needsOtpVerification]);
+
+    useEffect(() => {
+        if (!runnerId) return;
+
+        const cached = getCachedRecentChats(runnerId);
+        if (cached && cached.length > 0) {
+            const cleanCached = cached.filter(c =>
+                c.id !== BOT_CHAT_ID &&
+                !c.chatId?.startsWith('bot-') &&
+                !c.id?.toString?.().startsWith?.('bot-')
+            );
+            console.log('[recent-chats] loaded from cache:', cleanCached.length);
+            setChatHistory(prev => {
+                const existingIds = new Set(prev.map(c => c.id));
+                const toAdd = cleanCached.filter(c => !existingIds.has(c.id));
+                return toAdd.length ? [...prev, ...toAdd] : prev;
+            });
+        }
+
+        dispatch(fetchRefreshRecentChats(runnerId))
+            .unwrap()
+            .then((res) => {
+                console.log('[recent-chats] raw response:', res);
+                const serverChats = Array.isArray(res) ? res : (res?.chats || res?.data || []);
+                const cleanServerChats = serverChats.filter(c =>
+                    c.id !== BOT_CHAT_ID &&
+                    !c.chatId?.startsWith('bot-') &&
+                    !c.id?.toString?.().startsWith?.('bot-')
+                );
+                console.log('[recent-chats] parsed chats:', cleanServerChats);
+
+                setCachedRecentChats(runnerId, cleanServerChats);
+                setChatHistory(prev => mergeChatHistory(prev, cleanServerChats));
+            })
+            .catch(err => {
+                console.warn('[recent-chats] fetch failed:', err);
+            });
+    }, [runnerId, dispatch, mergeChatHistory]);
+
+    useEffect(() => {
+        if (!runnerId || !chatHistory || chatHistory.length === 0) return;
+
+        const nonBotChats = chatHistory.filter(c =>
+            c.id !== BOT_CHAT_ID &&
+            !c.chatId?.startsWith('bot-') &&
+            !c.id?.toString?.().startsWith?.('bot-')
+        );
+
+        if (nonBotChats.length > 0) {
+            setCachedRecentChats(runnerId, nonBotChats);
+            console.log('[recent-chats] cache updated with latest chats:', nonBotChats.length);
+        } else {
+            clearCachedRecentChats(runnerId);
+        }
+    }, [runnerId, chatHistory]);
+
+    useRunnerChatRoomJoin({
+        selectedUser, socket, runnerId, dispatch, chatSessionKey,
+        chatManager, currentOrderRef, activeChatIdRef, activeSetMessagesRef,
+        setChatHistory, mergeChatHistory, setAwaitingChatReady,
+    });
+
+    // ── Runner room join ─────────────────────────────────────────────────────────
+    useEffect(() => {
+        if (!registrationComplete || !runnerId || !socket) return;
+
+        const rejoin = () => {
+            console.log('[raw.jsx] (re)joining runner room after connect:', runnerId);
+            joinRunnerRoom(runnerId, null);
+        };
+
+        if (socket.connected) rejoin();
+        socket.on('connect', rejoin);
+
+        socket.on('connect', () => {
+            rejoin();
+            if (!kycStatus.overallVerified) {
+                checkVerificationStatus(botMessagesUpdater, () => { }, false);
+            }
+        });
+
+        return () => socket.off('connect', rejoin);
+    }, [registrationComplete, runnerId, socket, joinRunnerRoom]);
+
+    useEffect(() => {
+        if (socket && runnerId && registrationComplete) {
+            if (socket.connected) {
+                socket.emit('rejoinUserRoom', { userId: runnerId, userType: 'runner' });
+            }
+        }
+    }, [socket, runnerId, registrationComplete]);
+
+    // ── Verification status ──────────────────────────────────────────────────────
+    useEffect(() => {
+        if (!socket || !runnerId) return;
+        const handler = (data) => {
+            console.log("🔵 [SOCKET RECEIVED] verificationStatus event:", data);
+
+            setVerificationState(data);
+            setShowBannedModal(!!data.isBanned);
+
+            if (data.event === 'runner_banned' || data.event === 'runner_unbanned') {
+                const banMsg = {
+                    id: `${data.event}-${Date.now()}`,
+                    from: 'them',
+                    text: data.event === 'runner_banned'
+                        ? `Your account has been suspended.${data.reason ? ` Reason: ${data.reason}` : ''}. Please contact support`
+                        : 'Your account has been reinstated. You can resume accepting orders.',
+                    time: getCurrentTime(),
+                    status: 'delivered',
+                };
+                botMessagesUpdater(prev => [...prev, banMsg]);
+                if (!isBotMode) {
+                    chatMessagesUpdater(prev => [...prev, banMsg]);
+                }
+            }
+
+            const isKycDocEvent = [
+                'kyc_document_approved', 'kyc_document_rejected',
+                'kyc_selfie_approved', 'kyc_selfie_rejected',
+            ].includes(data.event);
+
+            if (isKycDocEvent) {
+
+                const updater = isBotMode ? botMessagesUpdater : chatMessagesUpdater;
+                checkVerificationStatus(updater, () => { }, false);
+            } else if (data.isVerifiedKyc === true) {
+                dispatch(updateRunner({ isVerifiedKyc: true, kycStatus: data.kycStatus }));
+            } else if (data.isVerifiedKyc === false) {
+                dispatch(updateRunner({ isVerifiedKyc: false, kycStatus: data.kycStatus }));
+            }
+        };
+        socket.on('verificationStatus', handler);
+        return () => socket.off('verificationStatus', handler);
+    }, [socket, runnerId, isBotMode, botMessagesUpdater, chatMessagesUpdater, checkVerificationStatus, dispatch]);
+
+    useEffect(() => {
+        if (!activeChatId || activeChatId === BOT_CHAT_ID) return;
+        const { getChat } = useOrderStore.getState(); // eslint-disable-line no-unused-vars
+        // Subscribe to store changes and keep the ref in sync
+        const unsub = useOrderStore.subscribe(
+            (state) => state._chats[activeChatId]?.currentOrder ?? null,
+            (order) => { currentOrderRef.current = order; }
+        );
+        return unsub;
+    }, [activeChatId]);
+
+    // sync  whenever activeChatId changes
+    useEffect(() => {
+        if (activeChatId && activeChatId !== BOT_CHAT_ID) {
+            useOrderStore.getState().setActiveChatId(activeChatId);
+        } else {
+            useOrderStore.getState().setActiveChatId(null);
+        }
+    }, [activeChatId]);
+
+    // ── Body scroll lock ─────────────────────────────────────────────────────────
+    useEffect(() => {
+        document.body.style.overflow = (drawerOpen || infoOpen) ? "hidden" : "";
+    }, [drawerOpen, infoOpen]);
+
+    // ── Geolocation ──────────────────────────────────────────────────────────────
+    useEffect(() => {
+        if (!registrationComplete) return;
+        if (navigator.geolocation) {
+            navigator.geolocation.getCurrentPosition(
+                (pos) => setRunnerLocation({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
+                () => setRunnerLocation({ latitude: 6.5244, longitude: 3.3792 })
+            );
+        } else {
+            setRunnerLocation({ latitude: 6.5244, longitude: 3.3792 });
+        }
+    }, [registrationComplete]);
+
+    // grace useEffect for expired token mid order 
+    useEffect(() => {
+        if (!runner?._id || !runnerId) return;
+
+        const validateRunnerSession = async () => {
+            // Only run if we have a selected user (active chat)
+            const savedUI = JSON.parse(localStorage.getItem('runner_ui') || '{}');
+            const savedChatId = savedUI.activeChatId;
+            if (!savedChatId || savedChatId === BOT_CHAT_ID) return;
+
+            const chatState = useOrderStore.getState().getChat(savedChatId);
+            if (chatState.taskCompleted || chatState.orderCancelled) return;
+
+            try {
+                const response = await api.post('/sessions/validate', { chatId: savedChatId });
+                const { isValid, hasActiveOrder, tokenExpired } = response.data.data;
+
+                if (isValid && hasActiveOrder) {
+                    console.log('[raw.jsx] Session valid, token expired:', tokenExpired);
+                    if (tokenExpired) {
+                        try {
+                            await refreshSession();
+                            console.log('[raw.jsx] session refreshed after expired token');
+                        } catch (_) {
+                            // Grace access still applies
+                        }
+                    }
+                    // Chat will restore via the existing savedUI restore effect
+                } else {
+                    // No active order — clear stale state for this chatId
+                    useOrderStore.getState()._patch(savedChatId, {
+                        currentOrder: null,
+                        taskCompleted: false,
+                        orderCancelled: false,
+                        completedStatuses: [],
+                        deliveryMarked: false,
+                    });
+                    chatManager.set(savedChatId, { currentOrder: null });
+                }
+            } catch (error) {
+                if (error.response?.status === 404) {
+                    // Confirmed no active order
+                    useOrderStore.getState()._patch(savedChatId, {
+                        currentOrder: null,
+                        taskCompleted: false,
+                        orderCancelled: false,
+                        completedStatuses: [],
+                        deliveryMarked: false,
+                    });
+                    chatManager.set(savedChatId, { currentOrder: null });
+                }
+                // On network error or 401, keep existing state — don't clear
+                console.warn('[raw.jsx] Session validation failed:', error.message);
+            }
+        };
+
+        const timer = setTimeout(validateRunnerSession, 500);
+        return () => clearTimeout(timer);
+    }, [runnerId, runner?._id]);
+
+    // ── Message handlers (bot screen) ────────────────────────────────────────────
+
+    const handleResendOtp = useCallback(() => {
+        if (!canResendOtp) return;
+
+        // actually dispatch the resend to backend
+        resendOtpFromHook(botMessagesUpdater);
+
+        const msg1 = {
+            id: Date.now(), from: "them",
+            text: "We have sent you a new OTP",
+            time: getCurrentTime(),
+            status: "delivered",
+        };
+        botMessagesUpdater(prev => [...prev, msg1]);
 
         setTimeout(() => {
-          const returningTrainingDone = runner.isTrainingCompleted ?? false;
-          if (returningTrainingDone) {
-            resumeKycFlow(returningUserData.kycStatus, botMessagesUpdater);
-          } else {
-            promptTraining(botMessagesUpdater);
-          }
-        }, 1500);
-      } else if (!alreadyAccepted) {
-        setShowTerms(true);
-      } else {
-        localStorage.setItem(`kyc_flow_started_${runnerId}`, 'true');
-        pendingKycResumeRef.current = null;
-        if (runner?.isTrainingCompleted) {
-          startKycFlow(botMessagesUpdater);
-        } else {
-          promptTraining(botMessagesUpdater);
-        }
-      }
-    }, 2000);
+            const msg2 = {
+                id: Date.now() + 1, from: "them",
+                // text: `Enter the OTP we sent to ${runnerData?.phone}, \n \nDidn't receive OTP? Resend`,
+                text: `Enter the OTP we sent to ${runnerData?.email}, \n \nDidn't receive OTP? Resend`,
+                time: getCurrentTime(),
+                status: "delivered", hasResendLink: true,
+            };
+            botMessagesUpdater(prev => [...prev, msg2]);
+        }, 1200);
 
-    return () => clearTimeout(timer);
-  }, [
-    registrationComplete, runnerId, needsOtpVerification, isCollectingCredentials,
-    isReturningUser, kycStatus.overallVerified, kycStep, returningUserData,
-    resumeKycFlow, startKycFlow, promptTraining, checkVerificationStatus, botMessagesUpdater,
-    runner?.isTrainingCompleted, runner?.isVerifiedKyc,
-  ]);
+        setCanResendOtp(false);
+        setTimeout(() => setCanResendOtp(true), 30000);
+    }, [canResendOtp, botMessagesUpdater, runnerData?.email, resendOtpFromHook
+        // runnerData?.phone,
+    ]);
 
-  // ── KYC nudge ────────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!registrationComplete || !runnerId) return;
-    if (kycStatus.selfieVerified) return;
-    if (kycStep === 3 || kycStep === 5) return;
-
-    const lastNudge = localStorage.getItem(`kyc_nudge_${runnerId}`);
-    const now = Date.now();
-    const timeUntilNext = lastNudge
-      ? Math.max(0, parseInt(lastNudge) + KYC_NUDGE_INTERVAL - now)
-      : KYC_NUDGE_INTERVAL;
-
-    kycNudgeTimerRef.current = setTimeout(() => {
-      if (kycStatus.selfieVerified) return;
-      const nudgeMessage = {
-        id: `kyc-nudge-${Date.now()}`,
-        from: 'them',
-        text: `Hi${runnerData?.firstName ? ` ${runnerData.firstName}` : ''}, complete your KYC now and gain access to endless tasks. Take your selfie now to verify your identity, this would only take a minute 📸`,
-        time: getCurrentTime(),
-        status: 'delivered',
-        isKyc: true,
-      };
-      botMessagesUpdater(prev => [...prev, nudgeMessage]);
-
-      if (permission === 'granted') {
-        new Notification('Complete your KYC 📸', {
-          body: `Hi${runnerData?.firstName ? ` ${runnerData.firstName}` : ''}! Take your selfie to unlock unlimited tasks.`,
-          icon: '/favicon.ico',
+    const handleKycRedirect = useCallback(() => {
+        chatManager.set(BOT_CHAT_ID, {
+            newOrderComplete: false,
+            newOrderStep: null,
         });
-      }
-      localStorage.setItem(`kyc_nudge_${runnerId}`, Date.now().toString());
-    }, timeUntilNext);
+        checkVerificationStatus(botMessagesUpdater, () => {
+            setShowBannedModal(true);
+            handleBannedDetected();
+        }, false);
+    }, [checkVerificationStatus, botMessagesUpdater]);
 
-    return () => { if (kycNudgeTimerRef.current) clearTimeout(kycNudgeTimerRef.current); };
-  }, [registrationComplete, runnerId, kycStatus.selfieVerified, kycStep, permission, runnerData?.firstName, botMessagesUpdater]);
-
-  // ── Fleet type sync ──────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (runnerData?.fleetType) fleetTypeRef.current = runnerData.fleetType;
-  }, [runnerData?.fleetType]);
-
-  // ── Initial bot messages (typed in one by one on first load) ─────────────────
-
-  const loadPersistedBotMessages = (runnerId) => {
-    if (!runnerId) return [];
-    try {
-      const stored = localStorage.getItem(`bot_messages_${runnerId}`);
-      return stored ? JSON.parse(stored) : [];
-    } catch (_) { return []; }
-  };
-
-  useEffect(() => {
-    const storedMsgs = useOrderStore.getState().getChat(BOT_CHAT_ID).messages;
-    if (storedMsgs.length > 0) {
-      chatManager.set(BOT_CHAT_ID, { messages: storedMsgs });
-      return;
-    }
-
-    if (runnerId) {
-      const persisted = loadPersistedBotMessages(runnerId);
-      if (persisted.length > 0) {
-        if (persisted.some(m => m.text?.includes('Congratulations'))) {
-          localStorage.setItem(`kyc_verified_shown_${runnerId}`, '1');
+    const handleMessageClick = useCallback((message, choice) => {
+        if (message.hasResendLink && canResendOtp) { handleResendOtp(); return; }
+        if (message.selfieChoice) {
+            handleSelfieResponseRef.current(message.selfieChoice, botMessagesUpdater);
+            if (message.selfieChoice === 'okay') openCamera();
         }
-        chatManager.set(BOT_CHAT_ID, { messages: persisted });
-        useOrderStore.getState().setMessages(BOT_CHAT_ID, persisted);
-        setInitialMessagesComplete(true);
-        return;
-      }
-    }
 
-    const botState = chatManager.get(BOT_CHAT_ID);
-    if (botState.messages.length > 0) return;
-
-    const startTypedIntro = () => {
-      const t1 = setTimeout(() => {
-        if (activeChatIdRef.current !== BOT_CHAT_ID) return;
-        const s = chatManager.get(BOT_CHAT_ID);
-        if (s.messages.length === 0) botMessagesUpdater([INITIAL_BOT_MESSAGES[0]]);
-      }, 0);
-
-      const t2 = setTimeout(() => {
-        if (activeChatIdRef.current !== BOT_CHAT_ID) return;
-        const s = chatManager.get(BOT_CHAT_ID);
-        if (s.messages.length === 1) botMessagesUpdater([...s.messages, INITIAL_BOT_MESSAGES[1]]);
-        setTimeout(() => setInitialMessagesComplete(true), 300);
-      }, 700);
-
-      return () => { clearTimeout(t1); clearTimeout(t2); };
-    };
-
-    // server fallback
-    if (runnerId && socket) {
-      let settled = false;
-      socket.emit('getBotChatHistory', { runnerId }, (serverMessages) => {
-        if (settled) return;
-        settled = true;
-        if (serverMessages?.length > 0) {
-          if (serverMessages.some(m => m.text?.includes('Congratulations'))) {
-            localStorage.setItem(`kyc_verified_shown_${runnerId}`, '1');
-          }
-          chatManager.set(BOT_CHAT_ID, { messages: serverMessages });
-          useOrderStore.getState().setMessages(BOT_CHAT_ID, serverMessages);
-          try {
-            localStorage.setItem(`bot_messages_${runnerId}`, JSON.stringify(serverMessages.slice(-60)));
-          } catch (_) { }
-          setInitialMessagesComplete(true);
-        } else {
-          startTypedIntro();
+        if (message.trainingPromptButton) {
+            openTrainingScreen();
         }
-      });
+    }, [canResendOtp, handleResendOtp, openCamera.apply, openTrainingScreen]);
 
-      const ackTimeout = setTimeout(() => { if (!settled) { settled = true; startTypedIntro(); } }, 2500);
-      return () => clearTimeout(ackTimeout);
-    }
+    const pickUp = useCallback(() => {
+        serviceTypeRef.current = "pick-up";
+        setServiceType("pick-up");
+        const updater = botMessagesUpdater;
+        updater(prev => [...prev, {
+            id: Date.now().toString(), from: "me", text: 'Pick Up',
+            time: getCurrentTime(),
+            status: "sent", isCredential: true,
+        }]);
+        setTimeout(() => startCredentialFlow('pick-up', updater), 1000);
+    }, [startCredentialFlow, botMessagesUpdater]);
 
-    return startTypedIntro();
-  }, [runnerId]);
+    const runErrand = useCallback(() => {
+        serviceTypeRef.current = "run-errand";
+        setServiceType("run-errand");
+        const updater = botMessagesUpdater;
+        updater(prev => [...prev, {
+            id: Date.now().toString(), from: "me", text: 'Run Errand',
+            time: getCurrentTime(),
+            status: "sent", isCredential: true,
+        }]);
+        setTimeout(() => startCredentialFlow('run-errand', updater), 1000);
+    }, [startCredentialFlow, botMessagesUpdater]);
 
-  // Ban listener
-  useEffect(() => {
-    if (!socket || !runnerId) return;
 
-    const handleAlert = (msg) => {
-      pushToActiveScreen(prev => [...prev, msg]);
-      const chatId = activeChatIdRef.current;
-      chatManager.updateMessages(chatId, prev => [...prev, msg]);
-    };
+    const send = useCallback((replyingTo = null) => { // eslint-disable-line no-unused-vars
+        const currentText = chatManager.get(activeChatIdRef.current).draft || ''; // eslint-disable-line no-unused-vars
+    }, []);
 
-    socket.on('runnerSystemAlert', handleAlert);
-    return () => socket.off('runnerSystemAlert', handleAlert);
-  }, [socket, runnerId, pushToActiveScreen]);
+    // text is still held in raw.jsx state to avoid threading issues
+    const [text, setText] = useState("");
 
-  // watch for runner becoming null
-  useEffect(() => {
-    if (!runner?._id && !runnerId) return; // not authenticated, nothing to clear
-    if (runner?._id) return; // still authenticated, do nothing
+    const sendMessage_fn = useCallback((replyingTo = null) => {
 
-    // Confirm tokens are actually gone before nuking chat state.
-    let cancelled = false;
-
-    const confirmAndWipe = async () => {
-      const { accessToken, refreshToken } = await authStorage.getTokens();
-      if (cancelled) return;
-
-      if (accessToken || refreshToken) {
-        // tokens still exist, transient null, not a real logout. Do nothing.
-        console.warn('[raw.jsx] runner went null but tokens still present — ignoring transient blip');
-        return;
-      }
-
-      // real logout — safe to wipe
-      chatManager.set(BOT_CHAT_ID, { messages: [] });
-      useOrderStore.getState().setMessages(BOT_CHAT_ID, []);
-      setInitialMessagesComplete(false);
-
-      if (runnerId) {
-        localStorage.removeItem(`bot_messages_${runnerId}`);
-        localStorage.removeItem(`kyc_flow_started_${runnerId}`);
-        localStorage.removeItem(`kyc_step_${runnerId}`);
-        localStorage.removeItem(`kyc_doc_type_${runnerId}`);
-        localStorage.removeItem(`terms_accepted_${runnerId}`);
-        localStorage.removeItem(`kyc_status_${runnerId}`);
-        localStorage.removeItem(`training_progress_${runnerId}`);
-        clearCachedRecentChats(runnerId);
-      }
-
-      useOrderStore.getState()._reset();
-      localStorage.removeItem('sendrey-order-store');
-      setRunnerId(null);
-    };
-
-    // small delay lets a reconnecting socket / rehydrating Redux settle
-    const t = setTimeout(confirmAndWipe, 800);
-    return () => { cancelled = true; clearTimeout(t); };
-  }, [runner?._id]);
-
-  // ── canShowNotifications ─────────────────────────────────────────────────────
-  useEffect(() => {
-    if (kycStep === 6 && registrationComplete && isBotMode) {
-      setCanShowNotifications(true);
-    } else if (!isBotMode) {
-      setCanShowNotifications(false);
-    }
-  }, [kycStep, registrationComplete, isBotMode]);
-
-  useEffect(() => {
-    if (!(kycStep === 6 && registrationComplete && isBotMode && runnerId)) return;
-
-    dispatch(fetchRefreshRecentChats(runnerId))
-      .unwrap()
-      .then((res) => {
-        const serverChats = Array.isArray(res) ? res : (res?.chats || res?.data || []);
-        const cleanServerChats = serverChats.filter(c =>
-          c.id !== BOT_CHAT_ID &&
-          !c.chatId?.startsWith('bot-') &&
-          !c.id?.toString?.().startsWith?.('bot-')
-        );
-        if (cleanServerChats.length === 0) return;
-
-        setCachedRecentChats(runnerId, cleanServerChats);
-        setChatHistory(prev => mergeChatHistory(prev, cleanServerChats));
-      })
-      .catch(err => {
-        console.warn('[recent-chats] connect-screen refresh failed:', err);
-      });
-  }, [kycStep, registrationComplete, isBotMode, runnerId, dispatch, mergeChatHistory]);
-
-  // ── OTP resend cooldown ──────────────────────────────────────────────────────
-  useEffect(() => {
-    if (needsOtpVerification) {
-      setCanResendOtp(false);
-      const timer = setTimeout(() => setCanResendOtp(true), 30000); // 30s
-      return () => clearTimeout(timer);
-    }
-  }, [needsOtpVerification]);
-
-  useEffect(() => {
-    if (!runnerId) return;
-
-    const cached = getCachedRecentChats(runnerId);
-    if (cached && cached.length > 0) {
-      const cleanCached = cached.filter(c =>
-        c.id !== BOT_CHAT_ID &&
-        !c.chatId?.startsWith('bot-') &&
-        !c.id?.toString?.().startsWith?.('bot-')
-      );
-      console.log('[recent-chats] loaded from cache:', cleanCached.length);
-      setChatHistory(prev => {
-        const existingIds = new Set(prev.map(c => c.id));
-        const toAdd = cleanCached.filter(c => !existingIds.has(c.id));
-        return toAdd.length ? [...prev, ...toAdd] : prev;
-      });
-    }
-
-    dispatch(fetchRefreshRecentChats(runnerId))
-      .unwrap()
-      .then((res) => {
-        console.log('[recent-chats] raw response:', res);
-        const serverChats = Array.isArray(res) ? res : (res?.chats || res?.data || []);
-        const cleanServerChats = serverChats.filter(c =>
-          c.id !== BOT_CHAT_ID &&
-          !c.chatId?.startsWith('bot-') &&
-          !c.id?.toString?.().startsWith?.('bot-')
-        );
-        console.log('[recent-chats] parsed chats:', cleanServerChats);
-
-        setCachedRecentChats(runnerId, cleanServerChats);
-        setChatHistory(prev => mergeChatHistory(prev, cleanServerChats));
-      })
-      .catch(err => {
-        console.warn('[recent-chats] fetch failed:', err);
-      });
-  }, [runnerId, dispatch, mergeChatHistory]);
-
-  useEffect(() => {
-    if (!runnerId || !chatHistory || chatHistory.length === 0) return;
-
-    const nonBotChats = chatHistory.filter(c =>
-      c.id !== BOT_CHAT_ID &&
-      !c.chatId?.startsWith('bot-') &&
-      !c.id?.toString?.().startsWith?.('bot-')
-    );
-
-    if (nonBotChats.length > 0) {
-      setCachedRecentChats(runnerId, nonBotChats);
-      console.log('[recent-chats] cache updated with latest chats:', nonBotChats.length);
-    } else {
-      clearCachedRecentChats(runnerId);
-    }
-  }, [runnerId, chatHistory]);
-
-  useRunnerChatRoomJoin({
-    selectedUser, socket, runnerId, dispatch, chatSessionKey,
-    chatManager, currentOrderRef, activeChatIdRef, activeSetMessagesRef,
-    setChatHistory, mergeChatHistory, setAwaitingChatReady,
-  });
-
-  // ── Runner room join ─────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!registrationComplete || !runnerId || !socket) return;
-
-    const rejoin = () => {
-      console.log('[raw.jsx] (re)joining runner room after connect:', runnerId);
-      joinRunnerRoom(runnerId, null);
-    };
-
-    if (socket.connected) rejoin();
-    socket.on('connect', rejoin);
-
-    socket.on('connect', () => {
-      rejoin();
-      if (!kycStatus.overallVerified) {
-        checkVerificationStatus(botMessagesUpdater, () => { }, false);
-      }
-    });
-
-    return () => socket.off('connect', rejoin);
-  }, [registrationComplete, runnerId, socket, joinRunnerRoom]);
-
-  useEffect(() => {
-    if (socket && runnerId && registrationComplete) {
-      if (socket.connected) {
-        socket.emit('rejoinUserRoom', { userId: runnerId, userType: 'runner' });
-      }
-    }
-  }, [socket, runnerId, registrationComplete]);
-
-  // ── Verification status ──────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!socket || !runnerId) return;
-    const handler = (data) => {
-      console.log("🔵 [SOCKET RECEIVED] verificationStatus event:", data);
-
-      setVerificationState(data);
-      setShowBannedModal(!!data.isBanned);
-
-      if (data.event === 'runner_banned' || data.event === 'runner_unbanned') {
-        const banMsg = {
-          id: `${data.event}-${Date.now()}`,
-          from: 'them',
-          text: data.event === 'runner_banned'
-            ? `Your account has been suspended.${data.reason ? ` Reason: ${data.reason}` : ''}. Please contact support`
-            : 'Your account has been reinstated. You can resume accepting orders.',
-          time: getCurrentTime(),
-          status: 'delivered',
-        };
-        botMessagesUpdater(prev => [...prev, banMsg]);
-        if (!isBotMode) {
-          chatMessagesUpdater(prev => [...prev, banMsg]);
+        if (isBotMode && !isCollectingCredentials && !needsOtpVerification && !registrationComplete) {
+            botMessagesUpdater(prev => [...prev, {
+                id: Date.now(), from: "me", text: "Get Started",
+                time: getCurrentTime(),
+                status: "sent",
+            }]);
+            setTimeout(() => startCredentialFlow(null, botMessagesUpdater), 500);
+            return;
         }
-      }
 
-      const isKycDocEvent = [
-        'kyc_document_approved', 'kyc_document_rejected',
-        'kyc_selfie_approved', 'kyc_selfie_rejected',
-      ].includes(data.event);
+        if (!text.trim()) return;
 
-      if (isKycDocEvent) {
-        
-        const updater = isBotMode ? botMessagesUpdater : chatMessagesUpdater;
-        checkVerificationStatus(updater, () => { }, false);
-      } else if (data.isVerifiedKyc === true) {
-        dispatch(updateRunner({ isVerifiedKyc: true, kycStatus: data.kycStatus }));
-      } else if (data.isVerifiedKyc === false) {
-        dispatch(updateRunner({ isVerifiedKyc: false, kycStatus: data.kycStatus }));
-      }
-    };
-    socket.on('verificationStatus', handler);
-    return () => socket.off('verificationStatus', handler);
-  }, [socket, runnerId, isBotMode, botMessagesUpdater, chatMessagesUpdater, checkVerificationStatus, dispatch]);
+        const currentRunnerId = runnerIdRef.current;
+        if (needsOtpVerification) {
+            botMessagesUpdater(prev => [...prev, {
+                id: Date.now(), from: "me", text: text.trim(),
+                time: getCurrentTime(),
+                status: "sent",
+            }]);
+            handleOtpVerification(text.trim(), botMessagesUpdater);
+            setText("");
+        } else if (isCollectingCredentials && credentialStep !== null) {
+            handleCredentialAnswer(text.trim(), setText, botMessagesUpdater);
+        } else if (!isBotMode && selectedUser) {
+            const chatId = `user-${selectedUser._id}-runner-${currentRunnerId}`; // ← ref
+            const newMsg = {
+                id: Date.now().toString(), from: "me", type: "text",
+                text: text.trim(),
+                time: getCurrentTime(),
+                status: socket?.connected ? "pending" : "queued",
+                senderId: currentRunnerId, senderType: "runner", // ← ref
+                ...(replyingTo && {
+                    replyTo: replyingTo.id,
+                    replyToMessage: replyingTo.text || replyingTo.fileName || "Media",
+                    replyToFrom: replyingTo.from,
+                }),
+            };
+            chatMessagesUpdater(prev => [...prev, newMsg]);
+            setText("");
 
-  useEffect(() => {
-    if (!activeChatId || activeChatId === BOT_CHAT_ID) return;
-    const { getChat } = useOrderStore.getState(); // eslint-disable-line no-unused-vars
-    // Subscribe to store changes and keep the ref in sync
-    const unsub = useOrderStore.subscribe(
-      (state) => state._chats[activeChatId]?.currentOrder ?? null,
-      (order) => { currentOrderRef.current = order; }
-    );
-    return unsub;
-  }, [activeChatId]);
+            if (socket?.connected) {
+                sendMessage(chatId, newMsg);
+                setChatHistory(prev => mergeChatHistory(prev, [{
+                    id: selectedUser._id,
+                    userId: selectedUser._id,
+                    chatId: chatId,
+                    name: `${selectedUser.firstName || ''} ${selectedUser.lastName || ''}`.trim() || 'User',
+                    lastMessage: text.trim().substring(0, 30),
+                    time: getCurrentTime(),
+                    online: false,
+                    unread: 0,
+                }]));
+            } else {
+                enqueue(newMsg)
 
-  // sync  whenever activeChatId changes
-  useEffect(() => {
-    if (activeChatId && activeChatId !== BOT_CHAT_ID) {
-      useOrderStore.getState().setActiveChatId(activeChatId);
-    } else {
-      useOrderStore.getState().setActiveChatId(null);
-    }
-  }, [activeChatId]);
-
-  // ── Body scroll lock ─────────────────────────────────────────────────────────
-  useEffect(() => {
-    document.body.style.overflow = (drawerOpen || infoOpen) ? "hidden" : "";
-  }, [drawerOpen, infoOpen]);
-
-  // ── Geolocation ──────────────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!registrationComplete) return;
-    if (navigator.geolocation) {
-      navigator.geolocation.getCurrentPosition(
-        (pos) => setRunnerLocation({ latitude: pos.coords.latitude, longitude: pos.coords.longitude }),
-        () => setRunnerLocation({ latitude: 6.5244, longitude: 3.3792 })
-      );
-    } else {
-      setRunnerLocation({ latitude: 6.5244, longitude: 3.3792 });
-    }
-  }, [registrationComplete]);
-
-  // grace useEffect for expired token mid order 
-  useEffect(() => {
-    if (!runner?._id || !runnerId) return;
-
-    const validateRunnerSession = async () => {
-      // Only run if we have a selected user (active chat)
-      const savedUI = JSON.parse(localStorage.getItem('runner_ui') || '{}');
-      const savedChatId = savedUI.activeChatId;
-      if (!savedChatId || savedChatId === BOT_CHAT_ID) return;
-
-      const chatState = useOrderStore.getState().getChat(savedChatId);
-      if (chatState.taskCompleted || chatState.orderCancelled) return;
-
-      try {
-        const response = await api.post('/sessions/validate', { chatId: savedChatId });
-        const { isValid, hasActiveOrder, tokenExpired } = response.data.data;
-
-        if (isValid && hasActiveOrder) {
-          console.log('[raw.jsx] Session valid, token expired:', tokenExpired);
-          if (tokenExpired) {
-            try {
-              await refreshSession();
-              console.log('[raw.jsx] session refreshed after expired token');
-            } catch (_) {
-              // Grace access still applies
+                setChatHistory(prev => mergeChatHistory(prev, [{
+                    id: selectedUser._id,
+                    userId: selectedUser._id,
+                    chatId: chatId,
+                    name: `${selectedUser.firstName || ''} ${selectedUser.lastName || ''}`.trim() || 'User',
+                    lastMessage: text.trim().substring(0, 30),
+                    time: getCurrentTime(),
+                    online: false,
+                    unread: 0,
+                }]));
             }
-          }
-          // Chat will restore via the existing savedUI restore effect
-        } else {
-          // No active order — clear stale state for this chatId
-          useOrderStore.getState()._patch(savedChatId, {
-            currentOrder: null,
-            taskCompleted: false,
-            orderCancelled: false,
-            completedStatuses: [],
-            deliveryMarked: false,
-          });
-          chatManager.set(savedChatId, { currentOrder: null });
         }
-      } catch (error) {
-        if (error.response?.status === 404) {
-          // Confirmed no active order
-          useOrderStore.getState()._patch(savedChatId, {
-            currentOrder: null,
-            taskCompleted: false,
-            orderCancelled: false,
-            completedStatuses: [],
-            deliveryMarked: false,
-          });
-          chatManager.set(savedChatId, { currentOrder: null });
-        }
-        // On network error or 401, keep existing state — don't clear
-        console.warn('[raw.jsx] Session validation failed:', error.message);
-      }
+    }, [text, isBotMode, isCollectingCredentials, needsOtpVerification, isCollectingCredentials,
+        credentialStep, isBotMode, socket, selectedUser, handleOtpVerification, registrationComplete,
+        handleCredentialAnswer, sendMessage, botMessagesUpdater, chatMessagesUpdater]);
+
+    const setBotReplyingTo = useCallback((r) => {
+        chatManager.set(BOT_CHAT_ID, { replyingTo: r });
+    }, []);
+
+    const handleLocationClick = () => setShowOrderFlow(true);
+    const handleAttachClick = () => setIsAttachFlowOpen(true);
+
+    // ── Derived ───────────────────────────────────────────────────────────────────
+    const isConnectLockedFromStore = useOrderStore(selectIsConnectLocked);
+    const isConnectLocked = orderPending || isConnectLockedFromStore;
+
+    // ── Main
+    const renderMainScreen = () => (
+        <RunnerMainScreen
+            isBotMode={isBotMode}
+            awaitingChatReady={awaitingChatReady}
+            isLoadingArchive={isLoadingArchive}
+            activeChatId={activeChatId}
+            selectedUser={selectedUser}
+            chatSessionKey={chatSessionKey}
+            chatManager={chatManager}
+            botStoreMessages={botStoreMessages}
+            botMessagesUpdater={botMessagesUpdater}
+            registerSetMessages={registerSetMessages}
+            botRefreshTrigger={botRefreshTrigger}
+            handleNewOrderFleetSelected={handleNewOrderFleetSelected}
+            handleStartNewOrder={handleStartNewOrder}
+            newOrderTrigger={newOrderTrigger}
+            isVerifyingOtp={isVerifyingOtp}
+            handleReturningUserChoice={handleReturningUserChoice}
+            isSubmitting={isSubmitting}
+            isVerified={runner?.isVerifiedKyc ?? false}
+            active={active}
+            text={text}
+            setText={setText}
+            dark={dark}
+            setDark={setDark}
+            isCollectingCredentials={isCollectingCredentials}
+            credentialStep={credentialStep}
+            credentialQuestions={credentialQuestions}
+            needsOtpVerification={needsOtpVerification}
+            registrationComplete={registrationComplete}
+            canResendOtp={canResendOtp}
+            sendMessage_fn={sendMessage_fn}
+            handleMessageClick={handleMessageClick}
+            pickUp={pickUp}
+            runErrand={runErrand}
+            setDrawerOpen={setDrawerOpen}
+            setInfoOpen={setInfoOpen}
+            initialMessagesComplete={initialMessagesComplete}
+            runnerId={runnerId}
+            kycStep={kycStep}
+            kycStatus={kycStatus}
+            onIdVerified={onIdVerified}
+            handleIDTypeSelection={handleIDTypeSelection}
+            onSelfieVerified={onSelfieVerified}
+            handleSelfieResponse={handleSelfieResponse}
+            handleBannedDetected={handleBannedDetected}
+            checkVerificationStatus={checkVerificationStatus}
+            handleConnectToService={handleConnectToService}
+            handleFindMore={handleFindMore}
+            nearbyUsers={nearbyUsers}
+            handlePickService={handlePickService}
+            runnerData={runnerData}
+            canShowNotifications={canShowNotifications}
+            hasSearched={hasSearched}
+            setBotReplyingTo={setBotReplyingTo}
+            verificationState={verificationState}
+            showBannedModal={showBannedModal}
+            setShowBannedModal={setShowBannedModal}
+            isConnectLocked={isConnectLocked}
+            handleCredentialAnswer={handleCredentialAnswer}
+            runnerLocation={runnerLocation}
+            isReturningUser={isReturningUser}
+            returningUserData={returningUserData}
+            effectiveReturningKycStatus={effectiveReturningKycStatus}
+            showNotifications={showNotifications}
+            onNotificationsShown={() => setShowNotifications(false)}
+            isTrainingCompleted={runner?.isTrainingCompleted ?? false}
+            openTrainingContinueClick={openTrainingScreen}
+            onKycRedirect={handleKycRedirect}
+            chatMessagesUpdater={chatMessagesUpdater}
+            handleBackToHome={handleBackToHome}
+            showOrderFlow={showOrderFlow}
+            setShowOrderFlow={setShowOrderFlow}
+            handleOrderStatusClick={handleOrderStatusClick}
+            isAttachFlowOpen={isAttachFlowOpen}
+            setIsAttachFlowOpen={setIsAttachFlowOpen}
+            handleLocationClick={handleLocationClick}
+            handleAttachClick={handleAttachClick}
+            handleSetCompletedStatuses={handleSetCompletedStatuses}
+            taskCompletedFromStore={taskCompletedFromStore}
+            completedStatusesFromStore={completedStatusesFromStore}
+        />
+    );
+
+    const renderContactInfo = (withClose = false) => {
+        const chatState = chatManager.get(activeChatId);
+        const disputeActive = chatState.currentOrder?.hasDispute === true;
+
+        return (
+            <ContactInfo
+                contact={active}
+                onClose={withClose ? () => setInfoOpen(false) : undefined}
+                setActiveModal={setActiveModal}
+                onNavigate={setCurrentView}
+                onBack={() => setCurrentView('chat')}
+                onStartNewOrder={handleStartNewOrder}
+                chatId={activeChatId}
+                registrationComplete={registrationComplete}
+                kycStep={kycStep}
+                isVerified={kycStatus.overallVerified}
+                isChatActive={!isBotMode}
+                messages={chatState.messages}
+                isBotMode={isBotMode}
+                isConnectLocked={isConnectLocked}
+                disputeActive={disputeActive}
+            />
+        );
     };
 
-    const timer = setTimeout(validateRunnerSession, 500);
-    return () => clearTimeout(timer);
-  }, [runnerId, runner?._id]);
+    const renderView = () => {
+        const handleBack = () => setCurrentView('chat');
+        const chatState = chatManager.get(activeChatId);
 
-  // ── Message handlers (bot screen) ────────────────────────────────────────────
-
-  const handleResendOtp = useCallback(() => {
-    if (!canResendOtp) return;
-
-    // actually dispatch the resend to backend
-    resendOtpFromHook(botMessagesUpdater);
-
-    const msg1 = {
-      id: Date.now(), from: "them",
-      text: "We have sent you a new OTP",
-      time: getCurrentTime(),
-      status: "delivered",
+        switch (currentView) {
+            case 'profile':
+                return <Profile darkMode={dark} onBack={handleBack} runnerId={runnerId} registrationComplete={registrationComplete} runnerData={runnerData} onToggleDarkMode={() => setDark(!dark)} />;
+            case 'wallet':
+                return <Wallet darkMode={dark} onBack={handleBack} runnerId={runnerId} />;
+            case 'orders':
+                return <Orders darkMode={dark} onBack={handleBack} runnerId={runnerId} registrationComplete={registrationComplete} />;
+            case 'payout':
+                return <Payout darkMode={dark} onBack={handleBack} socket={socket} runnerId={runnerId}
+                    chatId={selectedUser?._id ? `user-${selectedUser._id}-runner-${runnerId}` : null}
+                    currentOrder={chatState.currentOrder} />;
+            case 'disputes': {
+                const disputeChatState = chatManager.get(activeChatId);
+                // Fall back to store if chatManager already cleared it
+                const disputeOrder = disputeChatState.currentOrder
+                    ?? useOrderStore.getState().getChat(activeChatId)?.currentOrder
+                    ?? null;
+                return (
+                    <Disputes
+                        darkMode={dark}
+                        onBack={handleBack}
+                        runnerId={runnerId}
+                        currentOrder={disputeOrder}
+                        chatId={activeChatId}
+                    />
+                );
+            }
+            case 'chat':
+            default:
+                return (
+                    <div className="h-full w-full grid grid-cols-1 lg:grid-cols-[340px_minmax(0,1fr)_360px]">
+                        <aside className="hidden lg:flex flex-col border-r dark:border-white/10 border-gray-200 h-full overflow-hidden">
+                            <Sidebar
+                                active={active}
+                                setActive={setActive}
+                                chatHistory={chatHistory}
+                                onBotClick={handleBotClick}
+                                onUserClick={handleUserClick}
+                            />
+                        </aside>
+                        <div className="h-full overflow-hidden">{renderMainScreen()}</div>
+                        <aside className="hidden lg:block border-l dark:border-white/10 border-gray-200 h-full overflow-hidden">
+                            {renderContactInfo(false)}
+                        </aside>
+                    </div>
+                );
+        }
     };
-    botMessagesUpdater(prev => [...prev, msg1]);
-
-    setTimeout(() => {
-      const msg2 = {
-        id: Date.now() + 1, from: "them",
-        // text: `Enter the OTP we sent to ${runnerData?.phone}, \n \nDidn't receive OTP? Resend`,
-        text: `Enter the OTP we sent to ${runnerData?.email}, \n \nDidn't receive OTP? Resend`,
-        time: getCurrentTime(),
-        status: "delivered", hasResendLink: true,
-      };
-      botMessagesUpdater(prev => [...prev, msg2]);
-    }, 1200);
-
-    setCanResendOtp(false);
-    setTimeout(() => setCanResendOtp(true), 30000);
-  }, [canResendOtp, botMessagesUpdater, runnerData?.email, resendOtpFromHook
-    // runnerData?.phone,
-  ]);
-
-  const handleKycRedirect = useCallback(() => {
-    chatManager.set(BOT_CHAT_ID, {
-      newOrderComplete: false,
-      newOrderStep: null,
-    });
-    checkVerificationStatus(botMessagesUpdater, () => {
-      setShowBannedModal(true);
-      handleBannedDetected();
-    }, false);
-  }, [checkVerificationStatus, botMessagesUpdater]);
-
-  const handleMessageClick = useCallback((message, choice) => {
-    if (message.hasResendLink && canResendOtp) { handleResendOtp(); return; }
-    if (message.selfieChoice) {
-      handleSelfieResponseRef.current(message.selfieChoice, botMessagesUpdater);
-      if (message.selfieChoice === 'okay') openCamera();
-    }
-
-    if (message.trainingPromptButton) {
-      openTrainingScreen();
-    }
-  }, [canResendOtp, handleResendOtp, openCamera.apply, openTrainingScreen]);
-
-  const pickUp = useCallback(() => {
-    serviceTypeRef.current = "pick-up";
-    setServiceType("pick-up");
-    const updater = botMessagesUpdater;
-    updater(prev => [...prev, {
-      id: Date.now().toString(), from: "me", text: 'Pick Up',
-      time: getCurrentTime(),
-      status: "sent", isCredential: true,
-    }]);
-    setTimeout(() => startCredentialFlow('pick-up', updater), 1000);
-  }, [startCredentialFlow, botMessagesUpdater]);
-
-  const runErrand = useCallback(() => {
-    serviceTypeRef.current = "run-errand";
-    setServiceType("run-errand");
-    const updater = botMessagesUpdater;
-    updater(prev => [...prev, {
-      id: Date.now().toString(), from: "me", text: 'Run Errand',
-      time: getCurrentTime(),
-      status: "sent", isCredential: true,
-    }]);
-    setTimeout(() => startCredentialFlow('run-errand', updater), 1000);
-  }, [startCredentialFlow, botMessagesUpdater]);
-
-
-  const send = useCallback((replyingTo = null) => { // eslint-disable-line no-unused-vars
-    const currentText = chatManager.get(activeChatIdRef.current).draft || ''; // eslint-disable-line no-unused-vars
-  }, []);
-
-  // text is still held in raw.jsx state to avoid threading issues
-  const [text, setText] = useState("");
-
-  const sendMessage_fn = useCallback((replyingTo = null) => {
-
-    if (isBotMode && !isCollectingCredentials && !needsOtpVerification && !registrationComplete) {
-      botMessagesUpdater(prev => [...prev, {
-        id: Date.now(), from: "me", text: "Get Started",
-        time: getCurrentTime(),
-        status: "sent",
-      }]);
-      setTimeout(() => startCredentialFlow(null, botMessagesUpdater), 500);
-      return;
-    }
-
-    if (!text.trim()) return;
-
-    const currentRunnerId = runnerIdRef.current;
-    if (needsOtpVerification) {
-      botMessagesUpdater(prev => [...prev, {
-        id: Date.now(), from: "me", text: text.trim(),
-        time: getCurrentTime(),
-        status: "sent",
-      }]);
-      handleOtpVerification(text.trim(), botMessagesUpdater);
-      setText("");
-    } else if (isCollectingCredentials && credentialStep !== null) {
-      handleCredentialAnswer(text.trim(), setText, botMessagesUpdater);
-    } else if (!isBotMode && selectedUser) {
-      const chatId = `user-${selectedUser._id}-runner-${currentRunnerId}`; // ← ref
-      const newMsg = {
-        id: Date.now().toString(), from: "me", type: "text",
-        text: text.trim(),
-        time: getCurrentTime(),
-        status: socket?.connected ? "pending" : "queued",
-        senderId: currentRunnerId, senderType: "runner", // ← ref
-        ...(replyingTo && {
-          replyTo: replyingTo.id,
-          replyToMessage: replyingTo.text || replyingTo.fileName || "Media",
-          replyToFrom: replyingTo.from,
-        }),
-      };
-      chatMessagesUpdater(prev => [...prev, newMsg]);
-      setText("");
-
-      if (socket?.connected) {
-        sendMessage(chatId, newMsg);
-        setChatHistory(prev => mergeChatHistory(prev, [{
-          id: selectedUser._id,
-          userId: selectedUser._id,
-          chatId: chatId,
-          name: `${selectedUser.firstName || ''} ${selectedUser.lastName || ''}`.trim() || 'User',
-          lastMessage: text.trim().substring(0, 30),
-          time: getCurrentTime(),
-          online: false,
-          unread: 0,
-        }]));
-      } else {
-        enqueue(newMsg)
-
-        setChatHistory(prev => mergeChatHistory(prev, [{
-          id: selectedUser._id,
-          userId: selectedUser._id,
-          chatId: chatId,
-          name: `${selectedUser.firstName || ''} ${selectedUser.lastName || ''}`.trim() || 'User',
-          lastMessage: text.trim().substring(0, 30),
-          time: getCurrentTime(),
-          online: false,
-          unread: 0,
-        }]));
-      }
-    }
-  }, [text, isBotMode, isCollectingCredentials, needsOtpVerification, isCollectingCredentials,
-    credentialStep, isBotMode, socket, selectedUser, handleOtpVerification, registrationComplete,
-    handleCredentialAnswer, sendMessage, botMessagesUpdater, chatMessagesUpdater]);
-
-  const setBotReplyingTo = useCallback((r) => {
-    chatManager.set(BOT_CHAT_ID, { replyingTo: r });
-  }, []);
-
-  const handleLocationClick = () => setShowOrderFlow(true);
-  const handleAttachClick = () => setIsAttachFlowOpen(true);
-
-  // ── Derived ───────────────────────────────────────────────────────────────────
-  const isConnectLockedFromStore = useOrderStore(selectIsConnectLocked);
-  const isConnectLocked = orderPending || isConnectLockedFromStore;
-
-  // ── Main
-  const renderMainScreen = () => (
-    <RunnerMainScreen
-      isBotMode={isBotMode}
-      awaitingChatReady={awaitingChatReady}
-      isLoadingArchive={isLoadingArchive}
-      activeChatId={activeChatId}
-      selectedUser={selectedUser}
-      chatSessionKey={chatSessionKey}
-      chatManager={chatManager}
-      botStoreMessages={botStoreMessages}
-      botMessagesUpdater={botMessagesUpdater}
-      registerSetMessages={registerSetMessages}
-      botRefreshTrigger={botRefreshTrigger}
-      handleNewOrderFleetSelected={handleNewOrderFleetSelected}
-      handleStartNewOrder={handleStartNewOrder}
-      newOrderTrigger={newOrderTrigger}
-      isVerifyingOtp={isVerifyingOtp}
-      handleReturningUserChoice={handleReturningUserChoice}
-      isSubmitting={isSubmitting}
-      isVerified={runner?.isVerifiedKyc ?? false}
-      active={active}
-      text={text}
-      setText={setText}
-      dark={dark}
-      setDark={setDark}
-      isCollectingCredentials={isCollectingCredentials}
-      credentialStep={credentialStep}
-      credentialQuestions={credentialQuestions}
-      needsOtpVerification={needsOtpVerification}
-      registrationComplete={registrationComplete}
-      canResendOtp={canResendOtp}
-      sendMessage_fn={sendMessage_fn}
-      handleMessageClick={handleMessageClick}
-      pickUp={pickUp}
-      runErrand={runErrand}
-      setDrawerOpen={setDrawerOpen}
-      setInfoOpen={setInfoOpen}
-      initialMessagesComplete={initialMessagesComplete}
-      runnerId={runnerId}
-      kycStep={kycStep}
-      kycStatus={kycStatus}
-      onIdVerified={onIdVerified}
-      handleIDTypeSelection={handleIDTypeSelection}
-      onSelfieVerified={onSelfieVerified}
-      handleSelfieResponse={handleSelfieResponse}
-      handleBannedDetected={handleBannedDetected}
-      checkVerificationStatus={checkVerificationStatus}
-      handleConnectToService={handleConnectToService}
-      handleFindMore={handleFindMore}
-      nearbyUsers={nearbyUsers}
-      handlePickService={handlePickService}
-      runnerData={runnerData}
-      canShowNotifications={canShowNotifications}
-      hasSearched={hasSearched}
-      setBotReplyingTo={setBotReplyingTo}
-      verificationState={verificationState}
-      showBannedModal={showBannedModal}
-      setShowBannedModal={setShowBannedModal}
-      isConnectLocked={isConnectLocked}
-      handleCredentialAnswer={handleCredentialAnswer}
-      runnerLocation={runnerLocation}
-      isReturningUser={isReturningUser}
-      returningUserData={returningUserData}
-      effectiveReturningKycStatus={effectiveReturningKycStatus}
-      showNotifications={showNotifications}
-      onNotificationsShown={() => setShowNotifications(false)}
-      isTrainingCompleted={runner?.isTrainingCompleted ?? false}
-      openTrainingContinueClick={openTrainingScreen}
-      onKycRedirect={handleKycRedirect}
-      chatMessagesUpdater={chatMessagesUpdater}
-      handleBackToHome={handleBackToHome}
-      showOrderFlow={showOrderFlow}
-      setShowOrderFlow={setShowOrderFlow}
-      handleOrderStatusClick={handleOrderStatusClick}
-      isAttachFlowOpen={isAttachFlowOpen}
-      setIsAttachFlowOpen={setIsAttachFlowOpen}
-      handleLocationClick={handleLocationClick}
-      handleAttachClick={handleAttachClick}
-      handleSetCompletedStatuses={handleSetCompletedStatuses}
-      taskCompletedFromStore={taskCompletedFromStore}
-      completedStatusesFromStore={completedStatusesFromStore}
-    />
-  );
-
-  const renderContactInfo = (withClose = false) => {
-    const chatState = chatManager.get(activeChatId);
-    const disputeActive = chatState.currentOrder?.hasDispute === true;
 
     return (
-      <ContactInfo
-        contact={active}
-        onClose={withClose ? () => setInfoOpen(false) : undefined}
-        setActiveModal={setActiveModal}
-        onNavigate={setCurrentView}
-        onBack={() => setCurrentView('chat')}
-        onStartNewOrder={handleStartNewOrder}
-        chatId={activeChatId}
-        registrationComplete={registrationComplete}
-        kycStep={kycStep}
-        isVerified={kycStatus.overallVerified}
-        isChatActive={!isBotMode}
-        messages={chatState.messages}
-        isBotMode={isBotMode}
-        isConnectLocked={isConnectLocked}
-        disputeActive={disputeActive}
-      />
+        <CallContext.Provider value={{
+            callState, callType, isMuted, isCameraOff, formattedDuration,
+            remoteUsers, localVideoTrack, initiateCall, acceptCall, declineCall,
+            endCall, toggleMute, toggleCamera, isSpeakerOn, networkQuality,
+            toggleSpeaker, switchCamera: switchCallCamera, isConnecting, callError,
+        }}>
+            <div className="h-screen flex flex-col w-full bg-white dark:bg-black-100 bg-gradient-to-br from-slate-900 via-slate-950 to-black text-white">
+                <div className={`lg:hidden relative z-10 flex flex-shrink-0 items-center justify-between px-3 py-3 border-b dark:border-white/10 border-gray-200 ${currentView !== 'chat' ? 'hidden' : ''}`}>
+                    <div className="flex items-center gap-2">
+                        <IconButton variant="text" className="rounded-full" onClick={() => setDrawerOpen(true)}>
+                            <Menu className="h-5 w-5" />
+                        </IconButton>
+                    </div>
+                    <div className="flex gap-3">
+                        <span className="bg-gray-1000 dark:bg-black-200 rounded-full w-10 h-10 flex items-center justify-center">
+                            <HeaderIcon onClick={() => setInfoOpen(true)}>
+                                <MoreHorizontal className="h-6 w-6" />
+                            </HeaderIcon>
+                        </span>
+                        <div onClick={() => setDark(!dark)} className="cursor-pointer flex items-center gap-2 p-2">
+                            {dark ? <Sun className="w-6 h-6" /> : <Moon className="w-6 h-6 text-gray-800" strokeWidth={3.0} />}
+                        </div>
+                    </div>
+                </div>
+
+                <div className="flex-1 min-h-0 overflow-hidden">{renderView()}</div>
+
+                <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} placement="left"
+                    className="p-0 bg-white dark:bg-black-100 backdrop-blur-xl !z-[9999]"
+                    overlayProps={{ className: "!z-[9998]" }}>
+                    <Sidebar active={active} setActive={setActive} chatHistory={chatHistory}
+                        onBotClick={handleBotClick} onUserClick={handleUserClick}
+                        onClose={() => setDrawerOpen(false)} />
+                </Drawer>
+
+                <Drawer open={infoOpen} onClose={() => setInfoOpen(false)} placement="right"
+                    className="p-0 bg-white dark:bg-black-100 backdrop-blur-xl !z-[9999]"
+                    overlayProps={{ className: "!z-[9998]" }}>
+                    {renderContactInfo(true)}
+                </Drawer>
+
+                {activeModal && (
+                    <Modal type={activeModal} onClose={() => setActiveModal(null)}
+                        onConfirm={(reason) => {
+                            if (activeModal === 'cancelOrder' && socket && selectedUser?._id) {
+                                const chatId = `user-${selectedUser._id}-runner-${runnerId}`;
+                                const orderId = currentOrderRef.current?.orderId;
+
+                                // Optimistic — update UI immediately
+                                const chatId2 = chatId;
+                                useOrderStore.getState().setOrderCancelled(chatId2, 'runner');
+                                useOrderStore.getState().mergeCurrentOrder(chatId2, { status: 'cancelled' });
+                                chatManager.set(chatId2, { orderCancelled: true, cancellationReason: 'runner' });
+                                pushToActiveScreen(prev => {
+                                    if (prev.some(m => m.text?.toLowerCase().includes('cancelled this order'))) return prev;
+                                    return [...prev, {
+                                        id: `cancel-optimistic-${Date.now()}`,
+                                        from: 'system', type: 'system', messageType: 'system',
+                                        text: 'You cancelled this order.',
+                                        time: getCurrentTime(),
+                                        senderId: 'system', senderType: 'system',
+                                    }];
+                                });
+
+                                const cancelPayload = { chatId, orderId, runnerId, userId: selectedUser._id, reason };
+                                console.log('[cancelOrder] about to emit', {
+                                    socketExists: !!socket,
+                                    socketConnected: socket?.connected,
+                                    socketId: socket?.id,
+                                    cancelPayload,
+                                });
+
+                                if (socket.connected) {
+                                    socket.emit('cancelOrder', cancelPayload);
+                                    console.log('[cancelOrder] emitted via socket');
+                                } else {
+                                    // ← Queue it for when connection restores
+                                    enqueueSocketEvent('cancelOrder', cancelPayload);
+                                    console.log('[socketQueue] cancelOrder queued — socket offline');
+                                }
+                            }
+                            setActiveModal(null);
+                        }}
+                        chatId={activeChatId}
+                        isConnectLocked={isConnectLocked} selectedUser={selectedUser}
+                        registrationComplete={registrationComplete} darkMode={dark} />
+                )}
+
+                <TermsAcceptanceModal isOpen={showTerms} onClose={() => { }}
+                    onAccept={handleAcceptTerms} terms={RUNNER_TERMS} darkMode={dark} userType="runner" />
+
+                {/* user gets banned */}
+                <BannedModal
+                    isOpen={showBannedModal}
+                    reason={verificationState?.reason || verificationState?.message || null}
+                    darkMode={dark}
+                />
+
+                {showLocationModal && (
+                    <div className="fixed inset-0 z-[10000] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
+                        <div className={`w-full max-w-md rounded-2xl overflow-hidden relative ${dark ? 'bg-black-100' : 'bg-white'}`}>
+                            <RequestLocation
+                                darkMode={dark}
+                                onLocationComplete={handleLocationComplete}
+                                onCancel={handleLocationCancel}
+                                initialError={null}
+                                initialLoading={false}
+                            />
+                        </div>
+                    </div>
+                )}
+
+                {showTrainingScreen && (
+                    <RunnerTraining
+                        submitting={isSubmittingTraining}
+                        onComplete={async (score) => {
+                            const updater = isBotMode ? botMessagesUpdater : chatMessagesUpdater;
+                            const success = await completeTraining(score, updater);
+                            if (!success) return;
+
+                            if (pendingKycResumeRef.current) {
+                                resumeKycFlow(pendingKycResumeRef.current, updater);
+                            } else {
+                                startKycFlow(updater);
+                            }
+                        }}
+                        darkMode={dark}
+                        onExit={closeTrainingScreen}
+                        runnerId={runnerId}
+                    />
+                )}
+            </div>
+        </CallContext.Provider>
     );
-  };
-
-  const renderView = () => {
-    const handleBack = () => setCurrentView('chat');
-    const chatState = chatManager.get(activeChatId);
-
-    switch (currentView) {
-      case 'profile':
-        return <Profile darkMode={dark} onBack={handleBack} runnerId={runnerId} registrationComplete={registrationComplete} runnerData={runnerData} onToggleDarkMode={() => setDark(!dark)} />;
-      case 'wallet':
-        return <Wallet darkMode={dark} onBack={handleBack} runnerId={runnerId} />;
-      case 'orders':
-        return <Orders darkMode={dark} onBack={handleBack} runnerId={runnerId} registrationComplete={registrationComplete} />;
-      case 'payout':
-        return <Payout darkMode={dark} onBack={handleBack} socket={socket} runnerId={runnerId}
-          chatId={selectedUser?._id ? `user-${selectedUser._id}-runner-${runnerId}` : null}
-          currentOrder={chatState.currentOrder} />;
-      case 'disputes': {
-        const disputeChatState = chatManager.get(activeChatId);
-        // Fall back to store if chatManager already cleared it
-        const disputeOrder = disputeChatState.currentOrder
-          ?? useOrderStore.getState().getChat(activeChatId)?.currentOrder
-          ?? null;
-        return (
-          <Disputes
-            darkMode={dark}
-            onBack={handleBack}
-            runnerId={runnerId}
-            currentOrder={disputeOrder}
-            chatId={activeChatId}
-          />
-        );
-      }
-      case 'chat':
-      default:
-        return (
-          <div className="h-full w-full grid grid-cols-1 lg:grid-cols-[340px_minmax(0,1fr)_360px]">
-            <aside className="hidden lg:flex flex-col border-r dark:border-white/10 border-gray-200 h-full overflow-hidden">
-              <Sidebar
-                active={active}
-                setActive={setActive}
-                chatHistory={chatHistory}
-                onBotClick={handleBotClick}
-                onUserClick={handleUserClick}
-              />
-            </aside>
-            <div className="h-full overflow-hidden">{renderMainScreen()}</div>
-            <aside className="hidden lg:block border-l dark:border-white/10 border-gray-200 h-full overflow-hidden">
-              {renderContactInfo(false)}
-            </aside>
-          </div>
-        );
-    }
-  };
-
-  return (
-    <CallContext.Provider value={{
-      callState, callType, isMuted, isCameraOff, formattedDuration,
-      remoteUsers, localVideoTrack, initiateCall, acceptCall, declineCall,
-      endCall, toggleMute, toggleCamera, isSpeakerOn, networkQuality,
-      toggleSpeaker, switchCamera: switchCallCamera, isConnecting, callError,
-    }}>
-      <div className="h-screen flex flex-col w-full bg-white dark:bg-black-100 bg-gradient-to-br from-slate-900 via-slate-950 to-black text-white">
-        <div className={`lg:hidden relative z-10 flex flex-shrink-0 items-center justify-between px-3 py-3 border-b dark:border-white/10 border-gray-200 ${currentView !== 'chat' ? 'hidden' : ''}`}>
-          <div className="flex items-center gap-2">
-            <IconButton variant="text" className="rounded-full" onClick={() => setDrawerOpen(true)}>
-              <Menu className="h-5 w-5" />
-            </IconButton>
-          </div>
-          <div className="flex gap-3">
-            <span className="bg-gray-1000 dark:bg-black-200 rounded-full w-10 h-10 flex items-center justify-center">
-              <HeaderIcon onClick={() => setInfoOpen(true)}>
-                <MoreHorizontal className="h-6 w-6" />
-              </HeaderIcon>
-            </span>
-            <div onClick={() => setDark(!dark)} className="cursor-pointer flex items-center gap-2 p-2">
-              {dark ? <Sun className="w-6 h-6" /> : <Moon className="w-6 h-6 text-gray-800" strokeWidth={3.0} />}
-            </div>
-          </div>
-        </div>
-
-        <div className="flex-1 min-h-0 overflow-hidden">{renderView()}</div>
-
-        <Drawer open={drawerOpen} onClose={() => setDrawerOpen(false)} placement="left"
-          className="p-0 bg-white dark:bg-black-100 backdrop-blur-xl !z-[9999]"
-          overlayProps={{ className: "!z-[9998]" }}>
-          <Sidebar active={active} setActive={setActive} chatHistory={chatHistory}
-            onBotClick={handleBotClick} onUserClick={handleUserClick}
-            onClose={() => setDrawerOpen(false)} />
-        </Drawer>
-
-        <Drawer open={infoOpen} onClose={() => setInfoOpen(false)} placement="right"
-          className="p-0 bg-white dark:bg-black-100 backdrop-blur-xl !z-[9999]"
-          overlayProps={{ className: "!z-[9998]" }}>
-          {renderContactInfo(true)}
-        </Drawer>
-
-        {activeModal && (
-          <Modal type={activeModal} onClose={() => setActiveModal(null)}
-            onConfirm={(reason) => {
-              if (activeModal === 'cancelOrder' && socket && selectedUser?._id) {
-                const chatId = `user-${selectedUser._id}-runner-${runnerId}`;
-                const orderId = currentOrderRef.current?.orderId;
-
-                // Optimistic — update UI immediately
-                const chatId2 = chatId;
-                useOrderStore.getState().setOrderCancelled(chatId2, 'runner');
-                useOrderStore.getState().mergeCurrentOrder(chatId2, { status: 'cancelled' });
-                chatManager.set(chatId2, { orderCancelled: true, cancellationReason: 'runner' });
-                pushToActiveScreen(prev => {
-                  if (prev.some(m => m.text?.toLowerCase().includes('cancelled this order'))) return prev;
-                  return [...prev, {
-                    id: `cancel-optimistic-${Date.now()}`,
-                    from: 'system', type: 'system', messageType: 'system',
-                    text: 'You cancelled this order.',
-                    time: getCurrentTime(),
-                    senderId: 'system', senderType: 'system',
-                  }];
-                });
-
-                const cancelPayload = { chatId, orderId, runnerId, userId: selectedUser._id, reason };
-                console.log('[cancelOrder] about to emit', {
-                  socketExists: !!socket,
-                  socketConnected: socket?.connected,
-                  socketId: socket?.id,
-                  cancelPayload,
-                });
-
-                if (socket.connected) {
-                  socket.emit('cancelOrder', cancelPayload);
-                  console.log('[cancelOrder] emitted via socket');
-                } else {
-                  // ← Queue it for when connection restores
-                  enqueueSocketEvent('cancelOrder', cancelPayload);
-                  console.log('[socketQueue] cancelOrder queued — socket offline');
-                }
-              }
-              setActiveModal(null);
-            }}
-            chatId={activeChatId}
-            isConnectLocked={isConnectLocked} selectedUser={selectedUser}
-            registrationComplete={registrationComplete} darkMode={dark} />
-        )}
-
-        <TermsAcceptanceModal isOpen={showTerms} onClose={() => { }}
-          onAccept={handleAcceptTerms} terms={RUNNER_TERMS} darkMode={dark} userType="runner" />
-
-        {/* user gets banned */}
-        <BannedModal
-          isOpen={showBannedModal}
-          reason={verificationState?.reason || verificationState?.message || null}
-          darkMode={dark}
-        />
-
-        {showLocationModal && (
-          <div className="fixed inset-0 z-[10000] bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className={`w-full max-w-md rounded-2xl overflow-hidden relative ${dark ? 'bg-black-100' : 'bg-white'}`}>
-              <RequestLocation
-                darkMode={dark}
-                onLocationComplete={handleLocationComplete}
-                onCancel={handleLocationCancel}
-                initialError={null}
-                initialLoading={false}
-              />
-            </div>
-          </div>
-        )}
-
-        {showTrainingScreen && (
-          <RunnerTraining
-            submitting={isSubmittingTraining}
-            onComplete={async (score) => {
-              const updater = isBotMode ? botMessagesUpdater : chatMessagesUpdater;
-              const success = await completeTraining(score, updater);
-              if (!success) return;
-
-              if (pendingKycResumeRef.current) {
-                resumeKycFlow(pendingKycResumeRef.current, updater);
-              } else {
-                startKycFlow(updater);
-              }
-            }}
-            darkMode={dark}
-            onExit={closeTrainingScreen}
-            runnerId={runnerId}
-          />
-        )}
-      </div>
-    </CallContext.Provider>
-  );
 }
 
+// raw.jsx — WhatsAppLikeChatRoot, updated
 export default function WhatsAppLikeChatRoot() {
-  const hydrated = useOrderStore(s => s._hasHydrated);
+    const hydrated = useOrderStore(s => s._hasHydrated);
 
-  useEffect(() => {
-    console.log('[ROOT] MOUNTED');
-    return () => console.log('[ROOT] UNMOUNTED');
-  }, []);
+    useEffect(() => {
+        console.log('[ROOT] MOUNTED');
+        return () => console.log('[ROOT] UNMOUNTED');
+    }, []);
 
-  if (!hydrated) return null;
-  return (
-    <SocketProvider>
-      <CameraProvider>
-        <MemoChat key="runner-app" />
-      </CameraProvider>
-    </SocketProvider>
-  );
+    if (!hydrated) return null;
+    return (
+        <SocketProvider>
+            <CameraProvider>
+                <MemoChat key="runner-app" />
+            </CameraProvider>
+        </SocketProvider>
+    );
 }
 
 const MemoChat = React.memo(WhatsAppLikeChat);
