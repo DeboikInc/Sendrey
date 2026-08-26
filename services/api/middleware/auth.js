@@ -38,6 +38,16 @@ const authenticate = async (req, res, next) => {
       token = req.cookies.token;
     }
 
+    logger.warn('AUTH_DEBUG', {
+      path: req.path,
+      hasAuthHeader: !!authHeader,
+      authHeaderPreview: authHeader ? authHeader.slice(0, 20) + '...' : null,
+      hasCookieToken: !!req.cookies?.token,
+      cookieKeys: Object.keys(req.cookies || {}),
+      userAgent: req.headers['user-agent'],
+      tokenSource: authHeader?.startsWith('Bearer ') ? 'header' : (req.cookies?.token ? 'cookie' : 'none'),
+    });
+
     if (!token) {
       return res.status(401).json({
         success: false,
@@ -49,6 +59,8 @@ const authenticate = async (req, res, next) => {
     try {
       decoded = jwt.verify(token, config.jwt.secret);
     } catch (error) {
+      logger.warn('AUTH_DEBUG_VERIFY_FAIL', { path: req.path, errorName: error.name, errorMessage: error.message });
+      
       if (error.name === 'TokenExpiredError') {
         const expiredDecoded = jwt.decode(token);
 
