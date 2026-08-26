@@ -572,60 +572,41 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
         showOtpVerification(setMessages, updatedRunnerData.email);
       } catch (err) {
         console.error("Registration failed:", err);
+        console.log('registration error payload:', err)
         setMessages(prev => prev.filter(m => m.text !== "In progress..."));
 
-        const is409 = typeof err === 'object' && err !== null
-          ? (err?.status === 409 || err?.statusCode === 409)
-          : false;
+        const is409 = err?.status === 409;
+        const serverField = err?.field || null;
 
-        const rawMessage = typeof err === 'string'
-          ? err
-          : err?.message || err?.data?.message || 'Registration failed. Please try again.';
-
+        const rawMessage = err?.message || 'Registration failed. Please try again.';
         const networkPatterns = /ECONNRESET|ECONNREFUSED|ETIMEDOUT|ENOTFOUND|network|fetch|socket|SSL|certificate|ERR_|failed to fetch|load failed/i;
-
         const errorMessage = networkPatterns.test(rawMessage)
           ? 'Something went wrong. Please check your internet connection and try again.'
           : rawMessage;
 
-        const isExisting = is409 ||
-          errorMessage.toLowerCase().includes("already exist") ||
-          errorMessage.toLowerCase().includes("already registered");
-
-        if (isExisting) {
-          const serverName = err?.data?.userName || err?.userName || updatedRunnerData.name.trim().split(" ")[0];
-          const kycStatus = err?.data?.kycStatus || err?.kycStatus || {};
-          const fleetType = err?.data?.fleetType || err?.fleetType || {};
-          const isTrainingCompleted = err?.data?.isTrainingCompleted ?? err?.isTrainingCompleted ?? false;
-          const greetingText = buildReturningUserGreeting(serverName, kycStatus, fleetType || updatedRunnerData.fleetType);
-
-          setReturningUserData({
-            ...updatedRunnerData,
-            firstName: serverName,
-            kycStatus: {
-              isVerified: kycStatus?.isVerified ?? false,
-              ninStatus: kycStatus?.ninStatus ?? 'not_submitted',
-              driverLicenseStatus: kycStatus?.driverLicenseStatus ?? 'not_submitted',
-              selfieVerified: kycStatus?.selfieVerified ?? false,
-              selfieStatus: kycStatus?.selfieStatus ?? 'not_submitted',
-              overallVerified: kycStatus?.overallVerified ?? false,
-            },
-            isTrainingCompleted,
-          });
-          persistReturningKycStatus(updatedRunnerData.email, kycStatus);
-          setTempUserData(updatedRunnerData);
-          setIsReturningUser(true);
-          setIsCollectingCredentials(false);
-          setCredentialStep(null);
+        // phone conflict
+        if (is409 && serverField === 'phone') {
+          const phoneIdx = CREDENTIAL_QUESTIONS.findIndex(q => q.field === 'phone');
+          setRunnerData({ ...updatedRunnerData, phone: '' });
+          setLastValidatedField(null);
 
           setMessages(prev => [...prev, {
             id: Date.now(),
             from: "them",
-            text: greetingText,
+            text: `${errorMessage} Please provide a different phone number. ${CREDENTIAL_QUESTIONS[phoneIdx].question}`,
             time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
             status: "delivered",
+            isCredential: true,
           }]);
-        } else {
+
+          setCredentialStep(phoneIdx);
+          setIsCollectingCredentials(true);
+          setIsSubmitting(false);
+          isAnsweringRef.current = false;
+          return; // hard stop
+        }
+
+        if (!is409) {
           setMessages(prev => [...prev, {
             id: Date.now(),
             from: "them",
@@ -668,7 +649,47 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
               isCredential: true,
             }]);
           }, 1500);
+
+          setIsSubmitting(false);
+          isAnsweringRef.current = false;
+          return;
         }
+
+        const serverName = err?.userName || updatedRunnerData.name.trim().split(" ")[0];
+        const kycStatus = err?.kycStatus || {};
+        const fleetType = err?.fleetType || {};
+        const isTrainingCompleted = err?.isTrainingCompleted ?? false;
+        const greetingText = buildReturningUserGreeting(serverName, kycStatus, fleetType || updatedRunnerData.fleetType);
+
+        setReturningUserData({
+          ...updatedRunnerData,
+          firstName: serverName,
+          kycStatus: {
+            isVerified: kycStatus?.isVerified ?? false,
+            ninStatus: kycStatus?.ninStatus ?? 'not_submitted',
+            driverLicenseStatus: kycStatus?.driverLicenseStatus ?? 'not_submitted',
+            selfieVerified: kycStatus?.selfieVerified ?? false,
+            selfieStatus: kycStatus?.selfieStatus ?? 'not_submitted',
+            overallVerified: kycStatus?.overallVerified ?? false,
+          },
+          isTrainingCompleted,
+        });
+        persistReturningKycStatus(updatedRunnerData.email, kycStatus);
+        setTempUserData(updatedRunnerData);
+        setIsReturningUser(true);
+        setIsCollectingCredentials(false);
+        setCredentialStep(null);
+
+        setMessages(prev => [...prev, {
+          id: Date.now(),
+          from: "them",
+          text: greetingText,
+          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          status: "delivered",
+        }]);
+
+        setIsSubmitting(false);
+        isAnsweringRef.current = false;
       } finally {
         setIsSubmitting(false);
         isAnsweringRef.current = false;
