@@ -33,7 +33,7 @@ class AuthController extends BaseController {
   }
 
   setAuthCookies = setAuthCookies;
-  
+
   _generateOpaqueToken = () => crypto.randomBytes(40).toString('hex');
   _hashToken = (token) => crypto.createHash('sha256').update(token).digest('hex');
 
@@ -324,6 +324,7 @@ class AuthController extends BaseController {
         refreshToken: newRefreshToken,
       });
     } catch (err) {
+      logger.warn('Refresh token failed', { message: err.message, statusCode: err.statusCode });
       return this.error(res, err.message || 'Invalid or expired refresh token', err.statusCode || 401);
     }
   };
