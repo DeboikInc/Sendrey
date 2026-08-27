@@ -250,7 +250,7 @@ function OnboardingScreen({
     !isSubmitting;
 
   return (
-    <div className="onboarding-container">
+    <div className="onboarding-container bg-gray-100 dark:bg-black-200">
       {/* Header */}
       <div className="onboarding-header px-3 py-2 sm:px-5 sm:py-3 lg:px-8 lg:py-4 border-b dark:border-white/10 border-gray-200 flex items-center justify-between bg-white/5/10 backdrop-blur-xl">
         <div className="flex items-center gap-2 sm:gap-3 lg:gap-4 min-w-0">
@@ -327,7 +327,7 @@ function OnboardingScreen({
 
       {/* Composer - NO background, NO extra space */}
       {!(isCollectingCredentials && !isSubmitting && credentialStep !== null && credentialQuestions[credentialStep]?.isFleetSelection) && (
-        <div className="onboarding-composer-wrapper">
+        <div className="onboarding-composer-wrapper bg-gray-100 dark:bg-black-200">
           <ChatComposer
             isCollectingCredentials={isCollectingCredentials}
             credentialStep={credentialStep}

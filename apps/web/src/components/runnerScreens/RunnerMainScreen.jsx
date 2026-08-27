@@ -37,8 +37,7 @@ export default function RunnerMainScreen({
   credentialStep,
   credentialQuestions,
   needsOtpVerification,
-  registrationComplete,
-  canResendOtp,
+  registrationComplete,   canResendOtp,
   sendMessage_fn,
   handleMessageClick,
   pickUp,
@@ -111,26 +110,6 @@ export default function RunnerMainScreen({
 
   const containerRef = useRef(null);
 
-  // Calculate dynamic height for mobile
-  useEffect(() => {
-    const updateHeight = () => {
-      if (containerRef.current) {
-        const vh = window.innerHeight;
-        containerRef.current.style.height = `${vh}px`;
-        containerRef.current.style.maxHeight = `${vh}px`;
-      }
-    };
-
-    updateHeight();
-    window.addEventListener('resize', updateHeight);
-    window.addEventListener('orientationchange', updateHeight);
-
-    return () => {
-      window.removeEventListener('resize', updateHeight);
-      window.removeEventListener('orientationchange', updateHeight);
-    };
-  }, []);
-
   if (isBotMode || awaitingChatReady) {
     const botState = chatManager.get(BOT_CHAT_ID);
     const botMessages = botState.messages.length > 0 ? botState.messages : botStoreMessages;
@@ -138,13 +117,7 @@ export default function RunnerMainScreen({
     return (
       <div 
         ref={containerRef}
-        className="relative w-full overflow-hidden bg-white dark:bg-black-100"
-        style={{ 
-          height: '100vh',
-          maxHeight: '100vh',
-          display: 'flex',
-          flexDirection: 'column'
-        }}
+        className="relative w-full h-full overflow-hidden bg-white dark:bg-black-100 flex flex-col"
       >
         <div className="flex-1 flex flex-col min-h-0 relative">
           <OnboardingScreen
@@ -270,13 +243,7 @@ export default function RunnerMainScreen({
   return (
     <div 
       ref={containerRef}
-      className="relative w-full overflow-hidden bg-white dark:bg-black-100"
-      style={{ 
-        height: '100vh',
-        maxHeight: '100vh',
-        display: 'flex',
-        flexDirection: 'column'
-      }}
+      className="relative w-full h-full overflow-hidden bg-white dark:bg-black-100 flex flex-col"
     >
       <div className="flex-1 flex flex-col min-h-0">
         <RunnerChatScreen

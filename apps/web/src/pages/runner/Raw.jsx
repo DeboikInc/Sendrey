@@ -56,7 +56,7 @@ const getCurrentTime = () => {
 // --- Initial bot messages ----------------------------------------------------
 const INITIAL_BOT_MESSAGES = [
     { id: 1, from: "them", text: "Welcome!", time: getCurrentTime(), status: "read" },
-    { id: 2, from: "them", text: "Hi! I'm Sendrey Assistant ?? ", time: getCurrentTime(), status: "delivered" },
+    { id: 2, from: "them", text: "Hi! I'm Sendrey Assistant ", time: getCurrentTime(), status: "delivered" },
     // { id: 3, from: "them", text: "Would you like like to run a pickup or run an errand?", time: getCurrentTime(), status: "delivered" },
 ];
 
@@ -1438,7 +1438,7 @@ function WhatsAppLikeChat() {
             case 'chat':
             default:
                 return (
-                    <div className="h-full w-full grid grid-cols-1 lg:grid-cols-[340px_minmax(0,1fr)_360px]">
+                    <div className="h-full w-full flex flex-col lg:grid lg:grid-cols-[340px_minmax(0,1fr)_360px]">
                         <aside className="hidden lg:flex flex-col border-r dark:border-white/10 border-gray-200 h-full overflow-hidden">
                             <Sidebar
                                 active={active}
@@ -1448,7 +1448,7 @@ function WhatsAppLikeChat() {
                                 onUserClick={handleUserClick}
                             />
                         </aside>
-                        <div className="h-full overflow-hidden">{renderMainScreen()}</div>
+                        <div className="flex-1 min-h-0 lg:h-full overflow-hidden">{renderMainScreen()}</div>
                         <aside className="hidden lg:block border-l dark:border-white/10 border-gray-200 h-full overflow-hidden">
                             {renderContactInfo(false)}
                         </aside>

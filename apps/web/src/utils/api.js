@@ -1,9 +1,7 @@
 import axios from "axios";
 import { clearCredentials } from "../Redux/authSlice";
-import { authStorage } from "./authStorage";
 
 const BASE_URL = process.env.REACT_APP_API_URL;
-const isMobileBrowser = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
 
 const api = axios.create({
   baseURL: BASE_URL,
@@ -12,23 +10,12 @@ const api = axios.create({
 });
 
 const clearSession = async () => {
-  document.cookie = 'token=; Max-Age=0; path=/';
-  document.cookie = 'refreshToken=; Max-Age=0; path=/';
-  await authStorage.clearTokens();
-  if (store) store.dispatch(clearCredentials());
+  await store?.dispatch(clearCredentials());
 };
 
 api.interceptors.request.use(
-  async (config) => {
+  (config) => {
     if (config.data instanceof FormData) delete config.headers['Content-Type'];
-
-    // Mobile: cookies are unreliable (ITP, in-app WebViews). Attach the
-    // access token explicitly so requests don't depend on the cookie alone.
-    if (isMobileBrowser) {
-      const { accessToken } = await authStorage.getTokens();
-      if (accessToken) config.headers.Authorization = `Bearer ${accessToken}`;
-    }
-
     return config;
   },
   (error) => Promise.reject(error)
@@ -45,19 +32,8 @@ const processQueue = (error) => {
   refreshQueue = [];
 };
 
-// Build the refresh call — mobile sends the refresh token explicitly in the
-// body since its cookie may already be gone; desktop relies on the cookie.
 const doRefresh = async () => {
-  let body = {};
-  if (isMobileBrowser) {
-    const { refreshToken } = await authStorage.getTokens();
-    if (refreshToken) {
-      return axios.post(`${BASE_URL}/auth/refresh-token`, { refreshToken }, { withCredentials: true });
-    }
-
-    // no throwing errs, allow self heal
-  }
-  return axios.post(`${BASE_URL}/auth/refresh-token`, body, { withCredentials: true });
+  return axios.post(`${BASE_URL}/auth/refresh-token`, {}, { withCredentials: true });
 };
 
 export const refreshSession = () => {
@@ -66,12 +42,7 @@ export const refreshSession = () => {
   }
   isRefreshing = true;
   return doRefresh()
-    .then(async (res) => {
-      // Mobile: persist the newly rotated tokens back to localStorage
-      if (isMobileBrowser && res.data?.data) {
-        const { accessToken, refreshToken } = res.data.data;
-        if (accessToken) await authStorage.setTokens(accessToken, refreshToken);
-      }
+    .then((res) => {
       processQueue(null);
       return res;
     })
@@ -111,13 +82,7 @@ api.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        const res = await doRefresh();
-
-        if (isMobileBrowser && res.data?.data) {
-          const { accessToken, refreshToken } = res.data.data;
-          if (accessToken) await authStorage.setTokens(accessToken, refreshToken);
-        }
-
+        await doRefresh();
         processQueue(null);
         return api(original);
       } catch (refreshError) {

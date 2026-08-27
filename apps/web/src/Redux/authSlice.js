@@ -38,14 +38,6 @@ export const register = createAsyncThunk("auth/register", async (data, thunkAPI)
     }
 });
 
-export const logout = createAsyncThunk("auth/logout", async (_, thunkAPI) => {
-    try {
-        const response = await api.post("/auth/logout");
-        return response.data;
-    } catch (error) {
-        return thunkAPI.rejectWithValue(error.response?.data?.message || "Logout failed");
-    }
-});
 
 export const verifyEmail = createAsyncThunk("auth/verify-email", async ({ token }, thunkAPI) => {
     try {
@@ -269,14 +261,6 @@ const authSlice = createSlice({
             .addCase(register.rejected, (state, action) => {
                 state.status = "failed";
                 state.error = action.payload || "Registration failed";
-            })
-
-            // ── Logout ─────────────────────────────────────────────────────────────
-            .addCase(logout.fulfilled, (state) => {
-                state.user = null;
-                state.runner = null;
-                state.isAuthenticated = false;
-                state.status = 'idle';
             })
 
             // ── verifyEmailToken ───────────────────────────────────────────────────
