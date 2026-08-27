@@ -245,7 +245,7 @@ function OnboardingScreen({
 
   return (
     <div className="flex flex-col h-full w-full overflow-hidden bg-white dark:bg-black-100">
-      {/* Header - Mobile First */}
+      {/* Header - Mobile First - Fixed height */}
       <div className="flex-shrink-0 px-3 py-2 sm:px-5 sm:py-3 border-b dark:border-white/10 border-gray-200 flex items-center justify-between bg-white/5/10 backdrop-blur-xl">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0">
           <Avatar 
@@ -268,17 +268,17 @@ function OnboardingScreen({
             onClick={() => setDark(!dark)} 
             className="cursor-pointer bg-gray-900 dark:bg-gray-100/60 rounded-full w-8 h-8 sm:w-10 sm:h-10 flex items-center justify-center"
           >
-            {dark ? <Sun className="w-4 h-4 sm:w-5 sm:h-5 text:flash-white" /> : <Moon className="w-4 h-4 sm:w-5 sm:h-5 text:flash-white" strokeWidth={3.0} />}
+            {dark ? <Sun className="w-4 h-4 sm:w-5 sm:h-5 text-white" /> : <Moon className="w-4 h-4 sm:w-5 sm:h-5 text-white" strokeWidth={3.0} />}
           </div>
         </div>
       </div>
 
-      {/* Progress Bar - Compact on mobile */}
+      {/* Progress Bar - Compact on mobile - Fixed height */}
       <div className="flex-shrink-0">
         <OnboardingProgress stageIndex={stageIndex} darkMode={dark} />
       </div>
       
-      {/* Messages - Takes remaining space */}
+      {/* Messages - Takes remaining space - Scrollable */}
       <div 
         ref={listRef} 
         className="flex-1 min-h-0 overflow-y-auto px-2 sm:px-3 md:px-6 py-2 sm:py-4 bg-chat-pattern bg-gray-100 dark:bg-black-200 scrollbar-hide scroll-smooth"
@@ -302,7 +302,7 @@ function OnboardingScreen({
         </div>
       </div>
 
-      {/* Fleet Selection - Compact on mobile */}
+      {/* Fleet Selection - Compact on mobile - Fixed height when visible */}
       {isCollectingCredentials &&
         credentialStep !== null &&
         credentialQuestions[credentialStep]?.isFleetSelection &&
@@ -322,7 +322,7 @@ function OnboardingScreen({
           </div>
         )}
 
-      {/* Composer - Fixed at bottom */}
+      {/* Composer - Fixed at bottom - NO overflow */}
       {!(isCollectingCredentials && !isSubmitting && credentialStep !== null && credentialQuestions[credentialStep]?.isFleetSelection) && (
         <div className="flex-shrink-0 bg-gray-100 dark:bg-black-200">
           <ChatComposer
