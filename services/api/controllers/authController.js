@@ -294,22 +294,18 @@ class AuthController extends BaseController {
       if (!incomingToken) return this.error(res, 'No refresh token provided', 401);
 
       const tokenHash = this._hashToken(incomingToken);
+      const redisClient = redis.getClient();
 
-      // Replay cache — concurrent requests rotating the same tokenHash
-      const cached = await redis.get(`refresh_replay:${tokenHash}`);
+      const cached = await redisClient.get(`refresh_replay:${tokenHash}`);
       if (cached) {
         const { accessToken, refreshToken: cachedRefresh } = JSON.parse(cached);
         this.setAuthCookies(res, accessToken, cachedRefresh);
-        return this.success(res, {
-          message: 'Token refreshed',
-          accessToken,
-          refreshToken: cachedRefresh,
-        });
+        return this.success(res, { message: 'Token refreshed', accessToken, refreshToken: cachedRefresh });
       }
 
       const { accessToken, refreshToken: newRefreshToken } = await authService.refreshTokens(incomingToken);
 
-      await redis.set(
+      await redisClient.set(
         `refresh_replay:${tokenHash}`,
         JSON.stringify({ accessToken, refreshToken: newRefreshToken }),
         'EX',
@@ -317,12 +313,7 @@ class AuthController extends BaseController {
       );
 
       this.setAuthCookies(res, accessToken, newRefreshToken);
-
-      return this.success(res, {
-        message: 'Token refreshed',
-        accessToken,
-        refreshToken: newRefreshToken,
-      });
+      return this.success(res, { message: 'Token refreshed', accessToken, refreshToken: newRefreshToken });
     } catch (err) {
       logger.warn('Refresh token failed', { message: err.message, statusCode: err.statusCode });
       return this.error(res, err.message || 'Invalid or expired refresh token', err.statusCode || 401);

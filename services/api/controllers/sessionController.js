@@ -60,13 +60,11 @@ class SessionController extends BaseController {
   async refreshSession(req, res) {
     try {
       const { chatId } = req.body;
-
       if (!chatId) {
         return res.status(400).json({ success: false, message: 'chatId is required' });
       }
 
       const resolvedUserId = req.user._id;
-
       const activeOrder = await Order.findOne({
         $or: [{ userId: resolvedUserId }, { runnerId: resolvedUserId }],
         chatId,
@@ -74,10 +72,7 @@ class SessionController extends BaseController {
       }).lean();
 
       if (!activeOrder) {
-        return res.status(404).json({
-          success: false,
-          message: 'No active order found for this session'
-        });
+        return res.status(404).json({ success: false, message: 'No active order found for this session' });
       }
 
       const incomingToken = req.cookies.refreshToken || req.body.refreshToken;
@@ -86,23 +81,15 @@ class SessionController extends BaseController {
       }
 
       const tokenHash = authService._hashToken(incomingToken);
+      const redisClient = redis.getClient();   // ← added
 
-      // Replay cache — same guard as AuthController.refreshToken, since this
-      // hits the identical authService.refreshTokens() rotation and is
-      // vulnerable to the same concurrent-request race (e.g. app resume from
-      // background firing alongside an already-queued refresh).
-      const cached = await redis.get(`refresh_replay:${tokenHash}`);
+      const cached = await redisClient.get(`refresh_replay:${tokenHash}`);
       if (cached) {
         const { accessToken, refreshToken: cachedRefresh } = JSON.parse(cached);
         this.setAuthCookies(res, accessToken, cachedRefresh);
         return res.status(200).json({
           success: true,
-          data: {
-            accessToken,
-            refreshToken: cachedRefresh,
-            orderId: activeOrder.orderId,
-            orderStatus: activeOrder.status,
-          }
+          data: { accessToken, refreshToken: cachedRefresh, orderId: activeOrder.orderId, orderStatus: activeOrder.status }
         });
       }
 
@@ -112,18 +99,13 @@ class SessionController extends BaseController {
       } catch (err) {
         if (err.statusCode === 401) {
           await new Promise(r => setTimeout(r, 150));
-          const raced = await redis.get(`refresh_replay:${tokenHash}`);
+          const raced = await redisClient.get(`refresh_replay:${tokenHash}`);   // ← fixed
           if (raced) {
             const { accessToken, refreshToken: cachedRefresh } = JSON.parse(raced);
             this.setAuthCookies(res, accessToken, cachedRefresh);
             return res.status(200).json({
               success: true,
-              data: {
-                accessToken,
-                refreshToken: cachedRefresh,
-                orderId: activeOrder.orderId,
-                orderStatus: activeOrder.status,
-              }
+              data: { accessToken, refreshToken: cachedRefresh, orderId: activeOrder.orderId, orderStatus: activeOrder.status }
             });
           }
         }
@@ -132,7 +114,7 @@ class SessionController extends BaseController {
 
       const { accessToken, refreshToken: newRefresh } = result;
 
-      await redis.set(
+      await redisClient.set(   // ← fixed
         `refresh_replay:${tokenHash}`,
         JSON.stringify({ accessToken, refreshToken: newRefresh }),
         'EX',
@@ -140,22 +122,13 @@ class SessionController extends BaseController {
       );
 
       this.setAuthCookies(res, accessToken, newRefresh);
-
       return res.status(200).json({
         success: true,
-        data: {
-          accessToken,
-          refreshToken: newRefresh,
-          orderId: activeOrder.orderId,
-          orderStatus: activeOrder.status,
-        }
+        data: { accessToken, refreshToken: newRefresh, orderId: activeOrder.orderId, orderStatus: activeOrder.status }
       });
     } catch (error) {
       console.error('Session refresh error:', error.message);
-      return res.status(error.statusCode || 500).json({
-        success: false,
-        message: error.message || 'Internal server error'
-      });
+      return res.status(error.statusCode || 500).json({ success: false, message: error.message || 'Internal server error' });
     }
   }
 

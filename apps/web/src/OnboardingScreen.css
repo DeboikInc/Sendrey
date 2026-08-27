@@ -1,0 +1,194 @@
+/* components/runnerScreens/OnboardingScreen.css */
+
+.onboarding-container {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+  /* Match the messages background */
+  background: #f3f4f6; /* gray-100 */
+}
+
+.dark .onboarding-container {
+  background: #1a1a1a; /* black-200 */
+}
+
+.onboarding-header {
+  flex-shrink: 0;
+}
+
+.onboarding-progress {
+  flex-shrink: 0;
+}
+
+.onboarding-messages {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  min-height: 0;
+  max-height: 100%;
+  scroll-behavior: smooth;
+  /* Remove background from here - it's on container now */
+}
+
+.onboarding-fleet {
+  flex-shrink: 0;
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: 4px;
+  padding: 6px 10px;
+  background: #f3f4f6; /* gray-100 */
+}
+
+.dark .onboarding-fleet {
+  background: #1a1a1a; /* black-200 */
+}
+
+.onboarding-composer-wrapper {
+  flex-shrink: 0;
+  padding: 0 !important;
+  margin: 0 !important;
+  min-height: 0;
+  height: auto;
+  /* Match the container background */
+  background: #f3f4f6; /* gray-100 */
+}
+
+.dark .onboarding-composer-wrapper {
+  background: #1a1a1a; /* black-200 */
+}
+
+/* Mobile styles (default - phones) */
+@media (max-width: 640px) {
+  .onboarding-messages {
+    flex: 1 1 auto;
+    min-height: 60px;
+    max-height: 65vh;
+  }
+  
+  .onboarding-messages.has-fleet {
+    max-height: 50vh;
+  }
+  
+  .onboarding-fleet {
+    padding: 4px 8px;
+    gap: 3px;
+  }
+}
+
+/* Very small screens (like Galaxy Note II - 360x640) */
+@media (max-width: 375px) {
+  .onboarding-messages {
+    min-height: 50px;
+    max-height: 55vh;
+  }
+  
+  .onboarding-messages.has-fleet {
+    max-height: 40vh;
+  }
+  
+  .onboarding-fleet {
+    padding: 3px 6px;
+    gap: 2px;
+  }
+}
+
+/* Tablet and Desktop (641px and above) */
+@media (min-width: 641px) {
+  .onboarding-messages {
+    flex: 1 1 auto;
+    min-height: 150px;
+    max-height: 70vh;
+  }
+  
+  .onboarding-messages.has-fleet {
+    max-height: 60vh;
+  }
+  
+  .onboarding-fleet {
+    padding: 10px 16px;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+}
+
+/* Desktop (1025px and above) */
+@media (min-width: 1025px) {
+  .onboarding-messages {
+    max-height: 75vh;
+    min-height: 200px;
+    padding: 16px 24px;
+  }
+  
+  .onboarding-messages.has-fleet {
+    max-height: 65vh;
+  }
+  
+  .onboarding-fleet {
+    padding: 12px 20px;
+    gap: 12px;
+  }
+}
+
+/* Landscape phone optimization */
+@media (max-height: 500px) and (orientation: landscape) {
+  .onboarding-messages {
+    max-height: 40vh !important;
+    min-height: 40px;
+  }
+  
+  .onboarding-messages.has-fleet {
+    max-height: 30vh !important;
+  }
+  
+  .onboarding-header {
+    padding: 2px 6px !important;
+  }
+  
+  .onboarding-header .avatar {
+    width: 20px !important;
+    height: 20px !important;
+  }
+  
+  .onboarding-fleet {
+    padding: 2px 6px !important;
+  }
+}
+
+/* Scrollbar styling */
+.onboarding-messages::-webkit-scrollbar {
+  width: 4px;
+}
+
+.onboarding-messages::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.onboarding-messages::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 4px;
+}
+
+.onboarding-messages::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+.dark .onboarding-messages::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.dark .onboarding-messages::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+/* Firefox scrollbar */
+.onboarding-messages {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 0, 0, 0.2) transparent;
+}
+
+.dark .onboarding-messages {
+  scrollbar-color: rgba(255, 255, 255, 0.2) transparent;
+}

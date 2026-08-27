@@ -1,9 +1,8 @@
-// components/runner/ChatComposer
+// components/runner/ChatComposer.jsx - Full Responsive with proper spacing
 import { Button } from "@material-tailwind/react";
 import { Camera } from "lucide-react";
 import CustomInput from "../common/CustomInput";
 import { useState, useRef, useCallback } from "react";
-// import { shouldShowKycPendingMessage } from '../../utils/returningUserKycUtils';
 
 export default function ChatComposer({
   // State
@@ -48,7 +47,7 @@ export default function ChatComposer({
   currentOrder,
   onKycFileUpload,
 
-  // Audio upload — passed down from RunnerChatScreen
+  // Audio upload
   uploadFileWithProgress,
   chatId,
   runnerId,
@@ -94,7 +93,6 @@ export default function ChatComposer({
     setTimeout(() => setIsConnectDisabled(false), 3000);
   };
 
-
   const handleGetStarted = () => {
     if (isLetsGetStarted) return;
     const okayMessage = {
@@ -120,7 +118,6 @@ export default function ChatComposer({
 
     const tempId = `temp-audio-${Date.now()}`;
 
-    // Add optimistic message — use blob URL so it plays locally right away
     if (setMessages) {
       setMessages(prev => [...prev, {
         id: tempId,
@@ -148,15 +145,12 @@ export default function ChatComposer({
         type: 'audio',
         tempId,
       });
-      // Don't revoke here — the message listener in RunnerChatScreen replaces
-      // the temp message with the real server message (which has a cloudinary URL).
-      // The blob URL becomes unreferenced and GC'd naturally.
     } catch (err) {
       console.error('Audio upload error:', err);
       if (setMessages) {
         setMessages(prev => prev.filter(m => m.id !== tempId));
       }
-      URL.revokeObjectURL(audioUrl); // only revoke on failure
+      URL.revokeObjectURL(audioUrl);
     }
   }, [chatId, runnerId, uploadFileWithProgress, setMessages]);
 
@@ -165,19 +159,18 @@ export default function ChatComposer({
     !isCollectingCredentials && !needsOtpVerification && kycStep === 6
   ) {
     return (
-      <div className="p-4 py-6 flex justify-center">
-        <p className="text-sm text-center text-gray-500 dark:text-gray-400">
+      <div className="px-3 sm:px-4 lg:px-6 py-2 sm:py-3 lg:py-4 flex justify-center">
+        <p className="text-xs sm:text-sm lg:text-base text-center text-gray-500 dark:text-gray-400">
           Your documents are currently under review, we will get back to you soon.
         </p>
       </div>
     );
   }
 
-
   // ── Returning user — Yes / No ─────────────────────────────────────────────
   if (isReturningUser) {
     return (
-      <div className="flex gap-5 p-4">
+      <div className="flex gap-2 sm:gap-3 lg:gap-4 px-3 sm:px-4 lg:px-6 py-2 sm:py-3 lg:py-4">
         <Button
           onClick={async () => {
             if (returningChoiceMade) return;
@@ -185,12 +178,11 @@ export default function ChatComposer({
             try {
               await onReturningUserChoice('yes');
             } catch {
-              setReturningChoiceMade(false); // re-enable on failure
+              setReturningChoiceMade(false);
             }
           }}
-
           disabled={returningChoiceMade}
-          className={`bg-primary rounded-lg w-full h-14 sm:text-lg ${isSubmitting ? 'opacity-50 bg-gray-100 cursor-not-allowed' : ''}`}
+          className={`bg-primary rounded-lg w-full h-10 sm:h-12 lg:h-14 text-sm sm:text-base lg:text-lg ${isSubmitting ? 'opacity-50 bg-gray-100 cursor-not-allowed' : ''}`}
         >
           Yes, It's me
         </Button>
@@ -204,9 +196,8 @@ export default function ChatComposer({
               setReturningChoiceMade(false);
             }
           }}
-
           disabled={returningChoiceMade}
-          className={`bg-secondary rounded-lg w-full h-14 sm:text-lg ${isSubmitting ? 'opacity-50 bg-gray-100 cursor-not-allowed' : ''}`}
+          className={`bg-secondary rounded-lg w-full h-10 sm:h-12 lg:h-14 text-sm sm:text-base lg:text-lg ${isSubmitting ? 'opacity-50 bg-gray-100 cursor-not-allowed' : ''}`}
         >
           No
         </Button>
@@ -215,15 +206,16 @@ export default function ChatComposer({
   }
 
   if (isInProgress) {
-    return <div className="p-4 py-7" />;
+    return <div className="py-3 sm:py-4 lg:py-6" />;
   }
 
+  // ── Get Started button - Fixed for all screens ────────────────────────────
   if (!registrationComplete && !isCollectingCredentials && !needsOtpVerification && !isReturningUser) {
     return (
-      <div className="p-4">
+      <div className="px-3 sm:px-4 lg:px-6 py-1.5 sm:py-2 lg:py-3">
         <Button
           onClick={send}
-          className="w-full bg-primary rounded-lg sm:text-sm flex items-center justify-center py-4"
+          className="w-full bg-primary rounded-lg text-sm sm:text-base lg:text-lg flex items-center justify-center h-10 sm:h-12 lg:h-14 hover:scale-[1.02] transition-transform"
         >
           Get Started
         </Button>
@@ -234,11 +226,11 @@ export default function ChatComposer({
   // ── OTP verification input ────────────────────────────────────────────────
   if (needsOtpVerification) {
     if (isVerifyingOtp) {
-      return <div className="p-4 py-7" />;
+      return <div className="py-3 sm:py-4 lg:py-6" />;
     }
 
     return (
-      <div className="px-3 py-3 pb-3">
+      <div className="px-3 sm:px-4 lg:px-6 py-1.5 sm:py-2 lg:py-3">
         <CustomInput
           showMic={false}
           send={send}
@@ -256,11 +248,11 @@ export default function ChatComposer({
   // ── Credential collection input ───────────────────────────────────────────
   if (isCollectingCredentials && credentialStep !== null) {
     if (isSubmitting) {
-      return <div className="p-4 py-7" />; // blank while waiting for server
+      return <div className="py-3 sm:py-4 lg:py-6" />;
     }
 
     return (
-      <div className="px-3 py-3 pb-3">
+      <div className="px-3 sm:px-4 lg:px-6 py-1.5 sm:py-2 lg:py-3">
         <CustomInput
           showMic={false}
           send={send}
@@ -279,24 +271,23 @@ export default function ChatComposer({
     return null;
   }
 
-
-
-  // ── KYC Step 2 - ID Photo Camera 
+  // ── KYC Step 2 - ID Photo Camera ──────────────────────────────────────────
   if (registrationComplete && !isChatActive && kycStep === 2) {
     return (
-      <div className="py-3 flex justify-center items-center gap-3">
+      <div className="px-3 sm:px-4 lg:px-6 py-1.5 sm:py-2 lg:py-3 flex flex-wrap justify-center items-center gap-1.5 sm:gap-2 lg:gap-3">
         <Button
           onClick={openCamera}
-          className="bg-primary rounded-lg sm:text-lg flex items-center justify-center gap-3"
+          className="bg-primary rounded-lg text-xs sm:text-sm lg:text-base flex items-center justify-center gap-1.5 sm:gap-2 px-3 sm:px-4 lg:px-6 py-1.5 sm:py-2 lg:py-3 hover:scale-[1.02] transition-transform"
         >
-          <Camera size={28} />
+          <Camera size={16} className="sm:w-4 sm:h-4 lg:w-5 lg:h-5" />
+          <span>Camera</span>
         </Button>
-        <p>OR</p>
+        <span className="text-xs sm:text-sm text-gray-500">OR</span>
         <Button
           onClick={() => kycFileInputRef.current?.click()}
-          className="bg-secondary rounded-lg w-auto sm:text-lg gap-3"
+          className="bg-secondary rounded-lg text-xs sm:text-sm lg:text-base px-3 sm:px-4 lg:px-6 py-1.5 sm:py-2 lg:py-3 hover:scale-[1.02] transition-transform"
         >
-          Upload a File
+          Upload File
         </Button>
         <input
           ref={kycFileInputRef}
@@ -319,10 +310,10 @@ export default function ChatComposer({
   // ── KYC Step 3 - Selfie Prompt ───────────────────────────────────────────
   if (registrationComplete && !isChatActive && kycStep === 3) {
     return (
-      <div className="p-4 flex justify-center items-center w-full">
+      <div className="px-3 sm:px-4 lg:px-6 py-1.5 sm:py-2 lg:py-3 flex justify-center w-full">
         <Button
           onClick={handleGetStarted}
-          className={`bg-primary rounded-lg sm:text-sm flex items-center justify-center ${isLetsGetStarted ? 'bg-gray-500 opacity-50 cursor-not-allowed' : ''}`}
+          className={`bg-primary rounded-lg text-xs sm:text-sm lg:text-base px-4 sm:px-6 lg:px-8 py-1.5 sm:py-2 lg:py-3 flex items-center justify-center hover:scale-[1.02] transition-transform ${isLetsGetStarted ? 'bg-gray-500 opacity-50 cursor-not-allowed' : ''}`}
         >
           <span>Okay, let's get started</span>
         </Button>
@@ -333,12 +324,13 @@ export default function ChatComposer({
   // ── KYC Step 5 - Selfie Camera ───────────────────────────────────────────
   if (registrationComplete && !isChatActive && kycStep === 5) {
     return (
-      <div className="p-4 py-7 flex justify-center">
+      <div className="px-3 sm:px-4 lg:px-6 py-1.5 sm:py-2 lg:py-3 flex justify-center">
         <Button
           onClick={openCamera}
-          className="bg-primary rounded-lg w-24 h-14 sm:text-lg flex items-center justify-center gap-3"
+          className="bg-primary rounded-lg w-16 sm:w-20 lg:w-24 h-10 sm:h-12 lg:h-14 text-xs sm:text-sm lg:text-base flex items-center justify-center gap-1.5 hover:scale-[1.02] transition-transform"
         >
-          <Camera size={28} />
+          <Camera size={16} className="sm:w-4 sm:h-4 lg:w-5 lg:h-5" />
+          <span>Take</span>
         </Button>
       </div>
     );
@@ -346,11 +338,11 @@ export default function ChatComposer({
 
   if (isNewOrderFlow && newOrderStep === 'service') {
     return (
-      <div className="p-4">
+      <div className="px-3 sm:px-4 lg:px-6 py-1.5 sm:py-2 lg:py-3">
         <Button
           onClick={handleConnect}
           disabled={CONNECT_DISABLED || isConnectDisabled || isConnectLocked || isUpdatingServer}
-          className={`w-full bg-primary rounded-lg sm:text-sm flex items-center justify-center py-4 ${CONNECT_DISABLED || isConnectDisabled || isConnectLocked || isUpdatingServer ? 'bg-gray-500 opacity-50 cursor-not-allowed' : ''}`}
+          className={`w-full bg-primary rounded-lg text-xs sm:text-sm lg:text-base flex items-center justify-center h-10 sm:h-12 lg:h-14 ${CONNECT_DISABLED || isConnectDisabled || isConnectLocked || isUpdatingServer ? 'bg-gray-500 opacity-50 cursor-not-allowed' : 'hover:scale-[1.02] transition-transform'}`}
         >
           {CONNECT_DISABLED ? 'Connect to an errand service (Coming soon, stay tuned)'
             : isConnectLocked ? 'Ongoing Order — complete or cancel current order to connect'
@@ -364,11 +356,11 @@ export default function ChatComposer({
   // ── New Order Complete - Connect to Service ───────────────────────────────
   if (newOrderComplete) {
     return (
-      <div className="p-4">
+      <div className="px-3 sm:px-4 lg:px-6 py-1.5 sm:py-2 lg:py-3">
         <Button
           onClick={handleConnect}
           disabled={CONNECT_DISABLED || isConnectDisabled || isSearching || isConnectLocked || isUpdatingServer}
-          className={`w-full bg-primary rounded-lg sm:text-sm flex items-center justify-center py-4 ${CONNECT_DISABLED || isConnectDisabled || isSearching || isConnectLocked || isUpdatingServer ? 'bg-gray-500 opacity-50 cursor-not-allowed' : ''}`}
+          className={`w-full bg-primary rounded-lg text-xs sm:text-sm lg:text-base flex items-center justify-center h-10 sm:h-12 lg:h-14 ${CONNECT_DISABLED || isConnectDisabled || isSearching || isConnectLocked || isUpdatingServer ? 'bg-gray-500 opacity-50 cursor-not-allowed' : 'hover:scale-[1.02] transition-transform'}`}
         >
           <span>
             {CONNECT_DISABLED ? 'Connect to an errand service (Coming soon, stay tuned)'
@@ -384,7 +376,7 @@ export default function ChatComposer({
 
   if (registrationComplete && !isChatActive && kycStep === 7) {
     return (
-      <div className="p-4">
+      <div className="px-3 sm:px-4 lg:px-6 py-1.5 sm:py-2 lg:py-3">
         <Button
           onClick={() => {
             setMessages(prev => [...prev, {
@@ -394,7 +386,7 @@ export default function ChatComposer({
             }]);
             onStartNewOrder?.();
           }}
-          className="w-full bg-primary rounded-lg sm:text-sm flex items-center justify-center py-4"
+          className="w-full bg-primary rounded-lg text-xs sm:text-sm lg:text-base flex items-center justify-center h-10 sm:h-12 lg:h-14 hover:scale-[1.02] transition-transform"
         >
           Start New Order
         </Button>
@@ -402,14 +394,13 @@ export default function ChatComposer({
     );
   }
 
-
   // ── KYC Step 6 - Connect to Service ──────────────────────────────────────
   if (!newOrderComplete && registrationComplete && !isChatActive && kycStep === 6) {
 
     if (!isVerified) {
       return (
-        <div className="p-4 py-6 flex justify-center">
-          <p className="text-sm text-center text-gray-500 dark:text-gray-400">
+        <div className="px-3 sm:px-4 lg:px-6 py-2 sm:py-3 lg:py-4 flex justify-center">
+          <p className="text-xs sm:text-sm lg:text-base text-center text-gray-500 dark:text-gray-400">
             Your documents are currently under review, we will get back to you soon.
           </p>
         </div>
@@ -418,8 +409,8 @@ export default function ChatComposer({
 
     if (!isTrainingCompleted) {
       return (
-        <div className="p-4 py-6 flex justify-center">
-          <p className="text-sm text-center text-gray-500 dark:text-gray-400">
+        <div className="px-3 sm:px-4 lg:px-6 py-2 sm:py-3 lg:py-4 flex justify-center">
+          <p className="text-xs sm:text-sm lg:text-base text-center text-gray-500 dark:text-gray-400">
             Runner training ongoing. Complete the training to proceed.
           </p>
         </div>
@@ -427,12 +418,12 @@ export default function ChatComposer({
     }
 
     return (
-      <div className="p-4">
+      <div className="px-3 sm:px-4 lg:px-6 py-1.5 sm:py-2 lg:py-3">
         <Button
           onClick={handleConnect}
           disabled={CONNECT_DISABLED || isConnectDisabled || isSearching || isConnectLocked || isUpdatingServer}
-          className={`w-full bg-primary rounded-lg sm:text-sm flex items-center justify-center py-4 ${CONNECT_DISABLED || isConnectDisabled || isSearching || isConnectLocked || isUpdatingServer
-            ? 'bg-gray-500 opacity-50 cursor-not-allowed' : ''
+          className={`w-full bg-primary rounded-lg text-xs sm:text-sm lg:text-base flex items-center justify-center h-10 sm:h-12 lg:h-14 ${CONNECT_DISABLED || isConnectDisabled || isSearching || isConnectLocked || isUpdatingServer
+            ? 'bg-gray-500 opacity-50 cursor-not-allowed' : 'hover:scale-[1.02] transition-transform'
             }`}
         >
           <span>
@@ -449,14 +440,14 @@ export default function ChatComposer({
 
   // ── KYC Step 0 ───────────────────────────────────────────────────────────
   if (registrationComplete && !isChatActive && kycStep === 0) {
-    return <div className="p-4 py-7" />;
+    return <div className="py-3 sm:py-4 lg:py-6" />;
   }
 
   // ── Active chat input ─────────────────────────────────────────────────────
   if (isChatActive) {
     return (
-      <div>
-        <div className="px-3 py-3 pb-3">
+      <div className="w-full">
+        <div className="px-3 sm:px-4 lg:px-6 py-1.5 sm:py-2 lg:py-3">
           <CustomInput
             showMic={true}
             setLocationIcon={true}
@@ -498,8 +489,8 @@ export default function ChatComposer({
     (kycStep === null || kycStep === undefined)
   ) {
     return (
-      <div className="p-4 py-6 flex justify-center">
-        <p className="text-sm text-center text-gray-500 dark:text-gray-400">
+      <div className="px-3 sm:px-4 lg:px-6 py-2 sm:py-3 lg:py-4 flex justify-center">
+        <p className="text-xs sm:text-sm lg:text-base text-center text-gray-500 dark:text-gray-400">
           Training in progress..
         </p>
       </div>
@@ -512,13 +503,13 @@ export default function ChatComposer({
     (kycStep === null || kycStep === undefined) &&
     isTrainingCompleted
   ) {
-    return <div className="p-4 py-7" />; // blank while status resolves — matches the pattern used for isSubmitting/isVerifyingOtp elsewhere in this file
+    return <div className="py-3 sm:py-4 lg:py-6" />;
   }
 
   if (registrationComplete && !isChatActive && !isCollectingCredentials && !needsOtpVerification) {
     return (
-      <div className="p-4 py-6 flex justify-center">
-        <p className="text-sm text-center text-gray-500 dark:text-gray-400">
+      <div className="px-3 sm:px-4 lg:px-6 py-2 sm:py-3 lg:py-4 flex justify-center">
+        <p className="text-xs sm:text-sm lg:text-base text-center text-gray-500 dark:text-gray-400">
           Your documents are currently under review, we will get back to you soon.
         </p>
       </div>
