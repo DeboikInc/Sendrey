@@ -259,6 +259,16 @@ const notifyIncomingCall = async (receiverId, receiverType, { callId, chatId, ca
   });
 };
 
+const notifyReferralBonus = async ({ recipientId, recipientType, amount, referredName }) => {
+  return sendPushNotification({
+    recipientId,
+    recipientType,
+    title: '🎉 Referral Bonus Earned',
+    body: `You earned ₦${amount?.toLocaleString()} from referring ${referredName}`,
+    data: { type: 'referral_bonus', amount },
+  });
+};
+
 
 module.exports = {
   sendPushNotification,
@@ -277,4 +287,5 @@ module.exports = {
   notifyIncomingCall,
   notifyOrderCancelled,
   notifyPartnerOffline,
+  notifyReferralBonus,
 };

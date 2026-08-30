@@ -4,7 +4,8 @@ import { useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import {
   AlertTriangle, Briefcase, Users, LogOut,
-  LayoutDashboard, Package, CreditCard, X, Settings
+  LayoutDashboard, Package, CreditCard, X, Settings,
+  Users2
 } from 'lucide-react';
 import { adminLogout } from '../../Redux/authSlice';
 import Button from '../ui/Button';
@@ -19,6 +20,7 @@ const NAV_ITEMS = [
   { label: 'Runners', key: 'runner-list', icon: Users },
   { label: 'Orders', key: 'orders', icon: Package },
   { label: 'Payouts', key: 'payout', icon: CreditCard },
+  { label: 'Referrals', key: 'referrals', icon: Users2 },
   { label: 'Config', key: 'config', icon: Settings },
 ];
 

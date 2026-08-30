@@ -29,7 +29,7 @@ router.post('/verify-email',
 router.post('/resend-email-verification',
   userRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 3 }), // 3 resends per hour
   validate(authValidation.resendVerification),
-  authController.resendEmailVerification
+  authController.resendVerificationEmail
 );
 
 router.post('/forgot-password',

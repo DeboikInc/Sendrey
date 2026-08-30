@@ -6,6 +6,9 @@ const Runner = require('../models/Runner');
 const Wallet = require('../models/Wallet')
 const logger = require('../utils/logger');
 const AuthSession = require('../models/AuthSession');
+const paymentService = require('./paymentServices');
+const referralService = require('./referralService');
+const { sendEmailEvent } = require('../kafka/producers/emailProducer');
 
 class AuthService {
   _generateOpaqueToken = () => crypto.randomBytes(40).toString('hex');
@@ -23,6 +26,13 @@ class AuthService {
         : null;
 
       if (existingByEmail) {
+        if (userData.phone && existingByEmail.phone && existingByEmail.phone !== userData.phone) {
+          const err = new Error('This email or phone number is associated with another sendrey account');
+          err.statusCode = 409;
+          err.field = 'phone';
+          throw err;
+        }
+
         if (!existingByEmail.isVerified) {
           return { user: existingByEmail, existing: true };
         }
@@ -107,11 +117,130 @@ class AuthService {
     }
   }
 
-  async checkExistingUser(email, userType = 'user') {
+  /**
+   * Orchestrates the full user signup flow: creates the account, then handles
+   * OTP + email verification, virtual account provisioning, and referral
+   * code assignment/redemption. Virtual account and referral steps are
+   * non-blocking — a failure there shouldn't fail signup.
+   */
+  async completeUserRegistration(userData, creatorUserRole) {
+    const { user, existing } = await this.register(userData, creatorUserRole, 'user');
+
+    if (['admin', 'super-admin'].includes(user.role)) {
+      return { user, isAdmin: true };
+    }
+
+    const otp = await this.generateEmailVerificationOTP(user._id, userData.email, 'user');
+
+    logger.info('Sending EMAIL SMS', {
+      to: userData.email,
+      userId: user._id,
+      userType: 'user',
+      existing: !!existing,
+      endpoint: 'register-user',
+    });
+
+    if (user.email && !existing) {
+      await sendEmailEvent({
+        type: 'otp',
+        to: user.email,
+        subject: 'Your Sendrey Verification Code',
+        template: 'otpEmail',
+        data: { name: user.firstName, otp },
+      });
+    }
+
+    try {
+      await paymentService.createVirtualAccount(
+        user._id, user.email, `${user.firstName} ${user.lastName}`, user.phone
+      );
+    } catch (err) {
+      logger.error('Virtual account creation failed:', err.message);
+    }
+
+    try {
+      await referralService.assignReferralCode(user, 'User');
+      if (userData.referralCode) {
+        await referralService.applyReferralCode({
+          code: userData.referralCode,
+          referredId: user._id,
+          referredModel: 'User',
+        });
+      }
+    } catch (err) {
+      logger.error('Referral setup failed:', err.message);
+    }
+
+    return { user, otp, existing };
+  }
+
+  /**
+   * Orchestrates the full runner signup flow — same shape as
+   * completeUserRegistration, for the Runner model.
+   */
+  async completeRunnerRegistration(runnerData) {
+    runnerData.role = 'runner';
+
+    const { user: runner } = await this.register(runnerData, null, 'runner');
+
+    const otp = await this.generateEmailVerificationOTP(runner._id, runnerData.email, 'runner');
+
+    logger.info('Sending OTP SMS', {
+      to: runnerData.phone,
+      userId: runner._id,
+      userType: 'runner',
+      existing: !!runner.existing,
+      endpoint: 'register-runner',
+    });
+
+    if (runner.email) {
+      await sendEmailEvent({
+        type: 'otp',
+        to: runner.email,
+        subject: 'Your Sendrey Verification Code',
+        template: 'otpEmail',
+        data: { name: runner.firstName, otp },
+      });
+    }
+
+    if (!['admin', 'super-admin'].includes(runner.role)) {
+      try {
+        await paymentService.createVirtualAccount(
+          runner._id, runner.email, `${runner.firstName} ${runner.lastName}`, runner.phone
+        );
+      } catch (err) {
+        logger.error('Virtual account creation failed:', err.message);
+      }
+    }
+
+    try {
+      await referralService.assignReferralCode(runner, 'Runner');
+      if (runnerData.referralCode) {
+        await referralService.applyReferralCode({
+          code: runnerData.referralCode,
+          referredId: runner._id,
+          referredModel: 'Runner',
+        });
+      }
+    } catch (err) {
+      logger.error('Referral setup failed:', err.message);
+    }
+
+    return { runner, otp };
+  }
+
+  async checkExistingUser(email, phone, userType = 'user') {
     const Model = userType === 'runner' ? Runner : User;
     const user = await Model.findOne({ email });
 
     if (!user) return null;
+
+    if (phone && user.phone && user.phone !== phone) {
+      const err = new Error('This email or phone number is associated with another sendrey account');
+      err.statusCode = 409;
+      err.field = 'phone';
+      throw err;
+    }
 
     return {
       exists: true,
@@ -334,8 +463,8 @@ class AuthService {
       throw err;
     }
 
-    const token = await this.generateVerificationToken(user._id, userType);
-    return { user, token };
+    const otp = await this.generateEmailVerificationOTP(user._id, email, userType);
+    return { user, otp };
   }
 
   async generatePhoneVerificationOTP(userId, phone, userType = 'user') {

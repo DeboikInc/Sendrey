@@ -12,22 +12,24 @@ const storeTokensIfNeeded = async (payload) => {
 };
 
 // Thunks 
-
 export const register = createAsyncThunk("auth/register", async (data, thunkAPI) => {
     const { role, email, fullName, firstName, lastName, phone, fleetType, latitude, longitude } = data;
     try {
         const endpoint = role === "runner" ? "/auth/register-runner" : "/auth/register-user";
+        const referralCode = localStorage.getItem('referralCode') || undefined;
 
         const payload = role === "runner"
             ? {
                 phone, email, fleetType, role, latitude, longitude,
                 isOnline: true, isAvailable: true,
+                ...(referralCode && { referralCode }),
                 ...(fullName && { fullName }),
                 ...(firstName && { firstName }),
                 ...(lastName && { lastName }),
             }
             : {
                 phone, email, role, latitude, longitude,
+                ...(referralCode && { referralCode }),
                 ...(fullName && { fullName }),
                 ...(firstName && { firstName }),
                 ...(lastName && { lastName }),
@@ -94,15 +96,6 @@ export const resendEmailVerification = createAsyncThunk("auth/resend-email-verif
         return response.data;
     } catch (error) {
         return thunkAPI.rejectWithValue(error.response?.data?.message || "failed to resend verification");
-    }
-});
-
-export const requestEmailVerification = createAsyncThunk("auth/request-email-verification", async ({ email }, thunkAPI) => {
-    try {
-        const response = await api.post("/auth/request-email-verification", { email });
-        return response.data;
-    } catch (error) {
-        return thunkAPI.rejectWithValue(error.response?.data?.message || "failed to request email verification");
     }
 });
 
@@ -263,6 +256,7 @@ const authSlice = createSlice({
 
             .addCase(register.pending, (state) => { state.status = "loading"; state.error = null; })
             .addCase(register.fulfilled, (state, action) => {
+                localStorage.removeItem('referralCode');
                 state.status = "succeeded";
                 if (action.payload.runner) {
                     state.runner = action.payload.runner;
@@ -352,11 +346,7 @@ const authSlice = createSlice({
                     state.isAuthenticated = false;
                 }
             })
-
-            .addCase(requestEmailVerification.pending, (state) => { state.status = "loading"; state.error = null; })
-            .addCase(requestEmailVerification.fulfilled, (state) => { state.status = "succeeded"; })
-            .addCase(requestEmailVerification.rejected, (state, action) => { state.status = "failed"; state.error = action.payload; })
-
+            
             .addCase(sendEmailVerification.pending, (state) => { state.status = "loading"; state.error = null; })
             .addCase(sendEmailVerification.fulfilled, (state) => { state.status = "succeeded"; })
             .addCase(sendEmailVerification.rejected, (state, action) => { state.status = "failed"; state.error = action.payload; })

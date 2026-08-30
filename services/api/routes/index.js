@@ -20,6 +20,7 @@ const sessionRoutes = require('./sessionRoutes');
 const pricingRoutes = require('./pricingRoutes');
 const pedestrianRoutes = require('./pedestrianRoutes');
 const notificationRoutes = require('./notificationRoutes');
+const referralRoutes = require('./referralRoutes')
 
 // Use route modules
 router.use('/auth', authRoutes);
@@ -40,6 +41,7 @@ router.use('/upload', uploadRoutes);
 router.use('/pricing', pricingRoutes);
 router.use('/pedestrian', pedestrianRoutes);
 router.use('/notifications', notificationRoutes)
+router.use('/referrals', referralRoutes)
 
 // Export the router
 module.exports = router;

@@ -5,8 +5,6 @@ const userService = require('../services/userService');
 const runnerService = require('../services/runnerService');
 const emailService = require('../services/emailService');
 const smsService = require('../services/smsService');
-const paymentService = require('../services/paymentServices');
-
 const logger = require('../utils/logger');
 const User = require('../models/User');
 const Runner = require('../models/Runner');
@@ -61,14 +59,13 @@ class AuthController extends BaseController {
 
   register = async (req, res, next) => {
     try {
-      const userData = req.body;
       const creatorRole = req.user?.role;
+      const { user, otp, isAdmin } = await authService.completeUserRegistration(req.body, creatorRole);
 
-      const { user } = await authService.register(userData, creatorRole, 'user');
+      const { accessToken, refreshToken } = await this._createSession(user, 'user', req);
 
-      // Admins created inline don't get a session here — they log in separately
-      if (user.role === 'admin' || user.role === 'super-admin') {
-        const { accessToken, refreshToken } = await this._createSession(user, 'user', req);
+      // Admins created inline don't get the verification flow — they log in separately
+      if (isAdmin) {
         return this.created(res, {
           user: this._sanitizeUser(user),
           message: 'Admin registered successfully.',
@@ -77,40 +74,7 @@ class AuthController extends BaseController {
         });
       }
 
-      const otp = await authService.generateEmailVerificationOTP(user._id, userData.email, 'user');
-
-      logger.info('Sending EMAIL SMS', {
-        to: userData.email,
-        userId: user._id,
-        userType: 'user',
-        existing: !!user.existing,
-        endpoint: 'register-user'
-      });
-
-      if (user.email && !user.existing) {
-        await sendEmailEvent({
-          type: 'otp',
-          to: user.email,
-          subject: 'Your Sendrey Verification Code',
-          template: 'otpEmail',
-          data: { name: user.firstName, otp },
-        });
-      }
-
-      console.log("otp sent", otp);
-
-      // Virtual account (non-blocking)
-      try {
-        await paymentService.createVirtualAccount(
-          user._id, user.email, `${user.firstName} ${user.lastName}`, user.phone
-        );
-      } catch (err) {
-        console.error('Virtual account creation failed:', err.message);
-      }
-
-      const { accessToken, refreshToken } = await this._createSession(user, 'user', req);
       this.setAuthCookies(res, accessToken, refreshToken);
-
       logger.info(`User registered: ${user.phone}`);
 
       this.created(res, {
@@ -120,15 +84,22 @@ class AuthController extends BaseController {
         refreshToken,
       });
 
+      logger.info(`
+        "User account created",
+        ${user.firstName}-${user.lastName}
+      `)
+
     } catch (error) {
       logger.error('User registration error:', error);
       if (error.statusCode === 409) {
-        return this.error(res, {
-          message: 'Account already exists',
+        if (error.field === 'phone') {
+          return this.error(res, error.message, 409);
+        }
+        return this.error(res, `An account associated with this ${error.userEmail || 'email'} already exists`, 409, {
           userName: error.userName,
           userEmail: error.userEmail,
           userPhone: error.userPhone,
-        }, 409);
+        });
       }
       next(error);
     }
@@ -136,45 +107,10 @@ class AuthController extends BaseController {
 
   registerRunner = async (req, res, next) => {
     try {
-      const runnerData = req.body;
-      runnerData.role = 'runner';
-
-      const { user: runner } = await authService.register(runnerData, null, 'runner');
-
-      const otp = await authService.generateEmailVerificationOTP(runner._id, runnerData.email, 'runner');
-
-      logger.info('Sending OTP SMS', {
-        to: runnerData.phone,
-        userId: runner._id,
-        userType: 'runner',
-        existing: !!runner.existing,
-        endpoint: 'register-runner'
-      });
-
-      if (runner.email) {
-        await sendEmailEvent({
-          type: 'otp',
-          to: runner.email,
-          subject: 'Your Sendrey Verification Code',
-          template: 'otpEmail',
-          data: { name: runner.firstName, otp },
-        });
-      }
-
-      if (!['admin', 'super-admin'].includes(runner.role)) {
-        try {
-          await paymentService.createVirtualAccount(
-            runner._id, runner.email, `${runner.firstName} ${runner.lastName}`, runner.phone
-          );
-        } catch (err) {
-          console.error('Virtual account creation failed:', err.message);
-        }
-      }
+      const { runner, otp } = await authService.completeRunnerRegistration(req.body);
 
       const { accessToken, refreshToken } = await this._createSession(runner, 'runner', req);
       this.setAuthCookies(res, accessToken, refreshToken);
-
-      logger.info(`Runner registered: ${runner.phone}`);
 
       this.created(res, {
         runner: this._sanitizeRunner(runner),
@@ -183,13 +119,18 @@ class AuthController extends BaseController {
         refreshToken,
       });
 
+      logger.info(`
+        "Runner account created",
+        ${runner.firstName}-${runner.lastName}
+      `)
+
     } catch (error) {
       logger.error('Runner registration error:', error);
       if (error.statusCode === 409) {
         if (error.field === 'phone') {
           return this.error(res, error.message, 409, { field: 'phone' });
         }
-        return this.error(res, 'Account already exists', 409, {
+        return this.error(res, `An account associated with this ${error.userEmail || 'email'} already exists`, 409, {
           userName: error.userName,
           userEmail: error.userEmail,
           userPhone: error.userPhone,
@@ -231,13 +172,13 @@ class AuthController extends BaseController {
 
   checkExistingUser = async (req, res, next) => {
     try {
-      const { email, userType = 'user' } = req.body;
+      const { email, phone, userType = 'user' } = req.body;
 
       if (!email) {
         return this.error(res, 'Email is required', 400);
       }
 
-      const result = await authService.checkExistingUser(email, userType);
+      const result = await authService.checkExistingUser(email, phone, userType);
 
       if (!result) {
         return this.success(res, { exists: false });
@@ -246,6 +187,9 @@ class AuthController extends BaseController {
       return this.success(res, result);
     } catch (error) {
       logger.error('Check existing user error:', error);
+      if (error.statusCode === 409) {
+        return this.error(res, error.message, { field: 'phone' });
+      }
       next(error);
     }
   }
@@ -684,49 +628,19 @@ class AuthController extends BaseController {
     }
   }
 
-  requestEmailVerification = async (req, res, next) => {
-    try {
-      const userId = req.user.id;
-      const { email, userType = 'user' } = req.body;
-
-      const token = await authService.generateVerificationToken(userId, userType);
-
-      await sendEmailEvent({
-        type: 'email-verification',
-        to: email,
-        subject: 'Verify Your Sendrey Email',
-        template: 'emailVerification',
-        data: {
-          name: req.user.firstName,
-          verificationToken: token,
-          verificationUrl: `${process.env.FRONTEND_URL}/verify-email?token=${token}`,
-        },
-      });
-
-      logger.info(`Email verification token queued for ${userType}: ${email}`);
-      this.success(res, { message: 'Verification email sent to your inbox' });
-
-    } catch (error) {
-      logger.error('Email verification request error:', error);
-      next(error);
-    }
-  }
-
-  resendEmailVerification = async (req, res, next) => {
+  resendVerificationEmail = async (req, res, next) => {
     try {
       const { email, userType = 'user' } = req.body;
-      const { user, token } = await authService.resendVerificationEmail(email, userType);
+      const { user, otp } = await authService.resendVerificationEmail(email, userType);
 
       if (user.email) {
         await sendEmailEvent({
-          type: 'email-verification',
+          type: 'otp',
           to: user.email,
-          subject: 'Verify Your Sendrey Account',
-          template: 'emailVerification',
+          subject: 'Your Sendrey Verification Code',
+          template: 'resendEmailVerification',
           data: {
-            name: user.firstName,
-            verificationToken: token,
-            verificationUrl: `${process.env.FRONTEND_URL}/verify-email?token=${token}`,
+            name: user.firstName, otp
           },
         });
       }

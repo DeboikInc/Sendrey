@@ -16,6 +16,7 @@ export const Home = () => {
         const params = new URLSearchParams(window.location.search);
         let token = params.get('token');
         let inviteToken = params.get('invite');
+        const ref = params.get('ref');
 
         // strip ${ } wrapper if present (Postman/email client artifact)
         if (token?.startsWith('${')) token = token.slice(2, -1);
@@ -38,6 +39,10 @@ export const Home = () => {
                     console.log('invite token error:', err);
                 });
             return;
+        }
+
+        if (ref) {
+            localStorage.setItem('referralCode', ref);
         }
 
         // ── Email verification flow ──

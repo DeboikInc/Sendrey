@@ -15,6 +15,7 @@ import businessReducer from '../Redux/businessSlice';
 import payoutReducer from '../Redux/payoutSlice';
 import pinReducer from '../Redux/pinSlice';
 import notificationReducer from '../Redux/notificationSlice';
+import referralReducer from "../Redux/referralSlice";
 
 const store = configureStore({
   reducer: {
@@ -33,6 +34,7 @@ const store = configureStore({
     business: businessReducer,
     notification: notificationReducer,
     pin: persistReducer({ key: 'pin', storage, whitelist: ['isPinSet'] }, pinReducer),
+    referrals: referralReducer
   },
   middleware: (getDefaultMiddleware) =>
     getDefaultMiddleware({

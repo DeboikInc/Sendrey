@@ -13,9 +13,6 @@ const {
 const refreshTokenLimiter = ipRateLimit({ windowMs: 60 * 1000, maxRequests: 5 });
 const meEndpointLimiter = ipRateLimit({ windowMs: 60 * 1000, maxRequests: 8 });
 
-
-// router.get('/check-runner', authController.checkExistingUserOrRunner);
-
 router.post('/send-returning-user-otp',
   ipRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 10 }),
   authController.sendReturningUserEmailOTP
@@ -121,18 +118,11 @@ router.post('/change-password',
 
 
 // emails
-router.post('/request-email-verification',
-  // authenticate,
-  validate(authValidation.requestEmailVerification),
-  authController.requestEmailVerification
-);
-
-
 router.post('/resend-email-verification',
   // authenticate,
   userRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 5 }), // 3 resends per hour
   validate(authValidation.resendVerification),
-  authController.resendEmailVerification
+  authController.resendVerificationEmail
 );
 
 

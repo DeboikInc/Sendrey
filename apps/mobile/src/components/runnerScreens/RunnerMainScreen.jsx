@@ -1,5 +1,5 @@
 // components/runnerScreens/RunnerMainScreen.jsx - Mobile-First Refactor
-import React, { useEffect, useRef } from "react";
+import React, { useRef } from "react";
 import OnboardingScreen from "./OnboardingScreen";
 import RunnerChatScreen from "./RunnerChatScreen";
 import useOrderStore from "../../store/orderStore";

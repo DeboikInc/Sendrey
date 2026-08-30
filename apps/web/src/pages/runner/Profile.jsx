@@ -4,13 +4,14 @@ import { useDispatch, useSelector } from 'react-redux';
 import {
     ChevronLeft, ChevronRight, User, Trash2, Camera,
     Star, Phone, Shield, KeyRound, Clock, XCircle, CheckCircle,
-    Bell, BellOff, Moon, Sun
+    Bell, BellOff, Moon, Sun, Copy, Check, Users
 } from 'lucide-react';
 import { getRunnerRatings } from '../../Redux/ratingSlice';
 import { setPin, resetPin, setPinSet } from '../../Redux/pinSlice';
 import { updateProfile, getProfile } from '../../Redux/runnerSlice';
 import { optInNotifications, optOutNotifications, getNotificationPreferences } from '../../Redux/notificationSlice';
 import { PinPad } from '../../components/common/PinPad';
+import { getMyReferrals } from "../../Redux/referralSlice";
 
 const ConfirmModal = ({ field, value, onConfirm, onCancel, dark }) => (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -25,14 +26,14 @@ const ConfirmModal = ({ field, value, onConfirm, onCancel, dark }) => (
                 "{value}"
             </p>
             <div className="flex justify-end gap-3 font-medium text-sm sm:text-base">
-                <button 
-                    onClick={onCancel} 
+                <button
+                    onClick={onCancel}
                     className="text-black-100/80 dark:text-gray-400 px-2 py-1 active:scale-95 transition-transform"
                 >
                     Cancel
                 </button>
-                <button 
-                    onClick={onConfirm} 
+                <button
+                    onClick={onConfirm}
                     className="text-primary px-2 py-1 active:scale-95 transition-transform"
                 >
                     Save
@@ -57,13 +58,13 @@ const StarDisplay = ({ rating }) => {
     );
 };
 
-export const Profile = ({ 
-    darkMode, 
-    onBack, 
-    runnerId, 
-    registrationComplete, 
-    runnerData: initialRunnerData, 
-    onToggleDarkMode 
+export const Profile = ({
+    darkMode,
+    onBack,
+    runnerId,
+    registrationComplete,
+    runnerData: initialRunnerData,
+    onToggleDarkMode
 }) => {
     const dispatch = useDispatch();
     const averageRating = useSelector(s => s.rating.averageRating);
@@ -71,6 +72,8 @@ export const Profile = ({
     const isPinSet = useSelector(s => s.pin.isPinSet);
     const profileFromStore = useSelector(s => s.runners.profile);
     const notificationPrefs = useSelector(s => s.notification?.preferences);
+    const { referrals } = useSelector((s) => s.referrals);
+
 
     const [runnerData, setRunnerData] = useState(initialRunnerData || {});
     const [editingField, setEditingField] = useState(null);
@@ -79,7 +82,10 @@ export const Profile = ({
     const [saving, setSaving] = useState(false);
     const [saveError, setSaveError] = useState(null);
     const [avatarUploading, setAvatarUploading] = useState(false);
+    const [copied, setCopied] = useState(false);
     const fileInputRef = useRef(null);
+
+    const referralLink = `${process.env.REACT_APP_URL}?ref=${runnerData?.referralCode}`;
 
     const [pinMode, setPinMode] = useState(null);
     const [collectedCurrentPin, setCollectedCurrentPin] = useState('');
@@ -117,6 +123,7 @@ export const Profile = ({
         fetchData();
         dispatch(getRunnerRatings({ runnerId, page: 1 }));
         dispatch(getNotificationPreferences({ userId: runnerId, userType: 'runner' }));
+        dispatch(getMyReferrals());
     }, [runnerId, dispatch]);
 
     useEffect(() => {
@@ -211,6 +218,16 @@ export const Profile = ({
         }
     };
 
+    const handleCopyReferralLink = async () => {
+        try {
+            await navigator.clipboard.writeText(referralLink);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+        } catch (err) {
+            console.error("Copy failed:", err);
+        }
+    };
+
     const fields = [
         { key: 'firstName', label: 'First Name' },
         { key: 'lastName', label: 'Last Name' },
@@ -220,8 +237,8 @@ export const Profile = ({
         return (
             <div className={`h-full flex flex-col bg-white dark:bg-black-100 ${darkMode ? 'dark' : ''}`}>
                 <div className="flex items-center border-b border-gray-100 dark:border-white/10 p-3 sm:p-4">
-                    <button 
-                        onClick={onBack} 
+                    <button
+                        onClick={onBack}
                         className="cursor-pointer text-black-200 dark:text-gray-300 p-1 -ml-1 active:scale-95 transition-transform"
                         aria-label="Go back"
                     >
@@ -244,8 +261,8 @@ export const Profile = ({
         <div className={`h-screen flex flex-col bg-white dark:bg-black-100 ${darkMode ? 'dark' : ''}`}>
             {/* Header */}
             <div className="flex items-center border-b border-gray-100 dark:border-white/10 p-3 sm:p-4 flex-shrink-0">
-                <button 
-                    onClick={onBack} 
+                <button
+                    onClick={onBack}
                     className="cursor-pointer text-black-200 dark:text-gray-300 p-1 -ml-1 active:scale-95 transition-transform"
                     aria-label="Go back"
                 >
@@ -262,9 +279,9 @@ export const Profile = ({
                     <div className="relative">
                         <div className="w-20 h-20 sm:w-24 sm:h-24 rounded-full bg-gray-200 dark:bg-black-200 overflow-hidden flex items-center justify-center">
                             {runnerData.avatar ? (
-                                <img 
-                                    src={runnerData.avatar} 
-                                    alt="avatar" 
+                                <img
+                                    src={runnerData.avatar}
+                                    alt="avatar"
                                     className="w-full h-full object-cover"
                                     loading="lazy"
                                 />
@@ -313,8 +330,8 @@ export const Profile = ({
                 {/* Editable fields */}
                 <div className="px-3 sm:px-4 pb-4 space-y-3">
                     {fields.map(({ key, label }) => (
-                        <div 
-                            key={key} 
+                        <div
+                            key={key}
                             className="border border-black-100/20 dark:border-white/10 rounded-xl px-3 sm:px-4 py-3 min-h-[70px]"
                         >
                             <p className="text-xs text-black-100/80 dark:text-gray-500 mb-1">{label}</p>
@@ -336,9 +353,8 @@ export const Profile = ({
                                     tabIndex={0}
                                     onKeyDown={(e) => e.key === 'Enter' && handleEditStart(key, runnerData[key])}
                                 >
-                                    <p className={`text-sm sm:text-base text-black-200 dark:text-gray-200 ${
-                                        !runnerData[key] ? 'text-black-100/80 dark:text-gray-400' : ''
-                                    }`}>
+                                    <p className={`text-sm sm:text-base text-black-200 dark:text-gray-200 ${!runnerData[key] ? 'text-black-100/80 dark:text-gray-400' : ''
+                                        }`}>
                                         {runnerData[key] || 'Not set'}
                                     </p>
                                     <ChevronRight className="w-4 h-4 sm:w-5 sm:h-5 text-black-100/80 dark:text-gray-400 flex-shrink-0 ml-2" />
@@ -492,6 +508,47 @@ export const Profile = ({
                     )}
                 </div>
 
+                <div className="px-3 sm:px-4 pb-4">
+                    <p className={`text-[10px] sm:text-xs font-semibold uppercase tracking-widest mb-3 
+                        ${darkMode ? 'text-gray-500' : 'text-black-100/80'}`}>
+                        Referrals
+                    </p>
+
+                    <div className="border border-gray-200 dark:border-white/10 rounded-xl px-3 sm:px-4 py-3 min-h-[70px] mb-3">
+                        <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                                <Users className="w-4 h-4 text-primary" />
+                            </div>
+                            <div>
+                                <p className="text-xs text-black-100/80 dark:text-gray-500 mb-1">Total Referrals</p>
+                                <p className="text-sm sm:text-base font-medium text-black-200 dark:text-gray-200">
+                                    {referrals.length}
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="border border-gray-200 dark:border-white/10 rounded-xl px-3 sm:px-4 py-3">
+                        <p className="text-xs text-black-100/80 dark:text-gray-500 mb-1">Your Referral Code</p>
+                        <p className="text-xs sm:text-base font-medium text-black-200 dark:text-gray-200">
+                            {runnerData?.referralCode || '—'}
+                        </p>
+
+                        <button
+                            onClick={handleCopyReferralLink}
+                            className="mt-3 w-full flex items-center justify-between border border-gray-200 dark:border-white/10 rounded-xl px-3 sm:px-4 py-3 active:scale-[0.98] transition-transform"
+                        >
+                            <span className="truncate text-xs sm:text-sm text-black-200 dark:text-gray-200">
+                                {referralLink}
+                            </span>
+                            {copied
+                                ? <Check className="w-4 h-4 text-primary flex-shrink-0 ml-2" />
+                                : <Copy className="w-4 h-4 text-black-100/80 dark:text-gray-400 flex-shrink-0 ml-2" />
+                            }
+                        </button>
+                    </div>
+                </div>
+
                 {/* Preferences Section */}
                 <div className="px-3 sm:px-4 pb-4">
                     <p className={`text-[10px] sm:text-xs font-semibold uppercase tracking-widest mb-3 
@@ -513,12 +570,10 @@ export const Profile = ({
                                 {darkMode ? "Dark Mode" : "Light Mode"}
                             </p>
                         </div>
-                        <div className={`w-11 h-6 rounded-full transition-colors duration-300 relative flex-shrink-0 ml-4 ${
-                            darkMode ? "bg-primary" : "bg-gray-200"
-                        }`}>
-                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all duration-300 ${
-                                darkMode ? "left-6" : "left-1"
-                            }`} />
+                        <div className={`w-11 h-6 rounded-full transition-colors duration-300 relative flex-shrink-0 ml-4 ${darkMode ? "bg-primary" : "bg-gray-200"
+                            }`}>
+                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all duration-300 ${darkMode ? "left-6" : "left-1"
+                                }`} />
                         </div>
                     </button>
 
@@ -535,32 +590,28 @@ export const Profile = ({
                                 <BellOff className="h-4 w-4 sm:h-5 sm:w-5 text-black-100/80 dark:text-gray-400 flex-shrink-0" />
                             )}
                             <div className="text-left min-w-0">
-                                <p className={`text-sm sm:text-base font-medium truncate ${
-                                    darkMode ? 'text-gray-200' : 'text-black-200'
-                                }`}>
+                                <p className={`text-sm sm:text-base font-medium truncate ${darkMode ? 'text-gray-200' : 'text-black-200'
+                                    }`}>
                                     {isOptedIn ? 'Notifications On' : isOptedOut ? 'Notifications Off' : 'Notifications'}
                                 </p>
                                 {(notificationSuccess || notificationError) ? (
-                                    <p className={`text-xs font-medium truncate ${
-                                        notificationError ? 'text-red-500' : 'text-green-500'
-                                    }`}>
+                                    <p className={`text-xs font-medium truncate ${notificationError ? 'text-red-500' : 'text-green-500'
+                                        }`}>
                                         {notificationError || notificationSuccess}
                                     </p>
                                 ) : (
                                     <p className="text-xs text-black-100/80 dark:text-gray-400 truncate">
-                                        {isOptedIn ? 'All notifications enabled' : 
-                                         isOptedOut ? 'All notifications disabled' : 
-                                         'Tap to manage'}
+                                        {isOptedIn ? 'All notifications enabled' :
+                                            isOptedOut ? 'All notifications disabled' :
+                                                'Tap to manage'}
                                     </p>
                                 )}
                             </div>
                         </div>
-                        <div className={`w-11 h-6 rounded-full transition-colors duration-300 relative flex-shrink-0 ml-4 ${
-                            isOptedIn ? "bg-primary" : "bg-gray-200"
-                        }`}>
-                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all duration-300 ${
-                                isOptedIn ? "left-6" : "left-1"
-                            }`} />
+                        <div className={`w-11 h-6 rounded-full transition-colors duration-300 relative flex-shrink-0 ml-4 ${isOptedIn ? "bg-primary" : "bg-gray-200"
+                            }`}>
+                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all duration-300 ${isOptedIn ? "left-6" : "left-1"
+                                }`} />
                         </div>
                     </button>
                 </div>

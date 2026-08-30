@@ -245,6 +245,13 @@ const userSchema = new mongoose.Schema({
     default: 0
   },
   lockUntil: Date,
+  
+  referralCode: { 
+    type: String, 
+    unique: true, 
+    sparse: true, 
+    index: true 
+  },
 
   // Account Statistics
   profileViews: {

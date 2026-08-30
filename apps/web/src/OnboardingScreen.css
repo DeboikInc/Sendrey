@@ -43,6 +43,7 @@
   flex-shrink: 0;
   padding: 0;
   margin: 0;
+  padding-bottom: 10px;
   /* Sits flush at the bottom naturally because it's the last
      flex-shrink:0 child in a column that's exactly viewport-height.
      No position:fixed needed — fixed + mobile keyboards is what

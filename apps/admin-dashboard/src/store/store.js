@@ -10,6 +10,7 @@ import orderReducer from '../Redux/orderSlice';
 import payoutReducer from '../Redux/payoutSlice';
 import escrowReducer from '../Redux/escrowSlice';
 import configReducer from '../Redux/configSlice'
+import referralReducer from '../Redux/referralSlice';
 
 const store = configureStore({
   reducer: {
@@ -23,6 +24,7 @@ const store = configureStore({
     payouts: payoutReducer,
     escrow: escrowReducer,
     config: configReducer,
+    referrals: referralReducer,
   },
 });
 
