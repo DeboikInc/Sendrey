@@ -14,7 +14,8 @@ export const useCameraHook = (requestMediaAccess) => {
       setIsPreviewOpen(false);
       setCameraOpen(true);
 
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // wait ...
+      await new Promise(resolve => requestAnimationFrame(resolve));
 
       if (!videoRef.current) {
         console.error('❌ Video element not found after waiting!');
@@ -22,10 +23,11 @@ export const useCameraHook = (requestMediaAccess) => {
         return;
       }
 
-      const stream = await requestMediaAccess('camera', { video: { facingMode, width: { ideal: 1280 }, height: { ideal: 720 } } });
+      const stream = await requestMediaAccess('camera', {
+        constraints: { video: { facingMode, width: { ideal: 1280 }, height: { ideal: 720 } } }
+      });
 
       if (!videoRef.current) {
-        console.error('❌ Video ref lost!');
         stream.getTracks().forEach(track => track.stop());
         setCameraOpen(false);
         return;
@@ -123,7 +125,10 @@ export const useCameraHook = (requestMediaAccess) => {
     }
 
     try {
-      const stream = await requestMediaAccess('camera', { video: { facingMode, width: { ideal: 1280 }, height: { ideal: 720 } } });
+      const stream = await requestMediaAccess('camera', {
+        constraints: { video: { facingMode, width: { ideal: 1280 }, height: { ideal: 720 } } }
+      });
+
       if (!videoRef.current) return;
       videoRef.current.srcObject = stream;
       streamRef.current = stream;

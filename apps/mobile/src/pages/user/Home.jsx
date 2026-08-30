@@ -11,7 +11,7 @@ export const Home = () => {
     const [dark, setDark] = useDarkMode();
     const navigate = useNavigate();
     const dispatch = useDispatch();
-    // gh
+    
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
         let token = params.get('token');
