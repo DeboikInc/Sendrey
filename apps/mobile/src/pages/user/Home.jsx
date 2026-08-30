@@ -1,4 +1,4 @@
-import RoleSelectionScreen from "../../components/screens/RoleSelectionScreen";
+import RoleSelectionScreen from "../../components/common/RoleSelectionScreen";
 import useDarkMode from "../../hooks/useDarkMode";
 import { useNavigate } from "react-router-dom";
 import { useEffect } from "react";
