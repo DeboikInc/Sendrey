@@ -498,6 +498,7 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
     try {
       const checkResult = await dispatch(checkExistingUser({
         email: updatedRunnerData.email,
+        phone: updatedRunnerData.phone,
         userType: 'runner'
       })).unwrap();
 
@@ -528,6 +529,25 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
         return;
       }
     } catch (checkErr) {
+      
+      if (checkErr?.field === 'phone') {
+        setMessages(prev => prev.filter(m => m.text !== 'In progress...'));
+        const phoneIdx = CREDENTIAL_QUESTIONS.findIndex(q => q.field === 'phone');
+        setRunnerData({ ...updatedRunnerData, phone: '' });
+        setMessages(prev => [...prev, {
+          id: Date.now(),
+          from: "them",
+          text: `${checkErr.message} ${CREDENTIAL_QUESTIONS[phoneIdx].question}`,
+          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          status: "delivered",
+          isCredential: true,
+        }]);
+        setCredentialStep(phoneIdx);
+        setIsCollectingCredentials(true);
+        isAnsweringRef.current = false;
+        return;
+      }
+
       console.warn('User check failed, proceeding with registration:', checkErr);
     }
 

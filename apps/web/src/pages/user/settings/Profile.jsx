@@ -1,16 +1,23 @@
 // user/profile
-import React, { useRef, useState } from "react";
+import React, { useRef, useState, useEffect } from "react";
 import { useDispatch, useSelector } from "react-redux";
-import { Camera, Mail, Phone, User, Shield, KeyRound, ChevronRight } from "lucide-react";
+import {
+  Camera, Mail, Phone,
+  User, Shield, KeyRound, ChevronRight,
+  Copy, Check, Users
+} from "lucide-react";
 import { updateProfile } from "../../../Redux/userSlice";
 import { updateUser } from "../../../Redux/authSlice";
-import { setPin, resetPin,  } from "../../../Redux/pinSlice";
+import { setPin, resetPin, } from "../../../Redux/pinSlice";
+import { getMyReferrals } from "../../../Redux/referralSlice";
 import { PinPad } from "../../../components/common/PinPad";
 
 export default function Profile({ darkMode }) {
   const dispatch = useDispatch();
   const { user } = useSelector((s) => s.auth);
   const { isPinSet } = useSelector((s) => s.pin);
+  const { referrals } = useSelector((s) => s.referrals);
+
   const fileRef = useRef(null);
   const [uploading, setUploading] = useState(false);
 
@@ -18,8 +25,10 @@ export default function Profile({ darkMode }) {
   const [collectedCurrentPin, setCollectedCurrentPin] = useState('');
   const [pinSaveError, setPinSaveError] = useState(null);
   const [pinSuccess, setPinSuccess] = useState(null);
+  const [copied, setCopied] = useState(false);
 
   const hasPinSet = user?.pin !== undefined || isPinSet;
+  const referralLink = `${process.env.REACT_APP_URL}?ref=${user?.referralCode}`;
 
   const card = darkMode ? "bg-black-200 border-white/10" : "bg-gray-50 border-gray-100";
   const heading = darkMode ? "text-white" : "text-black-200";
@@ -41,6 +50,20 @@ export default function Profile({ darkMode }) {
       console.error("Avatar upload failed:", err);
     } finally {
       setUploading(false);
+    }
+  };
+
+  useEffect(() => {
+    dispatch(getMyReferrals());
+  }, [dispatch]);
+
+  const handleCopyReferralLink = async () => {
+    try {
+      await navigator.clipboard.writeText(referralLink);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error("Copy failed:", err);
     }
   };
 
@@ -73,8 +96,8 @@ export default function Profile({ darkMode }) {
           {user?.firstName} {user?.lastName}
         </p>
         <span className={`mt-1 text-[10px] font-black uppercase tracking-[0.2em] px-3 py-1 rounded-lg ${user?.accountType === "business"
-            ? "bg-primary/10 text-primary"
-            : darkMode ? "bg-white/5 text-gray-400" : "bg-gray-100 text-gray-500"
+          ? "bg-primary/10 text-primary"
+          : darkMode ? "bg-white/5 text-gray-400" : "bg-gray-100 text-gray-500"
           }`}>
           {user?.accountType === "business" ? "Business Account" : "Personal Account"}
         </span>
@@ -115,6 +138,35 @@ export default function Profile({ darkMode }) {
         <p className="text-primary text-xs">
           To change any information, contact <a href="mailto:support@sendrey.com">support@sendrey.com</a>
         </p>
+
+        <div className="space-y-2">
+          <p className={`text-[10px] font-black uppercase tracking-[0.2em] ${darkMode ? "text-gray-500" : "text-gray-400"}`}>
+            Referrals
+          </p>
+
+          <div className={fieldRow}>
+            <div className={`w-9 h-9 rounded-xl flex items-center justify-center ${darkMode ? "bg-black-100" : "bg-white"}`}>
+              <Users className="h-4 w-4 text-gray-400" />
+            </div>
+            <div>
+              <p className={label}>Total Referrals</p>
+              <p className={value}>{referrals.length}</p>
+            </div>
+          </div>
+
+          <div className={`p-4 rounded-2xl border ${card}`}>
+            <p className={label}>Your Referral Code</p>
+            <p className={`${value} mt-1`}>{user?.referralCode}</p>
+
+            <button
+              onClick={handleCopyReferralLink}
+              className="mt-3 w-full flex items-center justify-between px-4 py-3 rounded-xl bg-primary/10 text-primary text-xs font-semibold"
+            >
+              <span className="truncate">{referralLink}</span>
+              {copied ? <Check className="w-4 h-4 shrink-0" /> : <Copy className="w-4 h-4 shrink-0" />}
+            </button>
+          </div>
+        </div>
       </div>
 
       {/* ── Security / PIN ───────────────────────────────────────────────────── */}
@@ -192,81 +244,89 @@ export default function Profile({ darkMode }) {
       {/* ── PIN Modals ────────────────────────────────────────────────────────── */}
 
       {/* Set PIN */}
-      {pinMode === 'set' && (
-        <PinPad
-          dark={darkMode}
-          title="Set Transaction PIN"
-          subtitle="Choose a 4-digit PIN for payments"
-          skipVerify
-          confirmMode={true}
-          onPin={async (pin) => {
-            try {
-              await dispatch(setPin({ pin })).unwrap();
-              setPinMode(null);
-              setPinSuccess('PIN set successfully');
-            } catch (err) {
-              setPinSaveError(err || 'Failed to set PIN');
-              setPinMode(null);
-            }
-          }}
-          onCancel={() => setPinMode(null)}
-        />
-      )}
+      {
+        pinMode === 'set' && (
+          <PinPad
+            dark={darkMode}
+            title="Set Transaction PIN"
+            subtitle="Choose a 4-digit PIN for payments"
+            skipVerify
+            confirmMode={true}
+            onPin={async (pin) => {
+              try {
+                await dispatch(setPin({ pin })).unwrap();
+                setPinMode(null);
+                setPinSuccess('PIN set successfully');
+              } catch (err) {
+                setPinSaveError(err || 'Failed to set PIN');
+                setPinMode(null);
+              }
+            }}
+            onCancel={() => setPinMode(null)}
+          />
+        )
+      }
 
       {/* Reset PIN — step 1: verify current */}
-      {pinMode === 'reset_current' && (
-        <PinPad
-          dark={darkMode}
-          title="Current PIN"
-          subtitle="Enter your current PIN to continue"
-          skipVerify
-          onPin={(pin) => {
-            setCollectedCurrentPin(pin);
-            setPinMode('reset_new');
-          }}
-          onCancel={() => setPinMode(null)}
-        />
-      )}
+      {
+        pinMode === 'reset_current' && (
+          <PinPad
+            dark={darkMode}
+            title="Current PIN"
+            subtitle="Enter your current PIN to continue"
+            skipVerify
+            onPin={(pin) => {
+              setCollectedCurrentPin(pin);
+              setPinMode('reset_new');
+            }}
+            onCancel={() => setPinMode(null)}
+          />
+        )
+      }
 
       {/* Reset PIN — step 2: new PIN */}
-      {pinMode === 'reset_new' && (
-        <PinPad
-          dark={darkMode}
-          title="New PIN"
-          subtitle="Choose your new 4-digit PIN"
-          skipVerify
-          confirmMode={true}
-          onPin={async (newPin) => {
-            try {
-              await dispatch(resetPin({ currentPin: collectedCurrentPin, newPin })).unwrap();
-              setPinMode(null);
-              setCollectedCurrentPin('');
-              setPinSuccess('PIN updated successfully');
-            } catch (err) {
-              setPinSaveError(err || 'Failed to update PIN. Check your current PIN.');
-              setPinMode(null);
-              setCollectedCurrentPin('');
-            }
-          }}
-          onCancel={() => { setPinMode(null); setCollectedCurrentPin(''); }}
-        />
-      )}
+      {
+        pinMode === 'reset_new' && (
+          <PinPad
+            dark={darkMode}
+            title="New PIN"
+            subtitle="Choose your new 4-digit PIN"
+            skipVerify
+            confirmMode={true}
+            onPin={async (newPin) => {
+              try {
+                await dispatch(resetPin({ currentPin: collectedCurrentPin, newPin })).unwrap();
+                setPinMode(null);
+                setCollectedCurrentPin('');
+                setPinSuccess('PIN updated successfully');
+              } catch (err) {
+                setPinSaveError(err || 'Failed to update PIN. Check your current PIN.');
+                setPinMode(null);
+                setCollectedCurrentPin('');
+              }
+            }}
+            onCancel={() => { setPinMode(null); setCollectedCurrentPin(''); }}
+          />
+        )
+      }
 
       {/* Forgot PIN */}
-      {pinMode === 'forgot' && (
-        <PinPad
-          dark={darkMode}
-          title="Reset PIN"
-          subtitle="We'll send an OTP to verify your identity"
-          forgotMode={true}
-          onVerified={() => {
-            setPinMode(null);
-            setPinSuccess('PIN reset successfully');
-          }}
-          onCancel={() => setPinMode(null)}
-        />
-      )}
+      {
+        pinMode === 'forgot' && (
+          <PinPad
+            dark={darkMode}
+            title="Reset PIN"
+            subtitle="We'll send an OTP to verify your identity"
+            forgotMode={true}
+            onVerified={() => {
+              setPinMode(null);
+              setPinSuccess('PIN reset successfully');
+            }}
+            onCancel={() => setPinMode(null)}
+          />
+        )
+      }
 
-    </div>
+    </div >
   );
 }

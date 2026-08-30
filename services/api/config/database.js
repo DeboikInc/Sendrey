@@ -15,8 +15,6 @@ const connectDb = async () => {
     const dbConnect = await mongoose.connect(currentDB);
 
     console.log("Connecting to database");
-
-    // console.log(`Database connected successfully to ${dbConnect.connection.name}`);
     const totalUsers = await User.countDocuments({});
     console.log(`Total users in DB: ${totalUsers}`);
 

@@ -189,6 +189,11 @@ export const Auth = () => {
   const extractAllErrors = (error) => {
     const errors = [];
 
+    if (error?.field) {
+      if (error.message) errors.push(error.message);
+      return errors;
+    }
+
     if (Array.isArray(error)) {
       error.forEach(err => {
         const msg = err?.message || err || '';
@@ -302,6 +307,7 @@ export const Auth = () => {
     try {
       const checkResult = await dispatch(checkExistingUser({
         email: payload.email,
+        phone: payload.phone,
         userType: userType || 'user'
       })).unwrap();
 
@@ -317,6 +323,10 @@ export const Auth = () => {
         return;
       }
     } catch (error) {
+      if (error?.field === 'phone') {
+        setAllErrors(extractAllErrors(error));
+        return;
+      }
       console.warn('User check failed, proceeding with registration:', error);
     }
 
@@ -335,12 +345,16 @@ export const Auth = () => {
       setAllErrors([]);
     } catch (error) {
       console.error("Registration failed:", error);
+
       const raw = error?.errors
         ? Object.values(error.errors).map(e => e?.message || e).join(" ")
         : error?.message || error?.data?.message || String(error);
 
-      const isAlreadyExists = error?.status === 409 || error?.statusCode === 409 ||
-        /already exist|already registered/i.test(raw);
+      const isPhoneConflict = error?.field === 'phone';
+      const isAlreadyExists = !isPhoneConflict && (
+        error?.status === 409 || error?.statusCode === 409 ||
+        /already exist|already registered/i.test(raw)
+      );
 
       if (isAlreadyExists) {
         // Race condition — user was created between check and register

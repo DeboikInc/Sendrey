@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@material-tailwind/react";
 import { User, Navigation } from "lucide-react"; // eslint-disable-line no-unused-vars
 import { useNavigate } from "react-router-dom";
-import Message from "../common/Message";
-import Onboarding from "../common/Onboarding";
+import Message from "./Message";
+import Onboarding from "./Onboarding";
 
 const getCurrentTime = () => {
   return new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
@@ -103,7 +103,7 @@ export default function RoleSelectionScreen({ onSelectRole, darkMode, toggleDark
         <div ref={listRef} className="flex-1 overflow-y-auto p-4">
           {messages.map((m) => (
             <Message key={m.id} m={m}
-            showStatusIcons={false}
+              showStatusIcons={false}
               disableContextMenu={true}
             />
           ))}

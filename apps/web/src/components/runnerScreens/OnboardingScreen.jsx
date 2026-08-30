@@ -252,7 +252,7 @@ function OnboardingScreen({
   return (
     <div className="onboarding-container bg-gray-100 dark:bg-black-200">
       {/* Header */}
-      <div className="onboarding-header px-3 py-2 sm:px-5 sm:py-3 lg:px-8 lg:py-4 border-b dark:border-white/10 border-gray-200 flex items-center justify-between bg-white/5/10 backdrop-blur-xl">
+      <div className="onboarding-header px-3 py-2 sm:px-5 sm:py-3 lg:px-8 lg:py-3 border-b dark:border-white/10 border-gray-200 flex items-center justify-between bg-white/5/10 backdrop-blur-xl">
         <div className="flex items-center gap-2 sm:gap-3 lg:gap-4 min-w-0">
           <Avatar
             src={sendreyBot}
@@ -261,7 +261,7 @@ function OnboardingScreen({
             className="w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 flex-shrink-0"
           />
           <div className="truncate min-w-0">
-            <div className="font-bold text-sm sm:text-[16px] lg:text-lg truncate dark:text-white text-black-200">
+            <div className="font-bold text-sm sm:text-[14px] lg:text-lg truncate dark:text-white text-black-200">
               Sendrey Assistant
             </div>
             <div className="text-xs sm:text-sm lg:text-base font-medium text-black-100/70 dark:text-gray-400">
@@ -272,7 +272,7 @@ function OnboardingScreen({
         <div className="hidden sm:flex">
           <div
             onClick={() => setDark(!dark)}
-            className="cursor-pointer bg-gray-900 dark:bg-gray-100/60 rounded-full w-8 h-8 sm:w-10 sm:h-10 lg:w-12 lg:h-12 flex items-center justify-center hover:scale-105 transition-transform"
+            className="cursor-pointer bg-gray-900 dark:bg-gray-100/60 rounded-full w-8 h-8 sm:w-10 sm:h-10 lg:w-10 lg:h-10 flex items-center justify-center hover:scale-105 transition-transform"
           >
             {dark ? <Sun className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-white" /> : <Moon className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-white" strokeWidth={3.0} />}
           </div>
@@ -310,7 +310,7 @@ function OnboardingScreen({
 
       {/* Fleet Selection */}
       {showFleet && (
-        <div className="onboarding-fleet bg-gray-100 dark:bg-black-200">
+        <div className="onboarding-fleet flex justify-center gap-2 sm:gap-3 lg:gap-4 bg-gray-100 dark:bg-black-200">
           {FLEET_OPTIONS.map(({ type, icon: Icon, label }) => (
             <Button
               key={type}

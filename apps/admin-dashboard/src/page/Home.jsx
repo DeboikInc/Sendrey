@@ -11,6 +11,7 @@ import UsersTab from './UsersTab';
 import OrdersTab from './OrdersTab';
 import PayoutTab from './PayoutTab';
 import ConfigTab from './ConfigTab';
+import ReferralsTab from './ReferralsTab'
 
 const PAGES = {
   'dashboard':      <KycTab />,
@@ -20,6 +21,7 @@ const PAGES = {
   'users':          <UsersTab />,
   'orders':         <OrdersTab />,
   'payout':         <PayoutTab />,
+  'referrals':      <ReferralsTab />,
   'config':         <ConfigTab />,
 };
 

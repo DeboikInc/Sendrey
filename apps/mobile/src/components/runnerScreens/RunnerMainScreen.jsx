@@ -1,4 +1,4 @@
-// components/runnerScreens/RunnerMainScreen.jsx
+// components/runnerScreens/RunnerMainScreen
 import React, { useRef } from "react";
 import OnboardingScreen from "./OnboardingScreen";
 import RunnerChatScreen from "./RunnerChatScreen";

@@ -4,25 +4,32 @@ import useOrderStore from '../store/orderStore';
 import { authStorage } from "../utils/authStorage";
 
 export const register = createAsyncThunk("auth/register", async (data, thunkAPI) => {
-    const { role, email, fullName, firstName, lastName, phone, fleetType, latitude, longitude } = data;
+    const {
+        role, email, fullName, firstName,
+        lastName, phone, fleetType, latitude, longitude,
+    } = data;
     try {
         const endpoint = role === "runner" ? "/auth/register-runner" : "/auth/register-user";
+        const referralCode = localStorage.getItem('referralCode') || undefined;
 
         const payload = role === "runner"
             ? {
                 phone, email, fleetType, role, latitude, longitude,
                 isOnline: true, isAvailable: true,
+                ...(referralCode && { referralCode }),
                 ...(fullName && { fullName }),
                 ...(firstName && { firstName }),
                 ...(lastName && { lastName }),
             }
             : {
                 phone, email, role, latitude, longitude,
+                ...(referralCode && { referralCode }),
                 ...(fullName && { fullName }),
                 ...(firstName && { firstName }),
                 ...(lastName && { lastName }),
             };
 
+        console.log('Referral Code check:', referralCode);
         const response = await api.post(endpoint, payload);
         return response.data;
     } catch (error) {
@@ -84,16 +91,6 @@ export const resendEmailVerification = createAsyncThunk("auth/resend-email-verif
     }
 });
 
-export const requestEmailVerification = createAsyncThunk("auth/request-email-verification", async ({ email }, thunkAPI) => {
-    try {
-        const response = await api.post("/auth/request-email-verification", { email });
-        return response.data;
-    } catch (error) {
-        return thunkAPI.rejectWithValue(error.response?.data?.message || "failed to request email verification");
-    }
-});
-
-
 export const phoneVerificationRequest = createAsyncThunk("auth/phone-verification-request", async ({ phone }, thunkAPI) => {
     try {
         const response = await api.post("/auth/request-phone-verification", { phone });
@@ -154,9 +151,10 @@ export const fetchUserMe = createAsyncThunk('auth/fetchUserMe', async (_, { reje
     }
 });
 
-export const checkExistingUser = createAsyncThunk('auth/check-existing-user', async ({ email, userType = 'user' }, { rejectWithValue }) => {
+export const checkExistingUser = createAsyncThunk('auth/check-existing-user', 
+    async ({ email, phone, userType = 'user' }, { rejectWithValue }) => {
     try {
-        const res = await api.post('/auth/check-existing-user', { email, userType });
+        const res = await api.post('/auth/check-existing-user', { email, phone, userType });
         return res.data;
     } catch (err) {
         return rejectWithValue({
@@ -247,6 +245,7 @@ const authSlice = createSlice({
             // ── Register ───────────────────────────────────────────────────────────
             .addCase(register.pending, (state) => { state.status = "loading"; state.error = null; })
             .addCase(register.fulfilled, (state, action) => {
+                localStorage.removeItem('referralCode');
                 state.status = "succeeded";
                 if (action.payload.runner) {
                     state.runner = action.payload.runner;
@@ -357,11 +356,6 @@ const authSlice = createSlice({
                     state.isAuthenticated = false;
                 }
             })
-
-
-            .addCase(requestEmailVerification.pending, (state) => { state.status = "loading"; state.error = null; })
-            .addCase(requestEmailVerification.fulfilled, (state) => { state.status = "succeeded"; })
-            .addCase(requestEmailVerification.rejected, (state, action) => { state.status = "failed"; state.error = action.payload; })
 
             .addCase(sendEmailVerification.pending, (state) => { state.status = "loading"; state.error = null; })
             .addCase(sendEmailVerification.fulfilled, (state) => { state.status = "succeeded"; })

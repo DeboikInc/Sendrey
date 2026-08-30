@@ -90,7 +90,12 @@ const runnerSchema = new mongoose.Schema({
     },
     default: 'male'
   },
-
+  referralCode: {
+    type: String,
+    unique: true,
+    sparse: true,
+    index: true
+  },
   dailyErrandCount: {
     type: Number,
     default: 0

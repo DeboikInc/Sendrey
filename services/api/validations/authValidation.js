@@ -199,7 +199,11 @@ const authValidation = {
     longitude: Joi.number().min(-180).max(180).optional(),
     isOnline: Joi.boolean().optional(),
     isAvailable: Joi.boolean().default(true),
-    isActive: Joi.boolean().optional()
+    isActive: Joi.boolean().optional(),
+    referralCode: Joi.string().optional().trim().uppercase()
+      .messages({
+        'string.empty': 'Provide your referral code'
+      }),
   }),
 
   registerUser: Joi.object({
@@ -219,7 +223,11 @@ const authValidation = {
     longitude: Joi.number().min(-180).max(180).optional()
       .messages({ 'any.required': 'Location is required' }),
     isAvailable: Joi.boolean().default(true),
-    isActive: Joi.boolean().optional()
+    isActive: Joi.boolean().optional(),
+    referralCode: Joi.string().optional().trim().uppercase()
+      .messages({
+        'string.empty': 'Provide your referral code'
+      }),
   }),
 
 

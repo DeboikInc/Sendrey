@@ -38,15 +38,15 @@ const authenticate = async (req, res, next) => {
       token = req.cookies.token;
     }
 
-    logger.warn('AUTH_DEBUG', {
-      path: req.path,
-      hasAuthHeader: !!authHeader,
-      authHeaderPreview: authHeader ? authHeader.slice(0, 20) + '...' : null,
-      hasCookieToken: !!req.cookies?.token,
-      cookieKeys: Object.keys(req.cookies || {}),
-      userAgent: req.headers['user-agent'],
-      tokenSource: authHeader?.startsWith('Bearer ') ? 'header' : (req.cookies?.token ? 'cookie' : 'none'),
-    });
+    // logger.warn('AUTH_DEBUG', {
+    //   path: req.path,
+    //   hasAuthHeader: !!authHeader,
+    //   authHeaderPreview: authHeader ? authHeader.slice(0, 20) + '...' : null,
+    //   hasCookieToken: !!req.cookies?.token,
+    //   cookieKeys: Object.keys(req.cookies || {}),
+    //   userAgent: req.headers['user-agent'],
+    //   tokenSource: authHeader?.startsWith('Bearer ') ? 'header' : (req.cookies?.token ? 'cookie' : 'none'),
+    // });
 
     if (!token) {
       return res.status(401).json({

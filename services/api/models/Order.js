@@ -2,6 +2,7 @@ const mongoose = require('mongoose');
 const { TASK_TYPES, SERVICE_TYPE, CANCELLABLE_STATES_BY_SERVICE, DISPUTE_WINDOW_HOURS } = require('../config/constants');
 const OrderActivityLog = require('./OrderActivityLog');
 const orderHistoryCache = require('../cache/orderHistoryCache');
+const referralService = require('../services/referralService');
 
 //  Valid status transitions 
 const VALID_TRANSITIONS = {
@@ -247,6 +248,14 @@ orderSchema.pre('save', function (next) {
   next();
 });
 
+orderSchema.statics.isFirstCompletedOrder = async function (participantId, role) {
+  const query = role === 'runner'
+    ? { runnerId: participantId, status: 'completed' }
+    : { userId: participantId, status: 'completed' };
+  const count = await this.countDocuments(query);
+  return count === 1;
+};
+
 // ── updateStatus — validated transition + auto timestamps 
 orderSchema.methods.updateStatus = async function (newStatus, triggeredBy = 'system', meta = {}) {
   const allowed = VALID_TRANSITIONS[this.status];
@@ -294,7 +303,22 @@ orderSchema.methods.updateStatus = async function (newStatus, triggeredBy = 'sys
     metadata: { from: fromStatus, to: newStatus, note: meta.note || null },
   });
 
-  
+  if (newStatus === 'completed') {
+    const [userIsFirst, runnerIsFirst] = await Promise.all([
+      this.constructor.isFirstCompletedOrder(this.userId, 'user'),
+      this.constructor.isFirstCompletedOrder(this.runnerId, 'runner'),
+    ]);
+
+    if (userIsFirst) {
+      referralService.checkAndAwardBonus(this.userId, 'User')
+        .catch((err) => console.error(`[Order ${this.orderId}] referral bonus check failed (user):`, err.message));
+    }
+    if (runnerIsFirst) {
+      referralService.checkAndAwardBonus(this.runnerId, 'Runner')
+        .catch((err) => console.error(`[Order ${this.orderId}] referral bonus check failed (runner):`, err.message));
+    }
+  }
+
   return this;
 };
 

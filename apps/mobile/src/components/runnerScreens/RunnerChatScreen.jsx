@@ -1527,7 +1527,7 @@ function RunnerChatScreen({
         </div>
 
         {/* Composer */}
-        <div className="bg-gray-100 dark:bg-black-200">
+        <div className="onboarding-composer-wrapper bg-gray-100 dark:bg-black-200">
           {effectiveTaskCompleted ? (
             <div className="px-4 py-4">
               <button
