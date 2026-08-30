@@ -188,7 +188,7 @@ class AuthController extends BaseController {
     } catch (error) {
       logger.error('Check existing user error:', error);
       if (error.statusCode === 409) {
-        return this.error(res, error.message, { field: 'phone' });
+        return this.error(res, error.message, 409,{ field: 'phone' });
       }
       next(error);
     }
