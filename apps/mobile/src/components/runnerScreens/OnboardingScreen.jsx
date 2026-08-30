@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/exhaustive-deps */
-// components/runnerScreens/OnboardingScreen.jsx
+// components/runnerScreens/OnboardingScreen.jsx - Clean Mobile-First
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { Avatar, Button } from "@material-tailwind/react";
 import Message from "../common/Message";
@@ -11,6 +11,7 @@ import { useCameraHook } from "../../hooks/useCameraHook";
 import { returningUserNeedsKycPoll } from '../../utils/returningUserKycUtils';
 import RunnerNotifications from "./RunnerNotifications";
 import OnboardingProgress, { getOnboardingStageIndex } from "./OnboardingProgress";
+import { useMediaContext } from '../../contexts/MediaContext';
 import "../../OnboardingScreen.css";
 
 const FLEET_OPTIONS = [
@@ -95,6 +96,7 @@ function OnboardingScreen({
   const [isUpdatingServer] = useState(false);
 
   const syncedNewOrderComplete = newOrderComplete;
+  const { requestMediaAccess } = useMediaContext();
 
   useEffect(() => {
     mountedRef.current = true;
@@ -146,7 +148,7 @@ function OnboardingScreen({
   }, []);
 
   const { cameraOpen, capturedImage, videoRef, openCamera, closeCamera,
-    capturePhoto, retakePhoto, confirmPhoto, switchCamera } = useCameraHook();
+    capturePhoto, retakePhoto, confirmPhoto, switchCamera } = useCameraHook(requestMediaAccess);
 
   useEffect(() => {
     if (listRef.current && messages.length > 0) {
