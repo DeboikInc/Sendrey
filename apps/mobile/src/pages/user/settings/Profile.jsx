@@ -155,9 +155,7 @@ export default function Profile({ darkMode }) {
           </div>
 
           <div className={`p-4 rounded-2xl border ${card}`}>
-            <p className={label}>Your Referral Code</p>
-            <p className={`${value} mt-1`}>{user?.referralCode}</p>
-
+            <p className={label}>Your Referral Link</p>
             <button
               onClick={handleCopyReferralLink}
               className="mt-3 w-full flex items-center justify-between px-4 py-3 rounded-xl bg-primary/10 text-primary text-xs font-semibold"

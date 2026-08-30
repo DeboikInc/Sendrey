@@ -277,7 +277,7 @@ class AuthService {
         $set: {
           tokenHash: newTokenHash,
           lastUsedAt: new Date(),
-          expiresAt: new Date(Date.now() + parseInt(process.env.SESSION_TTL_MS)),
+          expiresAt: new Date(Date.now() + parseInt(process.env.SESSION_TTL_MS || 5184000000)),
         },
       },
       { new: false }

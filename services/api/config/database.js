@@ -21,11 +21,6 @@ const connectDb = async () => {
     const totalRunners = await Runner.countDocuments({});
     console.log(`Total runners in DB: ${totalRunners}`);
 
-    // await User.deleteMany({ role: { $nin: ['super-admin', 'admin'] } });
-    // await Runner.deleteMany({});
-    // await Runner.findOneAndUpdate({ email:'tinukareem17@gmail.com' }, { $set: { fleetType: 'cycling' } });
-    // await Runner.deleteOne({ email: 'timivik565@gmail.com' });
-
   } catch (error) {
     console.error('MongoDB connection error DETAILS:', {
       message: error.message,

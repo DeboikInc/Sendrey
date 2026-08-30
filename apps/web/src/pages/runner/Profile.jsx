@@ -529,10 +529,7 @@ export const Profile = ({
                     </div>
 
                     <div className="border border-gray-200 dark:border-white/10 rounded-xl px-3 sm:px-4 py-3">
-                        <p className="text-xs text-black-100/80 dark:text-gray-500 mb-1">Your Referral Code</p>
-                        <p className="text-xs sm:text-base font-medium text-black-200 dark:text-gray-200">
-                            {runnerData?.referralCode || '—'}
-                        </p>
+                        <p className="text-xs text-black-100/80 dark:text-gray-500 mb-1">Your Referral Link</p>
 
                         <button
                             onClick={handleCopyReferralLink}
