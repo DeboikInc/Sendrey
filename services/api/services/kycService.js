@@ -50,7 +50,7 @@ class KYCService {
             return {
                 blocked: false, // let it through, don't alert the submitter
                 flagForReview: true,
-                flaggedReason: `Document hash matches an existing submission from another account (${other._id})`
+                flaggedReason: `Document hash matches an existing submission from another account (${other._id}: ${other.firstName || ''} ${other.lastName || ''} - ${other.email || ''})`
             };
         }
 
