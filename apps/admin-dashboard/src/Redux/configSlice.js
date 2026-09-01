@@ -53,9 +53,11 @@ export const fetchPlatformConfig = createAsyncThunk('config/fetchPlatform', asyn
 export const savePlatformConfig = createAsyncThunk('config/savePlatform', async (config, { rejectWithValue }) => {
     try {
         const res = await api.put('/platform/update-platform-fee-bank-account', config);
+        console.log('updating platform config', config)
         return res.data;
     } catch (err) {
         return rejectWithValue(err.response?.data?.message || 'Failed to save platform bank account');
+        console.log("Error updating platform config", err)
     }
 });
 
