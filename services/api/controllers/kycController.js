@@ -11,6 +11,7 @@ class KYCController extends BaseController {
 
         this.verifyNIN = this.verifyNIN.bind(this);
         this.verifyDriverLicense = this.verifyDriverLicense.bind(this);
+        this.verifyBikerLicense = this.verifyBikerLicense.bind(this);
         this.verifySelfie = this.verifySelfie.bind(this);
         this.getVerificationStatus = this.getVerificationStatus.bind(this);
         this.getNextKYCSteps = this.getNextKYCSteps.bind(this);
@@ -120,6 +121,52 @@ class KYCController extends BaseController {
 
         } catch (error) {
             console.error('Driver license submission error:', error);
+            return this.error(res, 'Internal server error');
+        }
+    }
+
+    async verifyBikerLicense(req, res) {
+        try {
+            const userId = req.user.id || req.user._id;
+            const runner = await Runner.findById(userId);
+
+            if (!runner) {
+                return this.notFound(res, 'User not found');
+            }
+
+            if (!req.file) {
+                return this.badRequest(res, "Biker's License document image is required");
+            }
+
+            const userInfo = {
+                userId,
+                firstName: runner.firstName,
+                lastName: runner.lastName,
+                dateOfBirth: runner.dateOfBirth || null
+            };
+
+            const result = await this.service.submitBikerLicense(
+                null,
+                req.file.buffer,
+                req.file.originalname,
+                userInfo
+            );
+
+            if (result.success) {
+                await Runner.findByIdAndUpdate(userId, {
+                    kycStatus: 'pending_verification'
+                });
+
+                return this.success(res, {
+                    status: 'pending_review',
+                    submittedAt: result.data.submittedAt
+                }, "Biker's License submitted for verification. Please wait for admin approval.");
+            } else {
+                return this.badRequest(res, "Biker's License submission failed", { error: result.error });
+            }
+
+        } catch (error) {
+            console.error("Biker's License submission error:", error);
             return this.error(res, 'Internal server error');
         }
     }
@@ -263,7 +310,13 @@ class KYCController extends BaseController {
                         submittedAt: docs.driverLicense?.submittedAt || null,
                         rejectionReason: docs.driverLicense?.rejectionReason || null,
                         rejectedAt: docs.driverLicense?.rejectedAt
-
+                    },
+                    bikerLicense: {
+                        verified: docs.bikerLicense?.verified || false,
+                        status: docs.bikerLicense?.status || 'not_submitted',
+                        submittedAt: docs.bikerLicense?.submittedAt || null,
+                        rejectionReason: docs.bikerLicense?.rejectionReason || null,
+                        rejectedAt: docs.bikerLicense?.rejectedAt
                     }
                 },
                 biometrics: {
@@ -301,11 +354,13 @@ class KYCController extends BaseController {
             const verifiedDocs = [];
             if (docs.nin?.verified) verifiedDocs.push('nin');
             if (docs.driverLicense?.verified) verifiedDocs.push('driverLicense');
+            if (docs.bikerLicense?.verified) verifiedDocs.push('bikerLicense');
 
             const pendingDocs = [];
             if (docs.nin?.status === 'pending_review') pendingDocs.push('nin');
             if (docs.driverLicense?.status === 'pending_review') pendingDocs.push('driverLicense');
-
+            if (docs.bikerLicense?.status === 'pending_review') pendingDocs.push('bikerLicense');
+            
             const steps = [];
 
             if (pendingDocs.length > 0) {

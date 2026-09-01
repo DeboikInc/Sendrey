@@ -14,12 +14,15 @@ export function persistReturningKycStatus(email, kycStatus) {
     localStorage.setItem(
       `${STORAGE_KEY_PREFIX}${email}`,
       JSON.stringify({
+        ninStatus: kycStatus.ninStatus ?? 'not_submitted',
+        driverLicenseStatus: kycStatus.driverLicenseStatus ?? 'not_submitted',
+        bikerLicenseStatus: kycStatus.bikerLicenseStatus ?? 'not_submitted',
         selfieVerified: kycStatus.selfieVerified ?? false,
         selfieStatus: kycStatus.selfieStatus ?? 'not_submitted',
         overallVerified: kycStatus.overallVerified ?? false,
       })
     );
-  } catch (_) {}
+  } catch (_) { }
 }
 
 /**
@@ -43,7 +46,7 @@ export function clearPersistedReturningKycStatus(email) {
   if (!email) return;
   try {
     localStorage.removeItem(`${STORAGE_KEY_PREFIX}${email}`);
-  } catch (_) {}
+  } catch (_) { }
 }
 
 /**

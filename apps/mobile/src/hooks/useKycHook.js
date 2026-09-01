@@ -1,34 +1,33 @@
 // hooks/useKycHook.js
 import { useState, useCallback, useRef, useEffect } from 'react';
 import { useDispatch } from 'react-redux';
-import { verifyNIN, verifyDriverLicense, verifySelfie, getVerificationStatus } from '../Redux/kycSlice';
+import {
+  verifyNIN, verifyDriverLicense,
+  verifySelfie, getVerificationStatus, verifyBikerLicense
+} from '../Redux/kycSlice';
 import { updateRunner } from '../Redux/authSlice';
+
+const SINGLE_DOC_FLEETS = ['pedestrian', 'cycling'];
+const getSecondDocType = (fleetType) => {
+  if (SINGLE_DOC_FLEETS.includes(fleetType)) return null;
+  return fleetType === 'bike' ? 'bikerLicense' : 'driverLicense';
+};
+const secondDocLabel = (docType) => docType === 'bikerLicense' ? "Biker's License" : "Driver's License";
 
 // ─── Maps server kycStatus → the correct step to resume from ─────────────────
 // Called once after a returning user completes OTP, before startKycFlow runs.
-
 const resolveResumeStep = (kycStatus = {}, fleetType) => {
-  const {
-    ninStatus,
-    driverLicenseStatus,
-    selfieVerified,
-  } = kycStatus;
+  const { ninStatus, driverLicenseStatus, bikerLicenseStatus, selfieVerified } = kycStatus;
 
-  const isPedestrian = fleetType === 'pedestrian';
+  const secondDocType = getSecondDocType(fleetType);
   const ninDone = ['verified', 'pending', 'pending_review'].includes(ninStatus);
-  const licenseDone = ['verified', 'pending', 'pending_review'].includes(driverLicenseStatus);
-  const needsLicense = !isPedestrian && !licenseDone;
+  const secondDocStatus = secondDocType === 'bikerLicense' ? bikerLicenseStatus : driverLicenseStatus;
+  const secondDocDone = !secondDocType || ['verified', 'pending', 'pending_review'].includes(secondDocStatus);
+  const needsSecondDoc = secondDocType && !secondDocDone;
 
-  // Selfie already submitted — go straight to connect (step 6)
   if (selfieVerified || kycStatus.selfieStatus === 'pending_review') return 6;
-
-  // Both required docs done — go to selfie prompt (step 3)
-  if (ninDone && (isPedestrian || licenseDone)) return 3;
-
-  // NIN done, still needs driver's license
-  if (ninDone && needsLicense) return { step: 2, nextDoc: 'driverLicense' };
-
-  // Nothing submitted yet — start from top
+  if (ninDone && secondDocDone) return 3;
+  if (ninDone && needsSecondDoc) return { step: 2, nextDoc: secondDocType };
   return null;
 };
 
@@ -56,7 +55,7 @@ export const useKycHook = (runnerId, fleetType,) => {
   // Track which doc is currently being collected: 'nin' | 'driverLicense'
   const [currentDocType, setCurrentDocTypeState] = useState('nin');
   const currentDocTypeRef = useRef('nin');
-  const kycServerStatusRef = useRef({ nin: 'not_submitted', driverLicense: 'not_submitted', selfie: 'not_submitted' });
+  const kycServerStatusRef = useRef({ nin: 'not_submitted', driverLicense: 'not_submitted', bikerLicense: 'not_submitted', selfie: 'not_submitted' });
 
 
   useEffect(() => {
@@ -170,9 +169,11 @@ export const useKycHook = (runnerId, fleetType,) => {
       }]);
 
       setTimeout(() => {
-        const idMessage = fleetTypeRef.current === 'pedestrian'
+        const idMessage = SINGLE_DOC_FLEETS.includes(fleetTypeRef.current)
           ? "To get you approved, I'll need a valid government ID, preferably NIN or a valid document."
-          : "To get you approved, I'll need two valid government IDs. preferably NIN and a Driver's License.";
+          : fleetTypeRef.current === 'bike'
+            ? "To get you approved, I'll need two valid documents — your NIN and a valid Biker's License."
+            : "To get you approved, I'll need two valid government IDs. preferably NIN and a Driver's License.";
 
         setMessages(prev => [...prev, {
           id: `kyc-${Date.now()}-2`,
@@ -221,6 +222,7 @@ export const useKycHook = (runnerId, fleetType,) => {
       kycServerStatusRef.current = {
         nin: documents.nin?.status || 'not_submitted',
         driverLicense: documents.driverLicense?.status || 'not_submitted',
+        bikerLicense: documents.bikerLicense?.status || 'not_submitted',
         selfie: biometrics.status || 'not_submitted',
       };
 
@@ -229,7 +231,7 @@ export const useKycHook = (runnerId, fleetType,) => {
         return;
       }
 
-      const currentStatusKey = `${documents.nin?.status}-${documents.driverLicense?.status}-${biometrics.status}-${kycStatus}`;
+      const currentStatusKey = `${documents.nin?.status}-${documents.driverLicense?.status}-${documents.bikerLicense?.status}-${biometrics.status}-${kycStatus}`;
 
       if (lastCheckedStatusRef.current === currentStatusKey) return;
       lastCheckedStatusRef.current = currentStatusKey;
@@ -279,19 +281,19 @@ export const useKycHook = (runnerId, fleetType,) => {
       }
 
       // ── Partial rejections/approvals
+      const secondDocType = getSecondDocType(fleetTypeRef.current);
       const ninRejected = documents.nin?.status === 'rejected';
-      const licenseRejected = documents.driverLicense?.status === 'rejected';
+      const secondDocRejected = secondDocType && documents[secondDocType]?.status === 'rejected';
       const selfieRejected = biometrics.status === 'rejected';
-      const isPedestrian = fleetTypeRef.current === 'pedestrian';
 
-      const allRejected = ninRejected && selfieRejected && (isPedestrian || licenseRejected);
+      const allRejected = ninRejected && selfieRejected && (!secondDocType || secondDocRejected);
 
       let resumeStep = null;
 
       if (allRejected) {
         const reasons = [
           documents.nin.rejectionReason ? `NIN: ${documents.nin.rejectionReason}` : null,
-          !isPedestrian && documents.driverLicense.rejectionReason ? `Driver's License: ${documents.driverLicense.rejectionReason}` : null,
+          secondDocType && documents[secondDocType]?.rejectionReason ? `${secondDocLabel(secondDocType)}: ${documents[secondDocType].rejectionReason}` : null,
           biometrics.rejectionReason ? `Selfie: ${biometrics.rejectionReason}` : null,
         ].filter(Boolean).join(' | ');
 
@@ -320,17 +322,19 @@ export const useKycHook = (runnerId, fleetType,) => {
           if (!resumeStep) resumeStep = { step: 2, docType: 'nin' };
         }
 
-        if (licenseRejected) {
-          const reason = documents.driverLicense.rejectionReason
-            ? `❌ Your Driver's License verification was unsuccessful: ${documents.driverLicense.rejectionReason}. Please resubmit.`
-            : "❌ Your Driver's License verification was unsuccessful. Please resubmit.";
+        if (secondDocRejected) {
+          const doc = documents[secondDocType];
+          const reason = doc.rejectionReason
+            ? `❌ Your ${secondDocLabel(secondDocType)} verification was unsuccessful: ${doc.rejectionReason}. Please resubmit.`
+            : `❌ Your ${secondDocLabel(secondDocType)} verification was unsuccessful. Please resubmit.`;
+
           setMessages(prev => [...prev, {
-            id: `kyc-dl-rejected-${Date.now()}`,
+            id: `kyc-second-doc-rejected-${Date.now()}`,
             from: "them", text: reason,
             time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
             status: "delivered", isKyc: true
           }]);
-          if (!resumeStep) resumeStep = { step: 2, docType: 'driverLicense' };
+          if (!resumeStep) resumeStep = { step: 2, docType: secondDocType };
         }
 
         if (selfieRejected) {
@@ -402,6 +406,7 @@ export const useKycHook = (runnerId, fleetType,) => {
     const hasRejection =
       serverKycStatus?.ninStatus === 'rejected' ||
       serverKycStatus?.driverLicenseStatus === 'rejected' ||
+      serverKycStatus?.bikerLicenseStatus === 'rejected' ||
       serverKycStatus?.selfieStatus === 'rejected';
 
     if (hasRejection) {
@@ -449,8 +454,8 @@ export const useKycHook = (runnerId, fleetType,) => {
 
     const promptText = step === 3
       ? "Welcome back! You just need to take your selfie to complete verification."
-      : docType === 'driverLicense'
-        ? "Welcome back! You still need to provide your Driver's License."
+      : docType
+        ? `Welcome back! You still need to provide your ${secondDocLabel(docType)}.`
         : "Welcome back! Let's continue your verification.";
 
     setMessages(prev => [...prev, {
@@ -469,7 +474,11 @@ export const useKycHook = (runnerId, fleetType,) => {
 
     if (!photo) {
       console.error('[KYC] onIdVerified called with no photo');
-      const docLabel = currentDocTypeRef.current === 'driverLicense' ? "Driver's License" : 'NIN';
+      const docLabel = currentDocTypeRef.current === 'driverLicense'
+        ? "Driver's License"
+        : currentDocTypeRef.current === 'bikerLicense'
+          ? "Biker's License"
+          : 'NIN';
       setMessages(prev => [...prev, {
         id: `kyc-err-${Date.now()}`,
         from: "them",
@@ -522,7 +531,12 @@ export const useKycHook = (runnerId, fleetType,) => {
 
     if (!photo) {
       console.error('No photo captured!');
-      const docLabel = currentDocTypeRef.current === 'driverLicense' ? "Driver's License" : 'NIN'
+      const docLabel = currentDocTypeRef.current === 'driverLicense'
+        ? "Driver's License"
+        : currentDocTypeRef.current === 'bikerLicense'
+          ? "Biker's License"
+          : 'NIN';
+
       setMessages(prev => [...prev, {
         id: `kyc-err-${Date.now()}`,
         from: "them",
@@ -575,7 +589,9 @@ export const useKycHook = (runnerId, fleetType,) => {
 
         const result = currentDocTypeRef.current === 'driverLicense'
           ? await dispatch(verifyDriverLicense(file))
-          : await dispatch(verifyNIN(file));
+          : currentDocTypeRef.current === 'bikerLicense'
+            ? await dispatch(verifyBikerLicense(file))
+            : await dispatch(verifyNIN(file));
         verifyInProgress.current = false;
 
         if (result.type.includes('fulfilled')) {
@@ -591,23 +607,24 @@ export const useKycHook = (runnerId, fleetType,) => {
           // Optimistically mark what we just submitted as pending, so the next check reflects reality
           kycServerStatusRef.current[currentDocTypeRef.current] = 'pending_review';
 
-          const needsLicense = fleetTypeRef.current !== 'pedestrian' &&
-            currentDocTypeRef.current !== 'driverLicense' &&
-            ['not_submitted', 'rejected'].includes(kycServerStatusRef.current.driverLicense);
+          const secondDocType = getSecondDocType(fleetTypeRef.current);
+          const needsSecondDoc = secondDocType &&
+            currentDocTypeRef.current !== secondDocType &&
+            ['not_submitted', 'rejected'].includes(kycServerStatusRef.current[secondDocType]);
 
           const selfieStatus = kycServerStatusRef.current.selfie;
           const needsSelfie = ['not_submitted', 'rejected'].includes(selfieStatus);
 
-          if (needsLicense) {
-            const isResubmit = kycServerStatusRef.current.driverLicense === 'rejected';
-            setDocType('driverLicense');
+          if (needsSecondDoc) {
+            const isResubmit = kycServerStatusRef.current[secondDocType] === 'rejected';
+            setDocType(secondDocType);
             capturedIdPhotoRef.current = null;
 
             setTimeout(() => {
               setMessages(prev => [...prev, {
                 id: `kyc-dl-prompt-${Date.now()}`,
                 from: "them",
-                text: isResubmit ? "Kindly resubmit your Driver's License." : "Kindly provide your Driver's License.",
+                text: isResubmit ? `Kindly resubmit your ${secondDocLabel(secondDocType)}.` : `Kindly provide your ${secondDocLabel(secondDocType)}.`,
                 time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
                 status: "delivered",
                 isKyc: true

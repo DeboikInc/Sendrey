@@ -24,6 +24,14 @@ const CREDENTIAL_QUESTIONS = [
   { question: "What's your fleet type? (bike, car, motorcycle, van)", field: "fleetType", isFleetSelection: true },
 ];
 
+const SINGLE_DOC_FLEETS = ['pedestrian', 'cycling'];
+const getSecondDocType = (fleetType) => {
+  const normalized = fleetType?.toLowerCase();
+  if (SINGLE_DOC_FLEETS.includes(normalized)) return null;
+  return normalized === 'bike' ? 'bikerLicenseStatus' : 'driverLicenseStatus';
+};
+const secondDocLabel = (docKey) => docKey === 'bikerLicenseStatus' ? "biker's license" : "driver's license";
+
 // Greeting builder
 const buildReturningUserGreeting = (name, kycStatus = {}, fleetType = '') => {
   const {
@@ -31,6 +39,7 @@ const buildReturningUserGreeting = (name, kycStatus = {}, fleetType = '') => {
     overallVerified,
     ninStatus = 'not_submitted',
     driverLicenseStatus = 'not_submitted',
+    bikerLicenseStatus = 'not_submitted',
     selfieVerified = false,
     selfieStatus = 'not_submitted',
   } = kycStatus;
@@ -39,19 +48,20 @@ const buildReturningUserGreeting = (name, kycStatus = {}, fleetType = '') => {
     return `Hi ${name}, looks like you started signing up before! Would you like to continue where you left off?`;
   }
 
-  const isPedestrian = fleetType?.toLowerCase() === 'pedestrian';
+  const secondDocKey = getSecondDocType(fleetType);
+  const secondDocStatus = secondDocKey === 'bikerLicenseStatus' ? bikerLicenseStatus : driverLicenseStatus;
 
   // ── Rejection takes priority over every other state ─────────────────────
   const hasRejection =
-    ninStatus === 'rejected' || driverLicenseStatus === 'rejected' || selfieStatus === 'rejected';
+    ninStatus === 'rejected' || (secondDocKey && secondDocStatus === 'rejected') || selfieStatus === 'rejected';
 
   if (hasRejection) {
     return `Hi ${name}, welcome back! One of your documents needs to be resubmitted. Continue as ${name}?`;
   }
 
-  const idComplete = isPedestrian
-    ? (ninStatus === 'verified' || driverLicenseStatus === 'verified')
-    : (ninStatus === 'verified' && driverLicenseStatus === 'verified');
+  const idComplete = secondDocKey
+    ? (ninStatus === 'verified' && secondDocStatus === 'verified')
+    : (ninStatus === 'verified');
 
   const fullyVerified = overallVerified || (idComplete && selfieVerified);
 
@@ -64,14 +74,14 @@ const buildReturningUserGreeting = (name, kycStatus = {}, fleetType = '') => {
   }
 
   const ninSubmitted = ninStatus !== 'not_submitted';
-  const licenseSubmitted = driverLicenseStatus !== 'not_submitted';
+  const secondDocSubmitted = secondDocKey && secondDocStatus !== 'not_submitted';
   const ninPending = ['pending', 'pending_review'].includes(ninStatus);
-  const licensePending = ['pending', 'pending_review'].includes(driverLicenseStatus);
-  const idPending = ninPending || licensePending;
-  const idSubmitted = ninSubmitted || licenseSubmitted;
+  const secondDocPending = secondDocKey && ['pending', 'pending_review'].includes(secondDocStatus);
+  const idPending = ninPending || secondDocPending;
+  const idSubmitted = ninSubmitted || secondDocSubmitted;
 
-  const missingId = !isPedestrian && ninSubmitted && !licenseSubmitted ? "driver's license"
-    : !isPedestrian && licenseSubmitted && !ninSubmitted ? 'NIN'
+  const missingId = secondDocKey && ninSubmitted && !secondDocSubmitted ? secondDocLabel(secondDocKey)
+    : secondDocKey && secondDocSubmitted && !ninSubmitted ? 'NIN'
       : null;
 
   if (idPending) {
@@ -529,7 +539,7 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
         return;
       }
     } catch (checkErr) {
-      
+
       if (checkErr?.field === 'phone') {
         setMessages(prev => prev.filter(m => m.text !== 'In progress...'));
         const phoneIdx = CREDENTIAL_QUESTIONS.findIndex(q => q.field === 'phone');
@@ -688,6 +698,7 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
             isVerified: kycStatus?.isVerified ?? false,
             ninStatus: kycStatus?.ninStatus ?? 'not_submitted',
             driverLicenseStatus: kycStatus?.driverLicenseStatus ?? 'not_submitted',
+            bikerLicenseStatus: kycStatus?.bikerLicenseStatus ?? 'not_submitted',
             selfieVerified: kycStatus?.selfieVerified ?? false,
             selfieStatus: kycStatus?.selfieStatus ?? 'not_submitted',
             overallVerified: kycStatus?.overallVerified ?? false,
@@ -795,6 +806,7 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
             isVerified: freshKycStatus.isVerified ?? false,
             ninStatus: freshKycStatus.ninStatus ?? 'not_submitted',
             driverLicenseStatus: freshKycStatus.driverLicenseStatus ?? 'not_submitted',
+            bikerLicenseStatus: freshKycStatus.bikerLicenseStatus ?? 'not_submitted',
             selfieVerified: freshKycStatus.selfieVerified ?? false,
             selfieStatus: freshKycStatus.selfieStatus ?? 'not_submitted',
             overallVerified: freshKycStatus.overallVerified ?? false,

@@ -23,6 +23,14 @@ router.post('/verify/driver-license',
     kycController.verifyDriverLicense
 );
 
+router.post('/verify/biker-license',
+    authenticate,
+    isRunner,
+    auditLog('VERIFY_BIKERS_LICENSE'),
+    upload.single('document'),
+    kycController.verifyBikerLicense
+);
+
 // Selfie verification with file upload
 router.post('/verify/selfie',
     authenticate,

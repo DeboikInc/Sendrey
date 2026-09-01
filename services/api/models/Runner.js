@@ -215,6 +215,25 @@ const runnerSchema = new mongoose.Schema({
       wasResubmitted: { type: Boolean, default: false },
       previousRejectedAt: Date,
       previousRejectionReason: String,
+    },
+    bikerLicense: {
+      number: String,
+      verified: { type: Boolean, default: false },
+      verifiedAt: Date,
+      expiryDate: Date,
+      status: { type: String, enum: VERIFICATION_STATUS, default: 'not_submitted' },
+      submittedAt: Date,
+      documentPath: String,
+      verificationData: mongoose.Schema.Types.Mixed,
+      rejectedAt: Date,
+      rejectionReason: String,
+      verifiedBy: String,
+      documentHash: String,
+      flaggedForReview: { type: Boolean, default: false },
+      flaggedReason: String,
+      wasResubmitted: { type: Boolean, default: false },
+      previousRejectedAt: Date,
+      previousRejectionReason: String,
     }
   },
   biometricVerification: {
@@ -486,7 +505,8 @@ runnerSchema.index({
   isOnline: 1,
   isAvailable: 1,
   'verificationDocuments.nin.status': 1,
-  'verificationDocuments.driverLicense.status': 1
+  'verificationDocuments.driverLicense.status': 1,
+  'verificationDocuments.bikerLicense.status': 1
 });
 
 // Pre-save middlewares

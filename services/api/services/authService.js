@@ -251,6 +251,7 @@ class AuthService {
         isEmailVerified: user.isEmailVerified,
         ninStatus: user.verificationDocuments?.nin?.status || 'not_submitted',
         driverLicenseStatus: user.verificationDocuments?.driverLicense?.status || 'not_submitted',
+        bikerLicenseStatus: user.verificationDocuments?.bikerLicense?.status || 'not_submitted',
         selfieVerified: user.biometricVerification?.selfieVerified || false,
         overallVerified: user.isVerifiedKyc || false,
       } : {
@@ -464,6 +465,7 @@ class AuthService {
         isEmailVerified: user.isEmailVerified,
         ninStatus: user.verificationDocuments?.nin?.status || 'not_submitted',
         driverLicenseStatus: user.verificationDocuments?.driverLicense?.status || 'not_submitted',
+        bikerLicenseStatus: user.verificationDocuments?.bikerLicense?.status || 'not_submitted',
         selfieVerified: user.biometricVerification?.selfieVerified || false,
         overallVerified: user.isVerifiedKyc || false,
       }

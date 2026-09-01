@@ -7,21 +7,9 @@ export const verifyNIN = createAsyncThunk(
     "kyc/verify-nin",
     async (imageFile, thunkAPI) => {
         try {
-            // console.log('verifyNIN called with file:', {
-            //     type: typeof imageFile,
-            //     isFile: imageFile instanceof File,
-            //     name: imageFile?.name,
-            //     size: imageFile?.size,
-            //     fileType: imageFile?.type
-            // });
 
             const formData = new FormData();
             formData.append('document', imageFile);
-
-            // Debug: Check FormData contents
-            // for (let pair of formData.entries()) {
-            //     // console.log('FormData entry:', pair[0], pair[1]);
-            // }
 
             const response = await api.post("/kyc/verify/nin", formData, {
                 headers: {
@@ -43,13 +31,6 @@ export const verifyDriverLicense = createAsyncThunk(
     "kyc/verify-driver-license",
     async (imageFile, thunkAPI) => {
         try {
-            // console.log('verifyDriverLicense called with file:', {
-            //     type: typeof imageFile,
-            //     isFile: imageFile instanceof File,
-            //     name: imageFile?.name,
-            //     size: imageFile?.size,
-            //     fileType: imageFile?.type
-            // });
 
             if (!imageFile || !(imageFile instanceof File)) {
                 console.error('Invalid file object:', imageFile);
@@ -58,11 +39,6 @@ export const verifyDriverLicense = createAsyncThunk(
 
             const formData = new FormData();
             formData.append('document', imageFile);
-
-            // Debug: Check FormData contents
-            // for (let pair of formData.entries()) {
-            //     // console.log('FormData entry:', pair[0], pair[1]);
-            // }
 
             const response = await api.post("/kyc/verify/driver-license", formData, {
                 headers: {
@@ -79,19 +55,37 @@ export const verifyDriverLicense = createAsyncThunk(
     }
 );
 
+export const verifyBikerLicense = createAsyncThunk(
+    "kyc/verify-biker-license",
+    async (imageFile, thunkAPI) => {
+        try {
+            if (!imageFile || !(imageFile instanceof File)) {
+                console.error('Invalid file object:', imageFile);
+                throw new Error('Invalid file provided');
+            }
+
+            const formData = new FormData();
+            formData.append('document', imageFile);
+
+            const response = await api.post("/kyc/verify/biker-license", formData, {
+                headers: { 'Content-Type': 'multipart/form-data' }
+            });
+            return response.data;
+        } catch (error) {
+            console.error('verifyBikerLicense error:', error.response?.data || error.message);
+            return thunkAPI.rejectWithValue(
+                error.response?.data?.message || "Biker's License submission failed"
+            );
+        }
+    }
+);
+
 
 // Selfie verification - only needs selfie image
 export const verifySelfie = createAsyncThunk(
     "kyc/verify-selfie",
     async (imageFile, thunkAPI) => {
         try {
-            // console.log('verifySelfie called with file:', {
-            //     type: typeof imageFile,
-            //     isFile: imageFile instanceof File,
-            //     name: imageFile?.name,
-            //     size: imageFile?.size,
-            //     fileType: imageFile?.type
-            // });
 
             if (!imageFile || !(imageFile instanceof File)) {
                 console.error('Invalid file object:', imageFile);
@@ -100,11 +94,6 @@ export const verifySelfie = createAsyncThunk(
 
             const formData = new FormData();
             formData.append('selfie', imageFile);
-
-            // Debug: Check FormData contents
-            // for (let pair of formData.entries()) {
-            //     // console.log('FormData entry:', pair[0], pair[1]);
-            // }
 
             const response = await api.post("/kyc/verify/selfie", formData, {
                 headers: {
@@ -187,6 +176,7 @@ const kycSlice = createSlice({
                 state.status = "failed";
                 state.error = action.payload;
             })
+
             .addCase(verifyDriverLicense.pending, (state) => {
                 state.status = "loading";
                 state.error = "";
@@ -199,6 +189,20 @@ const kycSlice = createSlice({
                 state.status = "failed";
                 state.error = action.payload;
             })
+
+            .addCase(verifyBikerLicense.pending, (state) => {
+                state.status = "loading";
+                state.error = "";
+            })
+            .addCase(verifyBikerLicense.fulfilled, (state, action) => {
+                state.status = "succeeded";
+                state.message = action.payload.message;
+            })
+            .addCase(verifyBikerLicense.rejected, (state, action) => {
+                state.status = "failed";
+                state.error = action.payload;
+            })
+
             .addCase(verifySelfie.pending, (state) => {
                 state.status = "loading";
                 state.error = "";

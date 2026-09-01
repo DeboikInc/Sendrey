@@ -17,6 +17,14 @@ function hashBuffer(buffer) {
     return crypto.createHash('sha256').update(buffer).digest('hex');
 }
 
+const SINGLE_DOC_FLEETS = ['pedestrian', 'cycling'];
+const ALL_DOC_FIELDS = ['nin', 'driverLicense', 'bikerLicense'];
+
+function getSecondDocType(fleetType) {
+    if (SINGLE_DOC_FLEETS.includes(fleetType)) return null;
+    return fleetType === 'bike' ? 'bikerLicense' : 'driverLicense';
+}
+
 class KYCService {
 
     constructor() {
@@ -25,30 +33,29 @@ class KYCService {
 
 
     async checkDuplicateDocument(userId, docHash, docType) {
+        const otherFields = ALL_DOC_FIELDS.filter(f => f !== docType);
+
         const self = await Runner.findById(userId).select('verificationDocuments');
         const selfDocs = self?.verificationDocuments || {};
-        const otherFieldType = docType === 'nin' ? 'driverLicense' : 'nin';
 
-        if (selfDocs[otherFieldType]?.documentHash === docHash) {
+        const matchedField = otherFields.find(f => selfDocs[f]?.documentHash === docHash);
+        if (matchedField) {
+            const label = matchedField === 'nin' ? 'NIN' : matchedField === 'driverLicense' ? 'Driver License' : "Biker's License";
             return {
                 blocked: true,
                 userFacing: true,
-                error: `This is the same document you already submitted as your ${otherFieldType === 'nin' ? 'NIN' : 'Driver License'}. Please upload a different, valid ID.`
+                error: `This is the same document you already submitted as your ${label}. Please upload a different, valid ID.`
             };
         }
 
-        // Case 2: different account, same image — possible fraud, don't tip them off
         const other = await Runner.findOne({
             _id: { $ne: userId },
-            $or: [
-                { 'verificationDocuments.nin.documentHash': docHash },
-                { 'verificationDocuments.driverLicense.documentHash': docHash }
-            ]
+            $or: ALL_DOC_FIELDS.map(f => ({ [`verificationDocuments.${f}.documentHash`]: docHash }))
         }).select('_id');
 
         if (other) {
             return {
-                blocked: false, // let it through, don't alert the submitter
+                blocked: false,
                 flagForReview: true,
                 flaggedReason: `Document hash matches an existing submission from another account (${other._id}: ${other.firstName || ''} ${other.lastName || ''} - ${other.email || ''})`
             };
@@ -126,7 +133,8 @@ class KYCService {
 
         const doc = docs.nin?.documentPath ? { type: 'nin', premblyType: 'ID', path: docs.nin.documentPath }
             : docs.driverLicense?.documentPath ? { type: 'driverLicense', premblyType: 'DL', path: docs.driverLicense.documentPath }
-                : null;
+                : docs.bikerLicense?.documentPath ? { type: 'bikerLicense', premblyType: 'DL', path: docs.bikerLicense.documentPath }
+                    : null;
 
         if (!doc) return;
 
@@ -232,7 +240,7 @@ class KYCService {
     async submitDriverLicense(licenseNumber, fileBuffer, fileName, userInfo = {}) {
         try {
             const docHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
-            const dupCheck = await this.checkDuplicateDocument(userInfo.userId, docHash, 'driver_license');
+            const dupCheck = await this.checkDuplicateDocument(userInfo.userId, docHash, 'driverLicense');
 
             if (dupCheck.blocked) {
                 return { success: false, error: dupCheck.error, documentType: 'driver_license' };
@@ -292,6 +300,72 @@ class KYCService {
                 success: false,
                 error: error.message || 'Driver license submission failed',
                 documentType: 'driver_license'
+            };
+        }
+    }
+
+    async submitBikerLicense(licenseNumber, fileBuffer, fileName, userInfo = {}) {
+        try {
+            const docHash = crypto.createHash('sha256').update(fileBuffer).digest('hex');
+            const dupCheck = await this.checkDuplicateDocument(userInfo.userId, docHash, 'bikerLicense');
+
+            if (dupCheck.blocked) {
+                return { success: false, error: dupCheck.error, documentType: 'biker_license' };
+            }
+
+            const existing = await Runner.findById(userInfo.userId).select('verificationDocuments.bikerLicense');
+            const priorBikerLicense = existing?.verificationDocuments?.bikerLicense;
+            const wasRejected = priorBikerLicense?.status === 'rejected';
+
+            const uploadResult = await this.saveDocumentToCloudinary(fileBuffer, 'biker_license', userInfo.userId, fileName);
+            if (!uploadResult.success) {
+                return { success: false, error: 'Failed to upload document', documentType: 'biker_license' };
+            }
+
+            await Runner.findByIdAndUpdate(userInfo.userId, {
+                'verificationDocuments.bikerLicense': {
+                    status: 'pending_review',
+                    verified: false,
+                    documentPath: uploadResult.cloudinaryUrl,
+                    cloudinaryPublicId: uploadResult.cloudinaryPublicId,
+                    documentHash: docHash,
+                    flaggedForReview: dupCheck.flagForReview || false,
+                    flaggedReason: dupCheck.flaggedReason || null,
+                    wasResubmitted: wasRejected,
+                    previousRejectedAt: wasRejected ? priorBikerLicense.rejectedAt : undefined,
+                    previousRejectionReason: wasRejected ? priorBikerLicense.rejectionReason : undefined,
+                    submittedAt: new Date(),
+                    firstName: userInfo.firstName,
+                    lastName: userInfo.lastName,
+                    dateOfBirth: userInfo.dateOfBirth
+                }
+            });
+
+            await Runner.findByIdAndUpdate(userInfo.userId, {
+                kycStatus: await this.calculateRunnerStatus(userInfo.userId)
+            });
+
+            return {
+                success: true,
+                verified: false,
+                documentType: 'biker_license',
+                status: 'pending_review',
+                data: {
+                    firstName: userInfo.firstName,
+                    lastName: userInfo.lastName,
+                    dateOfBirth: userInfo.dateOfBirth,
+                    documentPath: uploadResult.cloudinaryUrl,
+                    cloudinaryPublicId: uploadResult.cloudinaryPublicId,
+                    submittedAt: new Date()
+                }
+            };
+
+        } catch (error) {
+            console.error('Biker License Submission Error:', error);
+            return {
+                success: false,
+                error: error.message || 'Biker license submission failed',
+                documentType: 'biker_license'
             };
         }
     }
@@ -370,14 +444,14 @@ class KYCService {
                     {
                         $or: [
                             { 'verificationDocuments.nin.status': 'pending_review' },
-                            { 'verificationDocuments.passport.status': 'pending_review' },
                             { 'verificationDocuments.driverLicense.status': 'pending_review' },
+                            { 'verificationDocuments.bikerLicense.status': 'pending_review' },
                             { 'biometricVerification.status': 'pending_review' }
                         ]
                     },
                     { 'verificationDocuments.nin.status': { $ne: 'rejected' } },
-                    { 'verificationDocuments.passport.status': { $ne: 'rejected' } },
                     { 'verificationDocuments.driverLicense.status': { $ne: 'rejected' } },
+                    { 'verificationDocuments.bikerLicense.status': 'pending_review' },
                     { 'biometricVerification.status': { $ne: 'rejected' } }
                 ]
             }).select('firstName lastName email phone fleetType createdAt verificationDocuments biometricVerification kycStatus');
@@ -407,7 +481,7 @@ class KYCService {
 
         if (docs.nin?.status === 'pending_review') pending.push('NIN');
         if (docs.driverLicense?.status === 'pending_review') pending.push('Driver License');
-        if (docs.passport?.status === 'pending_review') pending.push('Passport');
+        if (docs.bikerLicense?.status === 'pending_review') pending.push("Biker's License");
         if (bio.status === 'pending_review') pending.push('Selfie');
 
         return pending;
@@ -461,6 +535,20 @@ class KYCService {
                         flaggedReason: docs.driverLicense?.flaggedReason || null,
                         wasResubmitted: docs.driverLicense?.wasResubmitted || false,
                         previousRejectionReason: docs.driverLicense?.previousRejectionReason || null
+                    },
+                    bikerLicense: {
+                        status: docs.bikerLicense?.status || 'not_submitted',
+                        verified: docs.bikerLicense?.verified || false,
+                        submittedAt: docs.bikerLicense?.submittedAt,
+                        documentPath: docs.bikerLicense?.documentPath,
+                        verifiedAt: docs.bikerLicense?.verifiedAt,
+                        verifiedBy: docs.bikerLicense?.verifiedBy,
+                        rejectedAt: docs.bikerLicense?.rejectedAt,
+                        rejectionReason: docs.bikerLicense?.rejectionReason,
+                        flaggedForReview: docs.bikerLicense?.flaggedForReview || false,
+                        flaggedReason: docs.bikerLicense?.flaggedReason || null,
+                        wasResubmitted: docs.bikerLicense?.wasResubmitted || false,
+                        previousRejectionReason: docs.bikerLicense?.previousRejectionReason || null
                     }
                 },
                 biometrics: {
@@ -485,7 +573,7 @@ class KYCService {
 
     async approveDocument(runnerId, documentType, adminId = 'admin') {
         try {
-            const validTypes = ['nin', 'driverLicense', 'passport'];
+            const validTypes = ['nin', 'driverLicense', 'bikerLicense'];
             if (!validTypes.includes(documentType)) return { success: false, error: 'Invalid document type' };
 
             const updateField = `verificationDocuments.${documentType}`;
@@ -512,7 +600,7 @@ class KYCService {
 
     async rejectDocument(runnerId, documentType, reason) {
         try {
-            const validTypes = ['nin', 'driverLicense', 'passport'];
+            const validTypes = ['nin', 'driverLicense', 'bikerLicense'];
             if (!validTypes.includes(documentType)) return { success: false, error: 'Invalid document type' };
 
             const updateField = `verificationDocuments.${documentType}`;
@@ -587,16 +675,19 @@ class KYCService {
         const rejectedItems = [];
         if (docs.nin?.status === 'rejected') rejectedItems.push('nin');
         if (docs.driverLicense?.status === 'rejected') rejectedItems.push('driverLicense');
+        if (docs.bikerLicense?.status === 'rejected') rejectedItems.push('bikerLicense');
         if (biometrics.status === 'rejected') rejectedItems.push('selfie');
         if (rejectedItems.length > 0) return 'rejected'; // <-- new, checked first
 
         const verifiedDocs = [];
         if (docs.nin?.verified) verifiedDocs.push('nin');
         if (docs.driverLicense?.verified) verifiedDocs.push('driverLicense');
+        if (docs.bikerLicense?.verified) verifiedDocs.push('bikerLicense');
 
         const pendingDocs = [];
         if (docs.nin?.status === 'pending_review') pendingDocs.push('nin');
         if (docs.driverLicense?.status === 'pending_review') pendingDocs.push('driverLicense');
+        if (docs.bikerLicense?.status === 'pending_review') pendingDocs.push('bikerLicense');
 
         if (pendingDocs.length > 0 || biometrics.status === 'pending_review') return 'pending_verification';
         if (verifiedDocs.length === 0) return 'pending_verification';
@@ -648,6 +739,7 @@ class KYCService {
         const bio = runner.biometricVerification || {};
         if (docs.nin?.status === 'rejected') out.push({ type: 'NIN', reason: docs.nin.rejectionReason, auto: docs.nin.rejectedBy === 'prembly-auto' });
         if (docs.driverLicense?.status === 'rejected') out.push({ type: 'Driver License', reason: docs.driverLicense.rejectionReason });
+        if (docs.bikerLicense?.status === 'rejected') out.push({ type: "Biker's License", reason: docs.bikerLicense.rejectionReason });
         if (bio.status === 'rejected') out.push({ type: 'Selfie', reason: bio.rejectionReason, auto: bio.rejectionReason?.startsWith('Automated') });
         return out;
     }
@@ -657,7 +749,8 @@ class KYCService {
             role: 'runner',
             $or: [
                 { 'verificationDocuments.nin.flaggedForReview': true },
-                { 'verificationDocuments.driverLicense.flaggedForReview': true }
+                { 'verificationDocuments.driverLicense.flaggedForReview': true },
+                { 'verificationDocuments.bikerLicense.flaggedForReview': true }
             ]
         }).select('firstName lastName email phone fleetType createdAt verificationDocuments biometricVerification kycStatus');
         return runners.map(r => ({
@@ -673,6 +766,7 @@ class KYCService {
         const docs = runner.verificationDocuments || {};
         if (docs.nin?.flaggedForReview) out.push({ type: 'NIN', reason: docs.nin.flaggedReason });
         if (docs.driverLicense?.flaggedForReview) out.push({ type: 'Driver License', reason: docs.driverLicense.flaggedReason });
+        if (docs.bikerLicense?.flaggedForReview) out.push({ type: "Biker's License", reason: docs.bikerLicense.flaggedReason });
         return out;
     }
 
@@ -682,6 +776,7 @@ class KYCService {
             $or: [
                 { 'verificationDocuments.nin.verifiedBy': 'prembly-auto' },
                 { 'verificationDocuments.driverLicense.verifiedBy': 'prembly-auto' },
+                { 'verificationDocuments.bikerLicense.verifiedBy': 'prembly-auto' },
                 { 'biometricVerification.verifiedBy': 'prembly-auto' }
             ]
         }).select('firstName lastName email phone fleetType createdAt verificationDocuments biometricVerification kycStatus');
@@ -700,12 +795,13 @@ class KYCService {
                     $or: [
                         { 'verificationDocuments.nin.wasResubmitted': true },
                         { 'verificationDocuments.driverLicense.wasResubmitted': true },
+                        { 'verificationDocuments.bikerLicense.wasResubmitted': true },
                         { 'biometricVerification.wasResubmitted': true }
                     ]
                 },
                 { 'verificationDocuments.nin.status': { $ne: 'rejected' } },
-                { 'verificationDocuments.passport.status': { $ne: 'rejected' } },
                 { 'verificationDocuments.driverLicense.status': { $ne: 'rejected' } },
+                { 'verificationDocuments.bikerLicense.status': { $ne: 'rejected' } },
                 { 'biometricVerification.status': { $ne: 'rejected' } }
             ]
         }).select('firstName lastName email phone fleetType createdAt verificationDocuments biometricVerification kycStatus');
@@ -723,6 +819,7 @@ class KYCService {
         const bio = runner.biometricVerification || {};
         if (docs.nin?.wasResubmitted) out.push({ type: 'NIN', previousReason: docs.nin.previousRejectionReason });
         if (docs.driverLicense?.wasResubmitted) out.push({ type: 'Driver License', previousReason: docs.driverLicense.previousRejectionReason });
+        if (docs.bikerLicense?.wasResubmitted) out.push({ type: "Biker's License", previousReason: docs.bikerLicense.previousRejectionReason });
         if (bio.wasResubmitted) out.push({ type: 'Selfie', previousReason: bio.previousRejectionReason });
         return out;
     }
