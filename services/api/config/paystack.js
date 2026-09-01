@@ -108,7 +108,7 @@ class Paystack {
   async getBanks() {
     try {
       const response = await this.readClient.get('/bank', {
-        params: {country: 'nigeria', perPage: 100},
+        params: { country: 'nigeria', perPage: 100 },
       });
       return response.data;
     } catch (error) {

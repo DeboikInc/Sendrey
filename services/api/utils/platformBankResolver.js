@@ -31,7 +31,7 @@ async function resolveBankCode(accountNumber, bankCode) {
 
   let resolved;
   try {
-    resolved = await paystack.resolveAccount({
+    resolved = await paystack.verifyAccountNumber({
       account_number: accountNumber,
       bank_code: bankCode,
     });
