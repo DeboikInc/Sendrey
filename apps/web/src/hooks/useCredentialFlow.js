@@ -623,7 +623,7 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
           setMessages(prev => [...prev, {
             id: Date.now(),
             from: "them",
-            text: `${errorMessage} Please provide a different phone number. ${CREDENTIAL_QUESTIONS[phoneIdx].question}`,
+            text: `${errorMessage} Please provide a different detail. ${CREDENTIAL_QUESTIONS[phoneIdx].question}`,
             time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
             status: "delivered",
             isCredential: true,
