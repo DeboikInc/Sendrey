@@ -7,7 +7,7 @@ import {
     fetchPricingConfig, savePricingConfig,
     fetchMatchingConfig, saveMatchingConfig,
     fetchPlatformConfig, savePlatformConfig,
-    fetchPedestrianConfig, savePedestrianConfig,
+    fetchPedestrianConfig, savePedestrianConfig, getBanks,
     updateField, updatePedestrianLeg, updateFleetRule, updateTier, addTier, removeTier, discardChanges,
 } from '../Redux/configSlice';
 
@@ -76,6 +76,26 @@ function TextField({ label, value, onChange }) {
     );
 }
 
+function SelectField({ label, value, onChange, options, placeholder = 'Select...' }) {
+    return (
+        <div>
+            <label className="block text-[10px] text-white/30 tracking-widest uppercase font-medium mb-1.5">{label}</label>
+            <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg focus-within:border-primary/40 transition-colors">
+                <select
+                    value={value || ''}
+                    onChange={e => onChange(e.target.value)}
+                    className="bg-transparent text-sm text-white/80 outline-none w-full appearance-none p-2"
+                >
+                    <option value="" disabled className="bg-secondary">{placeholder}</option>
+                    {options.map(opt => (
+                        <option key={opt.code} value={opt.code} className="bg-secondary">{opt.name}</option>
+                    ))}
+                </select>
+            </div>
+        </div>
+    );
+}
+
 function FleetRuleCard({ fleetKey, label, rule, onChange }) {
     return (
         <div className="bg-secondary/30 border border-white/10 rounded-2xl p-4 space-y-3">
@@ -122,6 +142,7 @@ export default function ConfigTab() {
     const matching = useSelector(state => state.config.matching);
     const platform = useSelector(state => state.config.platform);
     const pedestrian = useSelector(state => state.config.pedestrian);
+    const banks = useSelector(state => state.config.banks);
     const [confirm, setConfirm] = useState(null);
     const NairaSign = '₦';
 
@@ -130,6 +151,7 @@ export default function ConfigTab() {
         dispatch(fetchMatchingConfig());
         dispatch(fetchPlatformConfig());
         dispatch(fetchPedestrianConfig());
+        dispatch(getBanks());
     }, [dispatch]);
 
     const { data: config, original: originalConfig, loading, saving: savingPricing, error: pricingError } = pricing;
@@ -163,7 +185,8 @@ export default function ConfigTab() {
         pedestrianConfig.pedestrianMaxDeliveryLeg !== originalPedestrianConfig.pedestrianMaxDeliveryLeg
     );
     const platformConfigChanged = platformConfig && originalPlatformConfig && (
-        platformConfig.platformBankAccount !== originalPlatformConfig.platformBankAccount
+        platformConfig.platformBankAccount !== originalPlatformConfig.platformBankAccount ||
+        platformConfig.bankCode !== originalPlatformConfig.bankCode
     );
 
     // Count distinct changed sections across all resources
@@ -244,12 +267,29 @@ export default function ConfigTab() {
     };
 
     const handlePlatformConfigSave = () => {
+        if (!platformConfig.bankCode) {
+            setConfirm({
+                title: 'Bank Required',
+                message: 'Select a bank before saving the settlement account.',
+                confirmLabel: 'OK',
+                confirmVariant: 'primary',
+                onConfirm: () => setConfirm(null),
+            });
+            return;
+        }
+
         setConfirm({
             title: 'Save Platform Bank Account',
             message: 'Update the platform settlement bank account? This affects where future settlements are sent.',
             confirmLabel: 'Save Changes',
             confirmVariant: 'primary',
-            onConfirm: () => { setConfirm(null); dispatch(savePlatformConfig(platformConfig)); },
+            onConfirm: () => {
+                setConfirm(null);
+                dispatch(savePlatformConfig({
+                    platformBankAccount: platformConfig.platformBankAccount,
+                    bankCode: platformConfig.bankCode,
+                }));
+            },
         });
     };
 
@@ -554,6 +594,13 @@ export default function ConfigTab() {
                                         label="Platform Bank Account"
                                         value={platformConfig.platformBankAccount}
                                         onChange={v => dispatch(updateField({ resource: 'platform', field: 'platformBankAccount', value: v }))}
+                                    />
+                                    <SelectField
+                                        label="Bank"
+                                        value={platformConfig.bankCode}
+                                        options={banks.list}
+                                        placeholder={banks.loading ? 'Loading banks...' : 'Select bank'}
+                                        onChange={v => dispatch(updateField({ resource: 'platform', field: 'bankCode', value: v }))}
                                     />
                                     {platformConfig.accountName && (
                                         <div className="text-xs text-white/40">

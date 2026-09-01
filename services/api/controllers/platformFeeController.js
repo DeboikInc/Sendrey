@@ -1,6 +1,7 @@
 const BaseController = require('./baseController');
 const platformService = require('../services/platformService');
 const { invalidatePlatformRecipientCache } = require('../utils/platformBankResolver');
+const paystack = require('../config/paystack');
 
 class PlatformFeeController extends BaseController {
   constructor(platformService) {
@@ -18,18 +19,27 @@ class PlatformFeeController extends BaseController {
     }
   };
 
+  getBanks = async (req, res, next) => {
+    try {
+      const banks = await paystack.getBanks();
+      return this.success(res, banks.data.map(b => ({ code: b.code, name: b.name })));
+    } catch (err) {
+      next(err);
+    }
+  };
+
   updateBankAccount = async (req, res, next) => {
     console.log('body received:', req.body);
     try {
-      const { platformBankAccount } = req.body;
+      const { platformBankAccount, bankCode } = req.body;
 
-      if (!platformBankAccount) {
-        return this.badRequest(res, 'platformBankAccount is required');
+      if (!platformBankAccount || !bankCode) {
+        return this.badRequest(res, 'platformBankAccount and bank code are required');
       }
 
       let settings;
       try {
-        settings = await this.platformService.updateBankAccount(platformBankAccount);
+        settings = await this.platformService.updateBankAccount(platformBankAccount, bankCode);
       } catch (resolveErr) {
 
         return this.badRequest(res, resolveErr.message);

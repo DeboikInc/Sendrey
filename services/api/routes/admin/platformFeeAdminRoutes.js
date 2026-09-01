@@ -4,5 +4,5 @@ const PlatformFeeController = require('../../controllers/platformFeeController')
 
 router.get('/get-platform-fee-setting',  PlatformFeeController.getSettings);
 router.put('/update-platform-fee-bank-account',  PlatformFeeController.updateBankAccount);
-
+router.get('/get-banks', PlatformFeeController.getBanks);
 module.exports = router;

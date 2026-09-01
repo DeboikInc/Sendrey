@@ -12,12 +12,12 @@ class PlatformService {
     return settings;
   }
 
-  async updateBankAccount(accountNumber) {
-    const { bankName, accountName } = await resolveBankCode(accountNumber);
+  async updateBankAccount(accountNumber, bankCode) {
+    const { bankName, accountName } = await resolveBankCode(accountNumber, bankCode);
 
     return PlatformSettings.findOneAndUpdate(
       { key: 'active' },
-      { $set: { platformBankAccount: accountNumber, bankName, accountName } },
+      { $set: { platformBankAccount: accountNumber, bankCode, bankName, accountName } },
       { new: true, upsert: true }
     );
   }

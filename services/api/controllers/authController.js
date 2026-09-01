@@ -359,6 +359,14 @@ class AuthController extends BaseController {
           expiryDate: runner.verificationDocuments?.driverLicense?.expiryDate ?? null,
           rejectionReason: runner.verificationDocuments?.driverLicense?.rejectionReason ?? null,
         },
+        bikerLicense: {
+          status: runner.verificationDocuments?.bikerLicense?.status ?? 'not_submitted',
+          verified: runner.verificationDocuments?.bikerLicense?.verified ?? false,
+          submittedAt: runner.verificationDocuments?.bikerLicense?.submittedAt ?? null,
+          verifiedAt: runner.verificationDocuments?.bikerLicense?.verifiedAt ?? null,
+          expiryDate: runner.verificationDocuments?.bikerLicense?.expiryDate ?? null,
+          rejectionReason: runner.verificationDocuments?.bikerLicense?.rejectionReason ?? null,
+        },
         biometric: {
           status: runner.biometricVerification?.status ?? 'not_submitted',
           selfieVerified: runner.biometricVerification?.selfieVerified ?? false,

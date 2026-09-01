@@ -5,6 +5,7 @@ const platformSettingsSchema = new mongoose.Schema({
   platformBankAccount: { type: String, default: '12345678901' },
   bankName: { type: String, default: null },
   accountName: { type: String, default: null },
+  bankCode: { type: String, default: null },
   updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin' },
 }, { timestamps: true });
 

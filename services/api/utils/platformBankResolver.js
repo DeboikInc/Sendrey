@@ -1,5 +1,6 @@
 const paystack = require('../config/paystack');
 const PlatformSettings = require('../models/PlatformSettings');
+const logger = require('../utils/logger');
 
 let cachedBankCode = null;
 let cachedAccountNumber = null;
@@ -10,28 +11,26 @@ let cachedRecipientCode = null;
  * Paystack's /bank/resolve endpoint returns account name and bank details.
  * We need to match against the bank list to get the code.
  */
-async function resolveBankCode(accountNumber) {
-  // Get all banks from Paystack
+async function resolveBankCode(accountNumber, bankCode) {
+  if (!bankCode) throw new Error('bankCode is required to resolve an account');
+
   const banksRes = await paystack.getBanks();
   if (!banksRes?.data) throw new Error('Failed to fetch banks from Paystack');
 
-  // Try resolving against each bank until one works
-  for (const bank of banksRes.data) {
-    try {
-      const resolved = await paystack.resolveAccount({
-        account_number: accountNumber,
-        bank_code: bank.code,
-      });
-      if (resolved?.data?.account_number === accountNumber) {
-        console.log(`[platformBank] Resolved: ${resolved.data.account_name} — bank: ${bank.name} (${bank.code})`);
-        return { bankCode: bank.code, bankName: bank.name, accountName: resolved.data.account_name };
-      }
-    } catch (_) {
-      // not this bank, continue
-    }
+  const bank = banksRes.data.find((b) => b.code === bankCode);
+  if (!bank) throw new Error(`Unknown bank code: ${bankCode}`);
+
+  const resolved = await paystack.resolveAccount({
+    account_number: accountNumber,
+    bank_code: bankCode,
+  });
+
+  if (resolved?.data?.account_number !== accountNumber) {
+    throw new Error(`Could not verify account number ${accountNumber} at ${bank.name}`);
   }
 
-  throw new Error(`Could not resolve bank code for account number: ${accountNumber}`);
+  console.log(`[platformBank] Resolved: ${resolved.data.account_name} — bank: ${bank.name} (${bankCode})`);
+  return { bankCode, bankName: bank.name, accountName: resolved.data.account_name };
 }
 
 /**
@@ -47,6 +46,7 @@ async function getOrCreatePlatformRecipient() {
   }
 
   const accountNumber = settings.platformBankAccount;
+  const bankCode = settings.bankCode;
 
   // Return cached recipient if account number hasn't changed
   if (cachedRecipientCode && cachedAccountNumber === accountNumber) {
@@ -54,7 +54,7 @@ async function getOrCreatePlatformRecipient() {
   }
 
   // Resolve bank code from Paystack
-  const { bankCode, accountName } = await resolveBankCode(accountNumber);
+  const { accountName } = await resolveBankCode(accountNumber, bankCode);
 
   // Create transfer recipient
   const recipient = await paystack.createTransferRecipient({
@@ -73,7 +73,7 @@ async function getOrCreatePlatformRecipient() {
   cachedAccountNumber = accountNumber;
   cachedBankCode = bankCode;
 
-  console.log(`[platformBank] Recipient created: ${cachedRecipientCode}`);
+  logger.info(`[platformBank] Recipient created: ${cachedRecipientCode}`);
   return cachedRecipientCode;
 }
 

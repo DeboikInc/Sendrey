@@ -66,9 +66,6 @@ export const fetchPedestrianConfig = createAsyncThunk(
         try {
             console.log('Fetching pedestrian config...');
             const res = await api.get('/distance/get-pedestrian-config');
-            console.log('Pedestrian config response:', res.data);
-            console.log('Response status:', res.status);
-            console.log('Response data keys:', Object.keys(res.data));
             return res.data.data || res.data;
         } catch (err) {
             console.error('Error fetching pedestrian config:', err);
@@ -86,6 +83,15 @@ export const savePedestrianConfig = createAsyncThunk('config/savePedestrian', as
     }
 });
 
+export const getBanks = createAsyncThunk('config/getBanks', async (_, { rejectWithValue }) => {
+    try {
+        const res = await api.get('/platform/get-banks');
+        return res.data;
+    } catch (err) {
+        return rejectWithValue(err.response?.data?.message || 'Failed to fetch banks');
+    }
+});
+
 const resourceInitial = { data: null, original: null, loading: false, saving: false, error: null };
 
 const initialState = {
@@ -93,6 +99,7 @@ const initialState = {
     matching: { ...resourceInitial },
     platform: { ...resourceInitial },
     pedestrian: { ...resourceInitial },
+    banks: { list: [], loading: false, error: null },
 };
 
 const configSlice = createSlice({
@@ -224,6 +231,7 @@ const configSlice = createSlice({
             .addCase(fetchPedestrianConfig.rejected, (state, action) => {
                 state.pedestrian.error = action.payload;
             })
+
             .addCase(savePedestrianConfig.pending, (state) => {
                 state.pedestrian.saving = true;
                 state.pedestrian.error = null;
@@ -236,6 +244,19 @@ const configSlice = createSlice({
             .addCase(savePedestrianConfig.rejected, (state, action) => {
                 state.pedestrian.saving = false;
                 state.pedestrian.error = action.payload;
+            })
+
+            .addCase(getBanks.pending, (state) => {
+                state.banks.loading = true;
+                state.banks.error = null;
+            })
+            .addCase(getBanks.fulfilled, (state, action) => {
+                state.banks.loading = false;
+                state.banks.list = action.payload;
+            })
+            .addCase(getBanks.rejected, (state, action) => {
+                state.banks.loading = false;
+                state.banks.error = action.payload;
             });
     },
 });
