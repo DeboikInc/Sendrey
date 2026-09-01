@@ -679,6 +679,12 @@ class KYCService {
         if (biometrics.status === 'rejected') rejectedItems.push('selfie');
         if (rejectedItems.length > 0) return 'rejected'; // <-- new, checked first
 
+        const flaggedItems = [];
+        if (docs.nin?.flaggedForReview) flaggedItems.push('nin');
+        if (docs.driverLicense?.flaggedForReview) flaggedItems.push('driverLicense');
+        if (docs.bikerLicense?.flaggedForReview) flaggedItems.push('bikerLicense');
+        if (flaggedItems.length > 0) return 'pending_verification';
+
         const verifiedDocs = [];
         if (docs.nin?.verified) verifiedDocs.push('nin');
         if (docs.driverLicense?.verified) verifiedDocs.push('driverLicense');
@@ -700,7 +706,10 @@ class KYCService {
         try {
             const verifiedRunners = await Runner.find({
                 role: 'runner',
-                kycStatus: { $in: ['approved_full', 'approved_limited'] }
+                kycStatus: { $in: ['approved_full', 'approved_limited'] },
+                'verificationDocuments.nin.flaggedForReview': { $ne: true },
+                'verificationDocuments.driverLicense.flaggedForReview': { $ne: true },
+                'verificationDocuments.bikerLicense.flaggedForReview': { $ne: true }
             }).select('firstName lastName email fleetType phone createdAt verificationDocuments biometricVerification kycStatus');
 
             return verifiedRunners.map(runner => ({
@@ -708,12 +717,11 @@ class KYCService {
                 firstName: runner.firstName,
                 lastName: runner.lastName,
                 email: runner.email,
-                // isKycVerified: runner.isKycVerified,
                 phone: runner.phone,
                 fleetType: runner.fleetType,
                 createdAt: runner.createdAt,
                 kycStatus: runner.kycStatus,
-                pendingItems: [] // Verified runners have no pending items
+                pendingItems: []
             }));
 
         } catch (error) {

@@ -604,7 +604,7 @@ export default function ConfigTab() {
                                     />
                                     {platformConfig.accountName && (
                                         <div className="text-xs text-white/40">
-                                            Resolved: <span className="text-white/70">{platformConfig.accountName}</span> — {platformConfig.bankName}
+                                            Account Name: <span className="text-white/70">{platformConfig.accountName}</span>
                                         </div>
                                     )}
                                 </div>
