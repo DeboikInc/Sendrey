@@ -14,22 +14,43 @@ let cachedRecipientCode = null;
 async function resolveBankCode(accountNumber, bankCode) {
   if (!bankCode) throw new Error('bankCode is required to resolve an account');
 
-  const banksRes = await paystack.getBanks();
+  let banksRes;
+  try {
+    banksRes = await paystack.getBanks();
+  } catch (err) {
+    logger.error('[platformBank] getBanks failed', {
+      message: err.message,
+      paystackError: err.response?.data,
+    });
+    throw new Error(err.response?.data?.message || 'Failed to fetch banks from Paystack');
+  }
   if (!banksRes?.data) throw new Error('Failed to fetch banks from Paystack');
 
   const bank = banksRes.data.find((b) => b.code === bankCode);
   if (!bank) throw new Error(`Unknown bank code: ${bankCode}`);
 
-  const resolved = await paystack.resolveAccount({
-    account_number: accountNumber,
-    bank_code: bankCode,
-  });
+  let resolved;
+  try {
+    resolved = await paystack.resolveAccount({
+      account_number: accountNumber,
+      bank_code: bankCode,
+    });
+  } catch (err) {
+    logger.error('[platformBank] resolveAccount failed', {
+      accountNumber,
+      bankCode,
+      bankName: bank.name,
+      message: err.message,
+      paystackError: err.response?.data,
+    });
+    throw new Error(err.response?.data?.message || `Could not resolve account at ${bank.name}`);
+  }
 
   if (resolved?.data?.account_number !== accountNumber) {
     throw new Error(`Could not verify account number ${accountNumber} at ${bank.name}`);
   }
 
-  console.log(`[platformBank] Resolved: ${resolved.data.account_name} — bank: ${bank.name} (${bankCode})`);
+  logger.info(`[platformBank] Resolved: ${resolved.data.account_name}, bank: ${bank.name} (${bankCode})`);
   return { bankCode, bankName: bank.name, accountName: resolved.data.account_name };
 }
 

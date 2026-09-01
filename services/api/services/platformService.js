@@ -1,8 +1,9 @@
+const logger = require('../utils/logger');
 const { resolveBankCode } = require('../utils/platformBankResolver');
 const PlatformSettings = require('../models/PlatformSettings');
 
 class PlatformService {
-  
+
   async getActive() {
     const settings = await PlatformSettings.findOneAndUpdate(
       { key: 'active' },
@@ -13,13 +14,22 @@ class PlatformService {
   }
 
   async updateBankAccount(accountNumber, bankCode) {
-    const { bankName, accountName } = await resolveBankCode(accountNumber, bankCode);
+    try {
+      const { bankName, accountName } = await resolveBankCode(accountNumber, bankCode);
 
-    return PlatformSettings.findOneAndUpdate(
-      { key: 'active' },
-      { $set: { platformBankAccount: accountNumber, bankCode, bankName, accountName } },
-      { new: true, upsert: true }
-    );
+      return await PlatformSettings.findOneAndUpdate(
+        { key: 'active' },
+        { $set: { platformBankAccount: accountNumber, bankCode, bankName, accountName } },
+        { new: true, upsert: true }
+      );
+    } catch (err) {
+      logger.error('[platformService] updateBankAccount failed', {
+        accountNumber,
+        bankCode,
+        message: err.message,
+      });
+      throw err;
+    }
   }
 }
 

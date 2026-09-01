@@ -2,6 +2,7 @@ const BaseController = require('./baseController');
 const platformService = require('../services/platformService');
 const { invalidatePlatformRecipientCache } = require('../utils/platformBankResolver');
 const paystack = require('../config/paystack');
+const logger = require('../utils/logger');
 
 class PlatformFeeController extends BaseController {
   constructor(platformService) {
@@ -29,7 +30,7 @@ class PlatformFeeController extends BaseController {
   };
 
   updateBankAccount = async (req, res, next) => {
-    console.log('body received:', req.body);
+    logger.info('[platform] updateBankAccount request', { body: req.body, adminId: req.admin?.id });
     try {
       const { platformBankAccount, bankCode } = req.body;
 
@@ -41,7 +42,7 @@ class PlatformFeeController extends BaseController {
       try {
         settings = await this.platformService.updateBankAccount(platformBankAccount, bankCode);
       } catch (resolveErr) {
-
+        logger.warn('[platform] updateBankAccount resolve failed', { message: resolveErr.message });
         return this.badRequest(res, resolveErr.message);
       }
 
