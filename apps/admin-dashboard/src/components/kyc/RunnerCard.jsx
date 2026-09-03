@@ -58,6 +58,11 @@ export default function RunnerCard({ runner, view, onReview }) {
       {!items?.length && view === 'verified' && (
         <p className="mt-2 text-[10px] text-white/30">All verified</p>
       )}
+
+      {/* {!items?.length && view === 'verified' && (
+        <p className="mt-2 text-[10px] text-white/30">Verified At: {runner.verifiedAt}</p>
+      )} */}
+
       {!items?.length && view === 'autoConfirmed' && (
         <p className="mt-2 text-[10px] text-white/30">Prembly auto-confirmed</p>
       )}

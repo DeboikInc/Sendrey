@@ -21,7 +21,6 @@ apps/mobile/.env
 apps/admin-dashboard/.env
 apps/landing-page/.env
 
-<<<<<<< HEAD
 apps/*/build/
 build/
 dist/
@@ -59,6 +58,5 @@ ios/App/Pods/
 .vscode/
 *.suo
 
-# Lockfiles (uncomment if you intentionally don't want to track this one)
-# apps/admin-dashboard/package-lock.json
->>>>>>> staging
+register.json
+

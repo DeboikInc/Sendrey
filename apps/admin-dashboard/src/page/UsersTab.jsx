@@ -294,6 +294,7 @@ export default function UsersTab() {
                                             <td className="px-5 py-4">
                                                 <div className="text-white font-medium text-sm">{`${user.firstName || ''} ${user.lastName || ''}`.trim() || '—'}</div>
                                                 <div className="text-white/50 text-xs mt-0.5">{user.email}</div>
+                                                <div className="text-white/50 text-xs mt-0.5">{user.phone}</div>
                                                 {user.createdAt && <div className="text-white/25 text-[9px] mt-0.5">Joined: {new Date(user.createdAt).toLocaleDateString()}</div>}
                                             </td>
                                             <td className="px-5 py-4">

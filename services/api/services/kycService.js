@@ -451,7 +451,7 @@ class KYCService {
                     },
                     { 'verificationDocuments.nin.status': { $ne: 'rejected' } },
                     { 'verificationDocuments.driverLicense.status': { $ne: 'rejected' } },
-                    { 'verificationDocuments.bikerLicense.status': 'pending_review' },
+                    { 'verificationDocuments.bikerLicense.status': 'rejected' },
                     { 'biometricVerification.status': { $ne: 'rejected' } }
                 ]
             }).select('firstName lastName email phone fleetType createdAt verificationDocuments biometricVerification kycStatus');
