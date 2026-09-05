@@ -419,6 +419,7 @@ function RunnerChatScreen({
   // ── Fallback checks against message history — zustand may lag behind 
   const messageTaskCompleted = useMemo(() => messages.some(m =>
     m.type === 'task_completed' || m.messageType === 'task_completed' ||
+    m.type === 'task_completed_marker' || m.messageType === 'task_completed_marker' ||
     (m.type === 'system' && m.text?.toLowerCase().includes('task completed'))
   ), [messages]);
 
@@ -615,17 +616,27 @@ function RunnerChatScreen({
     onOrderCreated((data) => {
       if (!mountedRef.current) return;
       const order = data.order || data;
-      console.log("order.serviceType:", order.serviceType);
       if (!order?.orderId) return;
 
-      setCurrentOrder(prev => {
-        if (prev?.orderId === order.orderId) return { ...prev, ...order };
-        return order;
-      });
+      const isGenuinelyNew = currentOrder?.orderId !== order.orderId;
+
+      setCurrentOrder(prev => (prev?.orderId === order.orderId ? { ...prev, ...order } : order));
+
+      if (isGenuinelyNew) {
+        useOrderStore.getState()._patch(chatId, {
+          taskCompleted: false,
+          orderCancelled: false,
+          cancellationReason: null,
+          deliveryMarked: false,
+          userConfirmedDelivery: false,
+        });
+        setCompletedOrderStatuses([]);
+      }
 
       setAwaitingNewOrder(false);
       setItemsApproved(false);
     });
+
   }, [onOrderCreated]);
 
   // GPS tracking
@@ -918,14 +929,11 @@ function RunnerChatScreen({
         setUserConfirmedDelivery(true);
       }
 
-      if (msg.type === 'system' && (msg.text?.toLowerCase().includes('task completed') || msg.id?.includes('task_completed'))) {
-        console.log('TASK COMPLETED DETECTED:', {
-          msgId: msg.id,
-          msgText: msg.text,
-          currentTaskCompleted: taskCompleted,
-          currentOrderStatus: currentOrder?.status,
-          chatId,
-        });
+      if (
+        msg.type === 'task_completed' || msg.messageType === 'task_completed' ||
+        msg.type === 'task_completed_marker' || msg.messageType === 'task_completed_marker' ||
+        (msg.type === 'system' && msg.text?.toLowerCase().includes('task completed'))
+      ) {
         setTaskCompleted(true);
       }
 
@@ -1458,8 +1466,11 @@ function RunnerChatScreen({
               </IconButton>
             </span>
             <div className="hidden lg:block pl-2">
-              <div onClick={() => setDark(!dark)} className="cursor-pointer bg-gray-1000 dark:bg-black-200 rounded-full w-10 h-10 flex items-center justify-center">
-                {dark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5 text-gray-900" strokeWidth={3.0} />}
+              <div
+                onClick={() => setDark(!dark)}
+                className="cursor-pointer bg-gray-900 dark:bg-gray-100/60 rounded-full w-8 h-8 sm:w-10 sm:h-10 lg:w-10 lg:h-10 flex items-center justify-center hover:scale-105 transition-transform"
+              >
+                {dark ? <Sun className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-white" /> : <Moon className="w-4 h-4 sm:w-5 sm:h-5 lg:w-6 lg:h-6 text-white" strokeWidth={3.0} />}
               </div>
             </div>
           </div>

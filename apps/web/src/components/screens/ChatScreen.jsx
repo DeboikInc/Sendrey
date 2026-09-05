@@ -580,7 +580,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
       }
     });
 
-    socket.on('task_completed', ({ orderId, triggeredBy }) => {
+    socket.on('taskCompleted', ({ orderId, triggeredBy }) => {
       setTaskCompleted(true);
 
       // If triggered by system (auto-confirm), check rating eligibility
@@ -621,7 +621,7 @@ export default function ChatScreen({ runner, userData, darkMode, toggleDarkMode,
 
     return () => {
       socket.off('orderCancelled');
-      socket.off('task_completed');
+      socket.off('taskCompleted');
       socket.off('autoConfirmWarning');
       socket.off('chatReset');
     };
