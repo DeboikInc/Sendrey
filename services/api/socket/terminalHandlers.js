@@ -48,28 +48,26 @@ const handleCancelOrder = async (socket, io, data) => {
         const now = new Date().toISOString();
         const reasonSuffix = reason ? ` Reason: ${reason}` : '';
 
-        // to runner
-        const runnerMessage = {
-            id: `cancel-runner-${Date.now()}`,
-            chatId,
-            text: `You cancelled this order. ${reasonSuffix}`,
-            type: 'system',
-            from: 'system',
-            senderId: 'system',
-            senderType: 'system',
-            createdAt: now,
-        };
-
-        // fetch runner name for a personal touch
         const runner = await Runner.findById(runnerId).select('firstName lastName').lean();
         const runnerName = runner
             ? `${runner.firstName}${runner.lastName ? ' ' + runner.lastName : ''}`
             : 'Your runner';
 
+        // Personalized — live display only, never persisted
+        const runnerMessage = {
+            id: `cancel-runner-${Date.now()}`,
+            chatId,
+            text: `You cancelled this order.${reasonSuffix}`,
+            type: 'system',
+            from: 'system',
+            senderId: 'system',
+            senderType: 'system',
+            createdAt: now,
+        };
         const userMessage = {
             id: `cancel-user-${Date.now()}`,
             chatId,
-            text: `${runnerName} cancelled this order. ${reasonSuffix}`,
+            text: `${runnerName} cancelled this order.${reasonSuffix}`,
             type: 'system',
             from: 'system',
             senderId: 'system',
@@ -77,34 +75,44 @@ const handleCancelOrder = async (socket, io, data) => {
             createdAt: now,
         };
 
-        // Emit orderCancelled to the whole room (both need to know to clear state)
-        // but send the personalised system message to each private room
+        // Neutral — the one persisted, shared version both sides see on refetch
+        const sharedCancelMessage = {
+            id: `cancel-shared-${Date.now()}`,
+            chatId,
+            text: `Order cancelled by ${runnerName}.${reasonSuffix}`,
+            type: 'system',
+            from: 'system',
+            senderId: 'system',
+            senderType: 'system',
+            createdAt: now,
+        };
+
         io.to(chatId).emit('orderCancelled', {
             orderId: order.orderId,
             chatId,
             message: cancelMessage.text,
             cancelledBy: 'runner',
             clearChat: true,
-            // give each side their own message so their client can display it
             runnerMessage,
             userMessage,
         });
 
-        notifyOrderCancelled(userId, {
-            orderId,
-            cancelledBy: 'runner',
-            runnerName,
-            reason,
-        }).catch(err => console.warn('[cancelOrder] User notify failed:', err.message));
+        notifyOrderCancelled(userId, { orderId, cancelledBy: 'runner', runnerName, reason })
+            .catch(err => console.warn('[cancelOrder] User notify failed:', err.message));
 
         io.to(`runner-${runnerId}`).emit('message', runnerMessage);
         io.to(`user-${userId}`).emit('message', userMessage);
 
-        // Slow ops fire-and-forget
         Promise.all([
             Runner.findByIdAndUpdate(runnerId, { isAvailable: true, activeOrderId: null, currentUserId: null }),
             User.findByIdAndUpdate(userId, { isAvailable: true, activeOrderId: null, currentRunnerId: null }),
-            Chat.findOneAndUpdate({ chatId }, { $set: { lastActivity: new Date() } }),
+            Chat.findOneAndUpdate(
+                { chatId },
+                {
+                    $push: { messages: sharedCancelMessage },
+                    $set: { lastActivity: new Date() },
+                }
+            ),
             archiveCurrentSession(chatId, orderId, 'cancelled'),
         ]).catch(err => logger.error('handleCancelOrder post-emit ops failed:', err));
 
@@ -262,9 +270,9 @@ const handleTaskCompleted = async (io, data) => {
     const { chatId, orderId, runnerId, userId } = data;
 
     const emitTaskCompleted = () => {
-        io.to(chatId).emit('task_completed', { orderId, chatId, runnerId, userId, clearChat: true });
-        io.to(`user-${userId}`).emit('task_completed', { orderId, chatId, runnerId, userId, clearChat: true });
-        io.to(`runner-${runnerId}`).emit('task_completed', { orderId, chatId, runnerId, userId, clearChat: true });
+        io.to(chatId).emit('taskCompleted', { orderId, chatId, runnerId, userId, clearChat: true });
+        io.to(`user-${userId}`).emit('taskCompleted', { orderId, chatId, runnerId, userId, clearChat: true });
+        io.to(`runner-${runnerId}`).emit('taskCompleted', { orderId, chatId, runnerId, userId, clearChat: true });
     };
 
     emitTaskCompleted();

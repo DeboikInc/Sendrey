@@ -6,7 +6,7 @@ const logger = require('../utils/logger');
 
 class PremblyService {
   isConfigured() {
-    return !!(process.env.PREMBLY_API_KEY && process.env.PREMBLY_APP_ID);
+    return !!process.env.PREMBLY_API_KEY;
   }
 
   async verifyDocumentWithFace({ docImageBase64, selfieImageBase64, docType, docCountry = 'NGA' }) {
@@ -20,7 +20,7 @@ class PremblyService {
         `${PREMBLY_BASE_URL}/document_w_face`,
         { doc_type: docType, doc_country: docCountry, doc_image: docImageBase64, selfie_image: selfieImageBase64 },
         {
-          headers: { 'x-api-key': process.env.PREMBLY_API_KEY, 'app-id': process.env.PREMBLY_APP_ID },
+          headers: { 'x-api-key': process.env.PREMBLY_API_KEY },
           timeout: 20000
         }
       );

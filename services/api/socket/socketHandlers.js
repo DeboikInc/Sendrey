@@ -540,9 +540,15 @@ const handleAcceptRunnerRequest = async (socket, io, { runnerId, userId, chatId,
         if (s && (!s.user || !s.runner)) {
           console.warn('[preRoom] timeout — both parties never arrived for chatId:', chatId);
           preRoomState.delete(chatId);
-          io.to(`pre-${chatId}`).emit('preRoomTimeout', { chatId, message: 'Connection timed out.' });
-          io.to(`user-${userId}`).emit('preRoomTimeout', { chatId, message: 'Connection timed out.' });
-          io.to(`runner-${runnerId}`).emit('preRoomTimeout', { chatId, message: 'Connection timed out or user did not respond.' });
+
+          // Only notify whichever party actually engaged and was left waiting
+          if (s.runner) {
+            io.to(`runner-${runnerId}`).emit('preRoomTimeout', { chatId, message: 'Connection timed out or user did not respond.' });
+          }
+          if (s.user) {
+            io.to(`user-${userId}`).emit('preRoomTimeout', { chatId, message: 'Connection timed out or runner did not respond.' });
+          }
+
           clearBeaconsForChat(io, chatId, runnerId, userId);
           clearPreRoomSockets(io, chatId);
         }
@@ -634,9 +640,13 @@ const handleRequestRunner = async (socket, io, data) => {
         if (s && (!s.user || !s.runner)) {
           console.warn('[preRoom] timeout — both parties never arrived for chatId:', chatId);
           preRoomState.delete(chatId);
-          io.to(`pre-${chatId}`).emit('preRoomTimeout', { chatId, message: 'Connection timed out.' });
-          io.to(`user-${userId}`).emit('preRoomTimeout', { chatId, message: 'Connection timed out.' });
-          io.to(`runner-${runnerId}`).emit('preRoomTimeout', { chatId, message: 'Connection timed out or user did not respond.' });
+          
+          if (s.user) {
+            io.to(`user-${userId}`).emit('preRoomTimeout', { chatId, message: 'Connection timed out or runner did not respond.' });
+          }
+          if (s.runner) {
+            io.to(`runner-${runnerId}`).emit('preRoomTimeout', { chatId, message: 'Connection timed out or user did not respond.' });
+          }
           clearBeaconsForChat(io, chatId, runnerId, userId);
           clearPreRoomSockets(io, chatId);
         }

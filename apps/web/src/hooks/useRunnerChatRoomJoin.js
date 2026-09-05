@@ -152,6 +152,7 @@ export function useRunnerChatRoomJoin({
 
       const isCompleted = formatted.some(m =>
         m.type === 'task_completed' || m.messageType === 'task_completed'
+        || m.type === 'task_completed_marker' || m.messageType === 'task_completed_marker'
         || (m.type === 'system' && m.text?.toLowerCase().includes('task completed'))
       );
       if (isCompleted) {
