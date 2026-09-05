@@ -323,7 +323,7 @@ export const Auth = () => {
         return;
       }
     } catch (error) {
-      if (error?.field === 'phone') {
+      if (error?.field === 'phone' || error?.statusCode === 409) {
         setAllErrors(extractAllErrors(error));
         return;
       }
@@ -344,31 +344,23 @@ export const Auth = () => {
       setNeedsOtpVerification(true);
       setAllErrors([]);
     } catch (error) {
-      console.error("Registration failed:", error);
-
-      const raw = error?.errors
-        ? Object.values(error.errors).map(e => e?.message || e).join(" ")
-        : error?.message || error?.data?.message || String(error);
-
-      const isPhoneConflict = error?.field === 'phone';
-      const isAlreadyExists = !isPhoneConflict && (
-        error?.status === 409 || error?.statusCode === 409 ||
-        /already exist|already registered/i.test(raw)
-      );
-
-      if (isAlreadyExists) {
-        // Race condition — user was created between check and register
-        const existingName = error?.data?.userName || error?.userName || "";
+      if (error?.status === 409 && error?.userName) {
         setReturningUser({
-          name: existingName,
-          email: payload.email,
-          phone: payload.phone,
+          name: error.userName,
+          email: error.userEmail || payload.email,
+          phone: error.userPhone || payload.phone,
           userType: userType || 'user',
         });
         setAllErrors([]);
-      } else {
-        setAllErrors(extractAllErrors(error));
+        return;
       }
+
+      if (error?.field === 'phone') {
+        setAllErrors(extractAllErrors(error));
+        return;
+      }
+
+      setAllErrors(extractAllErrors(error));
     }
   };
 
@@ -430,25 +422,20 @@ export const Auth = () => {
         })
         .catch((error) => {
           console.error("Registration failed:", error);
-          const raw = error?.errors
-            ? Object.values(error.errors).map(e => e?.message || e).join(" ")
-            : error?.message || error?.data?.message || String(error);
 
-          const isAlreadyExists = error?.status === 409 || error?.statusCode === 409 ||
-            /already exist|already registered/i.test(raw);
-
-          if (isAlreadyExists) {
-            const existingName = error?.data?.userName || error?.userName || "";
+          if (error?.status === 409 && error?.userName) {
             setReturningUser({
-              name: existingName,
-              email: payload.email,
-              phone: payload.phone,
+              name: error.userName,
+              email: error.userEmail || payload.email,
+              phone: error.userPhone || payload.phone,
               userType: userType || 'user',
             });
             setAllErrors([]);
-          } else {
-            setAllErrors(extractAllErrors(error));
+            setPendingRegistrationData(null);
+            return;
           }
+
+          setAllErrors(extractAllErrors(error));
           setPendingRegistrationData(null);
         });
     }

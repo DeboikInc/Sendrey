@@ -285,28 +285,12 @@ class AuthService {
     );
 
     if (!session) {
-      const totalSessions = await AuthSession.countDocuments();
-      logger.warn('refreshTokens: no session matched tokenHash', {
-        totalSessionsInCollection: totalSessions,
-        tokenHashPrefix: tokenHash.slice(0, 12),
-      });
-
       const err = new Error('Session expired or revoked');
       err.statusCode = 401;
       throw err;
     }
 
     if (session.expiresAt < new Date()) {
-      logger.warn('refreshTokens: session found but expired', {
-        sessionId: session._id,
-        userId: session.userId,
-        userType: session.userType,
-        expiresAt: session.expiresAt,
-        createdAt: session.createdAt,
-        lastUsedAt: session.lastUsedAt,
-        msPastExpiry: Date.now() - session.expiresAt.getTime(),
-      });
-
       await AuthSession.deleteOne({ _id: session._id });
       const err = new Error('Session expired');
       err.statusCode = 401;
@@ -316,12 +300,6 @@ class AuthService {
     const Model = session.userType === 'runner' ? Runner : User;
     const account = await Model.findById(session.userId);
     if (!account) {
-      logger.warn('refreshTokens: session valid but account no longer exists', {
-        sessionId: session._id,
-        userId: session.userId,
-        userType: session.userType,
-      });
-
       await AuthSession.deleteOne({ _id: session._id });
       const err = new Error('Account not found');
       err.statusCode = 404;

@@ -24,6 +24,7 @@ export default function RunnerSelectionScreen({
   const [isMobile, setIsMobile] = useState(false); // eslint-disable-line no-unused-vars
   const [topRatedLoading, setTopRatedLoading] = useState(false);
   const [topRatedStatus, setTopRatedStatus] = useState(null);
+  const [beaconRunners, setBeaconRunners] = useState({});
 
   const { socket, isConnected } = useSocket();
   const [currentOrder, setCurrentOrder] = useState(null);
@@ -79,15 +80,51 @@ export default function RunnerSelectionScreen({
     return () => { document.body.style.overflow = ""; };
   }, [isOpen]);
 
+  // ── Beacon: runner is requesting to connect ──────────────────────────────
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleRunnerBeacon = (data) => {
+      setBeaconRunners(prev => ({ ...prev, [data.runnerId]: true }));
+    };
+
+    const handleRunnerBeaconCancelled = (data) => {
+      setBeaconRunners(prev => {
+        const next = { ...prev };
+        delete next[data.runnerId];
+        return next;
+      });
+    };
+
+    socket.on('runnerConnectionBeacon', handleRunnerBeacon);
+    socket.on('runnerConnectionBeaconCancelled', handleRunnerBeaconCancelled);
+
+    return () => {
+      socket.off('runnerConnectionBeacon', handleRunnerBeacon);
+      socket.off('runnerConnectionBeaconCancelled', handleRunnerBeaconCancelled);
+    };
+  }, [socket]);
+
+  const cancelPendingRequest = useCallback(() => {
+    const pending = pendingRequestRef.current;
+    if (!socket || !pending) return;
+    socket.emit("cancelConnect", { runnerId: pending.runnerId, userId: pending.userId, chatId: pending.chatId });
+    socket.emit("cancelPreRoomRequest", { runnerId: pending.runnerId, userId: pending.userId, chatId: pending.chatId, role: 'user' });
+  }, [socket]);
+
   const handleClose = useCallback(() => {
     setIsVisible(false);
     setIsWaitingForRunner(false);
     setSelectedRunnerId(null);
+
+    cancelPendingRequest();
+    setBeaconRunners({});
+
     selectedRunnerIdRef.current = null;
     pendingRequestRef.current = null;
     if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
     setTimeout(() => { if (typeof onClose === "function") onClose(); }, 200);
-  }, [onClose]);
+  }, [onClose, cancelPendingRequest]);
 
   // ── Helper: advance to chat screen ───────────────────────────────────────
   const advanceToChat = useCallback((runnerId, order) => {
@@ -97,9 +134,15 @@ export default function RunnerSelectionScreen({
     setIsWaitingForRunner(false);
     setSelectedRunnerId(null);
 
+    const userId = userIdRef.current;
+    if (socket && userId && runnerId) {
+      socket.emit("cancelConnect", { runnerId, userId, chatId: `user-${userId}-runner-${runnerId}` });
+    }
+    setBeaconRunners({});
+
     const runnerData = runnersRef.current.find(r => (r._id || r.id) === runnerId);
     onSelectRunner?.(runnerData || { _id: runnerId, id: runnerId }, order);
-  }, [onSelectRunner]);
+  }, [onSelectRunner, socket]);
 
   // assign directly during render:
   handleProceedToChatRef.current = (data) => {
@@ -238,10 +281,22 @@ export default function RunnerSelectionScreen({
       setSelectedRunnerId(null);
       // Reuse the timedOut UI — user already knows what to do from that banner
       setTimedOutRunnerId(selectedRunnerIdRef.current);
-      setErrorMessage('Connection timed out. Please try again.');
+      setErrorMessage('Connection timed out or runner did not respond.');
     };
 
     const handleDisconnect = () => setNetworkError(true);
+
+    const handlePreRoomCancelled = (data) => {
+      if (data.chatId !== lastAttemptedChatIdRef.current) return;
+      if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
+      pendingRequestRef.current = null;
+      selectedRunnerIdRef.current = null;
+      setIsWaitingForRunner(false);
+      setSelectedRunnerId(null);
+      setBeaconRunners({});
+      setErrorMessage(data.message || 'Connection was cancelled. Please try again.');
+    };
+
     const handleReconnectSuccess = () => setNetworkError(false);
 
     socket.on('runnerTimeout', handleRunnerTimeout);
@@ -252,6 +307,7 @@ export default function RunnerSelectionScreen({
     socket.on('disconnect', handleDisconnect);
     socket.on('chatError', handleChatError);
     socket.on('preRoomTimeout', handlePreRoomTimeout)
+    socket.on('preRoomCancelled', handlePreRoomCancelled);
 
     console.log('[RSS] proceedToChat listener registered on socket:', socket.id);
 
@@ -278,7 +334,7 @@ export default function RunnerSelectionScreen({
       socket.off('connect', handleReconnectSuccess);
       socket.off('chatError', handleChatError);
       socket.off('preRoomTimeout', handlePreRoomTimeout)
-
+      socket.off('preRoomCancelled', handlePreRoomCancelled);
 
     };
     // eslint-disable-next-line 
@@ -331,6 +387,7 @@ export default function RunnerSelectionScreen({
         console.warn("[RSS] BLOCKED — double tap debounce");
         return;
       }
+      cancelPendingRequest();
       if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
       pendingRequestRef.current = null;
       setIsWaitingForRunner(false);
@@ -348,6 +405,7 @@ export default function RunnerSelectionScreen({
     selectedRunnerIdRef.current = runnerId;
     setSelectedRunnerId(runnerId);
     setIsWaitingForRunner(true);
+    setBeaconRunners({});
 
     console.log('[RSS doRequest] about to emit requestRunner', { runnerId, chatId, socketId: socket.id, connected: socket.connected });
 
@@ -359,6 +417,9 @@ export default function RunnerSelectionScreen({
       serviceType: selectedService,
       specialInstructions: specialInstructions || null,
     });
+
+    // Beacon: let the runner know this user is requesting to connect
+    socket.emit("requestConnect", { runnerId, userId, chatId, userName: userData?.firstName });
 
     // ── NOW check buffer (refs are all set so token check works too) ──
     if (proceedBufferRef.current?.chatId === chatId) {
@@ -378,6 +439,8 @@ export default function RunnerSelectionScreen({
     timeoutRef.current = setTimeout(() => {
       console.log('[RSS doRequest] TIMEOUT fired for runnerId:', runnerId);
       if (pendingRequestRef.current?.runnerId === runnerId) {
+        socket.emit("cancelConnect", { runnerId, userId, chatId });
+        socket.emit("cancelPreRoomRequest", { runnerId, userId, chatId, role: 'user' });
         pendingRequestRef.current = null;
         selectedRunnerIdRef.current = null;
         lastAttemptTokenRef.current = null;
@@ -385,9 +448,12 @@ export default function RunnerSelectionScreen({
         setIsWaitingForRunner(false);
         setSelectedRunnerId(null);
         setTimedOutRunnerId(runnerId);
+        setBeaconRunners({});
       }
     }, 90000);
-  }, [socket, selectedService, specialInstructions, advanceToChat, currentOrder]);
+  }, [socket, selectedService, specialInstructions,
+    advanceToChat, currentOrder, userData, cancelPendingRequest
+  ]);
 
   const handleRunnerClick = useCallback((runner) => {
     const runnerId = runner._id || runner.id;
@@ -495,8 +561,8 @@ export default function RunnerSelectionScreen({
                 )}
 
                 {errorMessage && (
-                  <div className={`rounded-2xl p-4 mb-4 border ${darkMode ? "bg-red-950/40 border-red-800/40" : "bg-red-50 border-red-200"}`}>
-                    <div className="flex items-start justify-between gap-2">
+                  <div className={`rounded-2xl px-1 py-1 mb-4 border ${darkMode ? "bg-red-950/40 border-red-800/40" : "bg-red-50 border-red-200"}`}>
+                    <div className="flex items-center justify-center gap-2">
                       <p className={`text-sm font-semibold ${darkMode ? "text-red-300" : "text-red-700"}`}>
                         {errorMessage}
                       </p>
@@ -531,6 +597,9 @@ export default function RunnerSelectionScreen({
                               <h4 className="font-bold text-black dark:text-gray-800">
                                 {runner.firstName} {runner.lastName || ""}
                               </h4>
+                              {beaconRunners[rid] && (
+                                <p className="text-xs pt-1 animate-pulse text-primary/90">requesting to connect....</p>
+                              )}
                               <div className="flex items-center gap-0.5">
                                 {[1, 2, 3, 4, 5].map((star) => {
                                   const full = runner.rating >= star;

@@ -14,6 +14,12 @@ const chatStatusHandlers = require('./socket/chatStatusHandlers');
 const fileUploadHandlers = require('./socket/fileUploadHandlers');
 const notificationHandlers = require('./socket/notificationHandlers');
 const { handleRunnerAccept } = require('./socket/orderHandlers');
+const {
+  handleRequestConnect,
+  handleCancelConnect,
+  handleRunnerRequestConnect,
+  handleRunnerCancelConnect
+} = require('./socket/beaconHandlers');
 const { handleSubmitItems,
   handleApproveItems,
   handleRejectItems,
@@ -461,11 +467,31 @@ async function startSocketServer(app) {
       safeHandler(handleOrderCancelledByUser, socket, io, data)
     );
 
-
     socket.on('runnerStartedNewOrder', (data) => safeHandler(handleRunnerStartedNewOrder, socket, data));
     socket.on('taskCompleted', (data) => safeHandler(handleTaskCompleted, io, data))
 
+    // beacon
+    socket.on("requestConnect", (data) =>
+      safeHandler(handleRequestConnect, socket, io, data)
+    );
+
+    socket.on("cancelConnect", (data) =>
+      safeHandler(handleCancelConnect, socket, io, data)
+    );
+
+    socket.on("runnerRequestConnect", (data) =>
+      safeHandler(handleRunnerRequestConnect, socket, io, data)
+    );
+
+    socket.on("runnerCancelConnect", (data) =>
+      safeHandler(handleRunnerCancelConnect, socket, io, data)
+    );
+
     // Disconnect
+    socket.on("cancelPreRoomRequest", (data) =>
+      safeHandler(socketHandlers.handleCancelPreRoomRequest, socket, io, data)
+    );
+
     socket.on("disconnect", (reason) => {
       console.log(`❌ Client disconnected: ${socket.id}, reason: ${reason}`);
       clearInterval(heartbeatInterval);

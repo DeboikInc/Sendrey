@@ -28,6 +28,7 @@ function RunnerNotifications({
   const [localRequests, setLocalRequests] = useState([]);
   const [errorMessage, setErrorMessage] = useState(null);
   const [runnerFee, setRunnerFee] = useState(null);
+  const [beaconRequests, setBeaconRequests] = useState({});
 
   const isAcceptingRef = useRef(false);
   const hasOpenedRef = useRef(false);
@@ -53,6 +54,31 @@ function RunnerNotifications({
       setSocketError(false);
     }
   }, [requests]);
+
+  // ── Beacon: user is requesting to connect ────────────────────────────────
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleConnectionBeacon = (data) => {
+      setBeaconRequests(prev => ({ ...prev, [data.userId]: true }));
+    };
+
+    const handleBeaconCancelled = (data) => {
+      setBeaconRequests(prev => {
+        const next = { ...prev };
+        delete next[data.userId];
+        return next;
+      });
+    };
+
+    socket.on('connectionBeacon', handleConnectionBeacon);
+    socket.on('connectionBeaconCancelled', handleBeaconCancelled);
+
+    return () => {
+      socket.off('connectionBeacon', handleConnectionBeacon);
+      socket.off('connectionBeaconCancelled', handleBeaconCancelled);
+    };
+  }, [socket]);
 
   useEffect(() => {
     if (!socket || !socket.connected) return;
@@ -83,7 +109,7 @@ function RunnerNotifications({
       setProcessingUserId(null);
       processingRef.current = false;
       if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
-      setErrorMessage('Connection timed out — the user may have left.');
+      setErrorMessage('Connection timed out or user did not respond.');
     };
 
     socket.on('connect', handleReconnect);
@@ -149,10 +175,14 @@ function RunnerNotifications({
 
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
 
+    // Beacon: let the user know a runner is requesting to connect
+    socket.emit("runnerRequestConnect", { runnerId, userId: user._id, chatId });
+
     const handleProceedToChat = (data) => {
       if (data.chatId === chatId && data.chatReady && mountedRef.current) {
         socket.off("proceedToChat", handleProceedToChat);
         if (timeoutRef.current) clearTimeout(timeoutRef.current);
+        socket.emit("runnerCancelConnect", { runnerId, userId: user._id, chatId });
         setProcessingUserId(null);
         processingRef.current = false;
         if (onPickService) onPickService(user, data.specialInstructions, currentOrder);
@@ -166,10 +196,13 @@ function RunnerNotifications({
     timeoutRef.current = setTimeout(() => {
       if (mountedRef.current && processingRef.current) {
         socket.off("proceedToChat", handleProceedToChat);
+        socket.emit("runnerCancelConnect", { runnerId, userId: user._id, chatId });
+        socket.emit("cancelPreRoomRequest", { runnerId, userId: user._id, chatId, role: 'runner' });
         setProcessingUserId(null);
         processingRef.current = false;
       }
     }, 60000);
+
   }, [socket, runnerId, onPickService, currentOrder]);
 
   const handlePickService = useCallback((user) => {
@@ -202,10 +235,17 @@ function RunnerNotifications({
   }, [socket, runnerId, onClose]);
 
   const handleClose = useCallback(() => {
+    if (processingRef.current && processingUserId && socket) {
+      const chatId = `user-${processingUserId}-runner-${runnerId}`;
+      socket.emit("runnerCancelConnect", { runnerId, userId: processingUserId, chatId });
+      socket.emit("cancelPreRoomRequest", { runnerId, userId: processingUserId, chatId, role: 'runner' });
+    }
     hasOpenedRef.current = false;
     setProcessingUserId(null);
+    processingRef.current = false;
+    if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null; }
     if (onClose) onClose();
-  }, [onClose]);
+  }, [onClose, socket, runnerId, processingUserId]);
 
   // Derived values, computed before any hook that depends on them,
   const user = localRequests[currentIndex];
@@ -242,6 +282,7 @@ function RunnerNotifications({
   const marketLocation = req.marketLocation?.address ?? req.marketLocation ?? null;
   const deliveryAddress = req.deliveryLocation?.address ?? req.deliveryLocation ?? null;
   const pickupAddress = req.pickupLocation?.address ?? req.pickupLocation ?? null;
+  const hasBeacon = beaconRequests[user._id];
 
   const slideVariants = {
     enter: (dir) => ({ x: dir === 'left' ? 300 : -300, opacity: 0 }),
@@ -293,7 +334,7 @@ function RunnerNotifications({
           <div className="h-px bg-gray-200 dark:bg-white/10 mx-4 flex-shrink-0" />
 
           {errorMessage && (
-            <div className={`mx-3 mt-3 mb-3 rounded-xl p-2 border flex items-start justify-between gap-2 flex-shrink-0 ${darkMode ? "bg-red-950/40 border-red-800/40" : "bg-red-50 border-red-200"
+            <div className={`mx-3 mt-3 mb-3 rounded-xl p-2 border flex items-center justify-center gap-2 flex-shrink-0 ${darkMode ? "bg-red-950/40 border-red-800/40" : "bg-red-50 border-red-200"
               }`}>
               <p className={`text-sm font-semibold ${darkMode ? "text-red-300" : "text-red-700"}`}>
                 {errorMessage}
@@ -353,6 +394,9 @@ function RunnerNotifications({
                         <div className="text-right">
                           <p className="text-xs text-black-100/80 dark:text-gray-400">Sender</p>
                           <p className="text-lg font-bold">{user.firstName} {user.lastName || ""}</p>
+                          {hasBeacon && (
+                            <p className="text-xs pt-1 animate-pulse text-primary/90">requesting to connect....</p>
+                          )}
                         </div>
                       </div>
 
@@ -435,7 +479,7 @@ function RunnerNotifications({
 
               <button
                 onClick={goPrev}
-                disabled={currentIndex === 0}
+                disabled={currentIndex === 0 || !!processingUserId}
                 className="p-2.5 rounded-full border border-gray-200 dark:border-white/10 disabled:opacity-25 hover:bg-gray-50 dark:hover:bg-black-200 transition flex-shrink-0"
               >
                 <ChevronLeft className="h-5 w-5 text-black-100/80 dark:text-gray-300" />
@@ -468,7 +512,7 @@ function RunnerNotifications({
 
               <button
                 onClick={goNext}
-                disabled={currentIndex === localRequests.length - 1}
+                disabled={currentIndex === localRequests.length - 1 || !!processingUserId}
                 className="p-2.5 rounded-full border border-gray-200 dark:border-white/10 disabled:opacity-25 hover:bg-gray-50 dark:hover:bg-black-200 transition flex-shrink-0"
               >
                 <ChevronRight className="h-5 w-5 text-black-100/80 dark:text-gray-300" />

@@ -13,6 +13,7 @@ const { logSocketAudit } = require('../utils/socketAudit');
 const { computeDeliveryFeeFromDocs, calculateFeeSplit } = require('../config/pricing');
 const { getPricingConfig } = require('../services/pricingService');
 const chatService = require('../services/chatService');
+const { clearBeaconsForChat } = require('./beaconHandlers');
 
 const {
   socketMessageSnapshot,
@@ -36,6 +37,15 @@ const runnersByService = {
 
 const preRoomState = new Map();
 const joiningChats = new Set();
+
+const clearPreRoomSockets = (io, chatId) => {
+  const room = io.sockets.adapter.rooms.get(`pre-${chatId}`);
+  if (!room) return;
+  for (const sid of [...room]) {
+    const s = io.sockets.sockets.get(sid);
+    if (s) s.leave(`pre-${chatId}`);
+  }
+};
 
 
 const sanitizeSpecialInstructions = (specialInstructions) => {
@@ -260,10 +270,10 @@ const createOrder = async (io, { chatId, userId, runnerId, serviceType }) => {
     serviceType: resolvedServiceType,
     taskType: isErrand ? 'run-errand' : 'pick-up',
 
-    currentUserLocation: request.currentUserLocation ? {address: request.currentUserLocation} : null,
-    pickupLocation: request.pickupLocation ? { address: request.pickupLocation } : null,
-    deliveryLocation: request.deliveryLocation ? { address: request.deliveryLocation } : null,
-    marketLocation: request.marketLocation ? { address: request.marketLocation } : null,
+    currentUserLocation: request.currentUserLocation?.address || request.currentUserLocation || null,
+    pickupLocation: request.pickupLocation?.address || request.pickupLocation || null,
+    deliveryLocation: request.deliveryLocation?.address || request.deliveryLocation || null,
+    marketLocation: request.marketLocation?.address || request.marketLocation || null,
 
     currentUserCoordinates: validCoords(request.currentUserCoordinates),
     marketCoordinates: validCoords(request.marketCoordinates),
@@ -532,6 +542,9 @@ const handleAcceptRunnerRequest = async (socket, io, { runnerId, userId, chatId,
           preRoomState.delete(chatId);
           io.to(`pre-${chatId}`).emit('preRoomTimeout', { chatId, message: 'Connection timed out.' });
           io.to(`user-${userId}`).emit('preRoomTimeout', { chatId, message: 'Connection timed out.' });
+          io.to(`runner-${runnerId}`).emit('preRoomTimeout', { chatId, message: 'Connection timed out or user did not respond.' });
+          clearBeaconsForChat(io, chatId, runnerId, userId);
+          clearPreRoomSockets(io, chatId);
         }
       }, 60000);
     }
@@ -562,14 +575,10 @@ const handleRequestRunner = async (socket, io, data) => {
   try {
     socket.join(`user-${userId}`);
 
-    // Check if runner already accepted before creating new state
     const existingState = preRoomState.get(chatId);
 
-    // If runner already accepted and we have a state, check if we should proceed
     if (existingState && existingState.runner && !existingState.locked) {
       console.log('[requestRunner] Runner already in pre-room, checking if user should join...');
-
-      // User joins pre-room
       socket.join(`pre-${chatId}`);
       existingState.user = true;
       existingState.userId = userId;
@@ -582,7 +591,6 @@ const handleRequestRunner = async (socket, io, data) => {
       return;
     }
 
-    // No existing state or runner hasn't accepted yet
     if (!preRoomState.has(chatId)) {
       preRoomState.set(chatId, {
         user: false, runner: false,
@@ -596,14 +604,9 @@ const handleRequestRunner = async (socket, io, data) => {
     if (state.user && !data.isReconnect) {
       console.warn('[requestRunner] user already in pre-room for chatId:', chatId);
 
-      const preRoomSockets = await io.in(`pre-${chatId}`).allSockets();
-      const runnerInPreRoom = [...preRoomSockets].some(sid => {
-        const s = io.sockets.sockets.get(sid);
-        return s?.runnerId === runnerId;
-      });
-
-      if (runnerInPreRoom && !state.locked) {
-        console.log('[requestRunner] runner is actually in pre-room, proceeding');
+      // Trust state, not stale socket-room membership
+      if (state.runner && !state.locked) {
+        console.log('[requestRunner] runner already accepted (per state), proceeding');
         if (state.globalTimer) { clearTimeout(state.globalTimer); state.globalTimer = null; }
         await lockAndProceed(io, chatId, state);
       }
@@ -616,15 +619,10 @@ const handleRequestRunner = async (socket, io, data) => {
     state.attemptToken = attemptToken || null;
     socket.join(`pre-${chatId}`);
 
-    const preRoomSockets = await io.in(`pre-${chatId}`).allSockets();
-    const runnerInPreRoom = [...preRoomSockets].some(sid => {
-      const s = io.sockets.sockets.get(sid);
-      return s?.runnerId === runnerId;
-    });
+    console.log(`[requestRunner] user ${userId} in pre-room. state.runner=${state.runner}`);
 
-    console.log(`[requestRunner] user ${userId} in pre-room. runner present=${runnerInPreRoom} (state.runner=${state.runner})`);
-
-    if (runnerInPreRoom) {
+    // Trust state, not stale socket-room membership
+    if (state.runner) {
       if (state.globalTimer) { clearTimeout(state.globalTimer); state.globalTimer = null; }
       await lockAndProceed(io, chatId, state);
       return;
@@ -638,6 +636,9 @@ const handleRequestRunner = async (socket, io, data) => {
           preRoomState.delete(chatId);
           io.to(`pre-${chatId}`).emit('preRoomTimeout', { chatId, message: 'Connection timed out.' });
           io.to(`user-${userId}`).emit('preRoomTimeout', { chatId, message: 'Connection timed out.' });
+          io.to(`runner-${runnerId}`).emit('preRoomTimeout', { chatId, message: 'Connection timed out or user did not respond.' });
+          clearBeaconsForChat(io, chatId, runnerId, userId);
+          clearPreRoomSockets(io, chatId);
         }
       }, 60_000);
     }
@@ -839,6 +840,8 @@ const initializeChatAndProceed = async (io, chatId, state) => {
 
     console.log('[initializeChat] proceedToChat emitted to all 3 rooms');
 
+    clearBeaconsForChat(io, chatId, runnerId, userId);
+    clearPreRoomSockets(io, chatId);
     preRoomState.delete(chatId);
     logSocketAudit('PROCEED_TO_CHATROOM', { runnerId, userId, serviceType });
 
@@ -1390,6 +1393,54 @@ const requestSessionRefresh = async (socket, io, data) => {
 
 // ─── Disconnect ───────────────────────────────────────────────────────────────
 
+// ─── Either party backs out of an in-flight pre-room pairing (before lock) ───
+const handleCancelPreRoomRequest = async (socket, io, { runnerId, userId, chatId, role }) => {
+  const state = preRoomState.get(chatId);
+  if (!state || state.locked) return;
+
+  const isRunner = role === 'runner';
+  if (isRunner && state.runnerId !== runnerId) return;
+  if (!isRunner && state.userId !== userId) return;
+
+  if (state.globalTimer) {
+    clearTimeout(state.globalTimer);
+    state.globalTimer = null;
+  }
+
+  // Drop that party's socket(s) out of the pre-room
+  const preRoomSockets = io.sockets.adapter.rooms.get(`pre-${chatId}`);
+  if (preRoomSockets) {
+    for (const sid of preRoomSockets) {
+      const s = io.sockets.sockets.get(sid);
+      const matches = isRunner ? s?.runnerId === runnerId : s?.userId === userId;
+      if (matches) s.leave(`pre-${chatId}`);
+    }
+  }
+
+  const otherPartyWaiting = isRunner ? state.user : state.runner;
+
+  if (!otherPartyWaiting) {
+    // Nobody else invested in this chatId — safe to wipe entirely
+    preRoomState.delete(chatId);
+    clearPreRoomSockets(io, chatId);
+    clearBeaconsForChat(io, chatId, state.runnerId, state.userId);
+  } else {
+    // Other party already joined expecting this pairing — tell them it fell through
+    preRoomState.delete(chatId);
+    clearPreRoomSockets(io, chatId);
+    clearBeaconsForChat(io, chatId, state.runnerId, state.userId);
+    const notifyRoom = isRunner ? `user-${state.userId}` : `runner-${state.runnerId}`;
+    io.to(notifyRoom).emit('preRoomCancelled', {
+      chatId,
+      message: isRunner
+        ? 'Runner is no longer available. Please try again.'
+        : 'User is no longer waiting. They may retry.',
+    });
+  }
+
+  logSocketAudit('PRE_ROOM_CANCELLED', { runnerId, userId, chatId, role });
+};
+
 const handleDisconnect = async (socket, io) => {
   if (socket.serviceType && runnersByService[socket.serviceType]) {
     runnersByService[socket.serviceType].delete(socket.id);
@@ -1398,6 +1449,23 @@ const handleDisconnect = async (socket, io) => {
 
   const isRunner = !!socket.runnerId && !socket.userId;
   const offlineId = isRunner ? socket.runnerId : socket.userId;
+
+  // Release any in-flight (not yet locked) pre-room pairing this socket held
+  if (offlineId) {
+    for (const [chatId, state] of preRoomState.entries()) {
+      const belongsToThisSocket = isRunner
+        ? state.runnerId === offlineId
+        : state.userId === offlineId;
+      if (belongsToThisSocket && !state.locked) {
+        await handleCancelPreRoomRequest(socket, io, {
+          runnerId: state.runnerId,
+          userId: state.userId,
+          chatId,
+          role: isRunner ? 'runner' : 'user',
+        });
+      }
+    }
+  }
 
   if (!offlineId) return;
 
@@ -1435,4 +1503,5 @@ module.exports = {
   handleGetSpecialInstructions,
   handleDeleteMessage,
   handleSendMessage,
+  handleCancelPreRoomRequest
 };
