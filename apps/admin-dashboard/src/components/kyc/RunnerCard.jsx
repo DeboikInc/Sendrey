@@ -38,11 +38,10 @@ export default function RunnerCard({ runner, view, onReview }) {
       {runner.faceMatchScore !== undefined && runner.faceMatchScore !== null && (
         <div className="mt-2 flex items-center gap-1.5">
           <span className="text-[9px] text-white/30 uppercase tracking-wider">Face Match</span>
-          <span className={`text-[10px] font-bold ${
-            runner.faceMatchScore >= 0.85 ? 'text-green-500'
-              : runner.faceMatchScore <= 0.5 ? 'text-red-500'
-                : 'text-yellow-500'
-          }`}>
+          <span className={`text-[10px] font-bold ${runner.faceMatchScore >= 0.85 ? 'text-green-500'
+            : runner.faceMatchScore <= 0.5 ? 'text-red-500'
+              : 'text-yellow-500'
+            }`}>
             {(runner.faceMatchScore * 100).toFixed(0)}%
           </span>
         </div>
@@ -59,9 +58,11 @@ export default function RunnerCard({ runner, view, onReview }) {
         <p className="mt-2 text-[10px] text-white/30">All verified</p>
       )}
 
-      {/* {!items?.length && view === 'verified' && (
-        <p className="mt-2 text-[10px] text-white/30">Verified At: {runner.verifiedAt}</p>
-      )} */}
+      {!items?.length && view === 'verified' && runner.verifiedAt && (
+        <p className="mt-2 text-[10px] text-white/30">
+          Verified At: {new Date(runner.verifiedAt).toLocaleDateString()}
+        </p>
+      )}
 
       {!items?.length && view === 'autoConfirmed' && (
         <p className="mt-2 text-[10px] text-white/30">Prembly auto-confirmed</p>

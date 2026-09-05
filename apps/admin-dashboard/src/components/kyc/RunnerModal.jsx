@@ -34,7 +34,6 @@ export default function RunnerModal({
   const identityDocuments = [];
   if (documents.nin) identityDocuments.push({ title: 'NIN Document', data: documents.nin, type: 'nin' });
   if (documents.driverLicense) identityDocuments.push({ title: "Driver's License", data: documents.driverLicense, type: 'driverLicense' });
-  if (documents.passport) identityDocuments.push({ title: 'Passport', data: documents.passport, type: 'passport' });
 
   const hasSelfie = biometrics?.status && biometrics.status !== 'not_submitted';
 
@@ -231,13 +230,24 @@ export default function RunnerModal({
             ['Phone', runner.phone],
             ['ID', runner._id?.slice(-8)],
             ['Email', runner.email],
-            ['FleetType', runner.fleetType]
+            ['FleetType', runner.fleetType],
           ].map(([label, value]) => (
             <div key={label} className="shrink-0">
               <p className="text-[9px] text-white/30 uppercase tracking-widest">{label}</p>
               <p className="text-[11px] text-white/70 font-medium mt-0.5">{value}</p>
             </div>
           ))}
+          
+          {runner.verifiedAt && (
+            <div className='flex flex-col'>
+              <p className="text-[9px] text-white/30 uppercase tracking-widest">
+                Verified At:
+              </p>
+              <p className='text-[11px] text-white/70 font-medium mt-0.5'>
+                {new Date(runner.verifiedAt).toLocaleDateString()}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* Body */}

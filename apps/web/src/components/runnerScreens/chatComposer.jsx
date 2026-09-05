@@ -79,7 +79,7 @@ export default function ChatComposer({
   const [isLetsGetStarted, setIsLetsGetStarted] = useState(false);
   const kycFileInputRef = useRef(null);
   const [returningChoiceMade, setReturningChoiceMade] = useState(false);
-  const CONNECT_DISABLED = true;
+  const CONNECT_DISABLED = false;
 
   const handleConnect = () => {
     if (isConnectDisabled || isSearching || isConnectLocked) return;

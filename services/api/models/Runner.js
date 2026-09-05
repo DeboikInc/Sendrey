@@ -286,6 +286,11 @@ const runnerSchema = new mongoose.Schema({
     default: false
   },
 
+  isVerifiedKycAt: {
+    type: Date,
+    default: null
+  },
+
   isPhoneVerified: {
     type: Boolean,
     default: false

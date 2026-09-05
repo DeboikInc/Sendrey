@@ -507,6 +507,7 @@ class KYCService {
                 kycStatus: runner.kycStatus,
                 isVerified: runner.isVerified,
                 isVerifiedKyc: runner.isVerifiedKyc,
+                verifiedAt: runner.isVerifiedKycAt,
                 documents: {
                     nin: {
                         status: docs.nin?.status || 'not_submitted',
@@ -588,7 +589,11 @@ class KYCService {
             const newStatus = await this.calculateRunnerStatus(runnerId);
             const isVerifiedKyc = newStatus === 'approved_full';
 
-            await Runner.findByIdAndUpdate(runnerId, { kycStatus: newStatus, isVerifiedKyc });
+            await Runner.findByIdAndUpdate(runnerId, {
+                kycStatus: newStatus,
+                isVerifiedKyc,
+                isVerifiedKycAt: isVerifiedKyc ? new Date() : null,
+            });
 
             console.log('[approveDocument]', documentType, '→ kycStatus:', newStatus, 'isVerifiedKyc:', isVerifiedKyc);
             return { success: true, kycStatus: newStatus };
@@ -613,7 +618,11 @@ class KYCService {
 
             const newStatus = await this.calculateRunnerStatus(runnerId);
             const isVerifiedKyc = newStatus === 'approved_full';
-            await Runner.findByIdAndUpdate(runnerId, { kycStatus: newStatus, isVerifiedKyc });
+            await Runner.findByIdAndUpdate(runnerId, {
+                kycStatus: newStatus,
+                isVerifiedKyc,
+                isVerifiedKycAt: isVerifiedKyc ? new Date() : null,
+            });
 
             return { success: true, kycStatus: newStatus };
         } catch (error) {
@@ -634,7 +643,11 @@ class KYCService {
             const newStatus = await this.calculateRunnerStatus(runnerId);
             const isVerifiedKyc = newStatus === 'approved_full';
 
-            await Runner.findByIdAndUpdate(runnerId, { kycStatus: newStatus, isVerifiedKyc });
+            await Runner.findByIdAndUpdate(runnerId, {
+                kycStatus: newStatus,
+                isVerifiedKyc,
+                isVerifiedKycAt: isVerifiedKyc ? new Date() : null,
+            });
 
             console.log('[approveSelfie] → kycStatus:', newStatus, 'isVerifiedKyc:', isVerifiedKyc);
             return { success: true, kycStatus: newStatus, isVerifiedKyc };
@@ -656,7 +669,11 @@ class KYCService {
 
             const newStatus = await this.calculateRunnerStatus(runnerId);
             const isVerifiedKyc = newStatus === 'approved_full';
-            await Runner.findByIdAndUpdate(runnerId, { kycStatus: newStatus, isVerifiedKyc });
+            await Runner.findByIdAndUpdate(runnerId, {
+                kycStatus: newStatus,
+                isVerifiedKyc,
+                isVerifiedKycAt: isVerifiedKyc ? new Date() : null,
+            });
 
             return { success: true, kycStatus: newStatus };
         } catch (error) {
@@ -710,7 +727,7 @@ class KYCService {
                 'verificationDocuments.nin.flaggedForReview': { $ne: true },
                 'verificationDocuments.driverLicense.flaggedForReview': { $ne: true },
                 'verificationDocuments.bikerLicense.flaggedForReview': { $ne: true }
-            }).select('firstName lastName email fleetType phone createdAt verificationDocuments biometricVerification kycStatus');
+            }).select('firstName lastName email fleetType phone createdAt verificationDocuments biometricVerification kycStatus isVerifiedKycAt');
 
             return verifiedRunners.map(runner => ({
                 id: runner._id,
@@ -721,6 +738,7 @@ class KYCService {
                 fleetType: runner.fleetType,
                 createdAt: runner.createdAt,
                 kycStatus: runner.kycStatus,
+                verifiedAt: runner.isVerifiedKycAt,
                 pendingItems: []
             }));
 

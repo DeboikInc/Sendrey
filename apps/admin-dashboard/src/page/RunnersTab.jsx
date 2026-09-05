@@ -140,6 +140,18 @@ export default function RunnersTab() {
                 return sorted.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
             case 'oldest':
                 return sorted.sort((a, b) => new Date(a.createdAt || 0) - new Date(b.createdAt || 0));
+            case 'kyc_pending':
+                return sorted.sort((a, b) => {
+                    const aPending = a.kycStatus === 'pending_verification' ? 0 : 1;
+                    const bPending = b.kycStatus === 'pending_verification' ? 0 : 1;
+                    return aPending - bPending;
+                });
+            case 'kyc_approved':
+                return sorted.sort((a, b) => {
+                    const aApproved = a.kycStatus === 'approved_full' ? 0 : 1;
+                    const bApproved = b.kycStatus === 'approved_full' ? 0 : 1;
+                    return aApproved - bApproved;
+                });
             default:
                 return sorted;
         }
@@ -211,6 +223,8 @@ export default function RunnersTab() {
             case false: return 'bg-red-500/10 text-red-500 border-red-500/20';
             case 'approved_full': return 'bg-green-500/10 text-green-500 border-green-500/20';
             case 'approved_limited': return 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20';
+            case 'pending_verification': return 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20';
+            case 'rejected': return 'bg-red-500/10 text-red-500 border-red-500/20';
             default: return 'bg-green-500/10 text-green-500 border-green-500/20';
         }
     };
@@ -299,6 +313,8 @@ export default function RunnersTab() {
                                 <option value="trips_low">Least Trips</option>
                                 <option value="newest">Newest First</option>
                                 <option value="oldest">Oldest First</option>
+                                <option value="kyc_pending">Pending Verification</option>
+                                <option value="kyc_approved">Approved Full</option>
                             </select>
                             <div className="absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none">
                                 {getSortIcon()}

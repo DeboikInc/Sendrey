@@ -62,6 +62,7 @@ export default function KycTab() {
     dispatch(getAutoConfirmedKYC());
     dispatch(getResubmittedKYC());
   }, [dispatch]);
+  
 
   useEffect(() => {
     refreshData();
@@ -84,7 +85,7 @@ export default function KycTab() {
     if (debouncedQuery.trim()) {
       const query = debouncedQuery.toLowerCase();
       filtered = baseData.filter(runner =>
-        `${runner.firstName} ${runner.lastName} ${runner.email} ${runner.phone} ${runner.fleetType} ${runner._id}`.toLowerCase().includes(query)
+        `${runner.firstName} ${runner.lastName} ${runner.email} ${runner.phone} ${runner.fleetType} ${runner._id}`.toLowerCase().includes(query),
       );
     }
 
