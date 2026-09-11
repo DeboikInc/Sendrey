@@ -33,9 +33,17 @@ class AuthService {
           throw err;
         }
 
+        if (!existingByEmail.isActive) {
+          const err = new Error('This account has been deleted. Contact support if this is a mistake.');
+          err.statusCode = 403;
+          err.field = 'account';
+          throw err;
+        }
+
         if (!existingByEmail.isVerified) {
           return { user: existingByEmail, existing: true };
         }
+        
         const err = new Error('Account already exists');
         err.statusCode = 409;
         err.userName = existingByEmail.firstName;
@@ -126,6 +134,10 @@ class AuthService {
   async completeUserRegistration(userData, creatorUserRole) {
     const { user, existing } = await this.register(userData, creatorUserRole, 'user');
 
+    if (!user.isActive) {
+      throw new Error('This account has been deleted. Contact support if this is a mistake.');
+    }
+
     if (['admin', 'super-admin'].includes(user.role)) {
       return { user, isAdmin: true };
     }
@@ -183,8 +195,13 @@ class AuthService {
 
     const { user: runner } = await this.register(runnerData, null, 'runner');
 
+    if (!runner.isActive) {
+      throw new Error('This account has been deleted. Contact support if this is a mistake.');
+    }
+
     const otp = await this.generateEmailVerificationOTP(runner._id, runnerData.email, 'runner');
 
+    console.log('sms otp', otp);
     logger.info('Sending OTP SMS', {
       to: runnerData.phone,
       userId: runner._id,
@@ -234,6 +251,13 @@ class AuthService {
     const user = await Model.findOne({ email });
 
     if (!user) return null;
+
+    if (!user.isActive) {
+      const err = new Error('This account has been deleted. Contact support if this is a mistake.');
+      err.statusCode = 403;
+      err.field = 'account';
+      throw err;
+    }
 
     if (phone && user.phone && user.phone !== phone) {
       const err = new Error('This email or phone number is associated with another sendrey account');
@@ -429,25 +453,6 @@ class AuthService {
     };
 
     return { user, otp, kycStatus };
-  }
-
-  async checkExistingUserOrRunner(email, userType = 'runner') {
-    const Model = userType === 'runner' ? Runner : User;
-    const user = await Model.findOne({ email });
-    if (!user) throw new Error('Account not found');
-
-    return {
-      userName: user.firstName,
-      kycStatus: {
-        isVerified: user.isVerified,
-        isEmailVerified: user.isEmailVerified,
-        ninStatus: user.verificationDocuments?.nin?.status || 'not_submitted',
-        driverLicenseStatus: user.verificationDocuments?.driverLicense?.status || 'not_submitted',
-        bikerLicenseStatus: user.verificationDocuments?.bikerLicense?.status || 'not_submitted',
-        selfieVerified: user.biometricVerification?.selfieVerified || false,
-        overallVerified: user.isVerifiedKyc || false,
-      }
-    };
   }
 
   async resendVerificationEmail(email, userType = 'user') {

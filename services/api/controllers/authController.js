@@ -130,11 +130,17 @@ class AuthController extends BaseController {
         if (error.field === 'phone') {
           return this.error(res, error.message, 409, { field: 'phone' });
         }
+
+        if (error.statusCode === 403 && error.field === 'account') {
+          return this.error(res, error.message, 403, { field: 'account' });
+        }
+
         return this.error(res, `An account associated with this ${error.userEmail || 'email'} already exists`, 409, {
           userName: error.userName,
           userEmail: error.userEmail,
           userPhone: error.userPhone,
           kycStatus: error.kycStatus,
+          fleetType: error.fleetType,
           isTrainingCompleted: error.isTrainingCompleted,
         });
       }
@@ -187,8 +193,13 @@ class AuthController extends BaseController {
       return this.success(res, result);
     } catch (error) {
       logger.error('Check existing user error:', error);
+      
+      if (error.statusCode === 403 && error.field === 'account') {
+        return this.error(res, error.message, 403, { field: 'account' });
+      }
+
       if (error.statusCode === 409) {
-        return this.error(res, error.message, 409,{ field: 'phone' });
+        return this.error(res, error.message, 409, { field: 'phone' });
       }
       next(error);
     }
@@ -219,8 +230,7 @@ class AuthController extends BaseController {
         user: this._sanitizeUser(admin),
         token: accessToken,
         refreshToken,
-        message: 'Admin login successful'
-      });
+      }, 'Admin login successful');
 
     } catch (error) {
       logger.error('Admin login error:', error);
@@ -244,7 +254,7 @@ class AuthController extends BaseController {
       if (cached) {
         const { accessToken, refreshToken: cachedRefresh } = JSON.parse(cached);
         this.setAuthCookies(res, accessToken, cachedRefresh);
-        return this.success(res, { message: 'Token refreshed', accessToken, refreshToken: cachedRefresh });
+        return this.success(res, { accessToken, refreshToken: cachedRefresh }, 'Token refreshed');
       }
 
       const { accessToken, refreshToken: newRefreshToken } = await authService.refreshTokens(incomingToken);
@@ -257,7 +267,7 @@ class AuthController extends BaseController {
       );
 
       this.setAuthCookies(res, accessToken, newRefreshToken);
-      return this.success(res, { message: 'Token refreshed', accessToken, refreshToken: newRefreshToken });
+      return this.success(res, { accessToken, refreshToken: newRefreshToken }, 'Token refreshed');
     } catch (err) {
       logger.warn('Refresh token failed', { message: err.message, statusCode: err.statusCode });
       return this.error(res, err.message || 'Invalid or expired refresh token', err.statusCode || 401);
@@ -398,16 +408,6 @@ class AuthController extends BaseController {
     }
   }
 
-  checkExistingUserOrRunner = async (req, res, next) => {
-    try {
-      const { email, userType = 'runner' } = req.body;
-      const result = await authService.checkExistingUserOrRunner(email, userType);
-      this.success(res, result);
-    } catch (error) {
-      next(error);
-    }
-  }
-
   sendReturningUserEmailOTP = async (req, res, next) => {
     try {
       const { email, userType = 'user', latitude, longitude } = req.body;
@@ -447,10 +447,7 @@ class AuthController extends BaseController {
         logger.warn(`sendReturningUserOTP silenced: ${innerErr.message}`);
       }
 
-      this.success(res, {
-        message: 'If this account exists, an OTP has been sent.',
-        fleetType: user.fleetType,
-      });
+      this.success(res, { fleetType: user.fleetType, }, 'If this account exists, an OTP has been sent.');
 
     } catch (error) {
       logger.error('Resend OTP for returning user error:', error);
@@ -468,7 +465,7 @@ class AuthController extends BaseController {
 
       const resetToken = await authService.generatePasswordResetToken(email, phone, userType);
       if (!resetToken) {
-        return this.success(res, { message: 'If the phone or email exists, password reset instructions have been sent' });
+        return this.success(res, null, 'If the phone or email exists, password reset instructions have been sent');
       }
 
       if (email) {
@@ -493,11 +490,11 @@ class AuthController extends BaseController {
 
       logger.info(`Password reset requested for ${userType}: ${email || phone}`);
 
-      this.success(res, { message: 'If the phone or email exists, password reset instructions have been sent' });
+      this.success(res, null, 'If the phone or email exists, password reset instructions have been sent');
 
     } catch (error) {
       logger.error('Forgot password error:', error);
-      this.success(res, { message: 'If the phone or email exists, password reset instructions have been sent' });
+      this.success(res, null, 'If the phone or email exists, password reset instructions have been sent');
     }
   }
 
@@ -523,7 +520,7 @@ class AuthController extends BaseController {
       }
 
       logger.info(`Password reset successful for ${userType}: ${user.email || user.phone}`);
-      this.success(res, { message: 'Password reset successfully' });
+      this.success(res, null, 'Password reset successfully');
 
     } catch (error) {
       logger.error('Reset password error:', error);
@@ -556,7 +553,7 @@ class AuthController extends BaseController {
       }
 
       logger.info(`Password changed for ${userType}: ${user.email || user.phone}`);
-      this.success(res, { message: 'Password changed successfully' });
+      this.success(res, null, 'Password changed successfully');
 
     } catch (error) {
       logger.error('Change password error:', error);
@@ -587,8 +584,9 @@ class AuthController extends BaseController {
 
       this.success(res, {
         [userType]: userType === 'user' ? this._sanitizeUser(user) : this._sanitizeRunner(user),
-        message: 'Email verified successfully'
-      });
+      },
+        'Email verified successfully'
+      );
 
     } catch (error) {
       logger.error('Email verification error:', error);
@@ -624,11 +622,10 @@ class AuthController extends BaseController {
 
       this.success(res, {
         [userType]: userType === 'user' ? this._sanitizeUser(user) : this._sanitizeRunner(user),
-        message: 'Email verified successfully',
         accessToken,
         refreshToken,
         ...(kycStatus && { kycStatus }),
-      });
+      }, 'Email verified successfully');
 
     } catch (error) {
       logger.error('Email OTP verification error:', error);
@@ -654,7 +651,7 @@ class AuthController extends BaseController {
       }
 
       logger.info(`Verification email resent to ${userType}: ${email}`);
-      this.success(res, { message: 'Verification email sent successfully' });
+      this.success(res, null, 'Verification email sent successfully');
 
     } catch (error) {
       logger.error('Resend email verification error:', error);
@@ -683,7 +680,7 @@ class AuthController extends BaseController {
       });
 
       logger.info(`Phone verification OTP queued for ${userType}: ${phone}`);
-      this.success(res, { message: 'Verification code sent to your phone' });
+      this.success(res, null, 'Verification code sent to your phone');
 
     } catch (error) {
       logger.error('Phone verification request error:', error);
@@ -717,11 +714,10 @@ class AuthController extends BaseController {
       logger.info(`Phone verified for ${userType}: ${user.email || user.phone}`);
       this.success(res, {
         user: this._sanitizeUser(user),
-        message: 'Phone number verified successfully',
         accessToken,
         refreshToken,
         ...(kycStatus && { kycStatus }),
-      });
+      }, 'Phone number verified successfully');
 
     } catch (error) {
       logger.error('Phone verification error:', error);
@@ -743,7 +739,7 @@ class AuthController extends BaseController {
       });
 
       logger.info(`Phone verification OTP resent for ${userType}: ${phone}`);
-      this.success(res, { message: 'Verification code resent to your phone' });
+      this.success(res, null, 'Verification code resent to your phone');
 
     } catch (error) {
       logger.error('Resend phone verification error:', error);
@@ -792,7 +788,7 @@ class AuthController extends BaseController {
         res.clearCookie('refreshToken');
       }
 
-      this.success(res, { message: 'Session revoked', wasCurrentDevice: isCurrentDevice });
+      this.success(res, { wasCurrentDevice: isCurrentDevice }, 'Session revoked');
     } catch (error) {
       next(error);
     }

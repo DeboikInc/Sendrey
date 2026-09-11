@@ -1,9 +1,13 @@
 import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { listUsers, updateUserStatus, bulkUserAction, deleteUser } from '../Redux/usersSlice';
+import {
+    listUsers,
+    restoreUser,
+    updateUserStatus, bulkUserAction, deleteUser
+} from '../Redux/usersSlice';
 import {
     Ban, Trash2, CheckCircle, AlertTriangle, Users,
-    Search, ArrowUpDown, SortAsc, SortDesc, ShoppingBag, X
+    Search, ArrowUpDown, SortAsc, SortDesc, ShoppingBag, X, RotateCcw
 } from 'lucide-react';
 import Button from '../components/ui/Button';
 import PageLayout from '../components/layout/PageLayout';
@@ -39,7 +43,20 @@ function ConfirmModal({ isOpen, title, message, confirmLabel = 'Confirm', confir
     );
 }
 
-function UserActions({ user, onSuspend, onActivate, onDelete, isMobile }) {
+function UserActions({ user, onSuspend, onActivate, onDelete, onRestore, isMobile }) {
+    if (user.isDeleted) {
+        return (
+            <div className={`flex items-center gap-2 ${isMobile ? 'w-full' : 'justify-end'}`}>
+                <button
+                    onClick={() => onRestore(user)}
+                    className={`text-xs text-green-400 hover:text-green-300 font-medium transition-colors flex items-center gap-1 ${isMobile ? 'flex-1 justify-center py-1.5 rounded-lg border border-green-500/20 bg-green-500/10' : ''}`}
+                >
+                    <RotateCcw size={13} /> Restore
+                </button>
+            </div>
+        );
+    }
+
     return (
         <div className={`flex items-center gap-2 ${isMobile ? 'w-full' : 'justify-end'}`}>
             {user.isActive ? (
@@ -141,10 +158,20 @@ export default function UsersTab() {
     const handleDelete = useCallback((user) => {
         setConfirm({
             title: 'Delete User',
-            message: `Permanently delete ${user.firstName || ''} ${user.lastName || ''}? This cannot be undone.`.trim().replace(/\s+/g, ' '),
+            message: `Delete ${user.firstName || ''} ${user.lastName || ''}? Their account can be restored later if this was a mistake.`.trim().replace(/\s+/g, ' '),
             confirmLabel: 'Delete',
             confirmVariant: 'destructive',
             onConfirm: () => { dispatch(deleteUser(user._id)); setConfirm(null); }
+        });
+    }, [dispatch]);
+
+    const handleRestore = useCallback((user) => {
+        setConfirm({
+            title: 'Restore User',
+            message: `Restore ${user.firstName || ''} ${user.lastName || ''}? Their account will become accessible again.`.trim().replace(/\s+/g, ' '),
+            confirmLabel: 'Restore',
+            confirmVariant: 'primary',
+            onConfirm: () => { dispatch(restoreUser(user._id)); setConfirm(null); }
         });
     }, [dispatch]);
 
@@ -168,7 +195,8 @@ export default function UsersTab() {
     const stats = useMemo(() => [
         { label: 'Total Users', value: list.length, icon: Users, bgClass: 'bg-primary/10', borderClass: 'border-primary/20', textClass: 'text-primary', iconClass: 'text-primary' },
         { label: 'Active', value: list.filter(u => u.isActive).length, icon: CheckCircle, bgClass: 'bg-green-500/10', borderClass: 'border-green-500/20', textClass: 'text-green-500', iconClass: 'text-green-500' },
-        { label: 'Suspended', value: list.filter(u => !u.isActive).length, icon: Ban, bgClass: 'bg-red-500/10', borderClass: 'border-red-500/20', textClass: 'text-red-500', iconClass: 'text-red-500' }
+        { label: 'Suspended', value: list.filter(u => !u.isActive).length, icon: Ban, bgClass: 'bg-yellow-500/10', borderClass: 'border-yellow-500/20', textClass: 'text-yellow-500', iconClass: 'text-yellow-500' },
+        { label: 'Deleted', value: list.filter(u => u.isDeleted).length, icon: Trash2, bgClass: 'bg-red-500/10', borderClass: 'border-red-500/20', textClass: 'text-red-500', iconClass: 'text-red-500' },
     ], [list]);
 
     return (
@@ -306,12 +334,21 @@ export default function UsersTab() {
                                                 {user.totalSpent > 0 && <div className="text-white/25 text-[9px] mt-0.5">₦{user.totalSpent.toLocaleString()} spent</div>}
                                             </td>
                                             <td className="px-5 py-4">
-                                                <span className={`px-2.5 py-1 rounded-lg text-[10px] font-medium border ${user.isActive ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-red-500/10 text-red-500 border-red-500/20'}`}>
-                                                    {user.isActive ? 'Active' : 'Suspended'}
+                                                <span className={`px-2.5 py-1 rounded-lg text-[10px] font-medium border ${user.isDeleted ? 'bg-red-500/20 text-red-500 border-red-500/20'
+                                                    : user.isActive ? 'bg-green-500/10 text-green-500 border-green-500/20'
+                                                        : 'bg-yellow-500/10 text-yellow-500 border-yellow-500/20'
+                                                    }`}>
+                                                    {user.isDeleted ? 'Deleted' : user.isActive ? 'Active' : 'Suspended'}
                                                 </span>
                                             </td>
                                             <td className="px-5 py-4 text-right">
-                                                <UserActions user={user} onSuspend={handleSuspend} onActivate={handleActivate} onDelete={handleDelete} isMobile={false} />
+                                                <UserActions
+                                                    user={user}
+                                                    onSuspend={handleSuspend}
+                                                    onActivate={handleActivate}
+                                                    onDelete={handleDelete}
+                                                    onRestore={handleRestore}
+                                                    isMobile={false} />
                                             </td>
                                         </tr>
                                     ))}
@@ -332,8 +369,11 @@ export default function UsersTab() {
                                                 {user.createdAt && <div className="text-white/25 text-[9px] mt-0.5">Joined: {new Date(user.createdAt).toLocaleDateString()}</div>}
                                             </div>
                                         </div>
-                                        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-medium border shrink-0 ${user.isActive ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-red-500/10 text-red-500 border-red-500/20'}`}>
-                                            {user.isActive ? 'Active' : 'Suspended'}
+                                        <span className={`px-2.5 py-1 rounded-lg text-[10px] font-medium border shrink-0 ${user.isDeleted ? 'bg-white/5 text-white/40 border-white/10'
+                                                : user.isActive ? 'bg-green-500/10 text-green-500 border-green-500/20'
+                                                    : 'bg-red-500/10 text-red-500 border-red-500/20'
+                                            }`}>
+                                            {user.isDeleted ? 'Deleted' : user.isActive ? 'Active' : 'Suspended'}
                                         </span>
                                     </div>
                                     <div className="flex items-center gap-4 text-xs">
@@ -345,7 +385,13 @@ export default function UsersTab() {
                                         {user.totalSpent > 0 && <div className="text-white/25">₦{user.totalSpent.toLocaleString()} spent</div>}
                                     </div>
                                     <div className="pt-1 border-t border-white/5">
-                                        <UserActions user={user} onSuspend={handleSuspend} onActivate={handleActivate} onDelete={handleDelete} isMobile={true} />
+                                        <UserActions
+                                            user={user}
+                                            onSuspend={handleSuspend}
+                                            onActivate={handleActivate}
+                                            onDelete={handleDelete}
+                                            onRestore={handleRestore}
+                                            isMobile={true} />
                                     </div>
                                 </div>
                             ))}

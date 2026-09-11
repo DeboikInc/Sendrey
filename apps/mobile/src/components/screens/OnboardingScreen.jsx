@@ -142,10 +142,15 @@ export default function OnboardingScreen({
 
             const lowerError = errorText.toLowerCase();
             let failedStep = 0;
-            for (const [stepIdx, hints] of Object.entries(fieldHints)) {
-              if (hints.some(h => lowerError.includes(h))) {
-                failedStep = parseInt(stepIdx);
-                break;
+
+            if (/deleted/i.test(lowerError)) {
+              failedStep = 0;
+            } else {
+              for (const [stepIdx, hints] of Object.entries(fieldHints)) {
+                if (hints.some(h => lowerError.includes(h))) {
+                  failedStep = parseInt(stepIdx);
+                  break;
+                }
               }
             }
 

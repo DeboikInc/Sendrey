@@ -129,7 +129,7 @@ class PaymentController extends BaseController {
                 });
             }
 
-            this.success(res, { message: 'Payment verified successfully', ...result });
+            this.success(res, { ...result }, 'Payment verified successfully');
         } catch (error) {
             console.error('Error verifying payment:', error);
             this.error(res, error.message);
@@ -303,9 +303,8 @@ class PaymentController extends BaseController {
             });
 
             this.success(res, {
-                message: 'Escrow created & funds locked ✅',
                 escrowId: escrow._id,
-            });
+            }, 'Escrow created & funds locked ✅');
         } catch (error) {
             console.error('Escrow creation error:', error);
             this.error(res, error.message);
@@ -338,7 +337,7 @@ class PaymentController extends BaseController {
                 // Notify runner their item budget is approved and in their wallet
                 notifyItemApproved(escrow.runnerId?._id, { orderId: escrow.taskId });
 
-                return this.success(res, { message: 'Item budget released to runner' });
+                return this.success(res, null, 'Item budget released to runner');
             }
 
             if (!escrow.deliveryFeeReleased) {
@@ -362,7 +361,7 @@ class PaymentController extends BaseController {
                 });
             }
 
-            this.success(res, { message: 'Funds released: runner paid full amount' });
+            this.success(res, null, 'Funds released: runner paid full amount');
         } catch (error) {
             this.error(res, error.message);
         }
@@ -384,9 +383,7 @@ class PaymentController extends BaseController {
                 checkedAt: Date.now(),
             });
 
-            this.success(res, {
-                message: `${timedOut.length} escrows auto-released due to timeout`,
-            });
+            this.success(res, null, `${timedOut.length} escrows auto-released due to timeout`);
         } catch (error) {
             this.error(res, error.message);
         }
@@ -417,7 +414,7 @@ class PaymentController extends BaseController {
             // Notify runner their item budget is approved and in their wallet
             notifyItemApproved(escrow.runnerId?._id, { orderId: escrow.taskId });
 
-            this.success(res, { message: 'Item budget released to runner', ...result });
+            this.success(res, { ...result }, 'Item budget released to runner');
         } catch (error) {
             console.error('Error releasing item budget:', error);
             this.error(res, error.message);
@@ -573,8 +570,7 @@ class PaymentController extends BaseController {
 
             this.success(res, {
                 ...result,
-                message: `Withdrawal of NGN ${amount?.toString()} scheduled. Funds will be released within 24 hours.`,
-            });
+            }, `Withdrawal of NGN ${amount?.toString()} scheduled. Funds will be released within 24 hours.`);
         } catch (error) {
             console.error('Error withdrawing from wallet:', error);
             if (error.statusCode === 400) return this.badRequest(res, error.message);
@@ -597,7 +593,7 @@ class PaymentController extends BaseController {
             const { reference } = req.body;
             const result = await paymentService.verifyWalletFunding(reference);
             if (result.alreadyProcessed) {
-                return this.success(res, { message: 'Already processed' });
+                return this.success(res, null, 'Already processed');
             }
 
             sendPaymentEvent('wallet.funded', {
@@ -610,7 +606,7 @@ class PaymentController extends BaseController {
             });
 
 
-            this.success(res, { message: 'Wallet funded successfully', balance: result.balance, amount: result.amount });
+            this.success(res, { balance: result.balance, amount: result.amount }, 'Wallet funded successfully');
         } catch (error) {
             console.error('Error verifying wallet funding:', error);
             if (error.statusCode === 400) return this.badRequest(res, error.message);
