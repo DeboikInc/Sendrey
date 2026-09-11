@@ -31,9 +31,21 @@ export default function RunnerModal({
   const documents = localDocuments.documents || {};
   const biometrics = localDocuments.biometrics || {};
 
+  const isPedestrian = runner?.fleetType === 'pedestrian';
+  const isCycling = runner?.fleetType === 'cycling';
+  const isBike = runner?.fleetType === 'bike';
+
+  // Only show the documents relevant to this runner's fleetType
   const identityDocuments = [];
-  if (documents.nin) identityDocuments.push({ title: 'NIN Document', data: documents.nin, type: 'nin' });
-  if (documents.driverLicense) identityDocuments.push({ title: "Driver's License", data: documents.driverLicense, type: 'driverLicense' });
+  if (isCycling) {
+    if (documents.nin) identityDocuments.push({ title: 'NIN Document', data: documents.nin, type: 'nin' });
+  } else if (isBike) {
+    if (documents.bikerLicense) identityDocuments.push({ title: "Biker's License", data: documents.bikerLicense, type: 'bikerLicense' });
+    if (documents.nin) identityDocuments.push({ title: 'NIN Document', data: documents.nin, type: 'nin' });
+  } else {
+    if (documents.nin) identityDocuments.push({ title: 'NIN Document', data: documents.nin, type: 'nin' });
+    if (documents.driverLicense) identityDocuments.push({ title: "Driver's License", data: documents.driverLicense, type: 'driverLicense' });
+  }
 
   const hasSelfie = biometrics?.status && biometrics.status !== 'not_submitted';
 
@@ -50,27 +62,43 @@ export default function RunnerModal({
   const hasRejectedDocuments = identityDocuments.some(doc => doc.data?.status === 'rejected') ||
     (hasSelfie && biometrics?.status === 'rejected');
 
-
-  const isPedestrian = runner?.fleetType === 'pedestrian';
-
   const ninSubmitted = documents.nin?.status && documents.nin.status !== 'not_submitted';
   const licenseSubmitted = documents.driverLicense?.status && documents.driverLicense.status !== 'not_submitted';
+  const bikerLicenseSubmitted = documents.bikerLicense?.status && documents.bikerLicense.status !== 'not_submitted';
 
   const allThreeSubmitted = isPedestrian
     ? true
-    : ninSubmitted && licenseSubmitted && hasSelfie;
+    : isCycling
+      ? ninSubmitted && hasSelfie
+      : isBike
+        ? bikerLicenseSubmitted && ninSubmitted && hasSelfie
+        : ninSubmitted && licenseSubmitted && hasSelfie;
 
-  const anyDocRejectedBlocking = !isPedestrian && (
-    documents.nin?.status === 'rejected' ||
-    documents.driverLicense?.status === 'rejected' ||
-    (hasSelfie && biometrics?.status === 'rejected')
-  );
+  const anyDocRejectedBlocking = isPedestrian
+    ? false
+    : isCycling
+      ? (documents.nin?.status === 'rejected' || (hasSelfie && biometrics?.status === 'rejected'))
+      : isBike
+        ? (
+          documents.bikerLicense?.status === 'rejected' ||
+          documents.nin?.status === 'rejected' ||
+          (hasSelfie && biometrics?.status === 'rejected')
+        )
+        : (
+          documents.nin?.status === 'rejected' ||
+          documents.driverLicense?.status === 'rejected' ||
+          (hasSelfie && biometrics?.status === 'rejected')
+        );
 
   const actionsLocked = !isPedestrian && (!allThreeSubmitted || anyDocRejectedBlocking);
 
   const lockedReason = anyDocRejectedBlocking
     ? "A document was rejected — all actions are locked until the runner resubmits it."
-    : "All three documents (NIN, Driver's License, Selfie) must be submitted before any can be reviewed.";
+    : isCycling
+      ? "All two documents (NIN, Selfie) must be submitted before any can be reviewed."
+      : isBike
+        ? "All three documents (Biker's License, NIN, Selfie) must be submitted before any can be reviewed."
+        : "All three documents (NIN, Driver's License, Selfie) must be submitted before any can be reviewed.";
 
   const handleApproveDocument = async (docType) => {
     setIsSubmitting(true);

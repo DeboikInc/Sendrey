@@ -352,6 +352,7 @@ const userValidation = {
     isActive: Joi.boolean().optional(),
     isTrainingCompleted: Joi.boolean().optional(),
     isAvailable: Joi.boolean().optional(),
+    isDeleted: Joi.boolean().optional(),
     isOnline: Joi.boolean().optional(),
     reason: Joi.string().optional().max(500)
   })
@@ -418,6 +419,11 @@ const userValidation = {
       .optional()
       .messages({
         'any.required': 'Availability status is required'
+      }),
+    isDeleted: Joi.boolean()
+      .optional()
+      .messages({
+        'any.required': 'Deletion status is required'
       }),
     isOnline: Joi.boolean()
       .optional()

@@ -25,11 +25,13 @@ const CREDENTIAL_QUESTIONS = [
 ];
 
 const SINGLE_DOC_FLEETS = ['pedestrian', 'cycling'];
+
 const getSecondDocType = (fleetType) => {
-  const normalized = fleetType?.toLowerCase();
+  const normalized = typeof fleetType === 'string' ? fleetType.toLowerCase() : '';
   if (SINGLE_DOC_FLEETS.includes(normalized)) return null;
   return normalized === 'bike' ? 'bikerLicenseStatus' : 'driverLicenseStatus';
 };
+
 const secondDocLabel = (docKey) => docKey === 'bikerLicenseStatus' ? "biker's license" : "driver's license";
 
 // Greeting builder
@@ -504,7 +506,6 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
       return;
     }
 
-
     try {
       const checkResult = await dispatch(checkExistingUser({
         email: updatedRunnerData.email,
@@ -554,6 +555,41 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
         }]);
         setCredentialStep(phoneIdx);
         setIsCollectingCredentials(true);
+        isAnsweringRef.current = false;
+        return;
+      }
+
+      if (checkErr?.field === 'account') {
+        setMessages(prev => prev.filter(m => m.text !== 'In progress...'));
+        setMessages(prev => [...prev, {
+          id: Date.now(),
+          from: "them",
+          text: checkErr.message,
+          time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+          status: "delivered",
+          isError: true,
+        }]);
+
+        setCredentialStep(null);
+        setText('');
+        setRunnerData({ name: "", phone: "", email: "", fleetType: "", role: "runner", serviceType: serviceTypeRef.current || "" });
+        setTempUserData(null);
+        setIsReturningUser(false);
+        setReturningUserData(null);
+
+        setTimeout(() => {
+          setCredentialStep(0);
+          setIsCollectingCredentials(true);
+          setMessages(prev => [...prev, {
+            id: Date.now() + 1,
+            from: "them",
+            text: CREDENTIAL_QUESTIONS[0].question,
+            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            status: "delivered",
+            isCredential: true,
+          }]);
+        }, 1200);
+
         isAnsweringRef.current = false;
         return;
       }
@@ -613,6 +649,41 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
         const errorMessage = networkPatterns.test(rawMessage)
           ? 'Something went wrong. Please check your internet connection and try again.'
           : rawMessage;
+
+        if (serverField === 'account') {
+          setMessages(prev => [...prev, {
+            id: Date.now(),
+            from: "them",
+            text: err.message,
+            time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+            status: "delivered",
+            isError: true,
+          }]);
+
+          setCredentialStep(null);
+          setText('');
+          setRunnerData({ name: "", phone: "", email: "", fleetType: "", role: "runner", serviceType: serviceTypeRef.current || "" });
+          setTempUserData(null);
+          setIsReturningUser(false);
+          setReturningUserData(null);
+
+          setTimeout(() => {
+            setCredentialStep(0);
+            setIsCollectingCredentials(true);
+            setMessages(prev => [...prev, {
+              id: Date.now() + 1,
+              from: "them",
+              text: CREDENTIAL_QUESTIONS[0].question,
+              time: new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+              status: "delivered",
+              isCredential: true,
+            }]);
+          }, 1200);
+
+          setIsSubmitting(false);
+          isAnsweringRef.current = false;
+          return;
+        }
 
         // phone conflict
         if (is409 && serverField === 'phone') {
@@ -687,7 +758,7 @@ export const useCredentialFlow = (serviceTypeRef, onRegistrationSuccess) => {
 
         const serverName = err?.userName || updatedRunnerData.name.trim().split(" ")[0];
         const kycStatus = err?.kycStatus || {};
-        const fleetType = err?.fleetType || {};
+        const fleetType = err?.fleetType || null;
         const isTrainingCompleted = err?.isTrainingCompleted ?? false;
         const greetingText = buildReturningUserGreeting(serverName, kycStatus, fleetType || updatedRunnerData.fleetType);
 

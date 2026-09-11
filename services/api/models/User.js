@@ -151,12 +151,18 @@ const userSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
-
+  isDeleted: {
+    type: Boolean,
+    default: false
+  },
   isAvailable: {
     type: Boolean,
     default: true
   },
-
+  isOnline: {
+    type: Boolean,
+    default: true
+  },
   isVerified: {
     type: Boolean,
     default: false
@@ -404,7 +410,7 @@ userSchema.virtual('accountAge').get(function () {
 // Indexes
 userSchema.index({ email: 1 });
 userSchema.index({ phone: 1 }, { sparse: true, unique: true });
-userSchema.index({ role: 1 });
+userSchema.index({ role: 1, isOnline: 1, isAvailable: 1, isDeleted: 1 });
 userSchema.index({ isActive: 1 });
 userSchema.index({ isVerified: 1 });
 userSchema.index({ createdAt: -1 });

@@ -320,8 +320,8 @@ function OnboardingScreen({
               className="flex flex-col p-1.5 sm:p-3 lg:p-4 justify-center items-center text-black-100/60 dark:text-gray-400 min-w-[50px] sm:min-w-[70px] lg:min-w-[90px] hover:scale-105 transition-transform"
               onClick={() => handleCredentialAnswer(type, setText, setMessagesAndSync)}
             >
-              <Icon className="text-xl sm:text-2xl lg:text-3xl" />
-              <span className="text-[8px] sm:text-[10px] lg:text-xs capitalize mt-1">{label}</span>
+              <Icon className="text-xl sm:text-2xl lg:text-2xl" />
+              <span className="text-[8px] sm:text-[10px] lg:text-[11px] capitalize mt-1">{label}</span>
             </Button>
           ))}
         </div>

@@ -323,6 +323,16 @@ export const Auth = () => {
         return;
       }
     } catch (error) {
+      const isDeletedAccount = error?.field === 'account' || error?.status === 403 || /deleted/i.test(error?.message || '');
+
+      if (isDeletedAccount) {
+        setReturningUser(null);
+        setTempUserData(null);
+        setNeedsOtpVerification(false);
+        setAllErrors(extractAllErrors(error));
+        return;
+      }
+
       if (error?.field === 'phone' || error?.statusCode === 409) {
         setAllErrors(extractAllErrors(error));
         return;
@@ -356,6 +366,14 @@ export const Auth = () => {
       }
 
       if (error?.field === 'phone') {
+        setAllErrors(extractAllErrors(error));
+        return;
+      }
+
+      if (error?.field === 'account') {
+        setReturningUser(null);
+        setTempUserData(null);
+        setNeedsOtpVerification(false);
         setAllErrors(extractAllErrors(error));
         return;
       }
@@ -422,6 +440,15 @@ export const Auth = () => {
         })
         .catch((error) => {
           console.error("Registration failed:", error);
+
+          if (error?.field === 'account') {
+            setReturningUser(null);
+            setTempUserData(null);
+            setNeedsOtpVerification(false);
+            setAllErrors(extractAllErrors(error));
+            setPendingRegistrationData(null);
+            return;
+          }
 
           if (error?.status === 409 && error?.userName) {
             setReturningUser({

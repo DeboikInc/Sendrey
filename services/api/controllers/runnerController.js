@@ -30,6 +30,7 @@ class RunnerController extends BaseController {
     this.updateAvatar = this.updateAvatar.bind(this);
     this.resetStrikes = this.resetStrikes.bind(this);
     this.deleteRunner = this.deleteRunner.bind(this);
+    this.restoreRunner = this.restoreRunner.bind(this);
     this.getRecentChats = this.getRecentChats.bind(this);
     this._sanitizeRunner = this._sanitizeRunner.bind(this);
   }
@@ -468,7 +469,22 @@ class RunnerController extends BaseController {
       await this.service.deleteRunner(runnerId);
 
       logger.info(`Runner deleted: ${runnerId}`);
-      return this.success(res, null, 'Runner deleted successfully');
+      return this.success(res, { runner }, 'Runner deleted successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+   * Restore runner (admin only)
+   */
+  async restoreRunner(req, res, next) {
+    try {
+      const { runnerId } = req.params;
+      const { runner } = await this.service.restoreRunner(runnerId);
+
+      logger.info(`Runner restored: ${runnerId}`);
+      return this.success(res, { runner }, 'Runner restored successfully');
     } catch (error) {
       next(error);
     }

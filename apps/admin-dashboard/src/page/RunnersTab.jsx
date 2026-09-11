@@ -7,7 +7,8 @@ import {
 } from 'lucide-react';
 import {
     getRunners, getRunnerStats,
-    deleteRunner, banRunner, unbanRunner, resetStrikeCount
+    deleteRunner, banRunner, unbanRunner, resetStrikeCount,
+    restoreRunner
 } from '../Redux/runnersSlice';
 import Button from '../components/ui/Button';
 import PageLayout from '../components/layout/PageLayout';
@@ -50,7 +51,17 @@ function ConfirmModal({ isOpen, title, message, confirmLabel = 'Confirm', confir
     );
 }
 
-function RunnerActions({ runner, onBan, onUnban, onResetStrikes, onDelete, isMobile }) {
+function RunnerActions({ runner, onBan, onUnban, onResetStrikes, onDelete, onRestore, isMobile }) {
+    if (runner.isDeleted) {
+        return (
+            <div className={`flex items-center gap-2 ${isMobile ? 'w-full' : 'justify-end'}`}>
+                <Button onClick={() => onRestore(runner)} variant="outline" size="xs" className={isMobile ? 'flex-1' : ''}>
+                    <RotateCcw size={13} className="mr-1" /> Restore
+                </Button>
+            </div>
+        );
+    }
+
     return (
         <div className={`flex items-center gap-2 ${isMobile ? 'w-full' : 'justify-end'}`}>
             {!runner.isActive ? (
@@ -209,6 +220,19 @@ export default function RunnersTab() {
         });
     }, [dispatch]);
 
+    const handleRestore = useCallback((runner) => {
+        setConfirm({
+            title: 'Restore Runner',
+            message: `Restore ${runner.firstName} ${runner.lastName || ''}? They will be reinstated.`,
+            confirmLabel: 'Restore',
+            confirmVariant: 'primary',
+            onConfirm: () => {
+                dispatch(restoreRunner(runner._id));
+                setConfirm(null);
+            }
+        });
+    }, [dispatch]);
+
     const getSortIcon = () => {
         if (['newest', 'name_desc', 'rating_high', 'trips_high'].includes(sortBy)) return <SortDesc size={14} />;
         if (['oldest', 'name_asc', 'rating_low', 'trips_low'].includes(sortBy)) return <SortAsc size={14} />;
@@ -229,35 +253,40 @@ export default function RunnersTab() {
         }
     };
 
-    const runnerStats = useMemo(() => [
-        {
-            label: 'Total Runners',
-            value: stats.total || 0,
-            icon: Users,
-            bgClass: 'bg-primary/10',
-            borderClass: 'border-primary/20',
-            textClass: 'text-primary',
-            iconClass: 'text-primary'
-        },
-        {
-            label: 'Active',
-            value: stats.available || 0,
-            icon: Bike,
-            bgClass: 'bg-green-500/10',
-            borderClass: 'border-green-500/20',
-            textClass: 'text-green-500',
-            iconClass: 'text-green-500'
-        },
-        {
-            label: 'Banned',
-            value: stats.byStatus?.find(s => s._id === 'banned')?.count || 0,
-            icon: ShieldAlert,
-            bgClass: 'bg-red-500/10',
-            borderClass: 'border-red-500/20',
-            textClass: 'text-red-500',
-            iconClass: 'text-red-500'
-        }
-    ], [stats]);
+    const runnerStats = useMemo(() => {
+        const activeCount = list.filter(r => r.isActive && !r.isDeleted).length;
+        const bannedCount = list.filter(r => !r.isActive && !r.isDeleted).length;
+
+        return [
+            {
+                label: 'Total Runners',
+                value: list.filter(r => !r.isDeleted).length,
+                icon: Users,
+                bgClass: 'bg-primary/10',
+                borderClass: 'border-primary/20',
+                textClass: 'text-primary',
+                iconClass: 'text-primary'
+            },
+            {
+                label: 'Active',
+                value: activeCount,
+                icon: Bike,
+                bgClass: 'bg-green-500/10',
+                borderClass: 'border-green-500/20',
+                textClass: 'text-green-500',
+                iconClass: 'text-green-500'
+            },
+            {
+                label: 'Banned',
+                value: bannedCount,
+                icon: ShieldAlert,
+                bgClass: 'bg-red-500/10',
+                borderClass: 'border-red-500/20',
+                textClass: 'text-red-500',
+                iconClass: 'text-red-500'
+            }
+        ];
+    }, [list]);
 
     return (
         <>
@@ -388,8 +417,8 @@ export default function RunnersTab() {
                                                 <div className="text-white/70 text-xs mt-0.5">{runner.completedOrders || 0} trips</div>
                                             </td>
                                             <td className="px-5 py-4">
-                                                <span className={`px-2.5 py-1 rounded-lg text-[10px] font-medium border ${getStatusStyle(runner.isActive)}`}>
-                                                    {runner.isActive ? 'Active' : 'Suspended'}
+                                                <span className={`px-2.5 py-1 rounded-lg text-[10px] font-medium border ${runner.isDeleted ? 'bg-red-500/10 text-red-500 border-red-500/20' : getStatusStyle(runner.isActive)}`}>
+                                                    {runner.isDeleted ? 'Deleted' : runner.isActive ? 'Active' : 'Suspended'}
                                                 </span>
                                                 {runner.itemRejectionCount > 0 && (
                                                     <div className="text-[10px] text-red-500/70 mt-1">
@@ -414,6 +443,7 @@ export default function RunnersTab() {
                                                     onUnban={handleUnban}
                                                     onResetStrikes={handleResetStrikes}
                                                     onDelete={handleDelete}
+                                                    onRestore={handleRestore}
                                                     isMobile={false}
                                                 />
                                             </td>
@@ -439,8 +469,8 @@ export default function RunnersTab() {
                                             )}
                                         </div>
                                         <div className="flex flex-col items-end gap-1.5 shrink-0">
-                                            <span className={`px-2.5 py-1 rounded-lg text-[10px] font-medium border ${getStatusStyle(runner.isActive)}`}>
-                                                {runner.isActive ? 'Active' : 'Suspended'}
+                                            <span className={`px-2.5 py-1 rounded-lg text-[10px] font-medium border ${runner.isDeleted ? 'bg-red-500/10 text-red-500 border-red-500/20' : getStatusStyle(runner.isActive)}`}>
+                                                {runner.isDeleted ? 'Deleted' : runner.isActive ? 'Active' : 'Suspended'}
                                             </span>
                                             <span className={`px-2.5 py-1 rounded-lg text-[10px] font-medium border ${getStatusStyle(runner.kycStatus)}`}>
                                                 {runner.kycStatus?.replace(/_/g, ' ') || '—'}
@@ -468,6 +498,7 @@ export default function RunnersTab() {
                                             onUnban={handleUnban}
                                             onResetStrikes={handleResetStrikes}
                                             onDelete={handleDelete}
+                                            onRestore={handleRestore}
                                             isMobile={true}
                                         />
                                     </div>
