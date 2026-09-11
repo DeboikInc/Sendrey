@@ -199,6 +199,7 @@ const authValidation = {
     longitude: Joi.number().min(-180).max(180).optional(),
     isOnline: Joi.boolean().optional(),
     isAvailable: Joi.boolean().default(true),
+    isDeleted: Joi.boolean().default(false),
     isActive: Joi.boolean().optional(),
     referralCode: Joi.string().optional().trim().uppercase()
       .messages({
@@ -223,6 +224,7 @@ const authValidation = {
     longitude: Joi.number().min(-180).max(180).optional()
       .messages({ 'any.required': 'Location is required' }),
     isAvailable: Joi.boolean().default(true),
+    isDeleted: Joi.boolean().default(false),
     isActive: Joi.boolean().optional(),
     referralCode: Joi.string().optional().trim().uppercase()
       .messages({

@@ -369,15 +369,41 @@ class RunnerService {
    */
   async deleteRunner(runnerId) {
     try {
-      const runner = await Runner.findByIdAndDelete(runnerId);
+      const runner = await Runner.findByIdAndUpdate(
+        runnerId,
+        { $set: { isActive: false, isAvailable: false, isDeleted: true } },
+        { new: true }
+      );
 
       if (!runner) {
         throw new Error('Runner not found');
       }
 
-      return { message: 'Runner deleted successfully' };
+      return { runner };
     } catch (error) {
       logger.error('RunnerService - Delete runner error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Restore runner
+   */
+  async restoreRunner(runnerId) {
+    try {
+      const runner = await Runner.findByIdAndUpdate(
+        runnerId,
+        { $set: { isActive: true, isAvailable: true, isDeleted: false } },
+        { new: true }
+      );
+
+      if (!runner) {
+        throw new Error('Runner not found');
+      }
+
+      return { runner };
+    } catch (error) {
+      logger.error('RunnerService - Restore runner error:', error);
       throw error;
     }
   }

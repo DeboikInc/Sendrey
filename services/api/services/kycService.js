@@ -51,7 +51,7 @@ class KYCService {
         const other = await Runner.findOne({
             _id: { $ne: userId },
             $or: ALL_DOC_FIELDS.map(f => ({ [`verificationDocuments.${f}.documentHash`]: docHash }))
-        }).select('_id');
+        }).select('_id firstName lastName email');
 
         if (other) {
             return {

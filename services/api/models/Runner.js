@@ -159,6 +159,10 @@ const runnerSchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  isDeleted: {
+    type: Boolean,
+    default: false
+  },
   lastLocationUpdate: {
     type: Date,
     default: null
@@ -502,7 +506,7 @@ runnerSchema.index({ isVerifiedKyc: 1 });
 runnerSchema.index({ createdAt: -1 });
 runnerSchema.index({ lastLogin: -1 });
 runnerSchema.index({ location: '2dsphere' });
-runnerSchema.index({ role: 1, isOnline: 1, isAvailable: 1 });
+runnerSchema.index({ role: 1, isOnline: 1, isAvailable: 1, isDeleted: 1 });
 runnerSchema.index({ fleetType: 1 });
 
 runnerSchema.index({

@@ -42,10 +42,19 @@ export const updateRunnerStatus = createAsyncThunk(
 
 export const deleteRunner = createAsyncThunk('runners/delete', async (runnerId, { rejectWithValue }) => {
     try {
-        await api.delete(`/runners/${runnerId}`);
-        return runnerId;
+        const response = await api.delete(`/runners/${runnerId}`);
+        return response.data;
     } catch (err) {
         return rejectWithValue(err.response?.data);
+    }
+});
+
+export const restoreRunner = createAsyncThunk('runners/restore', async (runnerId, { rejectWithValue }) => {
+    try {
+        const response = await api.patch(`/runners/restore/${runnerId}`);
+        return response.data;
+    } catch (err) {
+        return rejectWithValue(err.response.data)
     }
 });
 
@@ -127,8 +136,17 @@ const runnersSlice = createSlice({
                 const index = state.list.findIndex(r => r._id === updated._id);
                 if (index !== -1) state.list[index] = updated;
             })
+
             .addCase(deleteRunner.fulfilled, (state, action) => {
-                state.list = state.list.filter(r => r._id !== action.payload);
+                const updated = action.payload.runner;
+                const index = state.list.findIndex(r => r._id === updated._id);
+                if (index !== -1) state.list[index] = updated;
+            })
+
+            .addCase(restoreRunner.fulfilled, (state, action) => {
+                const updated = action.payload.runner;
+                const index = state.list.findIndex(r => r._id === updated._id);
+                if (index !== -1) state.list[index] = updated;
             })
 
             .addCase(banRunner.fulfilled, (state, action) => {
@@ -136,17 +154,17 @@ const runnersSlice = createSlice({
                 const index = state.list.findIndex(r => r._id === updated._id);
                 if (index !== -1) state.list[index] = updated;
             })
-            .addCase(unbanRunner.fulfilled, (state, action) => {
-                const updated = action.payload.runner;
-                const index = state.list.findIndex(r => r._id === updated._id);
-                if (index !== -1) state.list[index] = updated;
-            })
-            .addCase(resetStrikeCount.fulfilled, (state, action) => {
-                const updated = action.payload.runner;
-                const index = state.list.findIndex(r => r._id === updated._id);
-                if (index !== -1) state.list[index] = updated;
-            });
-    }
+        .addCase(unbanRunner.fulfilled, (state, action) => {
+            const updated = action.payload.runner;
+            const index = state.list.findIndex(r => r._id === updated._id);
+            if (index !== -1) state.list[index] = updated;
+        })
+        .addCase(resetStrikeCount.fulfilled, (state, action) => {
+            const updated = action.payload.runner;
+            const index = state.list.findIndex(r => r._id === updated._id);
+            if (index !== -1) state.list[index] = updated;
+        });
+}
 });
 
 export const { clearRunnersError } = runnersSlice.actions;

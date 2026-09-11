@@ -31,6 +31,7 @@ class UserController extends BaseController {
     this.getMyLocations = this.getMyLocations.bind(this);
     this.deleteLocation = this.deleteLocation.bind(this);
     this.deleteUser = this.deleteUser.bind(this);
+    this.restoreUser = this.restoreUser.bind(this);
     this.searchUsers = this.searchUsers.bind(this);
     this.bulkUserAction = this.bulkUserAction.bind(this);
     this.exportUsers = this.exportUsers.bind(this);
@@ -209,8 +210,7 @@ class UserController extends BaseController {
         success: true,
         count: eligibleUsers.length,
         users: eligibleUsers,
-        message: `Found ${eligibleUsers.length} nearby user${users.length !== 1 ? 's' : ''}`
-      });
+      }, `Found ${eligibleUsers.length} nearby user${users.length !== 1 ? 's' : ''}`);
     } catch (error) {
       logger.error('Error finding nearby users:', error);
       next(error);
@@ -241,8 +241,7 @@ class UserController extends BaseController {
 
       this.success(res, {
         preferences: user.notificationPreferences,
-        message: 'Notification preferences updated successfully'
-      });
+      }, 'Notification preferences updated successfully');
     } catch (error) {
       next(error);
     }
@@ -260,8 +259,7 @@ class UserController extends BaseController {
 
       this.success(res, {
         user: this._sanitizeUser(user),
-        message: 'User role updated successfully'
-      });
+      }, 'User role updated successfully');
     } catch (error) {
       next(error);
     }
@@ -302,8 +300,7 @@ class UserController extends BaseController {
 
       this.success(res, {
         user: this._sanitizeUser(user),
-        message: `User ${isActive ? 'activated' : 'deactivated'} successfully`
-      });
+      }, `User ${isActive ? 'activated' : 'deactivated'} successfully`);
     } catch (error) {
       next(error);
     }
@@ -314,9 +311,8 @@ class UserController extends BaseController {
     try {
       const locations = await userService.addSavedLocation(req.user.id, req.body);
       this.success(res, {
-        message: 'Location saved successfully',
         locations
-      });
+      }, 'Location saved successfully');
     } catch (error) {
       logger.error('Save location error:', error);
       next(error);
@@ -340,9 +336,8 @@ class UserController extends BaseController {
       const { locationId } = req.params;
       const locations = await userService.removeSavedLocation(req.user.id, locationId);
       this.success(res, {
-        message: 'Location removed successfully',
         locations
-      });
+      }, 'Location removed successfully');
     } catch (error) {
       logger.error('Delete location error:', error);
       next(error);
@@ -353,9 +348,25 @@ class UserController extends BaseController {
   async deleteUser(req, res, next) {
     try {
       const { userId } = req.params;
-      await userService.deleteUser(userId);
+      const { user } = await userService.deleteUser(userId);
+
       logger.info(`User deleted: ${userId}`);
-      this.success(res, { message: 'User deleted successfully' });
+      this.success(res, { user }, 'User deleted successfully');
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  /**
+     * Restore user (admin only)
+     */
+  async restoreUser(req, res, next) {
+    try {
+      const { userId } = req.params;
+      const { user } = await this.service.restoreUser(userId);
+
+      logger.info(`User restored: ${userId}`);
+      return this.success(res, { user }, 'User restored successfully');
     } catch (error) {
       next(error);
     }
@@ -381,9 +392,8 @@ class UserController extends BaseController {
       const result = await userService.bulkUserAction(userIds, action, role);
       logger.info(`Bulk user action performed: ${action} on ${userIds.length} users`);
       this.success(res, {
-        ...result,
-        message: `Bulk action completed successfully`
-      });
+        ...result
+      }, 'Bulk action completed successfully');
     } catch (error) {
       next(error);
     }

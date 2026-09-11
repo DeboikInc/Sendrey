@@ -77,17 +77,6 @@ router.post('/verify-email-otp',
   authController.verifyEmailOTP
 );
 
-router.post('/forgot-password',
-  ipRateLimit({ windowMs: 60 * 60 * 1000, maxRequests: 3 }),
-  validate(authValidation.forgotPassword),
-  authController.forgotPassword
-);
-
-router.post('/reset-password',
-  validate(authValidation.resetPassword),
-  authController.resetPassword
-);
-
 
 router.post('/verify-phone',
   // authenticate,
@@ -108,14 +97,6 @@ router.post('/resend-phone-verification',
   validate(authValidation.resendVerification),
   authController.resendPhoneVerification
 );
-
-// Protected routes (require authentication)
-router.post('/change-password',
-  validate(authValidation.changePassword),
-  auditLog('CHANGE_PASSWORD'),
-  authController.changePassword
-);
-
 
 // emails
 router.post('/resend-email-verification',

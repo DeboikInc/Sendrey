@@ -358,15 +358,42 @@ class UserService {
    */
   async deleteUser(userId) {
     try {
-      const user = await User.findByIdAndDelete(userId);
+      // soft delete
+      const user = await User.findByIdAndUpdate(
+        userId,
+        { $set: { isActive: false, isAvailable: false, isDeleted: true } },
+        { new: true }
+      );
 
       if (!user) {
         throw new Error('User not found');
       }
 
-      return { message: 'User deleted successfully' };
+      return { user };
     } catch (error) {
       logger.error('UserService - Delete user error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Restore user
+   */
+  async restoreUser(userId) {
+    try {
+      const user = await User.findByIdAndUpdate(
+        userId,
+        { $set: { isActive: true, isAvailable: true, isDeleted: false } },
+        { new: true }
+      );
+
+      if (!user) {
+        throw new Error('User not found');
+      }
+
+      return { user };
+    } catch (error) {
+      logger.error('UserService - Restore user error:', error);
       throw error;
     }
   }

@@ -165,8 +165,10 @@ export const checkExistingUser = createAsyncThunk('auth/check-existing-user', as
         const res = await api.post('/auth/check-existing-user', { email, userType });
         return res.data;
     } catch (err) {
+        const data = err.response?.data;
         return rejectWithValue({
-            ...(err.response?.data ?? {}),
+            ...data,
+            ...(data?.errors && typeof data.errors === 'object' && !Array.isArray(data.errors) ? data.errors : {}),
             status: err.response?.status,
         });
     }
@@ -346,7 +348,7 @@ const authSlice = createSlice({
                     state.isAuthenticated = false;
                 }
             })
-            
+
             .addCase(sendEmailVerification.pending, (state) => { state.status = "loading"; state.error = null; })
             .addCase(sendEmailVerification.fulfilled, (state) => { state.status = "succeeded"; })
             .addCase(sendEmailVerification.rejected, (state, action) => { state.status = "failed"; state.error = action.payload; })

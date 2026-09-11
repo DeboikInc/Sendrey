@@ -30,10 +30,19 @@ export const bulkUserAction = createAsyncThunk('users/bulkAction', async ({ user
 
 export const deleteUser = createAsyncThunk('users/delete', async (userId, { rejectWithValue }) => {
     try {
-        await api.delete(`/users/${userId}`);
-        return userId;
+        const response = await api.delete(`/users/${userId}`);
+        return response.data;
     } catch (err) {
         return rejectWithValue(err.response?.data);
+    }
+});
+
+export const restoreUser = createAsyncThunk('users/restore', async (userId, { rejectWithValue }) => {
+    try {
+        const response = await api.patch(`/users/restore/${userId}`);
+        return response.data;
+    } catch (err) {
+        return rejectWithValue(err.response.data)
     }
 });
 
@@ -79,8 +88,17 @@ const usersSlice = createSlice({
                 }
             })
             .addCase(deleteUser.fulfilled, (state, action) => {
-                state.list = state.list.filter(u => u._id !== action.payload);
+                const updated = action.payload.user;
+                const index = state.list.findIndex(u => u._id === updated._id);
+                if (index !== -1) state.list[index] = updated;
             })
+
+            .addCase(restoreUser.fulfilled, (state, action) => {
+                const updated = action.payload.user;
+                const index = state.list.findIndex(u => u._id === updated._id);
+                if (index !== -1) state.list[index] = updated;
+            })
+
             .addCase(deleteUser.rejected, (state, action) => {
                 state.error = action.payload?.message || 'Failed to delete user';
             });

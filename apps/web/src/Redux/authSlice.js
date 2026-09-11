@@ -157,8 +157,10 @@ export const checkExistingUser = createAsyncThunk('auth/check-existing-user',
         const res = await api.post('/auth/check-existing-user', { email, phone, userType });
         return res.data;
     } catch (err) {
+        const data = err.response?.data;
         return rejectWithValue({
-            ...(err.response?.data ?? {}),
+            ...data,
+            ...(data?.errors && typeof data.errors === 'object' && !Array.isArray(data.errors) ? data.errors : {}),
             status: err.response?.status,
         });
     }
