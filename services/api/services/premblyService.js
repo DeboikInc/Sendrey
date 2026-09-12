@@ -29,8 +29,11 @@ class PremblyService {
       const confidence = face_data?.confidence ?? 0;
 
       let decision = 'manual_review';
-      if (face_data?.status && confidence >= THRESHOLDS.AUTO_APPROVE) decision = 'auto_approve';
-      else if (confidence <= THRESHOLDS.AUTO_REJECT) decision = 'auto_reject';
+      if (face_data?.status && confidence >= THRESHOLDS.AUTO_APPROVE) {
+        decision = 'auto_approve';
+      } else if (face_data?.status === false && confidence <= THRESHOLDS.AUTO_REJECT) {
+        decision = 'auto_reject';
+      }
 
       return {
         skipped: false, success: true, confidence, decision,
