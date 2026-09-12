@@ -859,3 +859,4 @@ class KYCService {
 }
 
 module.exports = KYCService;
+module.exports.getRelevantVerificationItems = getRelevantVerificationItems;

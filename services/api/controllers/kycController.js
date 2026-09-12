@@ -4,7 +4,8 @@ const KYCService = require('../services/kycService');
 const Runner = require('../models/Runner');
 const { sendPushNotification } = require('../services/notificationService');
 const redis = require('../config/redis');
-// PREMBLY for automation
+const { getRelevantVerificationItems } = require('../services/kycService');
+
 class KYCController extends BaseController {
     constructor() {
         super(new KYCService());
@@ -360,7 +361,7 @@ class KYCController extends BaseController {
             if (docs.nin?.status === 'pending_review') pendingDocs.push('nin');
             if (docs.driverLicense?.status === 'pending_review') pendingDocs.push('driverLicense');
             if (docs.bikerLicense?.status === 'pending_review') pendingDocs.push('bikerLicense');
-            
+
             const steps = [];
 
             if (pendingDocs.length > 0) {
@@ -444,7 +445,10 @@ class KYCController extends BaseController {
                     .select('verificationDocuments biometricVerification kycStatus');
                 if (!runner) return;
 
-                const rejectedItems = this.service.getRejectedItems(runner);
+                const rejectedItems = getRelevantVerificationItems(runner)
+                    .filter(i => i.status === 'rejected')
+                    .map(i => ({ type: i.label, reason: i.rejectionReason }));
+
                 if (rejectedItems.length === 0) return;
 
                 const title = rejectedItems.length > 1
@@ -573,12 +577,13 @@ class KYCController extends BaseController {
         try {
             const { runnerId } = req.params;
             const { documentType, reason } = req.body;
+            const adminId = req.user?.id || req.user?._id || 'admin';
 
             if (!reason || reason.trim().length === 0) {
                 return this.badRequest(res, 'Rejection reason is required');
             }
 
-            const result = await this.service.rejectDocument(runnerId, documentType, reason);
+            const result = await this.service.rejectDocument(runnerId, documentType, reason, adminId);
 
             if (result.success) {
                 const payload = {
@@ -660,12 +665,13 @@ class KYCController extends BaseController {
         try {
             const { runnerId } = req.params;
             const { reason } = req.body;
+            const adminId = req.user?.id || req.user?._id || 'admin';
 
             if (!reason || reason.trim().length === 0) {
                 return this.badRequest(res, 'Rejection reason is required');
             }
 
-            const result = await this.service.rejectSelfie(runnerId, reason);
+            const result = await this.service.rejectSelfie(runnerId, reason, adminId);
 
             if (result.success) {
                 const payload = {
