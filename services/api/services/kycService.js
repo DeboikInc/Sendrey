@@ -755,19 +755,30 @@ class KYCService {
                 'verificationDocuments.bikerLicense.flaggedForReview': { $ne: true }
             }).select('firstName lastName email fleetType phone createdAt verificationDocuments biometricVerification kycStatus isVerifiedKycAt');
 
-            return verifiedRunners.map(runner => ({
-                id: runner._id,
-                firstName: runner.firstName,
-                lastName: runner.lastName,
-                email: runner.email,
-                phone: runner.phone,
-                fleetType: runner.fleetType,
-                createdAt: runner.createdAt,
-                kycStatus: runner.kycStatus,
-                verifiedAt: runner.isVerifiedKycAt,
-                pendingItems: []
-            }));
+            return verifiedRunners.map(runner => {
+                let verifiedBy = null;
 
+                if (runner.kycStatus === 'approved_full') {
+                    verifiedBy = runner.biometricVerification?.verifiedBy || null;
+                } else {
+                    const verifiedDoc = getRelevantVerificationItems(runner).find(i => i.field !== 'selfie' && i.verified);
+                    verifiedBy = verifiedDoc ? runner.verificationDocuments?.[verifiedDoc.field]?.verifiedBy || null : null;
+                }
+
+                return {
+                    id: runner._id,
+                    firstName: runner.firstName,
+                    lastName: runner.lastName,
+                    email: runner.email,
+                    phone: runner.phone,
+                    fleetType: runner.fleetType,
+                    createdAt: runner.createdAt,
+                    kycStatus: runner.kycStatus,
+                    verifiedAt: runner.isVerifiedKycAt,
+                    verifiedBy,
+                    pendingItems: []
+                };
+            });
         } catch (error) {
             console.error('Error fetching verified runners:', error);
             throw error;
@@ -859,3 +870,4 @@ class KYCService {
 }
 
 module.exports = KYCService;
+module.exports.getRelevantVerificationItems = getRelevantVerificationItems;
