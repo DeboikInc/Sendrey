@@ -54,8 +54,11 @@ export default function RunnerCard({ runner, view, onReview }) {
           ))}
         </div>
       )}
+
       {!items?.length && view === 'verified' && (
-        <p className="text-[10px] text-white/30">All verified</p>
+        <p className="text-[10px] text-white/30">
+          All verified{runner.verifiedBy ? ` — by ${runner.verifiedBy === 'prembly-auto' ? 'Prembly' : 'Admin'}` : ''}
+        </p>
       )}
 
       {!items?.length && view === 'verified' && runner.verifiedAt && (
