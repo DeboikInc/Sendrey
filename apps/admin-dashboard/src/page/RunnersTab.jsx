@@ -96,7 +96,7 @@ function RunnerActions({ runner, onBan, onUnban, onResetStrikes, onDelete, onRes
 
 export default function RunnersTab() {
     const dispatch = useDispatch();
-    const { list: rawList, stats = {}, loading = false, error = null } = useSelector(state => state.runners || {});
+    const { list: rawList, loading = false, error = null } = useSelector(state => state.runners || {});
     const list = useMemo(() => Array.isArray(rawList) ? rawList : [], [rawList]);
 
     const [searchQuery, setSearchQuery] = useState('');

@@ -25,12 +25,52 @@ function getSecondDocType(fleetType) {
     return fleetType === 'bike' ? 'bikerLicense' : 'driverLicense';
 }
 
+function getRequiredDocFields(fleetType) {
+    if (SINGLE_DOC_FLEETS.includes(fleetType)) return ['nin'];
+    const secondDoc = getSecondDocType(fleetType);
+    return ['nin', secondDoc];
+}
+
+function getRelevantVerificationItems(runner) {
+    const requiredFields = getRequiredDocFields(runner.fleetType);
+    const docs = runner.verificationDocuments || {};
+    const bio = runner.biometricVerification || {};
+
+    const labels = { nin: 'NIN', driverLicense: 'Driver License', bikerLicense: "Biker's License" };
+
+    const items = requiredFields.map(field => ({
+        field,
+        label: labels[field],
+        status: docs[field]?.status || 'not_submitted',
+        verified: docs[field]?.verified || false,
+        flaggedForReview: docs[field]?.flaggedForReview || false,
+        flaggedReason: docs[field]?.flaggedReason || null,
+        wasResubmitted: docs[field]?.wasResubmitted || false,
+        previousRejectionReason: docs[field]?.previousRejectionReason || null,
+        rejectionReason: docs[field]?.rejectionReason || null,
+        rejectedBy: docs[field]?.rejectedBy || null,
+    }));
+
+    items.push({
+        field: 'selfie',
+        label: 'Selfie',
+        status: bio.status || 'not_submitted',
+        verified: bio.selfieVerified || false,
+        flaggedForReview: false,
+        flaggedReason: null,
+        wasResubmitted: bio.wasResubmitted || false,
+        previousRejectionReason: bio.previousRejectionReason || null,
+        rejectionReason: bio.rejectionReason || null,
+        rejectedBy: bio.rejectionReason?.startsWith('Automated') ? 'prembly-auto' : null,
+    });
+
+    return items;
+}
 class KYCService {
 
     constructor() {
         this.uploadDir = 'uploads';
     }
-
 
     async checkDuplicateDocument(userId, docHash, docType) {
         const otherFields = ALL_DOC_FIELDS.filter(f => f !== docType);
@@ -127,26 +167,37 @@ class KYCService {
         }
     }
 
-    async runAutomatedVerification(userId, selfieBuffer) {
+    async runAutomatedVerification(userId) {
         const runner = await Runner.findById(userId);
+        if (!runner) return;
+
         const docs = runner.verificationDocuments || {};
+        const bio = runner.biometricVerification || {};
+        const requiredFields = getRequiredDocFields(runner.fleetType);
 
-        const doc = docs.nin?.documentPath ? { type: 'nin', premblyType: 'ID', path: docs.nin.documentPath }
-            : docs.driverLicense?.documentPath ? { type: 'driverLicense', premblyType: 'DL', path: docs.driverLicense.documentPath }
-                : docs.bikerLicense?.documentPath ? { type: 'bikerLicense', premblyType: 'DL', path: docs.bikerLicense.documentPath }
-                    : null;
+        const missingDoc = requiredFields.find(f => !docs[f]?.documentPath);
+        if (missingDoc || !bio.selfieImage) {
+            // Not everything this fleet type needs has been submitted yet —
+            // stay on manual/pending review, don't call Prembly prematurely.
+            return;
+        }
 
-        if (!doc) return;
+        const primaryField = docs.nin?.documentPath ? 'nin' : requiredFields.find(f => f !== 'nin');
+        const doc = {
+            type: primaryField,
+            premblyType: primaryField === 'nin' ? 'ID' : 'DL',
+            path: docs[primaryField]?.documentPath,
+        };
 
         try {
             const docImageBase64 = await urlToBase64(doc.path);
-            const selfieImageBase64 = selfieBuffer.toString('base64');
+            const selfieImageBase64 = await urlToBase64(bio.selfieImage);
 
             const result = await premblyService.verifyDocumentWithFace({
                 docImageBase64, selfieImageBase64, docType: doc.premblyType
             });
 
-            if (result.skipped) return; // call failed — stays pending_review, admin handles it
+            if (result.skipped) return;
 
             const docField = `verificationDocuments.${doc.type}`;
             await Runner.findByIdAndUpdate(userId, {
@@ -162,9 +213,9 @@ class KYCService {
                 await this.approveDocument(userId, doc.type, 'prembly-auto');
                 await this.approveSelfie(userId, 'prembly-auto');
             } else if (result.decision === 'auto_reject') {
-                await this.rejectSelfie(userId, `Automated face match failed (confidence ${result.confidence})`);
+                await this.rejectSelfie(userId, `Automated face match failed (confidence ${result.confidence})`, 'prembly-auto');
             }
-            // else 'manual_review' — leave as pending_review; admin now sees the confidence score in getRunnerVerificationDetails
+            // else 'manual_review' — leave as pending_review
         } catch (err) {
             console.error('[KYC] Automated verification error, staying on manual review:', err.message);
         }
@@ -211,6 +262,8 @@ class KYCService {
             await Runner.findByIdAndUpdate(userInfo.userId, {
                 kycStatus: await this.calculateRunnerStatus(userInfo.userId)
             });
+
+            await this.runAutomatedVerification(userId);
 
             return {
                 success: true,
@@ -279,6 +332,8 @@ class KYCService {
                 kycStatus: await this.calculateRunnerStatus(userInfo.userId)
             });
 
+            await this.runAutomatedVerification(userId);
+
             return {
                 success: true,
                 verified: false,
@@ -345,6 +400,8 @@ class KYCService {
                 kycStatus: await this.calculateRunnerStatus(userInfo.userId)
             });
 
+            await this.runAutomatedVerification(userId);
+
             return {
                 success: true,
                 verified: false,
@@ -397,7 +454,7 @@ class KYCService {
                 }
             });
 
-            await this.runAutomatedVerification(userId, fileBuffer);
+            await this.runAutomatedVerification(userId);
 
             return {
                 success: true,
@@ -419,6 +476,8 @@ class KYCService {
         }
     }
 
+    // ==================== ADMIN METHODS ====================
+
     async deleteDocument(cloudinaryPublicId) {
         try {
             const result = await cloudinary.uploader.destroy(cloudinaryPublicId);
@@ -434,57 +493,41 @@ class KYCService {
         }
     }
 
-    // ==================== ADMIN METHODS ====================
-
     async getPendingVerifications() {
         try {
-            const pendingRunners = await Runner.find({
+            const candidates = await Runner.find({
                 role: 'runner',
-                $and: [
-                    {
-                        $or: [
-                            { 'verificationDocuments.nin.status': 'pending_review' },
-                            { 'verificationDocuments.driverLicense.status': 'pending_review' },
-                            { 'verificationDocuments.bikerLicense.status': 'pending_review' },
-                            { 'biometricVerification.status': 'pending_review' }
-                        ]
-                    },
-                    { 'verificationDocuments.nin.status': { $ne: 'rejected' } },
-                    { 'verificationDocuments.driverLicense.status': { $ne: 'rejected' } },
-                    { 'verificationDocuments.bikerLicense.status': { $ne: 'rejected' } },
-                    { 'biometricVerification.status': { $ne: 'rejected' } }
+                $or: [
+                    { 'verificationDocuments.nin.status': 'pending_review' },
+                    { 'verificationDocuments.driverLicense.status': 'pending_review' },
+                    { 'verificationDocuments.bikerLicense.status': 'pending_review' },
+                    { 'biometricVerification.status': 'pending_review' }
                 ]
             }).select('firstName lastName email phone fleetType createdAt verificationDocuments biometricVerification kycStatus');
 
-            return pendingRunners.map(runner => ({
-                id: runner._id,
-                firstName: runner.firstName,
-                lastName: runner.lastName,
-                email: runner.email,
-                phone: runner.phone,
-                fleetType: runner.fleetType,
-                createdAt: runner.createdAt,
-                kycStatus: runner.kycStatus,
-                pendingItems: this.getPendingItems(runner)
-            }));
-
+            return candidates
+                .filter(runner => {
+                    const items = getRelevantVerificationItems(runner);
+                    if (items.some(i => i.status === 'rejected')) return false;
+                    return items.some(i => i.status === 'pending_review');
+                })
+                .map(runner => ({
+                    id: runner._id,
+                    firstName: runner.firstName,
+                    lastName: runner.lastName,
+                    email: runner.email,
+                    phone: runner.phone,
+                    fleetType: runner.fleetType,
+                    createdAt: runner.createdAt,
+                    kycStatus: runner.kycStatus,
+                    pendingItems: getRelevantVerificationItems(runner)
+                        .filter(i => i.status === 'pending_review')
+                        .map(i => i.label)
+                }));
         } catch (error) {
             console.error('Error fetching pending verifications:', error);
             throw error;
         }
-    }
-
-    getPendingItems(runner) {
-        const pending = [];
-        const docs = runner.verificationDocuments || {};
-        const bio = runner.biometricVerification || {};
-
-        if (docs.nin?.status === 'pending_review') pending.push('NIN');
-        if (docs.driverLicense?.status === 'pending_review') pending.push('Driver License');
-        if (docs.bikerLicense?.status === 'pending_review') pending.push("Biker's License");
-        if (bio.status === 'pending_review') pending.push('Selfie');
-
-        return pending;
     }
 
     async getRunnerVerificationDetails(runnerId) {
@@ -603,7 +646,7 @@ class KYCService {
         }
     }
 
-    async rejectDocument(runnerId, documentType, reason) {
+    async rejectDocument(runnerId, documentType, reason, adminId = 'admin') {
         try {
             const validTypes = ['nin', 'driverLicense', 'bikerLicense'];
             if (!validTypes.includes(documentType)) return { success: false, error: 'Invalid document type' };
@@ -614,6 +657,7 @@ class KYCService {
                 [`${updateField}.status`]: 'rejected',
                 [`${updateField}.rejectedAt`]: new Date(),
                 [`${updateField}.rejectionReason`]: reason,
+                [`${updateField}.rejectedBy`]: adminId,
             });
 
             const newStatus = await this.calculateRunnerStatus(runnerId);
@@ -657,14 +701,14 @@ class KYCService {
         }
     }
 
-
-    async rejectSelfie(runnerId, reason) {
+    async rejectSelfie(runnerId, reason, adminId = 'admin') {
         try {
             await Runner.findByIdAndUpdate(runnerId, {
                 'biometricVerification.selfieVerified': false,
                 'biometricVerification.status': 'rejected',
                 'biometricVerification.rejectedAt': new Date(),
                 'biometricVerification.rejectionReason': reason,
+                'biometricVerification.rejectedBy': adminId,
             });
 
             const newStatus = await this.calculateRunnerStatus(runnerId);
@@ -686,35 +730,17 @@ class KYCService {
         const runner = await Runner.findById(runnerId);
         if (!runner || runner.role !== 'runner') return 'pending_verification';
 
-        const docs = runner.verificationDocuments || {};
-        const biometrics = runner.biometricVerification || {};
+        const items = getRelevantVerificationItems(runner);
 
-        const rejectedItems = [];
-        if (docs.nin?.status === 'rejected') rejectedItems.push('nin');
-        if (docs.driverLicense?.status === 'rejected') rejectedItems.push('driverLicense');
-        if (docs.bikerLicense?.status === 'rejected') rejectedItems.push('bikerLicense');
-        if (biometrics.status === 'rejected') rejectedItems.push('selfie');
-        if (rejectedItems.length > 0) return 'rejected'; // <-- new, checked first
+        if (items.some(i => i.status === 'rejected')) return 'rejected';
+        if (items.some(i => i.flaggedForReview)) return 'pending_verification';
+        if (items.some(i => i.status === 'pending_review')) return 'pending_verification';
 
-        const flaggedItems = [];
-        if (docs.nin?.flaggedForReview) flaggedItems.push('nin');
-        if (docs.driverLicense?.flaggedForReview) flaggedItems.push('driverLicense');
-        if (docs.bikerLicense?.flaggedForReview) flaggedItems.push('bikerLicense');
-        if (flaggedItems.length > 0) return 'pending_verification';
+        const verifiedDocs = items.filter(i => i.field !== 'selfie' && i.verified);
+        const selfie = items.find(i => i.field === 'selfie');
 
-        const verifiedDocs = [];
-        if (docs.nin?.verified) verifiedDocs.push('nin');
-        if (docs.driverLicense?.verified) verifiedDocs.push('driverLicense');
-        if (docs.bikerLicense?.verified) verifiedDocs.push('bikerLicense');
-
-        const pendingDocs = [];
-        if (docs.nin?.status === 'pending_review') pendingDocs.push('nin');
-        if (docs.driverLicense?.status === 'pending_review') pendingDocs.push('driverLicense');
-        if (docs.bikerLicense?.status === 'pending_review') pendingDocs.push('bikerLicense');
-
-        if (pendingDocs.length > 0 || biometrics.status === 'pending_review') return 'pending_verification';
         if (verifiedDocs.length === 0) return 'pending_verification';
-        if (verifiedDocs.length >= 1 && biometrics.selfieVerified) return 'approved_full';
+        if (verifiedDocs.length >= 1 && selfie?.verified) return 'approved_full';
         if (verifiedDocs.length >= 1) return 'approved_limited';
         return 'pending_verification';
     }
@@ -729,19 +755,30 @@ class KYCService {
                 'verificationDocuments.bikerLicense.flaggedForReview': { $ne: true }
             }).select('firstName lastName email fleetType phone createdAt verificationDocuments biometricVerification kycStatus isVerifiedKycAt');
 
-            return verifiedRunners.map(runner => ({
-                id: runner._id,
-                firstName: runner.firstName,
-                lastName: runner.lastName,
-                email: runner.email,
-                phone: runner.phone,
-                fleetType: runner.fleetType,
-                createdAt: runner.createdAt,
-                kycStatus: runner.kycStatus,
-                verifiedAt: runner.isVerifiedKycAt,
-                pendingItems: []
-            }));
+            return verifiedRunners.map(runner => {
+                let verifiedBy = null;
 
+                if (runner.kycStatus === 'approved_full') {
+                    verifiedBy = runner.biometricVerification?.verifiedBy || null;
+                } else {
+                    const verifiedDoc = getRelevantVerificationItems(runner).find(i => i.field !== 'selfie' && i.verified);
+                    verifiedBy = verifiedDoc ? runner.verificationDocuments?.[verifiedDoc.field]?.verifiedBy || null : null;
+                }
+
+                return {
+                    id: runner._id,
+                    firstName: runner.firstName,
+                    lastName: runner.lastName,
+                    email: runner.email,
+                    phone: runner.phone,
+                    fleetType: runner.fleetType,
+                    createdAt: runner.createdAt,
+                    kycStatus: runner.kycStatus,
+                    verifiedAt: runner.isVerifiedKycAt,
+                    verifiedBy,
+                    pendingItems: []
+                };
+            });
         } catch (error) {
             console.error('Error fetching verified runners:', error);
             throw error;
@@ -749,29 +786,23 @@ class KYCService {
     }
 
     async getRejectedVerifications() {
-        const runners = await Runner.find({ role: 'runner', kycStatus: 'rejected' })
+        const candidates = await Runner.find({ role: 'runner', kycStatus: 'rejected' })
             .select('firstName lastName email phone fleetType createdAt verificationDocuments biometricVerification kycStatus');
-        return runners.map(r => ({
-            id: r._id, firstName: r.firstName, lastName: r.lastName, email: r.email,
-            phone: r.phone, fleetType: r.fleetType, createdAt: r.createdAt, kycStatus: r.kycStatus,
-            rejectedItems: this.getRejectedItems(r),
-            faceMatchScore: r.biometricVerification?.faceMatchScore
-        }));
-    }
 
-    getRejectedItems(runner) {
-        const out = [];
-        const docs = runner.verificationDocuments || {};
-        const bio = runner.biometricVerification || {};
-        if (docs.nin?.status === 'rejected') out.push({ type: 'NIN', reason: docs.nin.rejectionReason, auto: docs.nin.rejectedBy === 'prembly-auto' });
-        if (docs.driverLicense?.status === 'rejected') out.push({ type: 'Driver License', reason: docs.driverLicense.rejectionReason });
-        if (docs.bikerLicense?.status === 'rejected') out.push({ type: "Biker's License", reason: docs.bikerLicense.rejectionReason });
-        if (bio.status === 'rejected') out.push({ type: 'Selfie', reason: bio.rejectionReason, auto: bio.rejectionReason?.startsWith('Automated') });
-        return out;
+        return candidates
+            .filter(runner => getRelevantVerificationItems(runner).some(i => i.status === 'rejected'))
+            .map(runner => ({
+                id: runner._id, firstName: runner.firstName, lastName: runner.lastName, email: runner.email,
+                phone: runner.phone, fleetType: runner.fleetType, createdAt: runner.createdAt, kycStatus: runner.kycStatus,
+                rejectedItems: getRelevantVerificationItems(runner)
+                    .filter(i => i.status === 'rejected')
+                    .map(i => ({ type: i.label, reason: i.rejectionReason, auto: i.rejectedBy === 'prembly-auto' })),
+                faceMatchScore: runner.biometricVerification?.faceMatchScore
+            }));
     }
 
     async getFlaggedVerifications() {
-        const runners = await Runner.find({
+        const candidates = await Runner.find({
             role: 'runner',
             $or: [
                 { 'verificationDocuments.nin.flaggedForReview': true },
@@ -779,21 +810,17 @@ class KYCService {
                 { 'verificationDocuments.bikerLicense.flaggedForReview': true }
             ]
         }).select('firstName lastName email phone fleetType createdAt verificationDocuments biometricVerification kycStatus');
-        return runners.map(r => ({
-            id: r._id, firstName: r.firstName, lastName: r.lastName, email: r.email,
-            phone: r.phone, fleetType: r.fleetType, createdAt: r.createdAt, kycStatus: r.kycStatus,
-            flaggedItems: this.getFlaggedItems(r),
-            faceMatchScore: r.biometricVerification?.faceMatchScore
-        }));
-    }
 
-    getFlaggedItems(runner) {
-        const out = [];
-        const docs = runner.verificationDocuments || {};
-        if (docs.nin?.flaggedForReview) out.push({ type: 'NIN', reason: docs.nin.flaggedReason });
-        if (docs.driverLicense?.flaggedForReview) out.push({ type: 'Driver License', reason: docs.driverLicense.flaggedReason });
-        if (docs.bikerLicense?.flaggedForReview) out.push({ type: "Biker's License", reason: docs.bikerLicense.flaggedReason });
-        return out;
+        return candidates
+            .filter(runner => getRelevantVerificationItems(runner).some(i => i.flaggedForReview))
+            .map(runner => ({
+                id: runner._id, firstName: runner.firstName, lastName: runner.lastName, email: runner.email,
+                phone: runner.phone, fleetType: runner.fleetType, createdAt: runner.createdAt, kycStatus: runner.kycStatus,
+                flaggedItems: getRelevantVerificationItems(runner)
+                    .filter(i => i.flaggedForReview)
+                    .map(i => ({ type: i.label, reason: i.flaggedReason })),
+                faceMatchScore: runner.biometricVerification?.faceMatchScore
+            }));
     }
 
     async getAutoConfirmedVerifications() {
@@ -814,41 +841,33 @@ class KYCService {
     }
 
     async getResubmittedVerifications() {
-        const runners = await Runner.find({
+        const candidates = await Runner.find({
             role: 'runner',
-            $and: [
-                {
-                    $or: [
-                        { 'verificationDocuments.nin.wasResubmitted': true },
-                        { 'verificationDocuments.driverLicense.wasResubmitted': true },
-                        { 'verificationDocuments.bikerLicense.wasResubmitted': true },
-                        { 'biometricVerification.wasResubmitted': true }
-                    ]
-                },
-                { 'verificationDocuments.nin.status': { $ne: 'rejected' } },
-                { 'verificationDocuments.driverLicense.status': { $ne: 'rejected' } },
-                { 'verificationDocuments.bikerLicense.status': { $ne: 'rejected' } },
-                { 'biometricVerification.status': { $ne: 'rejected' } }
+            $or: [
+                { 'verificationDocuments.nin.wasResubmitted': true },
+                { 'verificationDocuments.driverLicense.wasResubmitted': true },
+                { 'verificationDocuments.bikerLicense.wasResubmitted': true },
+                { 'biometricVerification.wasResubmitted': true }
             ]
         }).select('firstName lastName email phone fleetType createdAt verificationDocuments biometricVerification kycStatus');
-        return runners.map(r => ({
-            id: r._id, firstName: r.firstName, lastName: r.lastName, email: r.email,
-            phone: r.phone, fleetType: r.fleetType, createdAt: r.createdAt, kycStatus: r.kycStatus,
-            resubmittedItems: this.getResubmittedItems(r),
-            faceMatchScore: r.biometricVerification?.faceMatchScore
-        }));
+
+        return candidates
+            .filter(runner => {
+                const items = getRelevantVerificationItems(runner);
+                if (!items.some(i => i.wasResubmitted)) return false;
+                return !items.some(i => i.status === 'rejected');
+            })
+            .map(runner => ({
+                id: runner._id, firstName: runner.firstName, lastName: runner.lastName, email: runner.email,
+                phone: runner.phone, fleetType: runner.fleetType, createdAt: runner.createdAt, kycStatus: runner.kycStatus,
+                resubmittedItems: getRelevantVerificationItems(runner)
+                    .filter(i => i.wasResubmitted)
+                    .map(i => ({ type: i.label, previousReason: i.previousRejectionReason })),
+                faceMatchScore: runner.biometricVerification?.faceMatchScore
+            }));
     }
 
-    getResubmittedItems(runner) {
-        const out = [];
-        const docs = runner.verificationDocuments || {};
-        const bio = runner.biometricVerification || {};
-        if (docs.nin?.wasResubmitted) out.push({ type: 'NIN', previousReason: docs.nin.previousRejectionReason });
-        if (docs.driverLicense?.wasResubmitted) out.push({ type: 'Driver License', previousReason: docs.driverLicense.previousRejectionReason });
-        if (docs.bikerLicense?.wasResubmitted) out.push({ type: "Biker's License", previousReason: docs.bikerLicense.previousRejectionReason });
-        if (bio.wasResubmitted) out.push({ type: 'Selfie', previousReason: bio.previousRejectionReason });
-        return out;
-    }
 }
 
 module.exports = KYCService;
+module.exports.getRelevantVerificationItems = getRelevantVerificationItems;
