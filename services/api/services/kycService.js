@@ -879,15 +879,17 @@ class KYCService {
                 if (!items.some(i => i.wasResubmitted)) return false;
                 return !items.some(i => i.status === 'rejected');
             })
-            .map(runner => ({
-                id: runner._id, firstName: runner.firstName, lastName: runner.lastName, email: runner.email,
-                phone: runner.phone, fleetType: runner.fleetType, createdAt: runner.createdAt, kycStatus: runner.kycStatus,
-                resubmittedItems: getRelevantVerificationItems(runner)
-                    .filter(i => i.wasResubmitted)
-                    .map(i => ({ type: i.label, previousReason: i.previousRejectionReason })),
-                submittedAt: latestSubmittedAt(resubmittedItems),
-                faceMatchScore: runner.biometricVerification?.faceMatchScore
-            }));
+            .map(runner => {
+                const resubmittedItems = getRelevantVerificationItems(runner).filter(i => i.wasResubmitted);
+
+                return {
+                    id: runner._id, firstName: runner.firstName, lastName: runner.lastName, email: runner.email,
+                    phone: runner.phone, fleetType: runner.fleetType, createdAt: runner.createdAt, kycStatus: runner.kycStatus,
+                    resubmittedItems: resubmittedItems.map(i => ({ type: i.label, previousReason: i.previousRejectionReason })),
+                    submittedAt: latestSubmittedAt(resubmittedItems),
+                    faceMatchScore: runner.biometricVerification?.faceMatchScore
+                };
+            });
     }
 
 }
