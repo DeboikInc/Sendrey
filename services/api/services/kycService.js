@@ -791,14 +791,18 @@ class KYCService {
 
         return candidates
             .filter(runner => getRelevantVerificationItems(runner).some(i => i.status === 'rejected'))
-            .map(runner => ({
-                id: runner._id, firstName: runner.firstName, lastName: runner.lastName, email: runner.email,
-                phone: runner.phone, fleetType: runner.fleetType, createdAt: runner.createdAt, kycStatus: runner.kycStatus,
-                rejectedItems: getRelevantVerificationItems(runner)
-                    .filter(i => i.status === 'rejected')
-                    .map(i => ({ type: i.label, reason: i.rejectionReason, auto: i.rejectedBy === 'prembly-auto' })),
-                faceMatchScore: runner.biometricVerification?.faceMatchScore
-            }));
+            .map(runner => {
+                const rejectedItems = getRelevantVerificationItems(runner).filter(i => i.status === 'rejected');
+                const rejectedBy = rejectedItems[rejectedItems.length - 1]?.rejectedBy || null;
+
+                return {
+                    id: runner._id, firstName: runner.firstName, lastName: runner.lastName, email: runner.email,
+                    phone: runner.phone, fleetType: runner.fleetType, createdAt: runner.createdAt, kycStatus: runner.kycStatus,
+                    rejectedItems: rejectedItems.map(i => ({ type: i.label, reason: i.rejectionReason, auto: i.rejectedBy === 'prembly-auto' })),
+                    rejectedBy,
+                    faceMatchScore: runner.biometricVerification?.faceMatchScore
+                };
+            });
     }
 
     async getFlaggedVerifications() {

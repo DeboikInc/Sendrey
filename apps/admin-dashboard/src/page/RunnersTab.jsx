@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import {
     Search, Star, Trash2, ShieldAlert,
@@ -99,10 +99,12 @@ export default function RunnersTab() {
     const { list: rawList, loading = false, error = null } = useSelector(state => state.runners || {});
     const list = useMemo(() => Array.isArray(rawList) ? rawList : [], [rawList]);
 
+    const [searchInput, setSearchInput] = useState('');
     const [searchQuery, setSearchQuery] = useState('');
     const [sortBy, setSortBy] = useState('newest');
     const [isRefreshing, setIsRefreshing] = useState(false);
     const [confirm, setConfirm] = useState(null);
+    const debounceRef = useRef(null);
 
     useEffect(() => {
         dispatch(getRunners());
@@ -118,6 +120,17 @@ export default function RunnersTab() {
             setIsRefreshing(false);
         }
     };
+
+    const handleSearchChange = (value) => {
+        setSearchInput(value);
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        debounceRef.current = setTimeout(() => setSearchQuery(value), 400);
+    };
+
+    useEffect(() => {
+        return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+    }, []);
+
 
     const filteredAndSortedRunners = useMemo(() => {
         let filtered = list;
@@ -314,14 +327,14 @@ export default function RunnersTab() {
                             <input
                                 type="text"
                                 value={searchQuery}
-                                onChange={e => setSearchQuery(e.target.value)}
+                                onChange={e => handleSearchChange(e.target.value)}
                                 placeholder="Search by name, email, or phone..."
                                 className="w-full bg-secondary/50 border border-white/10 rounded-lg py-2 pl-9 pr-4 text-sm text-white placeholder-white/25 outline-none focus:border-primary/40 transition-colors"
                                 autoComplete="off"
                             />
-                            {searchQuery && (
+                            {searchInput && (
                                 <button
-                                    onClick={() => setSearchQuery('')}
+                                    onClick={() => { setSearchInput(''); setSearchQuery(''); }}
                                     className="absolute right-3 top-2.5 text-white/30 hover:text-white/70 text-sm font-bold"
                                 >
                                     ×
@@ -358,9 +371,9 @@ export default function RunnersTab() {
                     </div>
                 )}
 
-                {!loading && searchQuery && filteredAndSortedRunners.length > 0 && (
+                {!loading && searchInput && filteredAndSortedRunners.length > 0 && (
                     <div className="mb-3 text-xs text-white/40">
-                        Found {filteredAndSortedRunners.length} runner{filteredAndSortedRunners.length !== 1 ? 's' : ''} matching "{searchQuery}"
+                        Found {filteredAndSortedRunners.length} runner{filteredAndSortedRunners.length !== 1 ? 's' : ''} matching "{searchInput}"
                     </div>
                 )}
 
@@ -372,9 +385,9 @@ export default function RunnersTab() {
                     <div className="text-center py-20 bg-secondary/30 rounded-2xl border border-dashed border-white/10">
                         <Bike size={32} className="mx-auto text-white/20 mb-3" />
                         <p className="text-white/40 text-sm">
-                            {searchQuery ? `No runners match "${searchQuery}"` : 'No runners found'}
+                            {searchInput ? `No runners match "${searchInput}"` : 'No runners found'}
                         </p>
-                        {searchQuery && (
+                        {searchInput && (
                             <button onClick={() => setSearchQuery('')} className="mt-2 text-xs text-primary hover:text-primary/80">
                                 Clear search
                             </button>
