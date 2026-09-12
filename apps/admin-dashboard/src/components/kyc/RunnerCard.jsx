@@ -33,6 +33,7 @@ export default function RunnerCard({ runner, view, onReview }) {
         <p className="text-xs text-white/50 truncate">{runner.email}</p>
         <p className="text-[10px] text-white/30">{runner.phone}</p>
         <p className="text-[10px] text-white/30">{runner.fleetType}</p>
+        <p className="text-[10px] text-white/30">SubmittedAt: {new Date(runner.submittedAt).toLocaleDateString()}</p>
       </div>
 
       {runner.faceMatchScore !== undefined && runner.faceMatchScore !== null && (

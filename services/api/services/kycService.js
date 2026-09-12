@@ -49,6 +49,7 @@ function getRelevantVerificationItems(runner) {
         previousRejectionReason: docs[field]?.previousRejectionReason || null,
         rejectionReason: docs[field]?.rejectionReason || null,
         rejectedBy: docs[field]?.rejectedBy || null,
+        submittedAt: docs[field]?.submittedAt || null,
     }));
 
     items.push({
@@ -62,9 +63,16 @@ function getRelevantVerificationItems(runner) {
         previousRejectionReason: bio.previousRejectionReason || null,
         rejectionReason: bio.rejectionReason || null,
         rejectedBy: bio.rejectionReason?.startsWith('Automated') ? 'prembly-auto' : null,
+        submittedAt: bio.submittedAt || null,
     });
 
     return items;
+}
+
+function latestSubmittedAt(items) {
+    const dates = items.map(i => i.submittedAt).filter(Boolean).map(d => new Date(d));
+    if (dates.length === 0) return null;
+    return new Date(Math.max(...dates));
 }
 class KYCService {
 
@@ -511,19 +519,24 @@ class KYCService {
                     if (items.some(i => i.status === 'rejected')) return false;
                     return items.some(i => i.status === 'pending_review');
                 })
-                .map(runner => ({
-                    id: runner._id,
-                    firstName: runner.firstName,
-                    lastName: runner.lastName,
-                    email: runner.email,
-                    phone: runner.phone,
-                    fleetType: runner.fleetType,
-                    createdAt: runner.createdAt,
-                    kycStatus: runner.kycStatus,
-                    pendingItems: getRelevantVerificationItems(runner)
-                        .filter(i => i.status === 'pending_review')
-                        .map(i => i.label)
-                }));
+                .map(runner => {
+                    const items = getRelevantVerificationItems(runner);
+                    const pendingItems = items.filter(i => i.status === 'pending_review');
+
+                    return {
+                        id: runner._id,
+                        firstName: runner.firstName,
+                        lastName: runner.lastName,
+                        email: runner.email,
+                        phone: runner.phone,
+                        fleetType: runner.fleetType,
+                        createdAt: runner.createdAt,
+                        kycStatus: runner.kycStatus,
+                        pendingItems: pendingItems.map(i => i.label),
+                        submittedAt: latestSubmittedAt(pendingItems)
+                    };
+                });
+
         } catch (error) {
             console.error('Error fetching pending verifications:', error);
             throw error;
@@ -775,6 +788,7 @@ class KYCService {
                     createdAt: runner.createdAt,
                     kycStatus: runner.kycStatus,
                     verifiedAt: runner.isVerifiedKycAt,
+                    submittedAt: latestSubmittedAt(getRelevantVerificationItems(runner)),
                     verifiedBy,
                     pendingItems: []
                 };
@@ -800,6 +814,7 @@ class KYCService {
                     phone: runner.phone, fleetType: runner.fleetType, createdAt: runner.createdAt, kycStatus: runner.kycStatus,
                     rejectedItems: rejectedItems.map(i => ({ type: i.label, reason: i.rejectionReason, auto: i.rejectedBy === 'prembly-auto' })),
                     rejectedBy,
+                    submittedAt: latestSubmittedAt(rejectedItems),
                     faceMatchScore: runner.biometricVerification?.faceMatchScore
                 };
             });
@@ -817,14 +832,17 @@ class KYCService {
 
         return candidates
             .filter(runner => getRelevantVerificationItems(runner).some(i => i.flaggedForReview))
-            .map(runner => ({
-                id: runner._id, firstName: runner.firstName, lastName: runner.lastName, email: runner.email,
-                phone: runner.phone, fleetType: runner.fleetType, createdAt: runner.createdAt, kycStatus: runner.kycStatus,
-                flaggedItems: getRelevantVerificationItems(runner)
-                    .filter(i => i.flaggedForReview)
-                    .map(i => ({ type: i.label, reason: i.flaggedReason })),
-                faceMatchScore: runner.biometricVerification?.faceMatchScore
-            }));
+            .map(runner => {
+                const flaggedItems = getRelevantVerificationItems(runner).filter(i => i.flaggedForReview);
+
+                return {
+                    id: runner._id, firstName: runner.firstName, lastName: runner.lastName, email: runner.email,
+                    phone: runner.phone, fleetType: runner.fleetType, createdAt: runner.createdAt, kycStatus: runner.kycStatus,
+                    flaggedItems: flaggedItems.map(i => ({ type: i.label, reason: i.flaggedReason })),
+                    submittedAt: latestSubmittedAt(flaggedItems),
+                    faceMatchScore: runner.biometricVerification?.faceMatchScore
+                };
+            });
     }
 
     async getAutoConfirmedVerifications() {
@@ -867,6 +885,7 @@ class KYCService {
                 resubmittedItems: getRelevantVerificationItems(runner)
                     .filter(i => i.wasResubmitted)
                     .map(i => ({ type: i.label, previousReason: i.previousRejectionReason })),
+                submittedAt: latestSubmittedAt(resubmittedItems),
                 faceMatchScore: runner.biometricVerification?.faceMatchScore
             }));
     }

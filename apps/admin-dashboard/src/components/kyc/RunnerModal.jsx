@@ -265,7 +265,7 @@ export default function RunnerModal({
               <p className="text-[11px] text-white/70 font-medium mt-0.5">{value}</p>
             </div>
           ))}
-          
+
           {runner.verifiedAt && (
             <div className='flex flex-col'>
               <p className="text-[9px] text-white/30 uppercase tracking-widest">
@@ -273,6 +273,17 @@ export default function RunnerModal({
               </p>
               <p className='text-[11px] text-white/70 font-medium mt-0.5'>
                 {new Date(runner.verifiedAt).toLocaleDateString()}
+              </p>
+            </div>
+          )}
+
+          {runner.submittedAt && (
+            <div className='flex flex-col'>
+              <p className="text-[9px] text-white/30 uppercase tracking-widest">
+                Verified At:
+              </p>
+              <p className='text-[11px] text-white/70 font-medium mt-0.5'>
+                {new Date(runner.submittedAt).toLocaleDateString()}
               </p>
             </div>
           )}
