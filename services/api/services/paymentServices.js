@@ -729,6 +729,7 @@ class PaymentService {
         account_number: accountNumber,
         bank_code: verified.bankCode,
       });
+      
       if (!recipient.status || !recipient.data) throw new Error('Failed to create transfer recipient');
 
       const transfer = await paystack.initiateTransfer({
