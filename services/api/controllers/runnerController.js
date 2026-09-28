@@ -498,8 +498,10 @@ class RunnerController extends BaseController {
 
     const runnerObj = runner.toObject ? runner.toObject() : { ...runner };
 
+    runnerObj.hasPinSet = !!runnerObj.pin;
+
     const sensitiveFields = [
-      'password', '__v',
+      'password', '__v', 'pin',
       'verificationToken', 'verificationExpires',
       'resetPasswordToken', 'resetPasswordExpires',
       'phoneVerificationOTP', 'phoneVerificationExpires'

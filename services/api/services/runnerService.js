@@ -177,7 +177,7 @@ class RunnerService {
    * Get runner by ID
    */
   async getRunnerById(id) {
-    const runner = await Runner.findById(id);
+    const runner = await Runner.findById(id).select('+pin');
 
     if (!runner) {
       throw new Error('Runner does not exist');

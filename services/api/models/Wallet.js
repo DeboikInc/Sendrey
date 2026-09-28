@@ -19,6 +19,11 @@ const walletSchema = new mongoose.Schema({
     min: 0,
     select: true,
   },
+  lockedBalance: {
+    type: Number,
+    default: 0,
+    min: 0,
+  },
   stripeAccountId: { type: String, default: null },
   virtualAccountNumber: { type: String, default: null },
   virtualAccountBank: { type: String, default: null },
@@ -50,18 +55,15 @@ walletSchema.virtual('balance').set(function () {
 });
 
 // ── Credit 
-walletSchema.methods.credit = async function (amount, reference, metadata = {}) {
+//  capture the transaction and don't drop it
+walletSchema.methods.credit = async function (amount, reference, metadata = {}, session = null) {
   if (typeof amount !== 'number' || amount <= 0) throw new Error('Credit amount must be a positive number');
   if (this.status !== 'active') throw new Error('Wallet is not active');
 
-  // Atomic increment — safe under concurrent requests
   const updated = await this.constructor.findOneAndUpdate(
     { _id: this._id, status: 'active' },
-    {
-      $inc: { _balance: amount },
-      $set: { lastTransactionAt: new Date() },
-    },
-    { new: true }
+    { $inc: { _balance: amount }, $set: { lastTransactionAt: new Date() } },
+    { new: true, session }
   );
 
   if (!updated) throw new Error('Wallet credit failed — wallet may be inactive');
@@ -69,7 +71,7 @@ walletSchema.methods.credit = async function (amount, reference, metadata = {}) 
   this._balance = updated._balance;
   this.lastTransactionAt = updated.lastTransactionAt;
 
-  await Transaction.create({
+  const [transaction] = await Transaction.create([{
     walletId: this._id,
     type: 'credit',
     amount,
@@ -77,7 +79,7 @@ walletSchema.methods.credit = async function (amount, reference, metadata = {}) 
     reference,
     metadata,
     balanceAfter: updated._balance,
-  });
+  }], { session });
 
   this._lastTransaction = transaction;
   return this;
@@ -137,7 +139,7 @@ walletSchema.methods.unlockAndCredit = async function (amount, reference, metada
 
   const transaction = await Transaction.create({
     walletId: this._id,
-    type: 'escrow_release',   
+    type: 'escrow_release',
     amount,
     status: 'completed',
     reference,

@@ -21,7 +21,7 @@ export default function Profile({ darkMode }) {
   const fileRef = useRef(null);
   const [uploading, setUploading] = useState(false);
 
-  const [pinMode, setPinMode] = useState(null); // null | 'set' | 'reset_current' | 'reset_new' | 'forgot'
+  const [pinMode, setPinMode] = useState(null); 
   const [collectedCurrentPin, setCollectedCurrentPin] = useState('');
   const [pinSaveError, setPinSaveError] = useState(null);
   const [pinSuccess, setPinSuccess] = useState(null);

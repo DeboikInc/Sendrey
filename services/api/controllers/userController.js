@@ -5,8 +5,8 @@ const emailService = require('../services/emailService');
 const smsService = require('../services/smsService');
 const logger = require('../utils/logger');
 const User = require('../models/User');
+const Runner = require('../models/Runner');
 const cloudinary = require('../config/cloudinary');
-const runnerService = require('../services/runnerService');
 const redis = require('../config/redis');
 const { sendPushNotification } = require('../services/notificationService');
 
@@ -154,7 +154,6 @@ class UserController extends BaseController {
       const {
         latitude, longitude,
         fleetType,
-        // serviceType, 
       } = req.query;
 
       if (!latitude || !longitude) {
@@ -175,37 +174,35 @@ class UserController extends BaseController {
         return this.error(res, 'Longitude must be between -180 and 180', 400);
       }
 
-      // const validServiceTypes = ['pick-up', 'run-errand'];
-      // if (serviceType && !validServiceTypes.includes(serviceType)) {
-      //   return this.error(res, `Invalid service type. Must be one of: ${validServiceTypes.join(', ')}`, 400);
-      // }
-
-      const validFleetTypes = ['cycling', 'bike', 'car', 'van', 'pedestrian'];
-      if (fleetType && !validFleetTypes.includes(fleetType)) {
-        return this.error(res, `Invalid fleet type. Must be one of: ${validFleetTypes.join(', ')}`, 400);
+      const runner = await Runner.findById(req.user.id);
+      if (!runner?.fleetType) {
+        return this.error(res, 'Runner has no fleet type configured', 400);
       }
 
       //  return only isAvailable tru users
       const users = await userService.findNearbyUsers({
         latitude: lat,
         longitude: lng,
-        // serviceType,
-        fleetType,
+        fleetType: runner.fleetType,
 
       });
 
       const userList = Array.isArray(users) ? users : users?.data || users?.users || [];
 
-      userList.forEach((user, index) => {
-        console.log(`User ${String.fromCharCode(65 + index)}: isAvailable: ${user.isAvailable}, isActive: ${user.isActive}`);
-      });
+      console.log('[getNearbyUsers] raw users before filter:', users?.length, users);
+
+      const anyAwaiting = await User.findOne({ 'currentRequest.status': 'awaiting_runner_connection' }).lean();
+      console.log('[debug] any doc awaiting (ignoring role):', anyAwaiting?.role, anyAwaiting?._id);
+
+      const anyUserRole = await User.find({ role: 'user' }).select('role currentRequest').lean();
+      console.log('[debug] all role=user docs:', anyUserRole.length, anyUserRole.map(u => ({ id: u._id, status: u.currentRequest?.status })));
 
       const eligibleUsers = users.filter(user => {
         // return user.isPhoneVerified === true;
         return user.isEmailVerified === true;
       });
 
-      console.log("GETNEARBY USERS: ", eligibleUsers)
+      console.log("GET NEARBY USERS: ", eligibleUsers)
       return this.success(res, {
         success: true,
         count: eligibleUsers.length,
@@ -420,8 +417,10 @@ class UserController extends BaseController {
 
     const userObj = user.toObject ? user.toObject() : { ...user };
 
+    userObj.hasPinSet = !!userObj.pin;
+
     const sensitiveFields = [
-      'password', '__v',
+      'password', '__v', 'pin',
       'verificationToken', 'verificationExpires',
       'resetPasswordToken', 'resetPasswordExpires',
       'phoneVerificationOTP', 'phoneVerificationExpires'

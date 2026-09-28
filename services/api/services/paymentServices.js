@@ -729,7 +729,7 @@ class PaymentService {
         account_number: accountNumber,
         bank_code: verified.bankCode,
       });
-      
+
       if (!recipient.status || !recipient.data) throw new Error('Failed to create transfer recipient');
 
       const transfer = await paystack.initiateTransfer({
@@ -772,26 +772,6 @@ class PaymentService {
         }
       );
     });
-  }
-
-  // helper
-  getTransactionLabel(entry) {
-    const labels = {
-      'escrow_lock': `Order Payment for ${entry.orderId}`,
-      'deposit': 'Wallet Funding',
-      'escrow_release': `Earnings from order ${entry.orderId}`,
-      'escrow_refund': 'Dispute Refund for order ' + entry.orderId,
-      'withdrawal': entry.description || 'Withdrawal',
-      'item_budget': 'Item Budget (shopping in progress) for order ' + entry.orderId,
-    };
-
-    const label = labels[entry.type];
-    if (label) return label;
-
-    // Don't show internal labels to users
-    if (entry.type === 'item_budget_spent') return null;
-
-    return entry.description || entry.type;
   }
 
   async getTransactionHistory(userId, page = 1, limit = 20, userType) {
@@ -867,6 +847,10 @@ class PaymentService {
         return `Item Budget (Shopping Completed) - ${entry.orderId}`;
       }
       return `Item Budget (shopping In progress) - ${entry.orderId}`;
+    }
+
+    if (entry.type === 'escrow_refund' && entry.description) {
+      return entry.description;
     }
 
     const labels = {

@@ -96,7 +96,7 @@ export const Profile = ({
     const [notificationError, setNotificationError] = useState(null);
     const [notificationSuccess, setNotificationSuccess] = useState(null);
 
-    const hasPinSet = isPinSet || runnerData?.hasPin === true;
+    const hasPinSet = isPinSet || runnerData?.hasPinSet === true;
     const isOptedIn = notificationPrefs?.push?.messages === true ||
         notificationPrefs?.push?.updates === true;
     const isOptedOut = notificationPrefs?.push?.messages === false &&

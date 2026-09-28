@@ -1,6 +1,7 @@
 'use client'
 
 import { IoMail } from "react-icons/io5";
+import { FaWhatsapp } from 'react-icons/fa'
 import { motion } from 'framer-motion'
 
 const fadeUp = {
@@ -36,6 +37,12 @@ export const ContactInfo = () => {
                                     support@sendrey.com
                                 </p>
                             </span>
+                        </a>
+                        <a
+                            href="https://wa.me/23491252723293"
+                            className="flex text-left items-center gap-2 text-white/80 hover:text-white transition"
+                        >
+                            <FaWhatsapp size={35} /> Chat on WhatsApp
                         </a>
                     </article>
                 </section>

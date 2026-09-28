@@ -60,7 +60,7 @@ class UserService {
    * Find single user by id 
    */
   async getUserById(id) {
-    const user = await User.findById(id);
+    const user = await User.findById(id).select('+pin');
 
     if (!user) {
       throw new Error('User does not exist');
@@ -461,14 +461,12 @@ class UserService {
    */
   async findNearbyUsers({
     latitude, longitude,
-    // serviceType, 
     fleetType,
   }) {
     try {
       return await User.findNearbyUsers({
         latitude,
         longitude,
-        // serviceType,
         fleetType,
       });
     } catch (error) {

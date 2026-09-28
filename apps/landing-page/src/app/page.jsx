@@ -4,7 +4,7 @@ import React, { useEffect, useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import { FiMail, FiInstagram, FiFacebook } from 'react-icons/fi'
 import { FaLinkedinIn, FaXTwitter } from 'react-icons/fa6'
-import { FaApple, FaGooglePlay } from 'react-icons/fa'
+import { FaApple, FaGooglePlay, FaWhatsapp } from 'react-icons/fa'
 import { motion } from 'framer-motion'
 import { display, body, mono } from '@/app/lib/fonts'
 
@@ -364,7 +364,13 @@ export default function HomePage() {
             </button>
             <div className="text-white/50 text-xs uppercase tracking-wide mb-2 mt-2">Contact</div>
             <a
-              href="mailto:support@sendrey.com"
+              href="https://wa.me/23491252723293" target="_blank" rel="noopener noreferrer"
+              className="flex items-center gap-2 text-white/80 hover:text-white transition"
+            >
+              <FaWhatsapp /> +23491252723293
+            </a>
+            <a
+              href="mailto:support@sendrey.com" target="_blank" rel="noopener noreferrer"
               className="flex items-center gap-2 text-white/80 hover:text-white transition"
             >
               <FiMail /> support@sendrey.com

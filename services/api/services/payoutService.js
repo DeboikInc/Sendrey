@@ -209,7 +209,8 @@ class PayoutService {
                 await walletBefore.credit(
                     change,
                     `unspent-refund-${orderId}-${Date.now()}`,
-                    { reason: 'unspent_item_budget', orderId }
+                    { reason: 'unspent_item_budget', orderId },
+                    session
                 );
 
                 const walletAfter = await Wallet.findOne({ userId }).session(session);
