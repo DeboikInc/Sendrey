@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
-import { Save, RotateCcw, AlertTriangle, Plus, Trash2, X } from 'lucide-react';
+import { Save, RotateCcw, AlertTriangle, Plus, Trash2, X, Copy, Check } from 'lucide-react';
 import Button from '../components/ui/Button';
 import PageLayout from '../components/layout/PageLayout';
 import {
@@ -8,7 +8,9 @@ import {
     fetchMatchingConfig, saveMatchingConfig,
     fetchPlatformConfig, savePlatformConfig,
     fetchPedestrianConfig, savePedestrianConfig, getBanks,
-    updateField, updatePedestrianLeg, updateFleetRule, updateTier, addTier, removeTier, discardChanges,
+    updateField, updatePedestrianLeg, updateFleetRule,
+    updateTier, addTier, removeTier, discardChanges,
+    saveDiscountConfig, fetchDiscountConfig
 } from '../Redux/configSlice';
 
 function ConfirmModal({ isOpen, title, message, confirmLabel = 'Confirm', confirmVariant = 'destructive', onConfirm, onCancel }) {
@@ -143,7 +145,9 @@ export default function ConfigTab() {
     const platform = useSelector(state => state.config.platform);
     const pedestrian = useSelector(state => state.config.pedestrian);
     const banks = useSelector(state => state.config.banks);
+    const discount = useSelector(state => state.config.discount);
     const [confirm, setConfirm] = useState(null);
+    const [linkCopied, setLinkCopied] = useState(false);
     const NairaSign = '₦';
 
     useEffect(() => {
@@ -152,14 +156,16 @@ export default function ConfigTab() {
         dispatch(fetchPlatformConfig());
         dispatch(fetchPedestrianConfig());
         dispatch(getBanks());
+        dispatch(fetchDiscountConfig());
     }, [dispatch]);
 
     const { data: config, original: originalConfig, loading, saving: savingPricing, error: pricingError } = pricing;
     const { data: matchingConfig, original: originalMatchingConfig, saving: savingMatching, error: matchingError } = matching;
     const { data: platformConfig, original: originalPlatformConfig, saving: savingPlatform, error: platformError } = platform;
     const { data: pedestrianConfig, original: originalPedestrianConfig, saving: savingPedestrian, error: pedestrianError } = pedestrian;
+    const { data: discountConfig, original: originalDiscountConfig, saving: savingDiscount, error: discountError } = discount;
 
-    const error = pricingError || matchingError || platformError || pedestrianError;
+    const error = pricingError || matchingError || platformError || pedestrianError || discountError;
 
     // ── Changed flags ────────────────────────────────────────────────────────
     const platformFeesChanged = config && originalConfig && (
@@ -188,6 +194,8 @@ export default function ConfigTab() {
         platformConfig.platformBankAccount !== originalPlatformConfig.platformBankAccount ||
         platformConfig.bankCode !== originalPlatformConfig.bankCode
     );
+    const discountChanged = discountConfig && originalDiscountConfig &&
+        discountConfig.discount !== originalDiscountConfig.discount;
 
     // Count distinct changed sections across all resources
     const changedCount = [
@@ -198,6 +206,7 @@ export default function ConfigTab() {
         matchingConfigChanged,
         pedestrianConfigChanged,
         platformConfigChanged,
+        discountChanged
     ].filter(Boolean).length;
 
     const multipleChanged = changedCount > 1;
@@ -224,6 +233,7 @@ export default function ConfigTab() {
                 dispatch(discardChanges({ resource: 'matching' }));
                 dispatch(discardChanges({ resource: 'pedestrian' }));
                 dispatch(discardChanges({ resource: 'platform' }));
+                dispatch(discardChanges({ resource: 'discount' }));
                 setConfirm(null);
             },
         });
@@ -293,6 +303,43 @@ export default function ConfigTab() {
         });
     };
 
+    const handleCopyLink = async (link) => {
+        try {
+            await navigator.clipboard.writeText(link);
+        } catch {
+            // fallback for non-secure contexts / older browsers
+            const el = document.createElement('textarea');
+            el.value = link;
+            document.body.appendChild(el);
+            el.select();
+            document.execCommand('copy');
+            document.body.removeChild(el);
+        }
+        setLinkCopied(true);
+        setTimeout(() => setLinkCopied(false), 2000);
+    };
+
+    const handleDiscountSave = () => {
+        const value = Number(discountConfig.discount);
+        if (!Number.isFinite(value) || value < 0 || value > 100) {
+            setConfirm({
+                title: 'Invalid Discount',
+                message: 'Discount must be a number between 0 and 100.',
+                confirmLabel: 'OK',
+                confirmVariant: 'primary',
+                onConfirm: () => setConfirm(null),
+            });
+            return;
+        }
+        setConfirm({
+            title: 'Save Discount',
+            message: `Set the discount to ${value}%? Existing links with a different percentage will stop working.`,
+            confirmLabel: 'Save Changes',
+            confirmVariant: 'primary',
+            onConfirm: () => { setConfirm(null); dispatch(saveDiscountConfig({ discount: value })); },
+        });
+    };
+
     const handleSaveAll = () => {
         setConfirm({
             title: 'Save All Changes',
@@ -311,6 +358,7 @@ export default function ConfigTab() {
                     }));
                 }
                 if (platformConfigChanged) dispatch(savePlatformConfig(platformConfig));
+                if (discountChanged) dispatch(saveDiscountConfig({ discount: Number(discountConfig.discount) }));
             },
         });
     };
@@ -382,6 +430,55 @@ export default function ConfigTab() {
 
                 {!loading && config && (
                     <div className="space-y-6">
+                        {/* discount */}
+                        {discountConfig && (
+                            <div className="bg-secondary/30 border border-white/10 rounded-2xl p-5 space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <div className="text-white font-medium text-sm">Discount</div>
+                                    <SectionActions
+                                        changed={discountChanged}
+                                        multipleChanged={multipleChanged}
+                                        saving={savingDiscount}
+                                        onSave={handleDiscountSave}
+                                        onCancel={() => confirmDiscard('discount', 'Discount')}
+                                    />
+                                </div>
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                                    <NumberField
+                                        label="Discount %"
+                                        suffix="%"
+                                        value={discountConfig.discount}
+                                        onChange={v => dispatch(updateField({ resource: 'discount', field: 'discount', value: v }))}
+                                    />
+                                    <div>
+                                        <div className="bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-white/60 break-all select-all">
+                                            {(() => {
+                                                const d = originalDiscountConfig?.discount;
+                                                const link = d != null ? `https://sendrey.com/?discount=${d}%off` : '';
+
+                                                return (
+                                                    <div>
+                                                        <label className="block text-[10px] text-white/30 tracking-widest uppercase font-medium mb-1.5">Discount link</label>
+                                                        <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-3 py-2">
+                                                            <span className="text-xs text-white/60 break-all select-all flex-1">{link}</span>
+                                                            <button
+                                                                type="button"
+                                                                onClick={() => handleCopyLink(link)}
+                                                                disabled={originalDiscountConfig?.discount == null}
+                                                                className="shrink-0 p-1.5 rounded-md text-white/40 hover:text-white hover:bg-white/10 transition-colors disabled:opacity-40"
+                                                                title="Copy link"
+                                                            >
+                                                                {linkCopied ? <Check size={14} className="text-green-500" /> : <Copy size={14} />}
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                );
+                                            })()}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Platform Fees */}
                         <div className="bg-secondary/30 border border-white/10 rounded-2xl p-5 space-y-4">

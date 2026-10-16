@@ -1,4 +1,4 @@
-// scripts/resetAllStuck.js
+// scripts/resetStuckPair.js
 require('dotenv').config();
 const mongoose = require('mongoose');
 const User = require('../models/User');

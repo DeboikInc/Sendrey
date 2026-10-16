@@ -13,7 +13,10 @@ const { logSocketAudit } = require('../utils/socketAudit');
 const { computeDeliveryFeeFromDocs, calculateFeeSplit } = require('../config/pricing');
 const { getPricingConfig } = require('../services/pricingService');
 const chatService = require('../services/chatService');
+const orderService = require('../services/orderService');
 const { clearBeaconsForChat } = require('./beaconHandlers');
+const OrderActivityLog = require('../models/OrderActivityLog');
+const orderHistoryCache = require('../cache/orderHistoryCache');
 
 const {
   socketMessageSnapshot,
@@ -192,6 +195,9 @@ const buildPaymentRequestMsg = (order, chatId, userId, runnerId) => ({
     itemBudget: order.itemBudget || 0,
     deliveryFee: order.deliveryFee || 0,
     totalAmount: order.totalAmount || 0,
+    discountApplied: order.discountApplied || false,
+    discountPercent: order.discountPercent || 0,
+    discountAmount: order.discountAmount || 0,
     currency: 'NGN',
     chatId,
     userId,
@@ -251,7 +257,10 @@ const createOrder = async (io, { chatId, userId, runnerId, serviceType }) => {
   const itemBudget = isErrand
     ? Number(userDoc?.currentRequest?.itemBudget || userDoc?.currentRequest?.budget) || 0
     : 0;
-  const totalAmount = itemBudget + deliveryFee;
+
+  await orderService.releaseDiscountForOpenOrders(chatId);
+  const discount = await orderService.redeemDiscount(userId, userDoc.currentRequest, deliveryFee);
+  const totalAmount = itemBudget + deliveryFee - discount.discountAmount;
 
   const pricingConfig = await getPricingConfig();
   const { platformFee, runnerPayout, providerFee, netPlatformFee } = calculateFeeSplit(deliveryFee, fleetType, pricingConfig);
@@ -289,6 +298,7 @@ const createOrder = async (io, { chatId, userId, runnerId, serviceType }) => {
     itemBudget,
     deliveryFee,
     totalAmount,
+    ...discount,
     platformFee,
     runnerPayout,
     providerFee,
@@ -301,12 +311,7 @@ const createOrder = async (io, { chatId, userId, runnerId, serviceType }) => {
     status: 'pending_payment',
     paymentStatus: 'unpaid',
     approvalStatus: isErrand ? 'pending' : 'not_required',
-    statusHistory: [{
-      status: 'pending_payment',
-      timestamp: now,
-      triggeredBy: 'system',
-      note: 'Order created on session start',
-    }],
+
     createdAt: now,
     updatedAt: now,
   };
@@ -326,6 +331,9 @@ const createOrder = async (io, { chatId, userId, runnerId, serviceType }) => {
       itemBudget,
       deliveryFee,
       totalAmount,
+      discountApplied: discount.discountApplied,
+      discountPercent: discount.discountPercent,
+      discountAmount: discount.discountAmount,
       currency: 'NGN',
       chatId,
       userId,
@@ -335,38 +343,65 @@ const createOrder = async (io, { chatId, userId, runnerId, serviceType }) => {
   };
 
   // ── 2. Fire all writes in parallel — none depend on each other ───────────────
-  const [order] = await Promise.all([
-    // Insert order (insertMany returns array, we take first)
-    Order.insertMany([orderDoc], { ordered: true }).then(docs => docs[0]),
+  // ── 2. Fire all writes in parallel ───────────────────────────────────────────
+  const staleFilter = {
+    chatId,
+    status: { $nin: ['completed', 'cancelled', 'task_completed'] },
+    paymentStatus: { $ne: 'paid' },
+  };
+  const staleOrders = await Order.find(staleFilter).select('_id orderId userId status').lean();
 
-    // Cancel stale orders for this chat
-    Order.updateMany(
-      {
-        chatId,
-        status: { $nin: ['completed', 'cancelled', 'task_completed'] },
-        paymentStatus: { $ne: 'paid' },
-        orderId: { $ne: orderId }, // don't cancel the one we just made
-      },
-      {
-        $set: { status: 'cancelled', cancelledAt: now, cancelReason: 'new_session_started' },
-        $push: { statusHistory: { status: 'cancelled', timestamp: now, triggeredBy: 'system', note: 'Superseded by new session' } },
-      }
-    ),
+  let order;
+  try {
+    [order] = await Promise.all([
+      Order.insertMany([orderDoc], { ordered: true }).then(docs => docs[0]),
 
-    // Inject payment_request into chat + pin orderId
-    Chat.findOneAndUpdate(
-      { chatId },
-      {
-        $push: { messages: paymentRequestMsg },
-        $set: { orderId, taskId: orderId, lastActivity: now },
-      },
-      { new: true }
-    ),
+      // Cancel stale orders (found before the insert, so the new one is never matched)
+      Order.updateMany(
+        { _id: { $in: staleOrders.map(o => o._id) } },
+        {
+          $set: {
+            status: 'cancelled',
+            cancelledAt: now,
+            cancelledBy: 'system',
+            cancellationReason: 'other',
+            cancellationNote: 'Superseded by new session',
+          },
+        }
+      ),
 
-    // Mark runner & user busy
-    Runner.findByIdAndUpdate(runnerId, { activeOrderId: orderId }),
-    User.findByIdAndUpdate(userId, { activeOrderId: orderId }),
-  ]);
+      Chat.findOneAndUpdate(
+        { chatId },
+        {
+          $push: { messages: paymentRequestMsg },
+          $set: { orderId, taskId: orderId, lastActivity: now },
+        },
+        { new: true }
+      ),
+
+      Runner.findByIdAndUpdate(runnerId, { activeOrderId: orderId }),
+      User.findByIdAndUpdate(userId, { activeOrderId: orderId }),
+
+      staleOrders.length
+        ? OrderActivityLog.insertMany(staleOrders.map((o) => ({
+          orderId: o.orderId,
+          actorType: 'system',
+          actorId: null,
+          action: 'status_changed',
+          metadata: { from: o.status, to: 'cancelled', note: 'Superseded by new session' },
+        })))
+        : Promise.resolve(),
+    ]);
+  } catch (err) {
+    if (discount.discountApplied) await orderService.restoreDiscount(userId);
+    throw err;
+  }
+
+  if (staleOrders.length) {
+    await Promise.all(
+      [...new Set(staleOrders.map(o => String(o.userId)))].map(id => orderHistoryCache.invalidate(id))
+    ).catch(e => console.error('[createOrder] cache invalidate failed:', e.message));
+  }
 
   console.log('[createOrder] Order created:', orderId);
 
@@ -378,10 +413,13 @@ const createOrder = async (io, { chatId, userId, runnerId, serviceType }) => {
   const orderPayload = {
     orderId,
     chatId,
-    orderId,
     itemBudget,
     deliveryFee,
     totalAmount,
+    discountApplied: discount.discountApplied,
+    discountPercent: discount.discountPercent,
+    discountAmount: discount.discountAmount,
+
     runnerPayout,
     taskType: orderDoc.taskType,
     serviceType: resolvedServiceType,
@@ -640,7 +678,7 @@ const handleRequestRunner = async (socket, io, data) => {
         if (s && (!s.user || !s.runner)) {
           console.warn('[preRoom] timeout — both parties never arrived for chatId:', chatId);
           preRoomState.delete(chatId);
-          
+
           if (s.user) {
             io.to(`user-${userId}`).emit('preRoomTimeout', { chatId, message: 'Connection timed out or runner did not respond.' });
           }
@@ -735,28 +773,34 @@ const initializeChatAndProceed = async (io, chatId, state) => {
       existingChat.taskId = null;
       existingChat.orderSessionId = orderSessionId;
 
+      await orderService.releaseDiscountForOpenOrders(chatId);
+
       // Save chat + cancel stale orders in parallel (both required before proceeding)
+      const staleFilter = { chatId, status: { $nin: ['completed', 'cancelled', 'task_completed'] } };
+      const staleOrders = await Order.find(staleFilter).select('orderId status').lean();
+      const now = new Date();
+
       await Promise.all([
         existingChat.save(),
-        Order.updateMany(
-          { chatId, status: { $nin: ['completed', 'cancelled', 'task_completed'] } },
-          {
-            $set: {
-              status: 'cancelled',
-              cancelledAt: new Date(),
-              cancelReason: 'new_session_started',
-            },
-            $push: {
-              statusHistory: {
-                status: 'cancelled',
-                timestamp: new Date(),
-                triggeredBy: 'system',
-                note: 'New session started',
-              },
-            },
-          }
-        ),
-        await chatService.updateRecentChats(runnerId, existingChat)
+        Order.updateMany(staleFilter, {
+          $set: {
+            status: 'cancelled',
+            cancelledAt: now,
+            cancelledBy: 'system',
+            cancellationReason: 'other',
+            cancellationNote: 'New session started',
+          },
+        }),
+        chatService.updateRecentChats(runnerId, existingChat), // no `await` inside the array
+        staleOrders.length
+          ? OrderActivityLog.insertMany(staleOrders.map((o) => ({
+            orderId: o.orderId,
+            actorType: 'system',
+            actorId: null,
+            action: 'status_changed',
+            metadata: { from: o.status, to: 'cancelled', note: 'New session started' },
+          })))
+          : Promise.resolve(),
       ]);
 
       // Reset socket state in background 
@@ -1019,6 +1063,9 @@ const handleUserJoinChat = async (socket, io, data) => {
           itemBudget: latestOrder.itemBudget,
           deliveryFee: latestOrder.deliveryFee,
           totalAmount: latestOrder.totalAmount,
+          discountApplied: latestOrder.discountApplied,
+          discountPercent: latestOrder.discountPercent,
+          discountAmount: latestOrder.discountAmount,
           taskType: latestOrder.taskType,
           serviceType: latestOrder.serviceType,
           status: latestOrder.status,

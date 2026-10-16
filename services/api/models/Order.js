@@ -112,6 +112,10 @@ const orderSchema = new mongoose.Schema({
     enum: ['card', 'wallet'],
   },
 
+  discountApplied: { type: Boolean, default: false },
+  discountPercent: { type: Number, default: 0, min: 0, max: 100 },
+  discountAmount: { type: Number, default: 0, min: 0 },
+
   escrowId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Escrow',
@@ -212,7 +216,8 @@ orderSchema.index({ status: 1, createdAt: -1 });
 
 // ── Immutability guard on pricing
 const IMMUTABLE_FIELDS = ['deliveryFee', 'totalAmount', 'platformFee', 'runnerPayout',
-  'orderId', 'chatId', 'userId', 'runnerId', 'serviceType', 'taskType'];
+  'orderId', 'chatId', 'userId', 'runnerId', 'serviceType', 'taskType', 'discountApplied', 'discountPercent', 'discountAmount'
+];
 
 orderSchema.pre('save', function (next) {
   if (this.isNew) return next();
@@ -226,7 +231,7 @@ orderSchema.pre('save', function (next) {
   }
 
   // ── Pricing integrity ──────────────────────────────────────────────────────
-  const expectedTotal = this.itemBudget + this.deliveryFee;
+  const expectedTotal = this.itemBudget + this.deliveryFee - (this.discountAmount || 0);
   if (Math.abs(expectedTotal - this.totalAmount) > 1) {
     return next(new Error(
       `Order pricing integrity failure: itemBudget(${this.itemBudget}) + ` +
@@ -324,6 +329,8 @@ orderSchema.methods.updateStatus = async function (newStatus, triggeredBy = 'sys
 
 // ── canBeCancelled 
 orderSchema.methods.canBeCancelled = function () {
+  if (this.paymentStatus === 'paid') return false;
+
   const allowedByGraph = VALID_TRANSITIONS[this.status]?.includes('cancelled') ?? false;
   if (!allowedByGraph) return false;
 

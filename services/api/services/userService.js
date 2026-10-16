@@ -4,6 +4,8 @@ const logger = require('../utils/logger');
 const runnerService = require('./runnerService');
 const { sendPushNotification } = require('./notificationService');
 const Order = require('../models/Order');
+const platformService = require('./platformService');
+
 class UserService {
   /**
    * Update last login user
@@ -17,6 +19,44 @@ class UserService {
 
     user.lastLogin = Date.now();
     await user.save();
+  }
+
+  /**
+* Strip server-owned discount fields from client input and re-derive them.
+* Mutates and returns updateData.
+*/
+  async resolveDiscountFields(userId, updateData) {
+    for (const k of [
+      'currentRequest.discountApplied',
+      'currentRequest.discountPercent',
+      'currentRequest.discountAmount',
+      'discountRedeemedAt',
+    ]) {
+      delete updateData[k];
+    }
+
+    const cr = updateData.currentRequest;
+    if (!cr || typeof cr !== 'object') return updateData;
+
+    delete cr.discountApplied;
+    delete cr.discountPercent;
+    delete cr.discountAmount;
+
+    // only touch the discount when the client sent a code
+    if (!('discountCode' in cr)) return updateData;
+
+    const existing = await User.findById(userId).select('discountRedeemedAt').lean();
+    const alreadyUsed = !!existing?.discountRedeemedAt;
+
+    const { valid, percent } = alreadyUsed
+      ? { valid: false, percent: 0 }
+      : await platformService.validateDiscount(cr.discountCode);
+
+    cr.discountCode = valid ? String(cr.discountCode) : null;
+    cr.discountApplied = valid;
+    cr.discountPercent = valid ? percent : 0;
+
+    return updateData;
   }
 
   /**

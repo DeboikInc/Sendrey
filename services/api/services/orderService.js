@@ -10,6 +10,7 @@ const logger = require('../utils/logger');
 const orderHistoryCache = require('../cache/orderHistoryCache');
 const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const OrderActivityLog = require('../models/OrderActivityLog');
+const platformService = require('./platformService');
 
 const encodeCursor = (doc) =>
   Buffer.from(JSON.stringify({ createdAt: doc.createdAt, _id: doc._id })).toString('base64');
@@ -210,6 +211,10 @@ class OrderService {
           : 'system',
     });
 
+    if (order.discountApplied) {
+      await this.restoreDiscount(order.userId);
+    }
+
     await Order.findByIdAndUpdate(order._id, {
       $set: {
         cancelledBy: cancelledBy,
@@ -271,13 +276,43 @@ class OrderService {
       throw err;
     }
 
+    const now = new Date();
+    const res = await Order.updateOne(
+      { _id: order._id, paymentStatus: { $ne: 'paid' }, status: { $nin: ['cancelled', 'completed', 'task_completed'] } },
+      {
+        $set: {
+          status: 'cancelled',
+          cancelledAt: now,
+          cancelledBy: 'user',
+          cancellationReason: reason || 'other',
+        },
+      }
+    );
+    if (res.modifiedCount === 0) {
+      throw Object.assign(new Error('Order can no longer be cancelled.'), { code: 'NOT_CANCELLABLE' });
+    }
+
+    await OrderActivityLog.create({
+      orderId: order.orderId,
+      actorType: 'user',
+      actorId: userId.toString(),
+      action: 'status_changed',
+      metadata: { from: order.status, to: 'cancelled', note: reason || 'Cancelled by user' },
+    });
+
+    if (order.discountApplied) {
+      await this.restoreDiscount(order.userId);
+    }
+
+    if (res.modifiedCount === 0) {
+      const err = new Error('Order can no longer be cancelled (payment may have just completed).');
+      err.code = 'NOT_CANCELLABLE';
+      throw err;
+    }
+
     await order.updateStatus('cancelled', 'user', {
       note: reason || 'Cancelled by user',
       triggeredById: userId.toString(),
-    });
-
-    await Order.findByIdAndUpdate(order._id, {
-      $set: { cancelledBy: 'user', cancellationReason: reason || 'other' },
     });
 
     const formatReason = (r) => r.replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
@@ -340,6 +375,40 @@ class OrderService {
     await Promise.all([...new Set(cancellable.map(o => o.userId.toString()))].map(uid => orderHistoryCache.invalidate(uid)));
 
   }
+
+  // Validates eligibility AND redeems in one atomic step.
+  // Uses the percent snapshotted on currentRequest at confirm time.
+  async redeemDiscount(userId, currentRequest, deliveryFee) {
+    const none = { discountApplied: false, discountPercent: 0, discountAmount: 0 };
+    const percent = Number(currentRequest?.discountPercent) || 0;
+    if (!currentRequest?.discountApplied || percent <= 0) return none;
+
+    const { discountAmount } = platformService.applyDiscount(deliveryFee, percent);
+
+    const res = await User.updateOne(
+      { _id: userId, discountRedeemedAt: null },
+      { $set: { discountRedeemedAt: new Date() } }
+    );
+    if (res.modifiedCount === 0) return none;
+    return { discountApplied: true, discountPercent: percent, discountAmount };
+  };
+
+  async restoreDiscount(userId) {
+    await User.updateOne({ _id: userId }, { $set: { discountRedeemedAt: null } });
+  };
+
+  // Superseded unpaid orders that hold a redemption give it back
+  async releaseDiscountForOpenOrders(chatId) {
+    const open = await Order.find({
+      chatId,
+      status: { $nin: ['completed', 'cancelled', 'task_completed'] },
+      paymentStatus: { $ne: 'paid' },
+      discountApplied: true,
+    }).select('userId').lean();
+
+    const userIds = [...new Set(open.map(o => String(o.userId)))];
+    await Promise.all(userIds.map(id => this.restoreDiscount(id)));
+  };
 }
 
 module.exports = new OrderService();

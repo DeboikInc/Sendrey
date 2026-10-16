@@ -94,6 +94,24 @@ export const getBanks = createAsyncThunk('config/getBanks', async (_, { rejectWi
     }
 });
 
+export const fetchDiscountConfig = createAsyncThunk('config/fetchDiscountConfig', async (_, { rejectWithValue }) => {
+    try {
+        const res = await api.get('/platform/get-platform-discount');
+        return res.data?.data ?? res.data;
+    } catch (err) {
+        return rejectWithValue(err.response?.data?.message || 'Failed to fetch discount config');
+    }
+});
+
+export const saveDiscountConfig = createAsyncThunk('config/saveDiscountConfig', async ({ discount }, { rejectWithValue }) => {
+    try {
+        const res = await api.put('/platform/update-platform-discount', { discount });
+        return res.data?.data ?? res.data;
+    } catch (err) {
+        return rejectWithValue(err.response?.data?.message || 'Failed to save discount config');
+    }
+});
+
 const resourceInitial = { data: null, original: null, loading: false, saving: false, error: null };
 
 const initialState = {
@@ -101,6 +119,7 @@ const initialState = {
     matching: { ...resourceInitial },
     platform: { ...resourceInitial },
     pedestrian: { ...resourceInitial },
+    discount: { ...resourceInitial },
     banks: { list: [], loading: false, error: null },
 };
 
@@ -259,6 +278,31 @@ const configSlice = createSlice({
             .addCase(getBanks.rejected, (state, action) => {
                 state.banks.loading = false;
                 state.banks.error = action.payload;
+            })
+
+            .addCase(fetchDiscountConfig.pending, (state) => {
+                state.discount.error = null;
+            })
+            .addCase(fetchDiscountConfig.fulfilled, (state, action) => {
+                state.discount.data = action.payload;
+                state.discount.original = action.payload;
+            })
+            .addCase(fetchDiscountConfig.rejected, (state, action) => {
+                state.discount.error = action.payload;
+            })
+            // saveDiscountConfig
+            .addCase(saveDiscountConfig.pending, (state) => {
+                state.discount.saving = true;
+                state.discount.error = null;
+            })
+            .addCase(saveDiscountConfig.fulfilled, (state, action) => {
+                state.discount.saving = false;
+                state.discount.data = action.payload;
+                state.discount.original = action.payload;
+            })
+            .addCase(saveDiscountConfig.rejected, (state, action) => {
+                state.discount.saving = false;
+                state.discount.error = action.payload;
             });
     },
 });

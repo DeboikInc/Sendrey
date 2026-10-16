@@ -25,7 +25,7 @@ router.use('/orders', require('./orderAdminRoutes'));
 router.use('/escrows', require('./escrowAdminRoutes'));
 router.use('/pricing',  require('./priceConfigRoutes'));
 router.use('/distance', require('./distanceAdminRoutes'))
-router.use('/platform', require('./platformFeeAdminRoutes'))
+router.use('/platform', require('./platformAdminRoutes'))
 router.use('/referrals', require('./referralAdminRoutes'))
 
 module.exports = router;

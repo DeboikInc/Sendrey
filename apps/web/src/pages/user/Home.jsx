@@ -17,10 +17,18 @@ export const Home = () => {
     let token = params.get('token');
     let inviteToken = params.get('invite');
     const ref = params.get('ref');
+    const discount = params.get('discount');
 
     // strip ${ } wrapper if present (Postman/email client artifact)
     if (token?.startsWith('${')) token = token.slice(2, -1);
     if (inviteToken?.startsWith('${')) inviteToken = inviteToken.slice(2, -1);
+
+    if (discount) {
+      const discountNum = parseFloat(discount);
+      if (Number.isFinite(discountNum)) {
+        localStorage.setItem('discountCode', String(discountNum));
+      }
+    }
 
     // ── Team invite flow ──
     if (inviteToken) {

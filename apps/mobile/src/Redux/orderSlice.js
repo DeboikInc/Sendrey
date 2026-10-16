@@ -94,6 +94,19 @@ export const getUserCancellationReasons = createAsyncThunk(
   }
 );
 
+export const applyDiscount = createAsyncThunk(
+  'order/applyDiscount',
+  async ({ discount, total }, { rejectWithValue }) => {
+    try {
+      const response = await api.get('/orders/apply-discount', { params: { discount, total } });
+      return response.data;
+    } catch (err) {
+      console.error('failed to apply discount', err.response?.status, err.response?.data);
+      return rejectWithValue(err.response?.data?.message || 'failed to apply discount');
+    }
+  }
+)
+
 // ─── Slice
 
 const initialState = {
@@ -123,6 +136,10 @@ const initialState = {
   cancellationReasons: [],
   reasonsLoading: false,
   reasonsError: null,
+
+  discount: null,
+  discountLoading: false,
+  discountError: null,
 };
 
 const orderSlice = createSlice({
@@ -173,6 +190,10 @@ const orderSlice = createSlice({
       state.ordersPage = 1;
       state.ordersHasMore = true;
       state.ordersError = null;
+    },
+    clearDiscountInfo: (state) => {
+      state.discount = null;
+      state.discountError = null;
     },
   },
   extraReducers: (builder) => {
@@ -272,6 +293,21 @@ const orderSlice = createSlice({
         state.reasonsLoading = false;
         state.reasonsError = action.payload;
       })
+
+      .addCase(applyDiscount.pending, (state) => {
+        state.discountLoading = true;
+        state.discountError = null;
+        state.discount = null;
+      })
+      .addCase(applyDiscount.fulfilled, (state, action) => {
+        state.discountLoading = false;
+        state.discount = action.payload?.valid ? action.payload : null;
+      })
+      .addCase(applyDiscount.rejected, (state, action) => {
+        state.discountLoading = false;
+        state.discount = null;
+        state.discountError = action.payload || 'Failed to apply discount';
+      });
   },
 });
 
@@ -282,6 +318,7 @@ export const {
   finishEditing,
   cancelEditing,
   clearOrder,
+  clearDiscountInfo,
   resetRunnerOrders,
   setActiveChat, clearActiveChat,
 } = orderSlice.actions;

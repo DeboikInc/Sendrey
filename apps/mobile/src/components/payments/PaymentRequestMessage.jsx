@@ -72,7 +72,7 @@ const PaymentRequestMessage = ({
   return (
     <div className="flex justify-center my-4 px-4">
       <div className={`max-w-md w-full rounded-2xl shadow-lg border p-6 ${darkMode ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'}`}>
-        
+
         {/* Header */}
         <div className="text-center mb-4">
           <div className={`inline-flex items-center justify-center w-16 h-16 rounded-full mb-3 ${darkMode ? 'bg-primary' : 'bg-primary/20'}`}>
@@ -102,6 +102,18 @@ const PaymentRequestMessage = ({
               <span className={`text-sm ${darkMode ? 'text-gray-400' : 'text-gray-600'}`}>Delivery Fee</span>
               <span className={`text-sm font-medium ${darkMode ? 'text-white' : 'text-gray-900'}`}>₦{Number(data.deliveryFee || 0).toLocaleString()}</span>
             </div>
+
+            {data.discountApplied && Number(data.discountAmount) > 0 && (
+              <div className="flex justify-between">
+                <span className="text-sm text-secondary/80 font-medium">
+                  Discount ({data.discountPercent}%)
+                </span>
+                <span className="text-sm font-medium text-secondary/80">
+                  −₦{Number(data.discountAmount).toLocaleString()}
+                </span>
+              </div>
+            )}
+
             <div className={`pt-2 mt-2 border-t ${darkMode ? 'border-gray-600' : 'border-gray-200'}`}>
               <div className="flex justify-between">
                 <span className={`font-semibold ${darkMode ? 'text-white' : 'text-gray-900'}`}>Total</span>

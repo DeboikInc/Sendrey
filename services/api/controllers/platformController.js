@@ -4,7 +4,7 @@ const { invalidatePlatformRecipientCache } = require('../utils/platformBankResol
 const paystack = require('../config/paystack');
 const logger = require('../utils/logger');
 
-class PlatformFeeController extends BaseController {
+class PlatformController extends BaseController {
   constructor(platformService) {
     super(platformService);
     this.platformService = platformService;
@@ -15,6 +15,58 @@ class PlatformFeeController extends BaseController {
       const settings = await this.platformService.getActive();
       if (!settings) return this.notFound(res, 'Platform settings not found');
       return this.success(res, settings);
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // ── Discount 
+  getDiscount = async (req, res, next) => {
+    try {
+      const discount = await this.platformService.getDiscount();
+      return this.success(res, { discount });
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  updateDiscount = async (req, res, next) => {
+    try {
+      console.log('[updateDiscount] body:', JSON.stringify(req.body), typeof req.body.discount);
+      const { discount } = req.body;
+      
+      if (discount === undefined || discount === null || discount === '') {
+        return this.badRequest(res, 'discount is required');
+      }
+
+      let settings;
+      try {
+        settings = await this.platformService.updateDiscount(discount, req.admin?.id);
+      } catch (validationErr) {
+        if (validationErr.status === 400) {
+          return this.badRequest(res, validationErr.message);
+        }
+        throw validationErr;
+      }
+
+      logger.info('[platform] discount updated', { discount: settings.discount, adminId: req.admin?.id });
+      return this.success(res, { discount: settings.discount }, 'Discount updated');
+    } catch (err) {
+      next(err);
+    }
+  };
+
+  // Client: check that the ?discount= value from the URL is currently valid
+  applyDiscount = async (req, res, next) => {
+    try {
+      const { discount, total } = req.query;
+      const amount = Number(total);
+      if (discount === undefined || !Number.isFinite(amount) || amount < 0) {
+        return this.badRequest(res, 'discount and total are required');
+      }
+      
+      const result = await this.platformService.resolveDiscount(discount, amount, req.user.id);
+      return this.success(res, result);
     } catch (err) {
       next(err);
     }
@@ -57,4 +109,4 @@ class PlatformFeeController extends BaseController {
   };
 }
 
-module.exports = new PlatformFeeController(platformService);
+module.exports = new PlatformController(platformService);

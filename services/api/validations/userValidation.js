@@ -231,6 +231,9 @@ const userValidation = {
           'any.required': 'Fleet type is required'
         }),
 
+      discountCode: Joi.string().trim().pattern(/^\d{1,3}(\.\d{1,2})?$/).allow(null, '').optional()
+        .messages({ 'string.pattern.base': 'Invalid discount code' }),
+
       // Common fields for both services
       deliveryLocation: Joi.string().required()
         .messages({

@@ -4,6 +4,7 @@ import { Button } from "@material-tailwind/react";
 import { useSelector } from "react-redux";
 import { useDispatch } from "react-redux";
 import { updateProfile } from "../../Redux/userSlice";
+import { applyDiscount, clearDiscountInfo } from "../../Redux/orderSlice";
 import BarLoader from "../common/BarLoader";
 import { computeDeliveryFee, formatNaira } from "../../utils/pricing";
 import api from "../../utils/api";
@@ -20,10 +21,20 @@ export default function ConfirmOrderScreen({
 }) {
   // const { socket, isConnected, uploadFile } = useSocket();
   const currentUser = useSelector(s => s.auth?.user || s.auth?.userData || s.auth);
+  const discountInfo = useSelector(s => s.order.discount);
   const dispatch = useDispatch();
   const [isConnecting, setIsConnecting] = useState(false);
   const [deliveryFee, setDeliveryFee] = useState(null);
   const [locationError, setLocationError] = useState(null);
+  const [discountCode, setDiscountCode] = useState(() => {
+    try { return localStorage.getItem('discountCode'); } catch { return null; }
+  });
+
+  const clearDiscount = () => {
+    try { localStorage.removeItem('discountCode'); } catch { /* ignore */ }
+    setDiscountCode(null);
+    dispatch(clearDiscountInfo());
+  };
 
   const {
     serviceType,
@@ -63,6 +74,16 @@ export default function ConfirmOrderScreen({
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [serviceType, fleetType, midOrPickupCoords?.lat, midOrPickupCoords?.lng, orderData?.deliveryCoordinates?.lat, orderData?.deliveryCoordinates?.lng]);
+
+  useEffect(() => {
+    if (!discountCode || deliveryFee == null) return;
+
+    dispatch(applyDiscount({ discount: discountCode, total: deliveryFee }))
+      .unwrap()
+      .then((data) => { if (!data?.valid && !data?.redeemed) clearDiscount(); })
+      .catch(() => { /* network error: keep the code, show no discount */ });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [discountCode, deliveryFee]);
 
 
   const handleEdit = (field) => {
@@ -124,7 +145,7 @@ export default function ConfirmOrderScreen({
 
   const handleContinueClick = async () => {
     if (isConnecting) return;
-    
+
     try {
       setIsConnecting(true);
       setLocationError(null);
@@ -223,6 +244,7 @@ export default function ConfirmOrderScreen({
           userId,
           currentUserLocation: freshCurrentUserLocation,
           currentUserCoordinates: freshCurrentUserCoordinates,
+          discountCode: discountCode || null,
 
           specialInstructions: resolvedSpecialInstructions,
           timestamp: new Date().toISOString(),
@@ -309,9 +331,21 @@ export default function ConfirmOrderScreen({
           {/* Delivery Fee */}
           <div className="p-4 bg-primary/10 rounded-lg">
             <p className="text-xs font-medium opacity-60 mb-1">Delivery Fee</p>
-            <p className="text-lg font-bold text-primary">
-              {deliveryFee != null ? formatNaira(deliveryFee) : "Calculating..."}
-            </p>
+            {discountInfo ? (
+              <>
+                <div className="flex justify-start items-center gap-2">
+                  <p className="text-sm line-through opacity-60">{formatNaira(deliveryFee)}</p>
+                  <p className="text-lg font-bold text-primary">{formatNaira(discountInfo.total)}</p>
+                </div>
+                <p className="text-xs text-green-500 font-medium mt-1">
+                  {discountInfo.percent}% discount applied (−{formatNaira(discountInfo.discountAmount)})
+                </p>
+              </>
+            ) : (
+              <p className="text-lg font-bold text-primary">
+                {deliveryFee != null ? formatNaira(deliveryFee) : "Calculating..."}
+              </p>
+            )}
           </div>
 
           {/* Service Type */}

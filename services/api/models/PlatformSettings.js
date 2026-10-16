@@ -7,6 +7,7 @@ const platformSettingsSchema = new mongoose.Schema({
   accountName: { type: String, default: null },
   bankCode: { type: String, default: null },
   updatedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Admin' },
+  discount: { type: Number, default: 5, min: 0, max: 100 },
 }, { timestamps: true });
 
 module.exports = mongoose.model('PlatformSettings', platformSettingsSchema);

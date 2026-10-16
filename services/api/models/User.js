@@ -251,12 +251,12 @@ const userSchema = new mongoose.Schema({
     default: 0
   },
   lockUntil: Date,
-  
-  referralCode: { 
-    type: String, 
-    unique: true, 
-    sparse: true, 
-    index: true 
+
+  referralCode: {
+    type: String,
+    unique: true,
+    sparse: true,
+    index: true
   },
 
   // Account Statistics
@@ -278,6 +278,8 @@ const userSchema = new mongoose.Schema({
     type: String,
     enum: ['cycling', 'bike', 'car', 'van', 'pedestrian']
   },
+
+  discountRedeemedAt: { type: Date, default: null },
 
   savedLocations: [{
     name: { type: String, required: true },
@@ -303,9 +305,13 @@ const userSchema = new mongoose.Schema({
       lng: { type: Number }
     },
 
+    discountCode: { type: String, default: null },
+    discountApplied: { type: Boolean, default: false },
+    discountPercent: { type: Number, default: 0, min: 0, max: 100 },
+    discountAmount: { type: Number, default: 0, min: 0 },
+
     dropoffPhone: { type: String },
 
-    // In your User model
     specialInstructions: { type: mongoose.Schema.Types.Mixed, default: null },
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     timestamp: { type: Date, default: Date.now },
@@ -346,6 +352,7 @@ const userSchema = new mongoose.Schema({
       default: null
     },
   },
+
   pendingPrompts: [
     {
       message: { type: String },

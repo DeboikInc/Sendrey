@@ -80,6 +80,8 @@ class UserController extends BaseController {
       const userId = req.params.userId || req.user.id;
       const updateData = { ...req.body };
 
+      await userService.resolveDiscountFields(userId, updateData);
+
       // Handle avatar upload if file present
       if (req.file) {
         const result = await new Promise((resolve, reject) => {
